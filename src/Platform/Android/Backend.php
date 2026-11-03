@@ -16,6 +16,7 @@ final class Backend implements Platform\Backend
     private ?Theme $theme = null;
     private ?Screen $screen = null;
     private ?Fonts $fonts = null;
+    private mixed $event = null;
 
     /** @var list<array{at: float, fn: \Closure}> pending timers */
     private array $timers = [];
@@ -73,43 +74,59 @@ final class Backend implements Platform\Backend
         }
         $this->timers = $keep;
 
-        // Process native event
+        // Process native events
         $f = Android::ffi();
-        $ev = $f->new('MyphpEvent');
-        if ($f->myphp_read_event(FFI::addr($ev), 16) > 0) {
+        $ev = $this->event ??= $f->new('MyphpEvent');
+        $timeout = 16;
+        while ($f->myphp_read_event(FFI::addr($ev), $timeout) > 0) {
+            $timeout = 0; // drain remaining queued events without waiting
             $win = Window::instance();
-            switch ($ev->type) {
-                case Android::EVENT_SURFACE_CREATED:
-                    $win?->initEgl();
-                    $win?->requestFrame();
-                    break;
-                case Android::EVENT_SURFACE_CHANGED:
-                    $win?->onSurfaceChanged();
-                    break;
-                case Android::EVENT_SURFACE_DESTROYED:
-                    $win?->destroySurface();
-                    break;
-                case Android::EVENT_TOUCH:
-                    $win?->onTouch((int)$ev->action, (float)$ev->x, (float)$ev->y, (int)$ev->time_ms);
-                    break;
-                case Android::EVENT_IME_COMMIT:
-                    $win?->onImeCommit(\FFI::string($ev->text));
-                    break;
-                case Android::EVENT_IME_COMPOSE:
-                    $win?->onImeCompose(\FFI::string($ev->text));
-                    break;
-                case Android::EVENT_IME_DELETE:
-                    $win?->onImeDelete();
-                    break;
-                case Android::EVENT_KEY:
-                    $win?->onKeyEvent((int)$ev->width, (int)$ev->action, (int)$ev->height);
-                    break;
-                case Android::EVENT_CHOREOGRAPHER:
-                    $win?->drawFrame();
-                    break;
-                case Android::EVENT_SIGNAL:
-                    $this->h->dispatch();
-                    break;
+            try {
+                switch ($ev->type) {
+                    case Android::EVENT_SURFACE_CREATED:
+                        $win?->initEgl();
+                        $win?->requestFrame();
+                        break;
+                    case Android::EVENT_SURFACE_CHANGED:
+                        $win?->onSurfaceChanged();
+                        break;
+                    case Android::EVENT_SURFACE_DESTROYED:
+                        $win?->destroySurface();
+                        break;
+                    case Android::EVENT_TOUCH:
+                        $win?->onTouch((int)$ev->action, (float)$ev->x, (float)$ev->y, (int)$ev->time_ms);
+                        break;
+                    case Android::EVENT_IME_COMMIT:
+                        $win?->onImeCommit(\FFI::string($ev->text));
+                        break;
+                    case Android::EVENT_IME_COMPOSE:
+                        $win?->onImeCompose(\FFI::string($ev->text));
+                        break;
+                    case Android::EVENT_IME_DELETE:
+                        $win?->onImeDelete();
+                        break;
+                    case Android::EVENT_KEY:
+                        $win?->onKeyEvent((int)$ev->width, (int)$ev->action, (int)$ev->height);
+                        break;
+                    case Android::EVENT_CHOREOGRAPHER:
+                        $win?->onFrame();
+                        break;
+                    case Android::EVENT_PAUSE:
+                        $win?->onPause();
+                        break;
+                    case Android::EVENT_RESUME:
+                        $win?->onResume();
+                        break;
+                    case Android::EVENT_CONFIGURATION:
+                        \MyPHP\App::setTheme($ev->night_mode ? \MyPHP\Theme::dark() : \MyPHP\Theme::light());
+                        $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3]);
+                        break;
+                    case Android::EVENT_SIGNAL:
+                        $this->h->dispatch();
+                        break;
+                }
+            } catch (\Throwable $e) {
+                \MyPHP\Logger::error("Exception in event dispatch: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
             }
         }
     }

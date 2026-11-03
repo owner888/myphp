@@ -341,6 +341,10 @@ final class Gl
         ($g->epoxy_glBindFramebuffer)(self::FRAMEBUFFER, $target);
         $this->target = [$pw / $scale, $ph / $scale, $scale, 1.0, (float)$ph];
         $this->drawList($list, $target, $pw, $ph, $clear);
+        $err = ($g->epoxy_glGetError)();
+        if ($err !== 0) {
+            Logger::error("GL error after drawList: 0x" . dechex($err), "opengl");
+        }
         $this->frame++;
     }
 

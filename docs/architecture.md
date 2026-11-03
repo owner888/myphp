@@ -8229,6 +8229,18 @@ request soft keyboard display via JNI `InputMethodManager.showSoftInput`,
 passing committed characters, composing pre-edit text, and backspace deletions
 through the event pipe into `TextState` and `TextInputClient`.
 
+## Android backend: lifecycle, EGL preservation and insets (P3)
+
+Activity lifecycle events (`onPause`, `onResume`, `surfaceDestroyed`, `surfaceCreated`)
+are dispatched to the PHP event loop. When the app is backgrounded or screen locked,
+the physical `ANativeWindow` and `EGLSurface` are destroyed to release the display buffer,
+while the `EGLDisplay`, `EGLConfig`, `EGLContext` and compiled GPU resources (glyph atlas,
+quad shaders, VAO) are preserved in memory. Upon resume, `initEgl` recreates the `EGLSurface`
+over the fresh native window and binds the existing context in microseconds without atlas
+re-upload. Non-blocking `poll()` on the event pipe prevents looper deadlocks when
+`AChoreographer` is paused. System insets (status bars, notch cutout, navigation bars)
+and dark mode configuration are tracked via `WindowInsets` and synced to `Platform\Android\Window`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

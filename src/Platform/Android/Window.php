@@ -76,7 +76,7 @@ final class Window implements Platform\Window
 
     public function initEgl(): bool
     {
-        if ($this->initialized && $this->eglSurface !== null) {
+        if ($this->eglSurface !== null) {
             return true;
         }
 
@@ -87,6 +87,26 @@ final class Window implements Platform\Window
         }
 
         $egl = Android::egl();
+
+        // Reuse existing context on resume
+        if ($this->eglContext !== null && $this->eglDisplay !== null && $this->eglConfig !== null) {
+            $surface = $egl->eglCreateWindowSurface($this->eglDisplay, $this->eglConfig, $nativeWin, null);
+            if ($surface === null || \FFI::isNull($surface)) {
+                Logger::error('Failed eglCreateWindowSurface on resume', 'android');
+                return false;
+            }
+            if (!$egl->eglMakeCurrent($this->eglDisplay, $surface, $surface, $this->eglContext)) {
+                Logger::error('Failed eglMakeCurrent on resume', 'android');
+                return false;
+            }
+            $this->eglSurface = $surface;
+            $this->surfaceWidth = $f->myphp_get_surface_width();
+            $this->surfaceHeight = $f->myphp_get_surface_height();
+            $this->initialized = true;
+            Logger::debug('EGLSurface seamlessly restored with existing Context', 'android');
+            return true;
+        }
+
         $dpy = $egl->eglGetDisplay(null);
         if ($dpy === null || \FFI::isNull($dpy)) {
             Logger::error('Failed eglGetDisplay', 'android');
@@ -217,8 +237,7 @@ final class Window implements Platform\Window
             $egl->eglDestroySurface($this->eglDisplay, $this->eglSurface);
             $this->eglSurface = null;
         }
-        $this->initialized = false;
-        Logger::debug('EGL surface destroyed', 'android');
+        Logger::debug('EGL surface destroyed (Context preserved)', 'android');
     }
 
     public function requestFrame(int $every = 1, bool $repaint = false): void
@@ -242,7 +261,7 @@ final class Window implements Platform\Window
     /** @var list<array{0: int, 1: float, 2: float}> [timeNs, x, y] */
     private array $touchHistory = [];
 
-    // Fling momentum state
+    // Fling inertial scrolling state
     private bool $flingActive = false;
     private float $flingVx = 0.0;
     private float $flingVy = 0.0;
@@ -251,37 +270,78 @@ final class Window implements Platform\Window
     // Keyboard state
     private bool $keyboardVisible = false;
 
-    public function drawFrame(): void
+    // App lifecycle & insets state
+    private bool $paused = false;
+    /** @var array{0: float, 1: float, 2: float, 3: float} top, bottom, left, right in points */
+    private array $insets = [0.0, 0.0, 0.0, 0.0];
+
+    public function onPause(): void
     {
-        // Handle ongoing fling inertial scrolling
+        $this->paused = true;
+        $this->flingActive = false;
+        Logger::debug('Window paused', 'android');
+    }
+
+    public function onResume(): void
+    {
+        $this->paused = false;
+        Logger::debug('Window resumed', 'android');
+        $this->requestFrame();
+    }
+
+    public function setInsets(int $topPx, int $bottomPx, int $leftPx, int $rightPx): void
+    {
+        $density = max(1.0, $this->density);
+        $this->insets = [
+            $topPx / $density,
+            $bottomPx / $density,
+            $leftPx / $density,
+            $rightPx / $density,
+        ];
+        Logger::debug("Window insets updated (pt): top={$this->insets[0]}, bottom={$this->insets[1]}, left={$this->insets[2]}, right={$this->insets[3]}", 'android');
+        $this->requestFrame();
+    }
+
+    public function onFrame(): void
+    {
         if ($this->flingActive) {
             $now = hrtime(true);
             $dt = ($now - $this->flingLastTime) / 1e9;
             $this->flingLastTime = $now;
 
-            if ($dt > 0.0 && $dt < 0.1) {
+            if ($dt > 0.001 && $dt < 0.05) {
                 $dx = $this->flingVx * $dt;
                 $dy = $this->flingVy * $dt;
+
                 $input = $this->w->input;
                 if ($input !== null) {
                     $input->push(['scroll', $this->touchLastX, $this->touchLastY, $dx, $dy, true, true]);
                 }
-                // Exponential velocity decay
-                $decay = exp(-8.0 * $dt);
+
+                // Natural friction decay
+                $decay = exp(-7.0 * $dt);
                 $this->flingVx *= $decay;
                 $this->flingVy *= $decay;
 
-                if (hypot($this->flingVx, $this->flingVy) < 20.0) {
+                $this->asked = true;
+
+                if (hypot($this->flingVx, $this->flingVy) < 25.0) {
                     $this->flingActive = false;
                 } else {
                     $this->requestFrame();
                 }
             } else {
                 $this->flingActive = false;
+                $this->asked = true;
             }
         }
 
-        if (!$this->asked || $this->frame === null) {
+        $this->drawFrame();
+    }
+
+    public function drawFrame(): void
+    {
+        if ($this->paused || !$this->asked || $this->frame === null) {
             return;
         }
         $this->asked = false;
@@ -381,19 +441,24 @@ final class Window implements Platform\Window
                 if (!$this->touchActive) {
                     break;
                 }
-                $this->touchHistory[] = [$time, $ptX, $ptY];
-                if (count($this->touchHistory) > 8) {
+                $now = hrtime(true);
+                $this->touchHistory[] = [$now, $ptX, $ptY];
+                while (count($this->touchHistory) > 1 && ($now - $this->touchHistory[0][0]) > 120_000_000) {
                     array_shift($this->touchHistory);
                 }
 
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
-                if ($dist > 8.0) {
+                if (!$this->touchIsScrolling && $dist > 8.0) {
                     $this->touchIsScrolling = true;
+                    $this->touchLastX = $ptX;
+                    $this->touchLastY = $ptY;
+                }
+
+                if ($this->touchIsScrolling) {
                     $dx = $ptX - $this->touchLastX;
                     $dy = $ptY - $this->touchLastY;
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
-                    $this->touchLastTime = $time;
 
                     $input->push(['scroll', $ptX, $ptY, $dx, $dy, true, false]);
                     $this->requestFrame();
@@ -407,15 +472,21 @@ final class Window implements Platform\Window
                 $this->touchActive = false;
 
                 if ($this->touchIsScrolling) {
-                    // Calculate fling velocity from touch history
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];
                         $dt = ($last[0] - $first[0]) / 1e9;
-                        if ($dt > 0.005 && $dt < 0.2) {
+                        if ($dt > 0.01 && $dt < 0.2) {
                             $vx = ($last[1] - $first[1]) / $dt;
                             $vy = ($last[2] - $first[2]) / $dt;
-                            if (hypot($vx, $vy) > 80.0) {
+                            $speed = hypot($vx, $vy);
+                            if ($speed > 100.0) {
+                                $maxSpeed = 1200.0;
+                                if ($speed > $maxSpeed) {
+                                    $scale = $maxSpeed / $speed;
+                                    $vx *= $scale;
+                                    $vy *= $scale;
+                                }
                                 $this->flingActive = true;
                                 $this->flingVx = $vx;
                                 $this->flingVy = $vy;
@@ -425,9 +496,10 @@ final class Window implements Platform\Window
                         }
                     }
                 } else {
-                    // Tap: short click
-                    $input->push(['down', $ptX, $ptY, 0, 1, 0, $this->touchStartTime]);
-                    $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
+                    // Tap: short click at the exact touch start location
+                    $input->mouse($this->touchStartX, $this->touchStartY);
+                    $input->push(['down', $this->touchStartX, $this->touchStartY, 0, 1, 0, $this->touchStartTime]);
+                    $input->push(['up', $this->touchStartX, $this->touchStartY, 0, 1, 0, $time]);
                     $this->requestFrame();
                 }
                 break;
