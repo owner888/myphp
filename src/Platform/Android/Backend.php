@@ -16,6 +16,11 @@ final class Backend implements Platform\Backend
     private ?Theme $theme = null;
     private ?Screen $screen = null;
     private ?Fonts $fonts = null;
+    private ?Dialogs $dialogs = null;
+    private ?Clipboard $clipboard = null;
+    private ?Shell $shell = null;
+    private ?Power $power = null;
+    private ?Network $network = null;
     private mixed $event = null;
 
     /** @var list<array{at: float, fn: \Closure}> pending timers */
@@ -122,6 +127,9 @@ final class Backend implements Platform\Backend
                         \MyPHP\App::setTheme($ev->night_mode ? \MyPHP\UI\Theme::dark() : \MyPHP\UI\Theme::light());
                         $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3]);
                         break;
+                    case Android::EVENT_DIALOG_RESULT:
+                        Dialogs::onDialogResult((int)$ev->width, (int)$ev->action);
+                        break;
                     case Android::EVENT_SIGNAL:
                         $this->h->dispatch();
                         break;
@@ -199,17 +207,17 @@ final class Backend implements Platform\Backend
 
     public function dialogs(): Platform\Dialogs
     {
-        throw new Platform\Unsupported('Dialogs not implemented on Android yet');
+        return $this->dialogs ??= new Dialogs($this);
     }
 
     public function clipboard(): Platform\Clipboard
     {
-        throw new Platform\Unsupported('Clipboard not implemented on Android yet');
+        return $this->clipboard ??= new Clipboard();
     }
 
     public function shell(): Platform\Shell
     {
-        throw new Platform\Unsupported('Shell not implemented on Android yet');
+        return $this->shell ??= new Shell();
     }
 
     public function screen(): Platform\Screen
@@ -224,12 +232,12 @@ final class Backend implements Platform\Backend
 
     public function power(): Platform\Power
     {
-        throw new Platform\Unsupported('Power not implemented on Android yet');
+        return $this->power ??= new Power();
     }
 
     public function network(): Platform\Network
     {
-        throw new Platform\Unsupported('Network not implemented on Android yet');
+        return $this->network ??= new Network();
     }
 
     public function nowPlaying(): Platform\NowPlaying
@@ -266,12 +274,13 @@ final class Backend implements Platform\Backend
 
     public function notificationsSupported(): bool
     {
-        return false;
+        return true;
     }
 
     public function showNotification(\MyPHP\Notification $n): void
     {
-        throw new Platform\Unsupported('Notifications not implemented on Android yet');
+        $id = crc32($n->id !== '' ? $n->id : $n->title);
+        Android::ffi()->myphp_show_notification($n->title, $n->body, $id);
     }
 
     public function removeNotification(string $id): void {}

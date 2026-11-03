@@ -37,6 +37,7 @@ enum MyphpEventType {
     MYPHP_EVENT_PAUSE = 11,
     MYPHP_EVENT_RESUME = 12,
     MYPHP_EVENT_CONFIGURATION = 13,
+    MYPHP_EVENT_DIALOG_RESULT = 14,
 };
 
 typedef struct {
@@ -175,6 +176,13 @@ static jmethodID g_mid_shape = NULL;
 static jmethodID g_mid_rasterize = NULL;
 static jmethodID g_mid_show_keyboard = NULL;
 static jmethodID g_mid_hide_keyboard = NULL;
+static jmethodID g_mid_clipboard_get = NULL;
+static jmethodID g_mid_clipboard_set = NULL;
+static jmethodID g_mid_open_url = NULL;
+static jmethodID g_mid_keep_screen_on = NULL;
+static jmethodID g_mid_show_alert_dialog = NULL;
+static jmethodID g_mid_show_notification = NULL;
+static jmethodID g_mid_is_network_connected = NULL;
 
 static JNIEnv* get_jni_env(void) {
     JNIEnv *env = NULL;
@@ -308,6 +316,13 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_rasterize = (*env)->GetStaticMethodID(env, clazz, "rasterizeGlyph", "(IFI[I)[B");
     g_mid_show_keyboard = (*env)->GetStaticMethodID(env, clazz, "showSoftKeyboard", "()V");
     g_mid_hide_keyboard = (*env)->GetStaticMethodID(env, clazz, "hideSoftKeyboard", "()V");
+    g_mid_clipboard_get = (*env)->GetStaticMethodID(env, clazz, "getClipboardText", "()Ljava/lang/String;");
+    g_mid_clipboard_set = (*env)->GetStaticMethodID(env, clazz, "setClipboardText", "(Ljava/lang/String;)V");
+    g_mid_open_url = (*env)->GetStaticMethodID(env, clazz, "openUrl", "(Ljava/lang/String;)V");
+    g_mid_keep_screen_on = (*env)->GetStaticMethodID(env, clazz, "setKeepScreenOn", "(Z)V");
+    g_mid_show_alert_dialog = (*env)->GetStaticMethodID(env, clazz, "showAlertDialog", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V");
+    g_mid_show_notification = (*env)->GetStaticMethodID(env, clazz, "showNotification", "(Ljava/lang/String;Ljava/lang/String;I)V");
+    g_mid_is_network_connected = (*env)->GetStaticMethodID(env, clazz, "isNetworkConnected", "()Z");
 
     if (pipe(g_event_pipe) == 0) {
         fcntl(g_event_pipe[0], F_SETFL, O_NONBLOCK);
@@ -478,4 +493,115 @@ Java_com_owner888_myphp_MyphpActivity_nativeConfigurationChanged(JNIEnv *env, jc
         };
         write(g_event_pipe[1], &ev, sizeof(ev));
     }
+}
+
+int myphp_clipboard_get_text(char *out, int max_len) {
+    if (!out || max_len <= 0) return 0;
+    out[0] = 0;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_clipboard_get) return 0;
+
+    jstring jtext = (jstring)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_clipboard_get);
+    if (!jtext) return 0;
+
+    const char *chars = (*env)->GetStringUTFChars(env, jtext, NULL);
+    if (!chars) {
+        (*env)->DeleteLocalRef(env, jtext);
+        return 0;
+    }
+
+    strncpy(out, chars, max_len - 1);
+    out[max_len - 1] = 0;
+    int len = (int)strlen(out);
+
+    (*env)->ReleaseStringUTFChars(env, jtext, chars);
+    (*env)->DeleteLocalRef(env, jtext);
+    return len;
+}
+
+void myphp_clipboard_set_text(const char *text) {
+    if (!text) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_clipboard_set) return;
+
+    jstring jtext = (*env)->NewStringUTF(env, text);
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_clipboard_set, jtext);
+    (*env)->DeleteLocalRef(env, jtext);
+}
+
+void myphp_open_url(const char *url) {
+    if (!url) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_open_url) return;
+
+    jstring jurl = (*env)->NewStringUTF(env, url);
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_open_url, jurl);
+    (*env)->DeleteLocalRef(env, jurl);
+}
+
+void myphp_set_keep_screen_on(int on) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_keep_screen_on) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_keep_screen_on, (jboolean)(on ? JNI_TRUE : JNI_FALSE));
+}
+
+void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_show_alert_dialog) return;
+
+    jstring jtitle = title ? (*env)->NewStringUTF(env, title) : NULL;
+    jstring jmsg = message ? (*env)->NewStringUTF(env, message) : NULL;
+
+    jclass string_cls = (*env)->FindClass(env, "java/lang/String");
+    jobjectArray jbtns = NULL;
+    if (buttons && button_count > 0 && string_cls) {
+        jbtns = (*env)->NewObjectArray(env, button_count, string_cls, NULL);
+        for (int i = 0; i < button_count; i++) {
+            if (buttons[i]) {
+                jstring bstr = (*env)->NewStringUTF(env, buttons[i]);
+                (*env)->SetObjectArrayElement(env, jbtns, i, bstr);
+                (*env)->DeleteLocalRef(env, bstr);
+            }
+        }
+    }
+
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_show_alert_dialog, jtitle, jmsg, jbtns, callback_id);
+
+    if (jtitle) (*env)->DeleteLocalRef(env, jtitle);
+    if (jmsg) (*env)->DeleteLocalRef(env, jmsg);
+    if (jbtns) (*env)->DeleteLocalRef(env, jbtns);
+    if (string_cls) (*env)->DeleteLocalRef(env, string_cls);
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeDialogResult(JNIEnv *env, jclass clazz, jint callbackId, jint buttonIndex) {
+    LOGI("nativeDialogResult: callbackId=%d buttonIndex=%d", callbackId, buttonIndex);
+    if (g_event_pipe[1] >= 0) {
+        MyphpEvent ev = {
+            .type = MYPHP_EVENT_DIALOG_RESULT,
+            .action = buttonIndex,
+            .width = callbackId
+        };
+        write(g_event_pipe[1], &ev, sizeof(ev));
+    }
+}
+
+void myphp_show_notification(const char *title, const char *body, int id) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_show_notification) return;
+
+    jstring jtitle = title ? (*env)->NewStringUTF(env, title) : NULL;
+    jstring jbody = body ? (*env)->NewStringUTF(env, body) : NULL;
+
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_show_notification, jtitle, jbody, id);
+
+    if (jtitle) (*env)->DeleteLocalRef(env, jtitle);
+    if (jbody) (*env)->DeleteLocalRef(env, jbody);
+}
+
+int myphp_is_network_connected(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_is_network_connected) return 0;
+    jboolean conn = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_is_network_connected);
+    return conn ? 1 : 0;
 }

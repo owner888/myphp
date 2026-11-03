@@ -23,6 +23,7 @@ final class Android
     public const EVENT_PAUSE = 11;
     public const EVENT_RESUME = 12;
     public const EVENT_CONFIGURATION = 13;
+    public const EVENT_DIALOG_RESULT = 14;
 
     // MotionEvent action constants
     public const ACTION_DOWN = 0;
@@ -80,6 +81,13 @@ final class Android
             void myphp_request_frame(void);
             void myphp_show_keyboard(void);
             void myphp_hide_keyboard(void);
+            int myphp_clipboard_get_text(char *out, int max_len);
+            void myphp_clipboard_set_text(const char *text);
+            void myphp_open_url(const char *url);
+            void myphp_set_keep_screen_on(int on);
+            void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
+            void myphp_show_notification(const char *title, const char *body, int id);
+            int myphp_is_network_connected(void);
             int myphp_shape_text(const char *text, float size, int style, float *out_buffer, int max_floats);
             int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics, uint8_t *out_pixels, int max_pixels);
         ', 'libmyphp.so');

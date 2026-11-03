@@ -8241,6 +8241,16 @@ re-upload. Non-blocking `poll()` on the event pipe prevents looper deadlocks whe
 `AChoreographer` is paused. System insets (status bars, notch cutout, navigation bars)
 and dark mode configuration are tracked via `WindowInsets` and synced to `Platform\Android\Window`.
 
+## Android backend: system services (P4)
+
+Standard system platform services are bridged to Android APIs through JNI and FFI:
+- `Clipboard`: system clipboard read/write via Android's `ClipboardManager`;
+- `Shell`: URL dispatch via `Intent.ACTION_VIEW` (`Shell::openExternal`);
+- `Dialogs`: modal alerts via Android `AlertDialog.Builder`, spinning the PHP run loop until button selection without UI blockage;
+- `Power`: display wake lock via `FLAG_KEEP_SCREEN_ON` (`Power::keepAwake`);
+- `Notifications`: system notifications with channel management (`NotificationManager`);
+- `Network`: connection state inspection through Android's `ConnectivityManager`.
+
 ## Network sensing and macOS status bar typography (Tray dual-line & SF Symbols)
 
 MyPHP extends `NetworkStatus` beyond upstream mygo's boolean flags by querying

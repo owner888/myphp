@@ -1,7 +1,13 @@
 package com.owner888.myphp;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -15,6 +21,9 @@ import android.graphics.Typeface;
 import android.graphics.fonts.Font;
 import android.graphics.text.PositionedGlyphs;
 import android.graphics.text.TextRunShaper;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.util.DisplayMetrics;
@@ -26,6 +35,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -378,6 +388,145 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         }
     }
 
+    public static String getClipboardText() {
+        if (sInstance == null) return "";
+        try {
+            ClipboardManager cm = (ClipboardManager) sInstance.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null && cm.hasPrimaryClip()) {
+                ClipData data = cm.getPrimaryClip();
+                if (data != null && data.getItemCount() > 0) {
+                    CharSequence cs = data.getItemAt(0).getText();
+                    if (cs != null) return cs.toString();
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "getClipboardText error", e);
+        }
+        return "";
+    }
+
+    public static void setClipboardText(String text) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                ClipboardManager cm = (ClipboardManager) sInstance.getSystemService(Context.CLIPBOARD_SERVICE);
+                if (cm != null) {
+                    cm.setPrimaryClip(ClipData.newPlainText("text", text));
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "setClipboardText error", e);
+            }
+        });
+    }
+
+    public static void openUrl(String url) {
+        if (sInstance == null || url == null || url.isEmpty()) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                sInstance.startActivity(intent);
+            } catch (Exception e) {
+                Log.e(TAG, "openUrl error: " + url, e);
+            }
+        });
+    }
+
+    public static void setKeepScreenOn(boolean on) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            if (on) {
+                sInstance.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } else {
+                sInstance.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+        });
+    }
+
+    public static void showAlertDialog(String title, String message, String[] buttons, int callbackId) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                AlertDialog.Builder builder = new AlertDialog.Builder(sInstance);
+                if (title != null && !title.isEmpty()) {
+                    builder.setTitle(title);
+                }
+                if (message != null && !message.isEmpty()) {
+                    builder.setMessage(message);
+                }
+                if (buttons != null && buttons.length > 0) {
+                    builder.setPositiveButton(buttons[0], (dialog, which) -> {
+                        nativeDialogResult(callbackId, 0);
+                    });
+                    if (buttons.length > 1) {
+                        builder.setNegativeButton(buttons[1], (dialog, which) -> {
+                            nativeDialogResult(callbackId, 1);
+                        });
+                    }
+                    if (buttons.length > 2) {
+                        builder.setNeutralButton(buttons[2], (dialog, which) -> {
+                            nativeDialogResult(callbackId, 2);
+                        });
+                    }
+                } else {
+                    builder.setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                        nativeDialogResult(callbackId, 0);
+                    });
+                }
+                builder.setOnCancelListener(dialog -> {
+                    nativeDialogResult(callbackId, -1);
+                });
+                builder.show();
+            } catch (Exception e) {
+                Log.e(TAG, "showAlertDialog error", e);
+                nativeDialogResult(callbackId, -1);
+            }
+        });
+    }
+
+    private static final String NOTIF_CHANNEL_ID = "myphp_notifications";
+
+    public static void showNotification(String title, String body, int id) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                NotificationManager nm = (NotificationManager) sInstance.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm == null) return;
+
+                NotificationChannel channel = new NotificationChannel(
+                    NOTIF_CHANNEL_ID,
+                    "Notifications",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                );
+                nm.createNotificationChannel(channel);
+
+                Notification.Builder builder = new Notification.Builder(sInstance, NOTIF_CHANNEL_ID)
+                    .setContentTitle(title != null ? title : "")
+                    .setContentText(body != null ? body : "")
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setAutoCancel(true);
+
+                nm.notify(id, builder.build());
+            } catch (Exception e) {
+                Log.e(TAG, "showNotification error", e);
+            }
+        });
+    }
+
+    public static boolean isNetworkConnected() {
+        if (sInstance == null) return false;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) sInstance.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            android.net.Network net = cm.getActiveNetwork();
+            if (net == null) return false;
+            NetworkCapabilities caps = cm.getNetworkCapabilities(net);
+            return caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private static class MyphpInputConnection extends BaseInputConnection {
         public MyphpInputConnection(View targetView, boolean fullEditor) {
             super(targetView, fullEditor);
@@ -454,4 +603,5 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativePause();
     private static native void nativeResume();
     private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight);
+    private static native void nativeDialogResult(int callbackId, int buttonIndex);
 }
