@@ -8293,6 +8293,19 @@ baseline offset (`NSBaselineOffset: -5.5pt`). This breaks `NSStatusBarButton`'s 
 alignment and achieves 1:1 vertical centering and pixel-identical glyph heights with native
 system accessories (like iStatistica and macOS Battery/Wi-Fi icons).
 
+On Android (`src/Platform/Android/launcher/myphp_launcher.c`), connecting to
+classic BR/EDR L2CAP channels such as AirPods AACP (PSM `0x1001`, type
+`TYPE_L2CAP = 3`) requires calling the `@hide` `android.bluetooth.BluetoothSocket`
+constructor (on Android 16 QPR3 / Android 17: `(BluetoothAdapter, BluetoothDevice, int, boolean, boolean, int, ParcelUuid)`).
+When `(*env)->GetMethodID` is called from a JNI method that was itself invoked
+by an app Java frame (`MyphpActivity`), ART's Hidden API enforcement walks the
+call stack, sees the non-bootclassloader Java caller, and denies the lookup.
+Because MyPHP runs PHP on its own native `pthread` (`php_worker_thread`) with
+zero Java frames on the stack, resolving and instantiating `BluetoothSocket`
+directly in C (`probe_l2cap_ctor_from_c` / `create_l2cap_socket_from_c`) before
+calling into `MyphpActivity` has no app Java frame on the stack and succeeds
+without a reflection bypass library.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

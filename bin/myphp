@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.158.0';
+const VERSION = '1.159.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -866,7 +866,7 @@ delta updates from the last versions published (updates.deltas), and
 update-<platform>.json: publish them where updates point to, or with -upload.
 
 Flags:
-  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64, android/arm64 (default: this machine's)
+  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64, android/arm64, ios/arm64 (default: this machine's)
   -launcher exec|micro  exec runs the PHP that built the app; micro makes one static binary (see myphp micro)
   -php version          the PHP version of micro.sfx, when myphp micro builds it
   -debug                keep development features such as the inspector
@@ -903,8 +903,8 @@ function build(array $args): void
     $targets = [];
     foreach (array_filter(array_map('trim', explode(',', $platforms))) as $p) {
         [$os, $arch] = array_pad(explode('/', $p, 2), 2, '');
-        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch]) || ($os === 'android' && in_array($arch, ['arm64', 'aarch64'], true))
-            || fail("myphp builds macOS, Linux and Android apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, android/arm64, linux/amd64 or linux/arm64, not $p");
+        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch]) || ($os === 'android' && in_array($arch, ['arm64', 'aarch64'], true)) || ($os === 'ios' && in_array($arch, ['arm64', 'aarch64'], true))
+            || fail("myphp builds macOS, Linux, Android and iOS apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, android/arm64, ios/arm64, linux/amd64 or linux/arm64, not $p");
         $host = (PHP_OS_FAMILY === 'Linux' ? 'linux/' : 'darwin/') . hostArch();
         $launcher !== 'micro' || "$os/$arch" === $host || fail("-launcher micro builds for this machine, $host: micro.sfx is of its system and architecture");
         $targets[] = [$os, $arch];
@@ -959,6 +959,7 @@ function build(array $args): void
             $artifacts = match ($os) {
                 'linux' => buildLinux($dir, $c, $arch, $opts),
                 'android' => buildAndroid($dir, $c, $arch, $opts),
+                'ios' => buildIOS($dir, $c, $arch, $opts),
                 default => buildPlatform($dir, $c, $arch, $opts),
             };
             array_push($built, ...$artifacts);
@@ -1027,6 +1028,25 @@ function buildAndroid(string $dir, array $c, string $arch, array $opts): array
     $cmd = [$script, $dir, $apk, $name];
     sh($cmd, $dir) === 0 || fail("Failed to package Android APK");
     return [$apk];
+}
+
+/** Packages the iOS App Bundle and .ipa archive. @return list<string> */
+function buildIOS(string $dir, array $c, string $arch, array $opts): array
+{
+    $out = path($dir, $c['out']);
+    is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
+    $name = orElse($c['name'], 'app');
+    $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
+    $mainPhp = $dir . '/main.php';
+    if (!file_exists($mainPhp)) {
+        $mainPhp = $dir . '/app.php';
+    }
+    logf("Making ios/$arch: $out/$name.ipa");
+    $script = dirname(__DIR__) . '/scripts/package-ios-app.sh';
+    is_executable($script) || chmod($script, 0755);
+    $cmd = [$script, $mainPhp, $bundleId, $name, $out];
+    sh($cmd, $dir) === 0 || fail("Failed to package iOS App");
+    return ["$out/$name.app", "$out/$name.ipa"];
 }
 
 /**

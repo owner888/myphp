@@ -135,6 +135,7 @@ final class Backend implements Platform\Backend
                         break;
                     case Android::EVENT_SIGNAL:
                         $this->h->dispatch();
+                        $win?->requestFrame();
                         break;
                 }
             } catch (\Throwable $e) {

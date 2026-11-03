@@ -1024,14 +1024,20 @@ final class App
             || (PHP_OS_FAMILY === 'Linux' && (getenv('ANDROID_ROOT') !== false || file_exists('/system/bin/app_process')));
     }
 
+    public static function isIOS(): bool
+    {
+        return getenv('MYPHP_PLATFORM') === 'ios';
+    }
+
     /**
-     * @internal the platform's backend (mygo's backend()): Cocoa on macOS, GTK on Linux, EGL/GLES on Android.
+     * @internal the platform's backend (mygo's backend()): Cocoa on macOS, GTK on Linux, EGL/GLES on Android, Metal/UIKit on iOS.
      * Made on first use, before App::run too, as Secrets need it.
      */
     public static function backend(): Platform\Backend
     {
         return self::$backend ??= match (true) {
             self::isAndroid() => new Platform\Android\Backend(new AppHandler),
+            self::isIOS() => new Platform\iOS\Backend(new AppHandler),
             PHP_OS_FAMILY === 'Darwin' => new Platform\Darwin\Backend(new AppHandler),
             PHP_OS_FAMILY === 'Linux' => new Platform\Linux\Backend(new AppHandler),
             default => throw new Platform\Unsupported('myphp: ' . PHP_OS_FAMILY . ' has no backend yet'),

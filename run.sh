@@ -55,6 +55,7 @@ case "$1" in
   embed-webview) exec $PHP $OPTS examples/embed-webview/main.php ;;
   menubar-flyout) exec $PHP $OPTS examples/menubar-flyout/main.php ;;
   menubar-native) exec $PHP $OPTS examples/menubar-native/main.php ;;
+  airpods-translate) exec $PHP $OPTS examples/airpods-translate/main.php ;;
   netmonitor) exec $PHP $OPTS examples/netmonitor/main.php ;;
   launcher) exec $PHP $OPTS examples/launcher/main.php ;;
   vibrancy) exec $PHP $OPTS examples/vibrancy/main.php ;;
