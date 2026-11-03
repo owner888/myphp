@@ -51,7 +51,7 @@ src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenUR
                    documents, open at login), Dock, Shell, Screen, Theme, Window (+ on(event), CloseEvent, FileDropEvent,
                    WindowState(+Store), newWebView), Page (+ PageOptions, on(event), eval, find, PDF, downloads, permissions),
                    WebView (Context::webView: a hole in the Metal view), Event, Network, Clipboard, Secrets, Cookies, WindowOptions,
-                   Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut, Notification (+ Options), Process (a child polled on the run loop), Http (+ HttpResponse: requests, CurlLoop), Ipc (bound services,
+                   Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions: SF symbols, dual-line title), GlobalShortcut, Notification (+ Options), Process (a child polled on the run loop), Http (+ HttpResponse: requests, CurlLoop), Ipc (bound services,
                    window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), Protocol (+ Request/Response), autoload.php,
                    Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
                    region/on*Changed), Region, I18n (tags, parents, plurals, dates, numbers, names; ext-intl + CldrTables),
