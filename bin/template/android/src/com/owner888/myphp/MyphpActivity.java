@@ -5,12 +5,22 @@ import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothSocket;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanRecord;
+import android.bluetooth.le.ScanResult;
+import android.bluetooth.le.ScanSettings;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -24,7 +34,9 @@ import android.graphics.text.TextRunShaper;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.ParcelUuid;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -52,9 +64,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = "MyPHP_Java";
@@ -709,6 +725,231 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         }
     }
 
+    // --- Bluetooth (AirPods BLE 0x004C + Classic L2CAP PSM 0x1001) ---
+    private static final String AACP_UUID_STR = "74ec2172-0bad-4d01-8f77-997b2be0722a";
+    private static volatile BluetoothSocket sBtSocket = null;
+    private static volatile Thread sBtReaderThread = null;
+    private static volatile String sLastBtError = "";
+    private static volatile byte[] sLastAppleBlePayload = null;
+    private static volatile boolean sBleScanning = false;
+    private static final ConcurrentLinkedQueue<byte[]> sBtRxQueue = new ConcurrentLinkedQueue<>();
+
+    private static final ScanCallback sBleScanCallback = new ScanCallback() {
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+            if (result == null) return;
+            ScanRecord record = result.getScanRecord();
+            if (record == null) return;
+            byte[] appleData = record.getManufacturerSpecificData(0x004C);
+            if (appleData != null && appleData.length >= 27 && (appleData[0] & 0xFF) == 0x07) {
+                sLastAppleBlePayload = Arrays.copyOf(appleData, 27);
+                nativeSignal();
+            }
+        }
+    };
+
+    public static boolean hasBluetoothPermissions() {
+        if (sInstance == null) return false;
+        return sInstance.checkSelfPermission("android.permission.BLUETOOTH_CONNECT") == PackageManager.PERMISSION_GRANTED
+            && sInstance.checkSelfPermission("android.permission.BLUETOOTH_SCAN") == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public static void btRequestPermissions() {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                if (!hasBluetoothPermissions()) {
+                    sInstance.requestPermissions(new String[]{
+                        "android.permission.BLUETOOTH_CONNECT",
+                        "android.permission.BLUETOOTH_SCAN"
+                    }, 1001);
+                }
+                BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+                if (adapter != null && !adapter.isEnabled() && hasBluetoothPermissions()) {
+                    Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                    sInstance.startActivity(enableIntent);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "btRequestPermissions error", e);
+            }
+        });
+    }
+
+    public static String btGetStatus() {
+        int sdk = Build.VERSION.SDK_INT;
+        String release = Build.VERSION.RELEASE != null ? Build.VERSION.RELEASE : "";
+        String buildId = Build.ID != null ? Build.ID : "";
+        boolean perm = hasBluetoothPermissions();
+        boolean btOn = false;
+        String bondedMac = "";
+        String bondedName = "";
+        String ctorStatus = nativeProbeL2capConstructor();
+
+        if (sInstance != null) {
+            try {
+                BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+                btOn = adapter != null && adapter.isEnabled();
+                if (btOn && perm) {
+                    ParcelUuid aacpUuid = ParcelUuid.fromString(AACP_UUID_STR);
+                    Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+                    if (bonded != null) {
+                        for (BluetoothDevice dev : bonded) {
+                            String dName = dev.getName() != null ? dev.getName() : "";
+                            ParcelUuid[] uuids = dev.getUuids();
+                            boolean hasAacp = false;
+                            if (uuids != null) {
+                                for (ParcelUuid u : uuids) {
+                                    if (aacpUuid.equals(u)) {
+                                        hasAacp = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (hasAacp || dName.toLowerCase().contains("airpods")) {
+                                bondedMac = dev.getAddress();
+                                bondedName = dName;
+                                break;
+                            }
+                            if (bondedMac.isEmpty()) {
+                                bondedMac = dev.getAddress();
+                                bondedName = dName;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "btGetStatus error", e);
+            }
+        }
+        return "sdk=" + sdk
+            + "|release=" + release
+            + "|build=" + buildId
+            + "|perm=" + (perm ? "1" : "0")
+            + "|btOn=" + (btOn ? "1" : "0")
+            + "|ctor=" + ctorStatus
+            + "|mac=" + bondedMac
+            + "|name=" + bondedName.replace("|", " ")
+            + "|err=" + sLastBtError.replace("|", " ");
+    }
+
+    public static byte[] btScanBle() {
+        if (sInstance == null || !hasBluetoothPermissions()) return sLastAppleBlePayload;
+        try {
+            BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+            if (adapter != null && adapter.isEnabled() && !sBleScanning) {
+                BluetoothLeScanner scanner = adapter.getBluetoothLeScanner();
+                if (scanner != null) {
+                    ScanSettings settings = new ScanSettings.Builder()
+                        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                        .build();
+                    scanner.startScan(null, settings, sBleScanCallback);
+                    sBleScanning = true;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "btScanBle error", e);
+        }
+        return sLastAppleBlePayload;
+    }
+
+    public static boolean btConnectL2cap(String mac, int psm) {
+        btDisconnect();
+        sLastBtError = "";
+        if (sInstance == null) {
+            sLastBtError = "No Activity instance";
+            return false;
+        }
+        if (!hasBluetoothPermissions()) {
+            btRequestPermissions();
+            sLastBtError = "BLUETOOTH_CONNECT permission not granted yet";
+            return false;
+        }
+        try {
+            BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+            if (adapter == null || !adapter.isEnabled()) {
+                sLastBtError = "Bluetooth is turned OFF on Xiaomi 14 Ultra";
+                return false;
+            }
+            BluetoothDevice device = adapter.getRemoteDevice(mac);
+            ParcelUuid uuid = ParcelUuid.fromString(AACP_UUID_STR);
+
+            // Create Classic L2CAP (type = 3) socket via JNI constructor lookup first
+            Object sockObj = nativeCreateL2capSocket(adapter, device, psm, uuid);
+            if (!(sockObj instanceof BluetoothSocket)) {
+                sLastBtError = "Failed to instantiate BluetoothSocket for L2CAP PSM " + psm;
+                return false;
+            }
+            BluetoothSocket socket = (BluetoothSocket) sockObj;
+            socket.connect();
+            sBtSocket = socket;
+            sBtRxQueue.clear();
+
+            sBtReaderThread = new Thread(() -> {
+                byte[] buf = new byte[1024];
+                try {
+                    InputStream in = socket.getInputStream();
+                    while (sBtSocket == socket && socket.isConnected()) {
+                        int n = in.read(buf);
+                        if (n <= 0) break;
+                        sBtRxQueue.add(Arrays.copyOf(buf, n));
+                        nativeSignal();
+                    }
+                } catch (Exception e) {
+                    sLastBtError = "L2CAP read ended: " + e.getMessage();
+                }
+            }, "MyPHP-AACP-Reader");
+            sBtReaderThread.setDaemon(true);
+            sBtReaderThread.start();
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "btConnectL2cap error", e);
+            sLastBtError = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "connect failed");
+            return false;
+        }
+    }
+
+    public static void btDisconnect() {
+        BluetoothSocket sock = sBtSocket;
+        sBtSocket = null;
+        if (sock != null) {
+            try {
+                sock.close();
+            } catch (Exception ignored) {}
+        }
+        sBtRxQueue.clear();
+    }
+
+    public static boolean btIsConnected() {
+        BluetoothSocket sock = sBtSocket;
+        return sock != null && sock.isConnected();
+    }
+
+    public static boolean btSend(byte[] data) {
+        BluetoothSocket sock = sBtSocket;
+        if (sock == null || !sock.isConnected() || data == null) return false;
+        try {
+            OutputStream out = sock.getOutputStream();
+            out.write(data);
+            out.flush();
+            return true;
+        } catch (Exception e) {
+            sLastBtError = "L2CAP send failed: " + e.getMessage();
+            return false;
+        }
+    }
+
+    public static byte[] btPoll() {
+        return sBtRxQueue.poll();
+    }
+
+    public static String btGetLastError() {
+        return sLastBtError != null ? sLastBtError : "";
+    }
+
     private static native void nativeInit(String filesDir, String cacheDir, float density);
     private static native void nativeSurfaceCreated(Surface surface);
     private static native void nativeSurfaceChanged(Surface surface, int width, int height);
@@ -723,4 +964,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight);
     private static native void nativeDialogResult(int callbackId, int buttonIndex);
     private static native void nativeOnWebMessage(int pageId, String message);
+    private static native void nativeSignal();
+    private static native String nativeProbeL2capConstructor();
+    private static native Object nativeCreateL2capSocket(BluetoothAdapter adapter, BluetoothDevice device, int psm, ParcelUuid uuid);
 }

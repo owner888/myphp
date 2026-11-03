@@ -8273,6 +8273,7 @@ page-aligned, signed APKs (`<out>/<name>.apk`) in 2–3 seconds without Gradle:
 - Assembly & Alignment: uncompressed packaging of `resources.arsc` and native `.so` libraries,
   followed by 4-byte/4KB page-alignment via `zipalign`;
 - Signing: V1/V2 APK signing through `apksigner` with debug or release keystores.
+Google Play distribution policies, 16KB alignment, and AAB specifications are detailed in `docs/android.md`.
 
 ## Network sensing and macOS status bar typography (Tray dual-line & SF Symbols)
 

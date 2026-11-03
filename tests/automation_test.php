@@ -300,8 +300,8 @@ same('Ada', $name->text, "setting the field's value types it");
 // their labels, a capture, and quitting from a menu item while answering it.
 (function (): void {
     $xvfb = \MyPHP\Native\Build\Cmd::look('Xvfb');
-    if (PHP_OS_FAMILY !== 'Linux' || $xvfb === '') {
-        echo "  skipped: Linux's, under Xvfb\n";
+    if (PHP_OS_FAMILY !== 'Linux' || $xvfb === '' || !\MyPHP\Platform\Linux\WebKit::available()) {
+        echo "  skipped: Linux's, under Xvfb (requires WebKitGTK 4.1)\n";
         return;
     }
     $dir = sys_get_temp_dir() . '/myphp-automation-x-' . getmypid();

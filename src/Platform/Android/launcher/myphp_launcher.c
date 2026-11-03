@@ -190,6 +190,15 @@ static jmethodID g_mid_load_url = NULL;
 static jmethodID g_mid_load_html = NULL;
 static jmethodID g_mid_eval_js = NULL;
 static jmethodID g_mid_place_web_view = NULL;
+static jmethodID g_mid_bt_req_perm = NULL;
+static jmethodID g_mid_bt_get_status = NULL;
+static jmethodID g_mid_bt_scan_ble = NULL;
+static jmethodID g_mid_bt_connect_l2cap = NULL;
+static jmethodID g_mid_bt_disconnect = NULL;
+static jmethodID g_mid_bt_is_connected = NULL;
+static jmethodID g_mid_bt_send = NULL;
+static jmethodID g_mid_bt_poll = NULL;
+static jmethodID g_mid_bt_last_error = NULL;
 
 static JNIEnv* get_jni_env(void) {
     JNIEnv *env = NULL;
@@ -336,6 +345,15 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_load_html = (*env)->GetStaticMethodID(env, clazz, "loadHtml", "(ILjava/lang/String;Ljava/lang/String;)V");
     g_mid_eval_js = (*env)->GetStaticMethodID(env, clazz, "evalJs", "(ILjava/lang/String;)V");
     g_mid_place_web_view = (*env)->GetStaticMethodID(env, clazz, "placeWebView", "(IIIIIZ)V");
+    g_mid_bt_req_perm = (*env)->GetStaticMethodID(env, clazz, "btRequestPermissions", "()V");
+    g_mid_bt_get_status = (*env)->GetStaticMethodID(env, clazz, "btGetStatus", "()Ljava/lang/String;");
+    g_mid_bt_scan_ble = (*env)->GetStaticMethodID(env, clazz, "btScanBle", "()[B");
+    g_mid_bt_connect_l2cap = (*env)->GetStaticMethodID(env, clazz, "btConnectL2cap", "(Ljava/lang/String;I)Z");
+    g_mid_bt_disconnect = (*env)->GetStaticMethodID(env, clazz, "btDisconnect", "()V");
+    g_mid_bt_is_connected = (*env)->GetStaticMethodID(env, clazz, "btIsConnected", "()Z");
+    g_mid_bt_send = (*env)->GetStaticMethodID(env, clazz, "btSend", "([B)Z");
+    g_mid_bt_poll = (*env)->GetStaticMethodID(env, clazz, "btPoll", "()[B");
+    g_mid_bt_last_error = (*env)->GetStaticMethodID(env, clazz, "btGetLastError", "()Ljava/lang/String;");
 
     if (pipe(g_event_pipe) == 0) {
         fcntl(g_event_pipe[0], F_SETFL, O_NONBLOCK);
@@ -680,4 +698,210 @@ Java_com_owner888_myphp_MyphpActivity_nativeOnWebMessage(JNIEnv *env, jclass cla
     (*env)->ReleaseStringUTFChars(env, jmsg, chars);
 
     write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeSignal(JNIEnv *env, jclass clazz) {
+    myphp_signal_backend();
+}
+
+// Probes which BluetoothSocket L2CAP constructor signature exists in ART via JNI
+JNIEXPORT jstring JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeProbeL2capConstructor(JNIEnv *env, jclass clazz) {
+    jclass sockCls = (*env)->FindClass(env, "android/bluetooth/BluetoothSocket");
+    if (!sockCls) {
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        return (*env)->NewStringUTF(env, "missing_class");
+    }
+
+    // 1. Android 16 QPR3 / Android 17 signature: (BluetoothAdapter, BluetoothDevice, int, boolean, boolean, int, ParcelUuid)
+    jmethodID mid1 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(Landroid/bluetooth/BluetoothAdapter;Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid1) {
+        (*env)->DeleteLocalRef(env, sockCls);
+        return (*env)->NewStringUTF(env, "A16QPR3_A17(Adapter,Device,type,auth,enc,psm,uuid)");
+    }
+
+    // 2. Android 14-16 signature: (BluetoothDevice, int, boolean, boolean, int, ParcelUuid)
+    jmethodID mid2 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid2) {
+        (*env)->DeleteLocalRef(env, sockCls);
+        return (*env)->NewStringUTF(env, "A14_16(Device,type,auth,enc,psm,uuid)");
+    }
+
+    // 3. Android 12-13 signature: (int, int, boolean, boolean, BluetoothDevice, int, ParcelUuid)
+    jmethodID mid3 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(IIZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    (*env)->DeleteLocalRef(env, sockCls);
+    if (mid3) {
+        return (*env)->NewStringUTF(env, "A12_13(type,fd,auth,enc,Device,psm,uuid)");
+    }
+    return (*env)->NewStringUTF(env, "unknown_ctor");
+}
+
+// Instantiates BluetoothSocket for Classic L2CAP (type = 3) directly from JNI
+JNIEXPORT jobject JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeCreateL2capSocket(
+    JNIEnv *env, jclass clazz, jobject adapter, jobject device, jint psm, jobject uuid
+) {
+    jclass sockCls = (*env)->FindClass(env, "android/bluetooth/BluetoothSocket");
+    if (!sockCls) {
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        return NULL;
+    }
+
+    const jint TYPE_L2CAP = 3;
+    jobject sock = NULL;
+
+    // 1. Android 16 QPR3 / Android 17 signature
+    jmethodID mid1 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(Landroid/bluetooth/BluetoothAdapter;Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid1) {
+        sock = (*env)->NewObject(env, sockCls, mid1, adapter, device, TYPE_L2CAP, JNI_TRUE, JNI_TRUE, psm, uuid);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            sock = NULL;
+        }
+        (*env)->DeleteLocalRef(env, sockCls);
+        return sock;
+    }
+
+    // 2. Android 14-16 signature
+    jmethodID mid2 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid2) {
+        sock = (*env)->NewObject(env, sockCls, mid2, device, TYPE_L2CAP, JNI_TRUE, JNI_TRUE, psm, uuid);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            sock = NULL;
+        }
+        (*env)->DeleteLocalRef(env, sockCls);
+        return sock;
+    }
+
+    // 3. Android 12-13 signature
+    jmethodID mid3 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(IIZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid3) {
+        sock = (*env)->NewObject(env, sockCls, mid3, TYPE_L2CAP, -1, JNI_TRUE, JNI_TRUE, device, psm, uuid);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            sock = NULL;
+        }
+    }
+    (*env)->DeleteLocalRef(env, sockCls);
+    return sock;
+}
+
+void myphp_bt_request_permissions(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_req_perm) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_bt_req_perm);
+}
+
+int myphp_bt_get_status(char *out, int max_len) {
+    if (!out || max_len <= 0) return 0;
+    out[0] = 0;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_get_status) return 0;
+
+    jstring jstr = (jstring)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_bt_get_status);
+    if (!jstr) return 0;
+    const char *chars = (*env)->GetStringUTFChars(env, jstr, NULL);
+    if (!chars) {
+        (*env)->DeleteLocalRef(env, jstr);
+        return 0;
+    }
+    strncpy(out, chars, max_len - 1);
+    out[max_len - 1] = 0;
+    int len = (int)strlen(out);
+    (*env)->ReleaseStringUTFChars(env, jstr, chars);
+    (*env)->DeleteLocalRef(env, jstr);
+    return len;
+}
+
+int myphp_bt_scan_ble(uint8_t *out, int max_len) {
+    if (!out || max_len <= 0) return 0;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_scan_ble) return 0;
+
+    jbyteArray jarr = (jbyteArray)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_bt_scan_ble);
+    if (!jarr) return 0;
+    jsize len = (*env)->GetArrayLength(env, jarr);
+    if (len > max_len) len = max_len;
+    (*env)->GetByteArrayRegion(env, jarr, 0, len, (jbyte*)out);
+    (*env)->DeleteLocalRef(env, jarr);
+    return (int)len;
+}
+
+int myphp_bt_connect_l2cap(const char *mac, int psm, char *err_out, int err_max) {
+    if (err_out && err_max > 0) err_out[0] = 0;
+    if (!mac) return 0;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_connect_l2cap) return 0;
+
+    jstring jmac = (*env)->NewStringUTF(env, mac);
+    jboolean ok = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_bt_connect_l2cap, jmac, psm);
+    (*env)->DeleteLocalRef(env, jmac);
+
+    if (!ok && err_out && err_max > 0 && g_mid_bt_last_error) {
+        jstring jerr = (jstring)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_bt_last_error);
+        if (jerr) {
+            const char *chars = (*env)->GetStringUTFChars(env, jerr, NULL);
+            if (chars) {
+                strncpy(err_out, chars, err_max - 1);
+                err_out[err_max - 1] = 0;
+                (*env)->ReleaseStringUTFChars(env, jerr, chars);
+            }
+            (*env)->DeleteLocalRef(env, jerr);
+        }
+    }
+    return ok ? 1 : 0;
+}
+
+void myphp_bt_disconnect(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_disconnect) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_bt_disconnect);
+}
+
+int myphp_bt_is_connected(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_is_connected) return 0;
+    jboolean ok = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_bt_is_connected);
+    return ok ? 1 : 0;
+}
+
+int myphp_bt_send(const uint8_t *data, int len) {
+    if (!data || len <= 0) return 0;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_send) return 0;
+
+    jbyteArray jarr = (*env)->NewByteArray(env, len);
+    if (!jarr) return 0;
+    (*env)->SetByteArrayRegion(env, jarr, 0, len, (const jbyte*)data);
+    jboolean ok = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_bt_send, jarr);
+    (*env)->DeleteLocalRef(env, jarr);
+    return ok ? 1 : 0;
+}
+
+int myphp_bt_poll(uint8_t *out, int max_len) {
+    if (!out || max_len <= 0) return 0;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_poll) return 0;
+
+    jbyteArray jarr = (jbyteArray)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_bt_poll);
+    if (!jarr) return 0;
+    jsize len = (*env)->GetArrayLength(env, jarr);
+    if (len > max_len) len = max_len;
+    (*env)->GetByteArrayRegion(env, jarr, 0, len, (jbyte*)out);
+    (*env)->DeleteLocalRef(env, jarr);
+    return (int)len;
 }

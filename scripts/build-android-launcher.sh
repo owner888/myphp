@@ -44,6 +44,7 @@ $CC -shared -fPIC -O2 \
     -L"${PHP_DIR}/libs" -lphp \
     -llog -landroid -lEGL -lGLESv3 \
     -Wl,-rpath,'$ORIGIN' \
+    -Wl,-z,max-page-size=16384 \
     -o "${OUT_DIR}/libmyphp.so"
 
 echo "==> Copying libphp.so..."

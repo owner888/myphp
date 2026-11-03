@@ -97,6 +97,14 @@ final class Android
             void myphp_place_web_view(int page_id, int x, int y, int w, int h, int visible);
             int myphp_shape_text(const char *text, float size, int style, float *out_buffer, int max_floats);
             int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics, uint8_t *out_pixels, int max_pixels);
+            void myphp_bt_request_permissions(void);
+            int myphp_bt_get_status(char *out, int max_len);
+            int myphp_bt_scan_ble(uint8_t *out, int max_len);
+            int myphp_bt_connect_l2cap(const char *mac, int psm, char *err_out, int err_max);
+            void myphp_bt_disconnect(void);
+            int myphp_bt_is_connected(void);
+            int myphp_bt_send(const uint8_t *data, int len);
+            int myphp_bt_poll(uint8_t *out, int max_len);
         ', 'libmyphp.so');
     }
 
