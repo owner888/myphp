@@ -38,6 +38,7 @@ enum MyphpEventType {
     MYPHP_EVENT_RESUME = 12,
     MYPHP_EVENT_CONFIGURATION = 13,
     MYPHP_EVENT_DIALOG_RESULT = 14,
+    MYPHP_EVENT_WEB_MESSAGE = 15,
 };
 
 typedef struct {
@@ -183,6 +184,12 @@ static jmethodID g_mid_keep_screen_on = NULL;
 static jmethodID g_mid_show_alert_dialog = NULL;
 static jmethodID g_mid_show_notification = NULL;
 static jmethodID g_mid_is_network_connected = NULL;
+static jmethodID g_mid_create_web_view = NULL;
+static jmethodID g_mid_destroy_web_view = NULL;
+static jmethodID g_mid_load_url = NULL;
+static jmethodID g_mid_load_html = NULL;
+static jmethodID g_mid_eval_js = NULL;
+static jmethodID g_mid_place_web_view = NULL;
 
 static JNIEnv* get_jni_env(void) {
     JNIEnv *env = NULL;
@@ -323,6 +330,12 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_show_alert_dialog = (*env)->GetStaticMethodID(env, clazz, "showAlertDialog", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V");
     g_mid_show_notification = (*env)->GetStaticMethodID(env, clazz, "showNotification", "(Ljava/lang/String;Ljava/lang/String;I)V");
     g_mid_is_network_connected = (*env)->GetStaticMethodID(env, clazz, "isNetworkConnected", "()Z");
+    g_mid_create_web_view = (*env)->GetStaticMethodID(env, clazz, "createWebView", "(I)V");
+    g_mid_destroy_web_view = (*env)->GetStaticMethodID(env, clazz, "destroyWebView", "(I)V");
+    g_mid_load_url = (*env)->GetStaticMethodID(env, clazz, "loadUrl", "(ILjava/lang/String;)V");
+    g_mid_load_html = (*env)->GetStaticMethodID(env, clazz, "loadHtml", "(ILjava/lang/String;Ljava/lang/String;)V");
+    g_mid_eval_js = (*env)->GetStaticMethodID(env, clazz, "evalJs", "(ILjava/lang/String;)V");
+    g_mid_place_web_view = (*env)->GetStaticMethodID(env, clazz, "placeWebView", "(IIIIIZ)V");
 
     if (pipe(g_event_pipe) == 0) {
         fcntl(g_event_pipe[0], F_SETFL, O_NONBLOCK);
@@ -604,4 +617,67 @@ int myphp_is_network_connected(void) {
     if (!env || !g_activity_class || !g_mid_is_network_connected) return 0;
     jboolean conn = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_is_network_connected);
     return conn ? 1 : 0;
+}
+
+void myphp_create_web_view(int page_id) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_create_web_view) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_create_web_view, page_id);
+}
+
+void myphp_destroy_web_view(int page_id) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_destroy_web_view) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_destroy_web_view, page_id);
+}
+
+void myphp_load_url(int page_id, const char *url) {
+    if (!url) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_load_url) return;
+    jstring jurl = (*env)->NewStringUTF(env, url);
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_load_url, page_id, jurl);
+    (*env)->DeleteLocalRef(env, jurl);
+}
+
+void myphp_load_html(int page_id, const char *html, const char *base_url) {
+    if (!html) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_load_html) return;
+    jstring jhtml = (*env)->NewStringUTF(env, html);
+    jstring jbase = base_url ? (*env)->NewStringUTF(env, base_url) : NULL;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_load_html, page_id, jhtml, jbase);
+    (*env)->DeleteLocalRef(env, jhtml);
+    if (jbase) (*env)->DeleteLocalRef(env, jbase);
+}
+
+void myphp_eval_js(int page_id, const char *script) {
+    if (!script) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_eval_js) return;
+    jstring jscript = (*env)->NewStringUTF(env, script);
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_eval_js, page_id, jscript);
+    (*env)->DeleteLocalRef(env, jscript);
+}
+
+void myphp_place_web_view(int page_id, int x, int y, int w, int h, int visible) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_place_web_view) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_place_web_view, page_id, x, y, w, h, (jboolean)(visible ? JNI_TRUE : JNI_FALSE));
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeOnWebMessage(JNIEnv *env, jclass clazz, jint pageId, jstring jmsg) {
+    if (g_event_pipe[1] < 0 || !jmsg) return;
+    const char *chars = (*env)->GetStringUTFChars(env, jmsg, NULL);
+    if (!chars) return;
+
+    MyphpEvent ev = {
+        .type = MYPHP_EVENT_WEB_MESSAGE,
+        .action = pageId
+    };
+    strncpy(ev.text, chars, sizeof(ev.text) - 1);
+    (*env)->ReleaseStringUTFChars(env, jmsg, chars);
+
+    write(g_event_pipe[1], &ev, sizeof(ev));
 }

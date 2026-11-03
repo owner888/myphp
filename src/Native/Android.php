@@ -24,6 +24,7 @@ final class Android
     public const EVENT_RESUME = 12;
     public const EVENT_CONFIGURATION = 13;
     public const EVENT_DIALOG_RESULT = 14;
+    public const EVENT_WEB_MESSAGE = 15;
 
     // MotionEvent action constants
     public const ACTION_DOWN = 0;
@@ -88,6 +89,12 @@ final class Android
             void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             void myphp_show_notification(const char *title, const char *body, int id);
             int myphp_is_network_connected(void);
+            void myphp_create_web_view(int page_id);
+            void myphp_destroy_web_view(int page_id);
+            void myphp_load_url(int page_id, const char *url);
+            void myphp_load_html(int page_id, const char *html, const char *base_url);
+            void myphp_eval_js(int page_id, const char *script);
+            void myphp_place_web_view(int page_id, int x, int y, int w, int h, int visible);
             int myphp_shape_text(const char *text, float size, int style, float *out_buffer, int max_floats);
             int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics, uint8_t *out_pixels, int max_pixels);
         ', 'libmyphp.so');
