@@ -41,7 +41,7 @@ final class Network
     /** Takes a status from the monitor, and calls the listeners when it differs from the last. @internal */
     public static function changed(NetworkStatus $s): void
     {
-        if (self::$last !== null && self::$last->online === $s->online && self::$last->metered === $s->metered) {
+        if (self::$last !== null && self::$last->online === $s->online && self::$last->metered === $s->metered && self::$last->type === $s->type) {
             return;
         }
         self::$last = $s;

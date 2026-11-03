@@ -16,6 +16,12 @@ interface Tray
 
     public function setTitle(string $title): void;
 
+    /** Sets a system vector icon by name (Apple SF Symbols on macOS, e.g. 'dot.radiowaves.left.and.right'). */
+    public function setSystemIcon(string $name): void;
+
+    /** Sets a compact two-line title on the status item (macOS). */
+    public function setDualLineTitle(string $top, string $bottom): void;
+
     public function setToolTip(string $tip): void;
 
     public function setMenu(?Menu $menu): void;

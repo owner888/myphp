@@ -2780,3 +2780,28 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: mobile support extends myphp's immediate-mode GPU UI to portable
     devices while maintaining the same `Platform\Backend` interface contract.
 
+## Network (v1.149)
+
+- **NetworkStatus reports interface type**
+  - mygo: `NetworkStatus` reports `Online` and `Metered` booleans.
+  - myphp: `NetworkStatus` adds `public readonly string $type = 'other'`
+    ('wifi', 'cellular', 'wired', 'other', 'none') and convenience methods
+    `isWifi()`, `isCellular()`, `isWired()`. `Network::onChanged` fires
+    whenever the interface type changes (e.g. Wi-Fi to 4G/cellular) even
+    if both remain online.
+  - Why: modern mobile and desktop clients need Flutter-like connectivity
+    awareness to refresh connections and show network state immediately
+    when switching between Wi-Fi and mobile hotspots.
+
+## Tray (v1.149)
+
+- **Tray supports system vector icons and dual-line titles**
+  - mygo: `Tray` supports PNG images and single-line text titles.
+  - myphp: `Tray` adds `setSystemIcon(string $name)` (Apple SF Symbols on
+    macOS, e.g. 'dot.radiowaves.left.and.right') and `setDualLineTitle(string $top, string $bottom)`
+    for compact dual-line status monitoring (macOS NSAttributedString with
+    exact vertical center alignment).
+  - Why: modern system-level monitoring utilities (network stats, thermal,
+    battery) on macOS require crisp resolution-independent SF Symbols and
+    compact two-line metrics that match Apple's native status bar baseline.
+

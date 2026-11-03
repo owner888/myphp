@@ -1,0 +1,10 @@
+{
+  "name": "NetMonitor",
+  "identifier": "dev.myphp.examples.netmonitor",
+  "entry": "main.php",
+  "macos": {
+    "infoPlist": {
+      "LSUIElement": true
+    }
+  }
+}

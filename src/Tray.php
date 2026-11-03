@@ -30,8 +30,12 @@ final class Tray implements Platform\TrayHandler
         }
         if ($o->icon !== null) {
             $this->setIcon($o->icon, $o->iconIsTemplate);
+        } elseif ($o->systemIcon !== '') {
+            $this->setSystemIcon($o->systemIcon);
         }
-        if ($o->title !== '') {
+        if ($o->topTitle !== '' || $o->bottomTitle !== '') {
+            $this->setDualLineTitle($o->topTitle, $o->bottomTitle);
+        } elseif ($o->title !== '') {
             $this->setTitle($o->title);
         }
         if ($o->toolTip !== '') {
@@ -58,6 +62,18 @@ final class Tray implements Platform\TrayHandler
     public function setTitle(string $title): void
     {
         $this->native?->setTitle($title);
+    }
+
+    /** Sets a system vector icon (Apple SF Symbols on macOS, e.g. 'dot.radiowaves.left.and.right'). */
+    public function setSystemIcon(string $name): void
+    {
+        $this->native?->setSystemIcon($name);
+    }
+
+    /** Sets a compact two-line title on the status item (macOS). */
+    public function setDualLineTitle(string $top, string $bottom): void
+    {
+        $this->native?->setDualLineTitle($top, $bottom);
     }
 
     /** Sets the menu a click shows; null removes it, so that clicks reach onClick (mygo's SetMenu). */

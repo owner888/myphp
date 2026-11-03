@@ -91,6 +91,13 @@ final class Tray implements Platform\Tray
         self::lib()->app_indicator_set_label($this->ind, $title, $title);
     }
 
+    public function setSystemIcon(string $name): void {}
+
+    public function setDualLineTitle(string $top, string $bottom): void
+    {
+        $this->setTitle(trim("$top $bottom"));
+    }
+
     public function setToolTip(string $tip): void
     {
         self::lib()->app_indicator_set_title($this->ind, $tip);

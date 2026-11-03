@@ -11,8 +11,14 @@ final class TrayOptions
         public ?string $icon = null,
         /** Lets macOS tint a black-and-transparent icon to match the menu bar. */
         public bool $iconIsTemplate = false,
+        /** System vector icon name (Apple SF Symbols on macOS, e.g. 'dot.radiowaves.left.and.right'). */
+        public string $systemIcon = '',
         /** Shown next to the icon. */
         public string $title = '',
+        /** Top line of a compact dual-line title (macOS). */
+        public string $topTitle = '',
+        /** Bottom line of a compact dual-line title (macOS). */
+        public string $bottomTitle = '',
         public string $toolTip = '',
         /** Shown when the icon is clicked; without one, clicks reach onClick/onRightClick. */
         public ?Menu $menu = null,
