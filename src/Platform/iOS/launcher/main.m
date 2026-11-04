@@ -2,6 +2,7 @@
 #import <MetalKit/MetalKit.h>
 #import <UserNotifications/UserNotifications.h>
 #import <Network/Network.h>
+#import <WebKit/WebKit.h>
 #import <pthread.h>
 #import <os/log.h>
 
@@ -47,6 +48,16 @@ static struct {
 static int g_dialog_result_count = 0;
 static pthread_mutex_t g_dialog_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#define WEB_MSG_QUEUE_SIZE 64
+typedef struct {
+    int page_id;
+    char msg[2048];
+} MyphpWebMsg;
+static MyphpWebMsg g_web_msg_queue[WEB_MSG_QUEUE_SIZE];
+static int g_web_msg_head = 0;
+static int g_web_msg_tail = 0;
+static pthread_mutex_t g_web_msg_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static float g_safe_top = 0.0f;
 static float g_safe_bottom = 0.0f;
 static float g_safe_left = 0.0f;
@@ -64,6 +75,8 @@ static MTKView *g_view = NULL;
 static CADisplayLink *g_display_link = NULL;
 static volatile int g_needs_render = 0;
 static pthread_t g_php_thread;
+
+static NSMutableDictionary<NSNumber *, WKWebView *> *g_webviews = nil;
 
 static void push_touch_event(int type, float x, float y, double ts) {
     pthread_mutex_lock(&g_touch_mutex);
@@ -106,6 +119,19 @@ static void push_open_url_event(const char *url) {
     pthread_mutex_unlock(&g_open_url_mutex);
 }
 
+static void push_web_msg(int page_id, const char *msg) {
+    if (!msg) return;
+    pthread_mutex_lock(&g_web_msg_mutex);
+    int next = (g_web_msg_head + 1) % WEB_MSG_QUEUE_SIZE;
+    if (next != g_web_msg_tail) {
+        g_web_msg_queue[g_web_msg_head].page_id = page_id;
+        strncpy(g_web_msg_queue[g_web_msg_head].msg, msg, sizeof(g_web_msg_queue[0].msg) - 1);
+        g_web_msg_queue[g_web_msg_head].msg[sizeof(g_web_msg_queue[0].msg) - 1] = '\0';
+        g_web_msg_head = next;
+    }
+    pthread_mutex_unlock(&g_web_msg_mutex);
+}
+
 static void set_dialog_result(int callback_id, int btn_idx) {
     pthread_mutex_lock(&g_dialog_mutex);
     if (g_dialog_result_count < MAX_DIALOG_RESULTS) {
@@ -115,6 +141,24 @@ static void set_dialog_result(int callback_id, int btn_idx) {
     }
     pthread_mutex_unlock(&g_dialog_mutex);
 }
+
+@interface MyphpWebBridge : NSObject <WKScriptMessageHandler>
+@property (nonatomic, assign) int pageId;
+@end
+
+@implementation MyphpWebBridge
+- (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message {
+    if ([message.body isKindOfClass:[NSString class]]) {
+        push_web_msg(self.pageId, [(NSString *)message.body UTF8String]);
+    } else if ([message.body isKindOfClass:[NSDictionary class]] || [message.body isKindOfClass:[NSArray class]]) {
+        NSData *data = [NSJSONSerialization dataWithJSONObject:message.body options:0 error:nil];
+        if (data) {
+            NSString *str = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            push_web_msg(self.pageId, [str UTF8String]);
+        }
+    }
+}
+@end
 
 // C exports for PHP ext-ffi
 int myphp_ios_get_screen_width(void) {
@@ -299,6 +343,110 @@ int myphp_ios_poll_memory_warning(void) {
         return 1;
     }
     return 0;
+}
+
+void myphp_ios_create_web_view(int page_id) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!g_webviews) g_webviews = [NSMutableDictionary dictionary];
+
+        WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+        MyphpWebBridge *bridge = [[MyphpWebBridge alloc] init];
+        bridge.pageId = page_id;
+        [config.userContentController addScriptMessageHandler:bridge name:@"myphp"];
+
+        NSString *initScript = @"window.__myphp_native = { postMessage: function(msg) { window.webkit.messageHandlers.myphp.postMessage(msg); } };";
+        WKUserScript *userScript = [[WKUserScript alloc] initWithSource:initScript injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
+        [config.userContentController addUserScript:userScript];
+
+        WKWebView *wv = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
+        wv.hidden = YES;
+        wv.opaque = NO;
+        wv.backgroundColor = [UIColor clearColor];
+        wv.scrollView.backgroundColor = [UIColor clearColor];
+
+        g_webviews[@(page_id)] = wv;
+        if (g_window.rootViewController.view) {
+            [g_window.rootViewController.view addSubview:wv];
+        }
+    });
+}
+
+void myphp_ios_destroy_web_view(int page_id) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (wv) {
+            [wv removeFromSuperview];
+            [g_webviews removeObjectForKey:@(page_id)];
+        }
+    });
+}
+
+void myphp_ios_load_url(int page_id, const char *url) {
+    if (!url) return;
+    NSString *u = [NSString stringWithUTF8String:url];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (wv) {
+            NSURL *nsUrl = [NSURL URLWithString:u];
+            if (nsUrl) {
+                [wv loadRequest:[NSURLRequest requestWithURL:nsUrl]];
+            }
+        }
+    });
+}
+
+void myphp_ios_load_html(int page_id, const char *html, const char *base_url) {
+    if (!html) return;
+    NSString *h = [NSString stringWithUTF8String:html];
+    NSString *b = base_url ? [NSString stringWithUTF8String:base_url] : @"";
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (wv) {
+            NSURL *nsBase = b.length > 0 ? [NSURL URLWithString:b] : nil;
+            [wv loadHTMLString:h baseURL:nsBase];
+        }
+    });
+}
+
+void myphp_ios_eval_js(int page_id, const char *script) {
+    if (!script) return;
+    NSString *s = [NSString stringWithUTF8String:script];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (wv) {
+            [wv evaluateJavaScript:s completionHandler:nil];
+        }
+    });
+}
+
+void myphp_ios_place_web_view(int page_id, float x, float y, float w, float h, int visible) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (wv) {
+            if (!visible || w <= 0 || h <= 0) {
+                wv.hidden = YES;
+            } else {
+                wv.frame = CGRectMake(x, y, w, h);
+                wv.hidden = NO;
+                [wv.superview bringSubviewToFront:wv];
+            }
+        }
+    });
+}
+
+int myphp_ios_poll_web_message(int *out_page_id, char *out_buf, int max_len) {
+    if (!out_page_id || !out_buf || max_len <= 0) return 0;
+    int has = 0;
+    pthread_mutex_lock(&g_web_msg_mutex);
+    if (g_web_msg_head != g_web_msg_tail) {
+        *out_page_id = g_web_msg_queue[g_web_msg_tail].page_id;
+        strncpy(out_buf, g_web_msg_queue[g_web_msg_tail].msg, max_len - 1);
+        out_buf[max_len - 1] = '\0';
+        g_web_msg_tail = (g_web_msg_tail + 1) % WEB_MSG_QUEUE_SIZE;
+        has = 1;
+    }
+    pthread_mutex_unlock(&g_web_msg_mutex);
+    return has;
 }
 
 void myphp_ios_show_keyboard(void) {

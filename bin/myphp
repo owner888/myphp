@@ -25,6 +25,8 @@ Commands:
 	i18n check [dir]     check the app's catalogs of messages
 	dev                  run the app in development, restarting it on changes
 	build                build production apps (a .app and a .dmg, Linux packages)
+	run [flags] [dir]    run the app on an Android device, iOS simulator or desktop
+	devices              list connected devices and available simulators
 	screenshot [dir]     run the app once and save a PNG of its window, and its elements
 	micro                build the static PHP that apps built with -launcher micro run on
 	keygen               create the key pair that signs updates
@@ -37,7 +39,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, Dmg, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -2365,41 +2367,178 @@ final class ScreenshotSession
     }
 }
 
-// ---- doctor, skills -----------------------------------------------------
-/** Checks the tools MyPHP needs (mygo's doctor): failed checks exit with status 1. */
+// ---- doctor, devices, run ----------------------------------------------
+/** Checks the tools MyPHP needs: PHP runtime, macOS/iOS toolchain, Android toolchain. */
 function doctor(array $args): void
 {
-    help($args, "doctor\n\nChecks the tools and system libraries MyPHP needs.");
-    $ok = true;
-    $check = function (string $name, bool $good, string $detail) use (&$ok): void {
-        if (!$good) { $ok = false; }
-        printf("%s %-10s %s\n", $good ? "\033[32m✓\033[0m" : "\033[31m✗\033[0m", $name, $detail);
-    };
-    $optional = function (string $name, string $feature, string $found): void {
-        if ($found !== '') {
-            printf("\033[32m✓\033[0m %-10s %s\n", $name, $found);
-        } else {
-            printf("- %-10s not found (optional: %s)\n", $name, $feature);
+    help($args, "doctor\n\nChecks the tools, toolchains and system libraries MyPHP needs.");
+    echo "Doctor summary (to see all details, run `myphp doctor -v`):\n\n";
+
+    $section = function (string $title, array $items): bool {
+        $allOk = true;
+        foreach ($items as $item) {
+            if (!$item[0]) {
+                $allOk = false;
+                break;
+            }
         }
+        $icon = $allOk ? "\033[32m[✓]\033[0m" : "\033[31m[!]\033[0m";
+        echo "$icon $title\n";
+        foreach ($items as [$ok, $desc, $hint]) {
+            $mark = $ok ? "\033[32m•\033[0m" : "\033[31m✗\033[0m";
+            echo "    $mark $desc\n";
+            if (!$ok && $hint !== '') {
+                echo "      \033[33m! $hint\033[0m\n";
+            }
+        }
+        echo "\n";
+        return $allOk;
     };
-    $check('php', PHP_VERSION_ID >= 80300 && extension_loaded('ffi'), PHP_VERSION . (extension_loaded('ffi') ? ' with FFI' : ' without the FFI extension, which MyPHP needs') . ' (8.3 or later is required)');
-    $bun = trim((string)shell_exec('bun --version 2>/dev/null'));
-    $bun !== '' ? $check('bun', true, $bun) : print("- bun        not found (optional, used by the web template: https://bun.sh)\n");
+
+    // 1. PHP Runtime
+    $phpVersion = PHP_VERSION;
+    $phpOk = PHP_VERSION_ID >= 80300;
+    $ffiOk = extension_loaded('ffi');
+    $opcacheOk = extension_loaded('Zend OPcache');
+    $mbstringOk = extension_loaded('mbstring');
+    $zlibOk = extension_loaded('zlib');
+    $section("PHP Runtime", [
+        [$phpOk, "PHP version $phpVersion (8.3.0 or later required)", "Install PHP 8.3+ via Homebrew or system package manager"],
+        [$ffiOk, "ext-ffi enabled", "Enable ffi.enable=1 in php.ini"],
+        [$opcacheOk, "OPcache & JIT available", "Enable zend_extension=opcache in php.ini"],
+        [$mbstringOk && $zlibOk, "mbstring and zlib extensions loaded", "Install php-mbstring and php-zlib"],
+    ]);
+
+    // 2. Apple & iOS Toolchain
     if (PHP_OS_FAMILY === 'Darwin') {
-        $v = trim((string)shell_exec('sw_vers -productVersion'));
-        $check('macOS', (int)explode('.', $v)[0] >= 12, "$v (macOS 12 or later is required)");
-        $check('cc', trim((string)shell_exec('command -v cc')) !== '', 'the C compiler of the exec launcher (xcode-select --install)');
+        $swVers = trim((string)@shell_exec('sw_vers -productVersion 2>/dev/null'));
+        $clang = trim((string)@shell_exec('command -v clang 2>/dev/null'));
+        $xcodePath = trim((string)@shell_exec('xcode-select -p 2>/dev/null'));
+        $iosSdk = trim((string)@shell_exec('xcrun --sdk iphoneos --show-sdk-path 2>/dev/null'));
+        $simctl = trim((string)@shell_exec('command -v xcrun 2>/dev/null'));
+        $section("Apple & iOS Toolchain", [
+            [$swVers !== '', "macOS $swVers", "macOS 12.0 or later is recommended"],
+            [$clang !== '', "Xcode Command Line Tools ($clang)", "Run: xcode-select --install"],
+            [$xcodePath !== '', "Xcode developer directory ($xcodePath)", "Install Xcode from the App Store"],
+            [$iosSdk !== '', "iOS SDK ($iosSdk)", "Install iOS platform components in Xcode"],
+            [$simctl !== '', "iOS Simulator manager (xcrun simctl)", "Install iOS simulator runtimes via Xcode Settings"],
+        ]);
+    }
+
+    // 3. Android Toolchain
+    $adb = trim((string)@shell_exec('command -v adb 2>/dev/null'));
+    $javac = trim((string)@shell_exec('command -v javac 2>/dev/null'));
+    $androidSdk = getenv('ANDROID_HOME') ?: (getenv('ANDROID_SDK_ROOT') ?: '/opt/homebrew/share/android-commandlinetools');
+    if (!is_dir($androidSdk) && is_dir(getenv('HOME') . '/Library/Android/sdk')) {
+        $androidSdk = getenv('HOME') . '/Library/Android/sdk';
+    }
+    $sdkOk = is_dir($androidSdk);
+    $aapt2 = trim((string)@shell_exec("find '$androidSdk' -name aapt2 -type f 2>/dev/null | head -n 1"));
+    $section("Android Toolchain", [
+        [$adb !== '', $adb !== '' ? "Android Debug Bridge ($adb)" : "adb not found", "Install platform-tools or add adb to PATH"],
+        [$javac !== '', $javac !== '' ? "Java Development Kit ($javac)" : "JDK javac not found", "Install OpenJDK 17+ (brew install openjdk@17)"],
+        [$sdkOk, $sdkOk ? "Android SDK ($androidSdk)" : "Android SDK not found", "Set ANDROID_HOME environment variable"],
+        [$aapt2 !== '', $aapt2 !== '' ? "Android Build-Tools (aapt2, d8, zipalign)" : "Android Build-Tools missing", "Install build-tools via sdkmanager"],
+    ]);
+
+    // 4. Connected Devices
+    $devices = DeviceManager::listDevices();
+    $deviceCount = count($devices);
+    $deviceItems = [];
+    foreach ($devices as $d) {
+        $deviceItems[] = [true, "{$d->name} ({$d->platform}, {$d->status}) • {$d->id}", ""];
+    }
+    $section("Connected Devices ($deviceCount available)", $deviceItems ?: [[false, "No connected devices found", "Connect an Android device or boot an iOS simulator"]]);
+}
+
+/** Lists connected devices, real hardware and available simulators. */
+function devices(array $args): void
+{
+    help($args, "devices\n\nLists all connected devices, physical phones and available simulators.");
+    $devices = DeviceManager::listDevices();
+    if ($devices === []) {
+        echo "No devices or simulators found.\n";
+        return;
+    }
+
+    echo "Found " . count($devices) . " connected device(s):\n\n";
+    printf("  %-28s  %-36s  %-10s  %-10s\n", "Device", "ID", "Platform", "Status");
+    printf("  %s  %s  %s  %s\n", str_repeat('-', 28), str_repeat('-', 36), str_repeat('-', 10), str_repeat('-', 10));
+    foreach ($devices as $d) {
+        $name = mb_strlen($d->name) > 28 ? mb_substr($d->name, 0, 26) . '…' : $d->name;
+        $id = strlen($d->id) > 36 ? substr($d->id, 0, 34) . '…' : $d->id;
+        $status = $d->status === 'connected' || $d->status === 'booted'
+            ? "\033[32m{$d->status}\033[0m"
+            : "\033[90m{$d->status}\033[0m";
+        printf("  %-28s  %-36s  %-10s  %s\n", $name, $id, $d->platform, $status);
+    }
+    echo "\n";
+}
+
+/** Runs the app on an Android device, iOS simulator or desktop. */
+function runCommand(array $args): void
+{
+    help($args, "run [flags] [dir]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux)");
+    $deviceId = option($args, 'd') ?: (option($args, 'device') ?: (option($args, '-device') ?: ''));
+
+    ['dir' => $dir, 'config' => $c] = project($args);
+    $targetDev = DeviceManager::findDevice($deviceId);
+    if ($targetDev === null) {
+        fail($deviceId !== '' ? "No device found matching \"$deviceId\". Run `myphp devices` to list available devices." : "No available devices or simulators found.");
+    }
+
+    logf("Selected target device: {$targetDev->name} ({$targetDev->platform})");
+
+    if ($targetDev->platform === 'android') {
+        // 1. Android Workflow
+        logf("Building Android APK...");
+        $out = path($dir, $c['out']);
+        is_dir($out) || mkdir($out, 0755, true);
+        $name = orElse($c['name'], 'app');
+        $apk = "$out/$name.apk";
+        $script = FRAMEWORK . '/scripts/package-android-apk.sh';
+        sh([$script, $dir, $apk, $name], $dir) === 0 || fail("Failed to build Android APK");
+
+        logf("Installing APK on device {$targetDev->id}...");
+        sh(['adb', '-s', $targetDev->id, 'install', '-r', $apk]) === 0 || fail("Failed to install APK via adb");
+
+        logf("Launching application...");
+        sh(['adb', '-s', $targetDev->id, 'shell', 'am', 'start', '-n', 'com.owner888.myphp/.MyphpActivity']) === 0 || fail("Failed to start activity");
+
+        echo "\n  ✓ Application is now running on {$targetDev->name}\n";
+        echo "  Streaming logs from device (Ctrl+C to quit):\n\n";
+        passthru("adb -s {$targetDev->id} logcat -c && adb -s {$targetDev->id} logcat -s MyPHP:D AndroidRuntime:E");
+    } elseif ($targetDev->platform === 'ios') {
+        // 2. iOS Workflow
+        if ($targetDev->status === 'shutdown') {
+            logf("Booting iOS Simulator {$targetDev->name}...");
+            sh(['xcrun', 'simctl', 'boot', $targetDev->id]);
+            shell_exec('open -a Simulator 2>/dev/null');
+        }
+        logf("Building iOS App Bundle...");
+        $out = path($dir, $c['out']);
+        is_dir($out) || mkdir($out, 0755, true);
+        $name = orElse($c['name'], 'app');
+        $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
+        $mainPhp = file_exists($dir . '/main.php') ? $dir . '/main.php' : $dir . '/app.php';
+        $script = FRAMEWORK . '/scripts/package-ios-app.sh';
+        sh([$script, $mainPhp, $bundleId, $name, $out], $dir) === 0 || fail("Failed to build iOS application");
+
+        $appBundle = "$out/$name.app";
+        logf("Installing app on simulator {$targetDev->id}...");
+        sh(['xcrun', 'simctl', 'install', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on iOS simulator");
+
+        logf("Launching application ($bundleId)...");
+        sh(['xcrun', 'simctl', 'launch', $targetDev->id, $bundleId]) === 0 || fail("Failed to launch app on iOS simulator");
+        shell_exec('open -a Simulator 2>/dev/null');
+
+        echo "\n  ✓ Application is now running on {$targetDev->name}\n\n";
     } else {
-        $check(PHP_OS_FAMILY, false, 'no MyPHP backend for this platform yet');
+        // 3. Desktop Workflow
+        logf("Running on desktop...");
+        $mainPhp = file_exists($dir . '/main.php') ? $dir . '/main.php' : $dir . '/app.php';
+        passthru(escapeshellcmd(PHP_BINARY) . ' ' . implode(' ', PHP_FLAGS) . ' ' . escapeshellarg($mainPhp));
     }
-    $optional('gh', 'myphp build -upload to GitHub releases, https://cli.github.com', MyPHP\Native\Build\Cmd::look('gh'));
-    if (PHP_OS_FAMILY === 'Darwin') {
-        $ids = substr_count((string)shell_exec('security find-identity -v -p codesigning 2>/dev/null'), 'Developer ID Application');
-        $optional('codesign', 'a Developer ID to sign apps for other Macs', $ids > 0 ? "$ids Developer ID identities" : '');
-    }
-    $spc = trim((string)shell_exec('command -v spc')) ?: (is_file(getenv('HOME') . '/.myphp/spc') ? getenv('HOME') . '/.myphp/spc' : '');
-    $optional('spc', 'myphp build -launcher micro, which myphp micro sets up', $spc);
-    $ok || fail('some checks failed');
 }
 
 const SKILLS = __DIR__ . '/skills'; // the bundled skills, which apps do not ship
@@ -2444,6 +2583,8 @@ function run(string $cmd, array $args): void
         'generate', 'gen' => generate($args),
         'i18n' => i18nCheck($args),
         'build' => build($args),
+        'run' => runCommand($args),
+        'devices' => devices($args),
         'screenshot' => screenshot($args),
         'micro' => micro($args),
         'keygen' => keygen($args),

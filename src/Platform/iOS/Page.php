@@ -4,17 +4,41 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
+use MyPHP\Native\iOS;
 use MyPHP\Platform;
 
+/**
+ * iOS system WebView page via WKWebView over WebKit.framework.
+ */
 final class Page implements Platform\Page
 {
+    /** @var array<int, self> */
+    private static array $pages = [];
     private static int $nextId = 1;
+
     public readonly int $id;
     private bool $closed = false;
 
-    public function __construct(public ?Closure $onMessage = null)
+    /** @var ?Closure(string): void */
+    public ?Closure $onMessage = null;
+
+    public function __construct(?Closure $onMessage = null)
     {
         $this->id = self::$nextId++;
+        $this->onMessage = $onMessage;
+        self::$pages[$this->id] = $this;
+
+        try {
+            iOS::ffi()->myphp_ios_create_web_view($this->id);
+        } catch (\Throwable $e) {}
+    }
+
+    public static function onWebMessage(int $pageId, string $message): void
+    {
+        $page = self::$pages[$pageId] ?? null;
+        if ($page !== null && $page->onMessage !== null) {
+            ($page->onMessage)($message);
+        }
     }
 
     public function handle(): mixed
@@ -26,42 +50,119 @@ final class Page implements Platform\Page
     public function closeDevTools(): void {}
     public function isDevToolsOpened(): bool { return false; }
     public function setUserScripts(array $scripts): void {}
+    public function setContentRules(array $lists): void {}
+    public function isAudible(): bool { return false; }
+    public function setAudioMuted(bool $muted): void {}
+    public function isAudioMuted(): bool { return false; }
+    public function captureState(int $kind): int { return 0; }
+    public function setCaptureState(int $kind, int $state): void {}
+    public function processID(): int { return getmypid(); }
+    public function sessionState(): string { return ''; }
+    public function restoreSessionState(string $state): bool { return false; }
 
-    public function loadURL(string $url): void {}
-    public function loadHTML(string $html, string $baseURL): void {}
-    public function eval(string $script, ?Closure $callback = null): void
+    public function reload(bool $ignoreCache): void
     {
-        if ($callback !== null) {
-            $callback(null, null);
-        }
+        $this->evaluate('location.reload();');
     }
 
-    public function postMessage(string $message): void {}
+    public function stop(): void
+    {
+        $this->evaluate('window.stop();');
+    }
 
-    public function reload(): void {}
-    public function stopLoading(): void {}
+    public function goBack(): void
+    {
+        $this->evaluate('history.back();');
+    }
+
+    public function goForward(): void
+    {
+        $this->evaluate('history.forward();');
+    }
+
     public function canGoBack(): bool { return false; }
     public function canGoForward(): bool { return false; }
-    public function goBack(): void {}
-    public function goForward(): void {}
-
-    public function find(string $text, bool $forward, bool $matchCase, bool $findNext): void {}
-    public function stopFinding(bool $keepSelection): void {}
-
-    public function print(): void {}
-    public function printToPDF(string $path, ?array $options = null, ?Closure $callback = null): void
+    public function isLoading(): bool { return false; }
+    public function setZoom(float $f): void {}
+    public function zoom(): float { return 1.0; }
+    public function setUserAgent(string $ua): void {}
+    public function userAgent(): string { return ''; }
+    public function loadFile(string $path, string $readAccessDir): void
     {
-        if ($callback !== null) {
-            $callback(false);
+        $this->loadURL('file://' . $path);
+    }
+
+    public function callAsync(string $body, Closure $done): void
+    {
+        $done(null, null);
+    }
+
+    public function capture(Closure $done): void
+    {
+        $done(null);
+    }
+
+    public function loadHTML(string $html, string $baseURL = ''): void
+    {
+        if (!$this->closed) {
+            try {
+                iOS::ffi()->myphp_ios_load_html($this->id, $html, $baseURL);
+            } catch (\Throwable $e) {}
         }
     }
 
-    public function zoom(): float { return 1.0; }
-    public function setZoom(float $zoom): void {}
-    public function setBackground(int $color): void {}
+    public function url(): string
+    {
+        return '';
+    }
+
+    public function loadURL(string $url): void
+    {
+        if (!$this->closed) {
+            try {
+                iOS::ffi()->myphp_ios_load_url($this->id, $url);
+            } catch (\Throwable $e) {}
+        }
+    }
+
+    public function print($window): void {}
+    public function printToPDF($window, float $width, float $height, bool $landscape, array $margins, bool $background, Closure $done): void
+    {
+        $done(null);
+    }
+
+    public function allowsPictureInPicture(): ?bool { return false; }
+    public function togglePictureInPicture(string $script): void {}
+    public function pictureInPictureActive(): bool { return false; }
+    public function leavingPage(bool $pip): void {}
+
+    public function evaluate(string $js, $completion = null): void
+    {
+        if (!$this->closed) {
+            try {
+                iOS::ffi()->myphp_ios_eval_js($this->id, $js);
+            } catch (\Throwable $e) {}
+        }
+    }
+
+    public function deliver(array $message): void
+    {
+        $json = json_encode($message, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $script = "if(window.myphp&&window.myphp.__deliver){window.myphp.__deliver({$json});}";
+        $this->evaluate($script);
+    }
+
+    public function contextMenu(array $menu, array $event, \MyPHP\EventListen $listen): void {}
+    public function scrollTo(): mixed { return null; }
 
     public function close(): void
     {
-        $this->closed = true;
+        if (!$this->closed) {
+            $this->closed = true;
+            unset(self::$pages[$this->id]);
+            try {
+                iOS::ffi()->myphp_ios_destroy_web_view($this->id);
+            } catch (\Throwable $e) {}
+        }
     }
 }

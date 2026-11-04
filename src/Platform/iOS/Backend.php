@@ -91,6 +91,14 @@ final class Backend implements Platform\Backend
                     $this->h->openURLs([$urlStr]);
                 }
             }
+
+            // Poll web view IPC messages
+            $pageId = $f->new('int');
+            $msgBuf = $f->new('char[2048]');
+            while ($f->myphp_ios_poll_web_message(\FFI::addr($pageId), \FFI::cast('char*', \FFI::addr($msgBuf)), 2048) > 0) {
+                $msgStr = \FFI::string(\FFI::cast('char*', \FFI::addr($msgBuf)));
+                Page::onWebMessage((int)$pageId->cdata, $msgStr);
+            }
         } catch (\Throwable $e) {}
 
         // Process frame if requested
@@ -201,9 +209,11 @@ final class Backend implements Platform\Backend
         throw new Platform\Unsupported('NowPlaying not implemented on iOS');
     }
 
+    private ?Media $media = null;
+
     public function media(): Platform\Media
     {
-        throw new Platform\Unsupported('Media playback not implemented on iOS yet');
+        return $this->media ??= new Media();
     }
 
     private ?Symbols $symbols = null;
