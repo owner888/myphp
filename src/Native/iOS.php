@@ -39,6 +39,7 @@ final class iOS
             void myphp_ios_remove_all_notifications(void);
             int myphp_ios_is_network_connected(void);
             int myphp_ios_is_network_cellular(void);
+            int myphp_ios_poll_theme_changed(void);
             void myphp_ios_show_keyboard(void);
             void myphp_ios_hide_keyboard(void);
         ");

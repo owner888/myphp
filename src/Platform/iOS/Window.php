@@ -114,6 +114,11 @@ final class Window implements Platform\Window
                     $this->onBackspace();
                 }
             }
+
+            if ($f->myphp_ios_poll_theme_changed() > 0) {
+                $this->b->theme()->notifyChanged();
+                $this->requestFrame();
+            }
         } catch (\Throwable $e) {
         }
     }

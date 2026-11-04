@@ -49,6 +49,7 @@ static float g_safe_right = 0.0f;
 static int g_network_connected = 1;
 static int g_network_is_cellular = 0;
 static nw_path_monitor_t g_path_monitor = NULL;
+static volatile int g_theme_changed = 0;
 
 static UIWindow *g_window = NULL;
 static MTKView *g_view = NULL;
@@ -235,6 +236,14 @@ int myphp_ios_is_network_cellular(void) {
     return g_network_is_cellular;
 }
 
+int myphp_ios_poll_theme_changed(void) {
+    if (g_theme_changed) {
+        g_theme_changed = 0;
+        return 1;
+    }
+    return 0;
+}
+
 void myphp_ios_show_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (g_view && ![g_view isFirstResponder]) {
@@ -386,6 +395,12 @@ static void* php_worker_thread(void *arg) {
         }
         [g_display_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
     }
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    g_theme_changed = 1;
+    g_needs_render = 1;
 }
 
 - (BOOL)prefersStatusBarHidden {
