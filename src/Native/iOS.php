@@ -44,6 +44,13 @@ final class iOS
             int myphp_ios_poll_theme_changed(void);
             int myphp_ios_is_app_paused(void);
             int myphp_ios_poll_memory_warning(void);
+            void myphp_ios_create_web_view(int page_id);
+            void myphp_ios_destroy_web_view(int page_id);
+            void myphp_ios_load_url(int page_id, const char *url);
+            void myphp_ios_load_html(int page_id, const char *html, const char *base_url);
+            void myphp_ios_eval_js(int page_id, const char *script);
+            void myphp_ios_place_web_view(int page_id, float x, float y, float w, float h, int visible);
+            int myphp_ios_poll_web_message(int *out_page_id, char *out_buf, int max_len);
             void myphp_ios_show_keyboard(void);
             void myphp_ios_hide_keyboard(void);
         ");

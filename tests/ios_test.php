@@ -69,5 +69,9 @@ $shell = $b->shell();
 $shell->beep();
 same(true, true, 'shell beep triggers without error');
 
+// 10. Media outputs
+$media = $b->media();
+same(true, is_array($media->audioOutputs()), 'iOS audio outputs returned as array');
+
 $win1->close();
 same(true, $win1->isClosed(), 'window closes successfully');
