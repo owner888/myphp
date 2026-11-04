@@ -199,6 +199,13 @@ final class Window implements Platform\Window
                     }
                 }
 
+                // Visual pressed highlight & Taptic feedback when touching an interactive control
+                if ($rt !== null && $rt->pressTarget($ptX, $ptY) !== null) {
+                    $input->mouseDown = true;
+                    iOS::ffi()->myphp_ios_haptic_feedback(0);
+                    $this->requestFrame();
+                }
+
                 $pressId = ++$this->longPressId;
                 App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
                     if ($this->touchActive && !$this->touchIsScrolling && $this->longPressId === $pressId) {
@@ -232,6 +239,7 @@ final class Window implements Platform\Window
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
                 if (!$this->touchIsScrolling && $dist > 8.0) {
                     $this->touchIsScrolling = true;
+                    $input->mouseDown = false;
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
                 }
@@ -284,6 +292,15 @@ final class Window implements Platform\Window
                     $input->push(['down', $this->touchStartX, $this->touchStartY, 0, 1, 0, $this->touchStartTime]);
                     $input->push(['up', $this->touchStartX, $this->touchStartY, 0, 1, 0, $time]);
                     $this->requestFrame();
+                    App::after(0.08, function () {
+                        if (!$this->touchActive && ($inp = $this->w->input) !== null) {
+                            $inp->mouseDown = false;
+                            $inp->mouseInside = false;
+                            $inp->mouseX = -1;
+                            $inp->mouseY = -1;
+                            $this->requestFrame();
+                        }
+                    });
                 }
                 break;
 
@@ -291,6 +308,9 @@ final class Window implements Platform\Window
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
                 $this->touchInField = false;
+                $input->mouseDown = false;
+                $input->mouseInside = false;
+                $this->requestFrame();
                 break;
         }
     }

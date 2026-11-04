@@ -45,6 +45,7 @@ import android.os.ParcelUuid;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -479,6 +480,26 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         });
     }
 
+    public static void performHapticFeedback() {
+        if (sInstance == null) return;
+        try {
+            android.os.Vibrator vib = sInstance.getSystemService(android.os.Vibrator.class);
+            if (vib != null && vib.hasVibrator()) {
+                vib.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_CLICK));
+            }
+        } catch (Exception ignored) {}
+        if (sInstance.surfaceView != null) {
+            sInstance.runOnUiThread(() -> {
+                try {
+                    sInstance.surfaceView.performHapticFeedback(
+                        HapticFeedbackConstants.VIRTUAL_KEY,
+                        HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
+                    );
+                } catch (Exception ignored) {}
+            });
+        }
+    }
+
     public static void showAlertDialog(String title, String message, String[] buttons, int callbackId) {
         if (sInstance == null) return;
         sInstance.runOnUiThread(() -> {
@@ -874,9 +895,19 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
 
     private static void setAudioProfilesConnected(Context context, BluetoothDevice device, boolean connect) {
         try {
+            if (connect) {
+                btStopBleScan();
+            }
             BluetoothManager bm = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
             BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
             if (adapter == null || device == null) return;
+            if (connect) {
+                try {
+                    java.lang.reflect.Method setAct = adapter.getClass().getMethod("setActiveDevice", BluetoothDevice.class, int.class);
+                    setAct.setAccessible(true);
+                    setAct.invoke(adapter, device, 0); // ACTIVE_DEVICE_AUDIO
+                } catch (Exception ignored) {}
+            }
             String methodName = connect ? "connect" : "disconnect";
             int[] profiles = new int[]{BluetoothProfile.A2DP, BluetoothProfile.HEADSET};
             for (int prof : profiles) {
@@ -891,8 +922,25 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                         } catch (Exception e) {
                             Log.w(TAG, "Profile " + profile + " " + methodName + " reflection: " + e.getMessage());
                         }
-                        adapter.closeProfileProxy(profile, proxy);
-                        nativeSignal();
+                        if (connect && profile == BluetoothProfile.A2DP) {
+                            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                                try {
+                                    if (proxy.getConnectionState(device) != BluetoothProfile.STATE_CONNECTED) {
+                                        java.lang.reflect.Method m2 = proxy.getClass().getDeclaredMethod("connect", BluetoothDevice.class);
+                                        m2.setAccessible(true);
+                                        m2.invoke(proxy, device);
+                                    }
+                                    java.lang.reflect.Method setAct = adapter.getClass().getMethod("setActiveDevice", BluetoothDevice.class, int.class);
+                                    setAct.setAccessible(true);
+                                    setAct.invoke(adapter, device, 0);
+                                } catch (Exception ignored) {}
+                                adapter.closeProfileProxy(profile, proxy);
+                                nativeSignal();
+                            }, 450);
+                        } else {
+                            adapter.closeProfileProxy(profile, proxy);
+                            nativeSignal();
+                        }
                     }
                     @Override
                     public void onServiceDisconnected(int profile) {}
@@ -1085,8 +1133,23 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             + "|err=" + sLastBtError.replace("|", " ");
     }
 
+    public static void btStopBleScan() {
+        if (sInstance == null || !sBleScanning) return;
+        try {
+            BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+            if (adapter != null && adapter.isEnabled()) {
+                BluetoothLeScanner scanner = adapter.getBluetoothLeScanner();
+                if (scanner != null) {
+                    scanner.stopScan(sBleScanCallback);
+                }
+            }
+        } catch (Exception ignored) {}
+        sBleScanning = false;
+    }
+
     public static byte[] btScanBle() {
-        if (sInstance == null || !hasBluetoothPermissions()) return sLastAppleBlePayload;
+        if (sInstance == null || !hasBluetoothPermissions() || btIsConnected()) return sLastAppleBlePayload;
         try {
             BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
             BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
@@ -1094,7 +1157,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 BluetoothLeScanner scanner = adapter.getBluetoothLeScanner();
                 if (scanner != null) {
                     ScanSettings settings = new ScanSettings.Builder()
-                        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                         .build();
                     scanner.startScan(null, settings, sBleScanCallback);
                     sBleScanning = true;
@@ -1107,6 +1170,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     public static boolean btConnectL2capSocket(Object sockObj) {
+        btStopBleScan();
         btDisconnect();
         sLastBtError = "";
         if (!(sockObj instanceof BluetoothSocket)) {

@@ -182,6 +182,7 @@ static jmethodID g_mid_clipboard_get = NULL;
 static jmethodID g_mid_clipboard_set = NULL;
 static jmethodID g_mid_open_url = NULL;
 static jmethodID g_mid_keep_screen_on = NULL;
+static jmethodID g_mid_perform_haptic = NULL;
 static jmethodID g_mid_show_alert_dialog = NULL;
 static jmethodID g_mid_show_notification = NULL;
 static jmethodID g_mid_is_network_connected = NULL;
@@ -339,6 +340,7 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_clipboard_set = (*env)->GetStaticMethodID(env, clazz, "setClipboardText", "(Ljava/lang/String;)V");
     g_mid_open_url = (*env)->GetStaticMethodID(env, clazz, "openUrl", "(Ljava/lang/String;)V");
     g_mid_keep_screen_on = (*env)->GetStaticMethodID(env, clazz, "setKeepScreenOn", "(Z)V");
+    g_mid_perform_haptic = (*env)->GetStaticMethodID(env, clazz, "performHapticFeedback", "()V");
     g_mid_show_alert_dialog = (*env)->GetStaticMethodID(env, clazz, "showAlertDialog", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V");
     g_mid_show_notification = (*env)->GetStaticMethodID(env, clazz, "showNotification", "(Ljava/lang/String;Ljava/lang/String;I)V");
     g_mid_is_network_connected = (*env)->GetStaticMethodID(env, clazz, "isNetworkConnected", "()Z");
@@ -579,6 +581,12 @@ void myphp_set_keep_screen_on(int on) {
     JNIEnv *env = get_jni_env();
     if (!env || !g_activity_class || !g_mid_keep_screen_on) return;
     (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_keep_screen_on, (jboolean)(on ? JNI_TRUE : JNI_FALSE));
+}
+
+void myphp_perform_haptic(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_perform_haptic) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_perform_haptic);
 }
 
 void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id) {

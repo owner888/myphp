@@ -1167,7 +1167,7 @@ final class Runtime
     }
 
     /** The innermost node under ($x, $y) last frame that takes the pointer (mygo's interactive): clickable, focusable, draggable, a field, a link or a slider; null for none. */
-    private function pressTarget(float $x, float $y): ?int
+    public function pressTarget(float $x, float $y): ?int
     {
         $best = null; $at = -1;
         foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->dragSources), array_keys($this->dataSources), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $ids) {
@@ -3405,12 +3405,32 @@ final class Runtime
         return true;
     }
 
+    /** @var array<int, float> node id => monotonic timestamp (seconds) until which a touch tap keeps its visual flash highlight */
+    public array $touchFlash = [];
+
+    public function flashTouch(int $id, float $duration = 0.20): void
+    {
+        $this->touchFlash[$id] = hrtime(true) / 1e9 + $duration;
+    }
+
+    public function isTouchFlashing(int $id): bool
+    {
+        if (!isset($this->touchFlash[$id])) {
+            return false;
+        }
+        if (hrtime(true) / 1e9 >= $this->touchFlash[$id]) {
+            unset($this->touchFlash[$id]);
+            return false;
+        }
+        return true;
+    }
+
     public function hovered(int $id): bool
     {
         if (!$this->input->mouseInside || !$this->under($id, $this->input->mouseX, $this->input->mouseY)) {
             return false;
         }
-        $p = $this->input->mouseDown ? ($this->pointerPress['id'] ?? null) : null;
+        $p = $this->input->mouseDown && ($this->pointerPress['down'] ?? false) ? ($this->pointerPress['id'] ?? null) : null;
         if ($p === null || $p === $id || !isset($this->rects[$p])) {
             return true; // no press held, or the node pressed gone: what is under the pointer
         }
