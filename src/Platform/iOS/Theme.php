@@ -39,4 +39,11 @@ final class Theme implements Platform\Theme
     {
         $this->onChange = $fn;
     }
+
+    public function notifyChanged(): void
+    {
+        if ($this->onChange !== null) {
+            ($this->onChange)();
+        }
+    }
 }
