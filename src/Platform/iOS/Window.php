@@ -176,6 +176,9 @@ final class Window implements Platform\Window
 
         $input->mouse($ptX, $ptY);
         $input->mods = 0;
+        if ($this->w->runtime !== null) {
+            $this->w->runtime->touchMode = true;
+        }
 
         switch ($type) {
             case 0: // touchesBegan
@@ -195,16 +198,17 @@ final class Window implements Platform\Window
                     $r = $rt->rectOf($rt->focus);
                     if ($r !== null && $ptX >= $r[0] && $ptX < $r[0] + $r[2] && $ptY >= $r[1] && $ptY < $r[1] + $r[3]) {
                         $this->touchInField = true;
-                        $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
                     }
                 }
 
-                // Visual pressed highlight & Taptic feedback when touching an interactive control
-                if ($rt !== null && $rt->pressTarget($ptX, $ptY) !== null) {
-                    $input->mouseDown = true;
+                // Push pointer down immediately so all controls enter their native pressed/dragging state
+                $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
+                $hitId = $rt?->pressTarget($ptX, $ptY);
+                if ($hitId !== null) {
+                    $rt->flashTouch($hitId, 2.0);
                     iOS::ffi()->myphp_ios_haptic_feedback(0);
-                    $this->requestFrame();
                 }
+                $this->requestFrame();
 
                 $pressId = ++$this->longPressId;
                 App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
@@ -223,7 +227,8 @@ final class Window implements Platform\Window
                 if (!$this->touchActive) {
                     break;
                 }
-                if ($this->touchInField) {
+                $rt = $this->w->runtime;
+                if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && $rt->isDraggingControl())) {
                     $input->mouse($ptX, $ptY);
                     $input->push(['drag', $ptX, $ptY, $time]);
                     $this->requestFrame();
@@ -239,7 +244,7 @@ final class Window implements Platform\Window
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
                 if (!$this->touchIsScrolling && $dist > 8.0) {
                     $this->touchIsScrolling = true;
-                    $input->mouseDown = false;
+                    $rt?->cancelTouchPress();
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
                 }
@@ -250,7 +255,7 @@ final class Window implements Platform\Window
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
 
-                    $input->push(['scroll', $ptX, $ptY, $dx, $dy, true, false]);
+                    $input->push(['scroll', $this->touchStartX, $this->touchStartY, $dx, $dy, true, false]);
                     $this->requestFrame();
                 }
                 break;
@@ -260,6 +265,10 @@ final class Window implements Platform\Window
                     break;
                 }
                 $this->touchActive = false;
+                $rt = $this->w->runtime;
+                if ($rt !== null) {
+                    $rt->touchFlash = [];
+                }
 
                 if ($this->touchInField) {
                     $input->mouse($ptX, $ptY);
@@ -271,6 +280,7 @@ final class Window implements Platform\Window
 
                 if ($this->touchIsScrolling) {
                     $this->touchIsScrolling = false;
+                    $rt?->cancelTouchPress();
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];
@@ -287,20 +297,13 @@ final class Window implements Platform\Window
                             }
                         }
                     }
-                } else {
-                    $input->mouse($this->touchStartX, $this->touchStartY);
-                    $input->push(['down', $this->touchStartX, $this->touchStartY, 0, 1, 0, $this->touchStartTime]);
-                    $input->push(['up', $this->touchStartX, $this->touchStartY, 0, 1, 0, $time]);
                     $this->requestFrame();
-                    App::after(0.08, function () {
-                        if (!$this->touchActive && ($inp = $this->w->input) !== null) {
-                            $inp->mouseDown = false;
-                            $inp->mouseInside = false;
-                            $inp->mouseX = -1;
-                            $inp->mouseY = -1;
-                            $this->requestFrame();
-                        }
-                    });
+                } else {
+                    $input->push(['up', $this->touchStartX, $this->touchStartY, 0, 1, 0, $time]);
+                    $input->mouseInside = false;
+                    $input->mouseX = -1;
+                    $input->mouseY = -1;
+                    $this->requestFrame();
                 }
                 break;
 
@@ -308,8 +311,7 @@ final class Window implements Platform\Window
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
                 $this->touchInField = false;
-                $input->mouseDown = false;
-                $input->mouseInside = false;
+                $this->w->runtime?->cancelTouchPress();
                 $this->requestFrame();
                 break;
         }

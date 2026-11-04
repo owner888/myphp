@@ -18,7 +18,12 @@ final class Fonts implements Platform\Fonts
     private ?AndroidTextEngine $engine = null;
     /** @var array<string, int> */
     private array $fontMap = [];
+    /** @var array<string, true> glyphs with no ink (e.g. space gid=3), cached to avoid repeated JNI calls */
+    private array $emptyGlyphs = [];
     private int $nextFontId = 1000;
+    private mixed $shapeBuf = null;
+    private mixed $metricsBuf = null;
+    private mixed $pixelsBuf = null;
 
     public function __construct(float $scale = 1.0)
     {
@@ -62,7 +67,7 @@ final class Fonts implements Platform\Fonts
         }
 
         $f = Android::ffi();
-        $buf = $f->new('float[4096]');
+        $buf = $this->shapeBuf ??= $f->new('float[4096]');
         $n = $f->myphp_shape_text($text, $size, $style, $buf, 4096);
 
         if ($n < 4) {
@@ -121,14 +126,19 @@ final class Fonts implements Platform\Fonts
 
     public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false, float $dx = 0.0): ?array
     {
+        $emptyKey = "$fontId:$glyph";
+        if (isset($this->emptyGlyphs[$emptyKey])) {
+            return null;
+        }
+
         $engine = $this->engine();
         $cfg = ($engine instanceof AndroidTextEngine ? $engine->getFontConfig($fontId) : null) ?? ['size' => 16.0, 'style' => 0];
         $s = $scale ?? $this->scale;
         $targetPx = $cfg['size'] * $s;
 
         $f = Android::ffi();
-        $metrics = $f->new('int[4]');
-        $pixels = $f->new('uint8_t[262144]');
+        $metrics = $this->metricsBuf ??= $f->new('int[4]');
+        $pixels = $this->pixelsBuf ??= $f->new('uint8_t[262144]');
 
         $len = $f->myphp_rasterize_glyph($glyph, $targetPx, $cfg['style'], $metrics, $pixels, 262144);
 
@@ -138,6 +148,7 @@ final class Fonts implements Platform\Fonts
         $oy = (int)$metrics[3];
 
         if ($len <= 0 || $w <= 0 || $h <= 0) {
+            $this->emptyGlyphs[$emptyKey] = true;
             return null;
         }
 

@@ -15,6 +15,9 @@ final class AndroidTextEngine implements Engine
     private array $fontConfigs = [];
     /** @var array<string, Font> */
     private array $fonts = [];
+    /** @var array<string, array> */
+    private array $shapeCache = [];
+    private mixed $shapeBuf = null;
     private int $nextFontId = 1;
 
     public function __construct(private Fonts $fontsPlatform) {}
@@ -83,8 +86,16 @@ final class AndroidTextEngine implements Engine
         $size = $cfg['size'];
         $fontStyle = $cfg['style'];
 
+        $cacheKey = "{$font->id}:" . ($rtl ? '1:' : '0:') . $text;
+        if (isset($this->shapeCache[$cacheKey])) {
+            return $this->shapeCache[$cacheKey];
+        }
+        if (count($this->shapeCache) > 2048) {
+            $this->shapeCache = array_slice($this->shapeCache, -1024, null, true);
+        }
+
         $f = Android::ffi();
-        $buf = $f->new('float[2048]');
+        $buf = $this->shapeBuf ??= $f->new('float[2048]');
         $n = $f->myphp_shape_text($text, $size, $fontStyle, $buf, 2048);
 
         if ($n < 4) {
@@ -96,10 +107,10 @@ final class AndroidTextEngine implements Engine
                 $pen += $adv;
             }
             $run = ['font' => $font, 'start' => 0, 'end' => count($runes), 'glyphs' => $glyphs];
-            return [['start' => 0, 'end' => count($runes), 'runs' => [$run]]];
+            return $this->shapeCache[$cacheKey] = [['start' => 0, 'end' => count($runes), 'runs' => [$run]]];
         }
 
-        $count = (int)$buf[3];
+        $count = min((int)$buf[3], intdiv($n - 4, 3));
         $glyphs = [];
 
         for ($i = 0; $i < $count; $i++) {
@@ -119,7 +130,7 @@ final class AndroidTextEngine implements Engine
             'glyphs' => $glyphs,
         ];
 
-        return [
+        return $this->shapeCache[$cacheKey] = [
             ['start' => 0, 'end' => count($runes), 'runs' => [$run]],
         ];
     }

@@ -105,6 +105,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         sInstance = this;
 
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        try {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.preferredRefreshRate = 120.0f;
+            getWindow().setAttributes(lp);
+        } catch (Exception ignored) {}
 
         surfaceView = new SurfaceView(this) {
             @Override
@@ -272,19 +277,26 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        Log.i(TAG, "surfaceCreated: surface=" + holder.getSurface());
+        try {
+            if (holder.getSurface() != null && holder.getSurface().isValid()) {
+                holder.getSurface().setFrameRate(120.0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
+            }
+        } catch (Exception ignored) {}
         nativeSurfaceCreated(holder.getSurface());
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        Log.i(TAG, "surfaceChanged: " + width + "x" + height);
+        try {
+            if (holder.getSurface() != null && holder.getSurface().isValid()) {
+                holder.getSurface().setFrameRate(120.0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
+            }
+        } catch (Exception ignored) {}
         nativeSurfaceChanged(holder.getSurface(), width, height);
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        Log.i(TAG, "surfaceDestroyed");
         nativeSurfaceDestroyed();
     }
 
@@ -294,7 +306,6 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         float x = event.getX();
         float y = event.getY();
         long time = event.getEventTime();
-        Log.i(TAG, "onTouchEvent: action=" + action + ", x=" + x + ", y=" + y);
         nativeTouchEvent(action, x, y, time);
         return true;
     }
@@ -322,7 +333,6 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         );
 
         int count = glyphs.glyphCount();
-        Log.i(TAG, "shapeText: '" + text + "' -> count=" + count);
         float advance = glyphs.getAdvance();
         float ascent = glyphs.getAscent();
         float descent = glyphs.getDescent();
@@ -351,7 +361,6 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     // Glyph rasterization via Canvas.drawGlyphs into ALPHA_8 Bitmap
     public static synchronized byte[] rasterizeGlyph(int glyphId, float textSize, int style, int[] outMetrics) {
         Font font = sGlyphFontCache.get(glyphId);
-        Log.i(TAG, "rasterizeGlyph: gid=" + glyphId + " font=" + font + " textSize=" + textSize);
         if (font == null) {
             outMetrics[0] = 0;
             outMetrics[1] = 0;
@@ -756,6 +765,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static final String AACP_UUID_STR = "74ec2172-0bad-4d01-8f77-997b2be0722a";
     private static volatile BluetoothSocket sBtSocket = null;
     private static volatile Thread sBtReaderThread = null;
+    private static volatile boolean sL2capConnecting = false;
     private static volatile String sLastBtError = "";
     private static volatile byte[] sLastAppleBlePayload = null;
     private static volatile int sLastBleRssi = -100;
@@ -1129,6 +1139,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             + "|audio=" + (sLocalAudioPlaying ? "1" : "0")
             + "|audioSeq=" + sAudioStartSeq
             + "|aclSeq=" + sAclConnectSeq
+            + "|connecting=" + (sL2capConnecting ? "1" : "0")
             + "|pair=" + sPairState.replace("|", " ")
             + "|err=" + sLastBtError.replace("|", " ");
     }
@@ -1149,7 +1160,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     public static byte[] btScanBle() {
-        if (sInstance == null || !hasBluetoothPermissions() || btIsConnected()) return sLastAppleBlePayload;
+        if (sInstance == null || !hasBluetoothPermissions() || btIsConnected() || sL2capConnecting) return sLastAppleBlePayload;
         try {
             BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
             BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
@@ -1170,6 +1181,9 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     public static boolean btConnectL2capSocket(Object sockObj) {
+        if (btIsConnected() || sL2capConnecting) {
+            return true;
+        }
         btStopBleScan();
         btDisconnect();
         sLastBtError = "";
@@ -1177,34 +1191,45 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             sLastBtError = "Invalid BluetoothSocket instance";
             return false;
         }
-        try {
-            BluetoothSocket socket = (BluetoothSocket) sockObj;
-            socket.connect();
-            sBtSocket = socket;
-            sBtRxQueue.clear();
+        final BluetoothSocket socket = (BluetoothSocket) sockObj;
+        sL2capConnecting = true;
+        sBtReaderThread = new Thread(() -> {
+            try {
+                socket.connect();
+                sBtSocket = socket;
+                sL2capConnecting = false;
+                sBtRxQueue.clear();
+                nativeSignal();
 
-            sBtReaderThread = new Thread(() -> {
+                // Send initial AACP handshake burst on background thread so UI never blocks
+                OutputStream out = socket.getOutputStream();
+                out.write(new byte[]{0,0,4,0,1,0,2,0,0,0,0,0,0,0,0,0}); // 0x0001 Handshake
+                out.flush();
+                Thread.sleep(60);
+                out.write(new byte[]{4,0,4,0,0x4d,0,(byte)0xff,0,0,0,0,0,0,0}); // 0x004D Capabilities
+                out.write(new byte[]{4,0,4,0,0x0f,0,(byte)0xff,(byte)0xff,(byte)0xfe,(byte)0xff}); // 0x000F Notifications
+                out.write(new byte[]{4,0,4,0,0x29,0,0,(byte)0xff,(byte)0xff,(byte)0xff,(byte)0xff,(byte)0xff,(byte)0xff,(byte)0xff}); // 0x0029 Ext Caps
+                out.write(new byte[]{4,0,4,0,0x30,0,0x05,0}); // 0x0030 Request Proximity Keys (IRK + ENC_KEY)
+                out.flush();
+
                 byte[] buf = new byte[4096];
-                try {
-                    InputStream in = socket.getInputStream();
-                    while (sBtSocket == socket && socket.isConnected()) {
-                        int n = in.read(buf);
-                        if (n <= 0) break;
-                        sBtRxQueue.add(Arrays.copyOf(buf, n));
-                        nativeSignal();
-                    }
-                } catch (Exception e) {
-                    sLastBtError = "L2CAP read ended: " + e.getMessage();
+                InputStream in = socket.getInputStream();
+                while (sBtSocket == socket && socket.isConnected()) {
+                    int n = in.read(buf);
+                    if (n <= 0) break;
+                    sBtRxQueue.add(Arrays.copyOf(buf, n));
+                    nativeSignal();
                 }
-            }, "MyPHP-AACP-Reader");
-            sBtReaderThread.setDaemon(true);
-            sBtReaderThread.start();
-            return true;
-        } catch (Exception e) {
-            Log.e(TAG, "btConnectL2capSocket error", e);
-            sLastBtError = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "connect failed");
-            return false;
-        }
+            } catch (Exception e) {
+                Log.e(TAG, "btConnectL2capSocket async error", e);
+                sL2capConnecting = false;
+                sLastBtError = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "connect failed");
+                nativeSignal();
+            }
+        }, "MyPHP-AACP-Reader");
+        sBtReaderThread.setDaemon(true);
+        sBtReaderThread.start();
+        return true;
     }
 
     public static void btDisconnect() {

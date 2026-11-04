@@ -1227,13 +1227,15 @@ final class Painter
         }
         if ($n->scroll !== null) {
             $list->popClip();
-            // The thumbs show while the pointer is over the container or drags one.
-            if ($rt !== null && !$n->hideScrollbars && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
+            // The thumbs show while the pointer is over the container (desktop), while actively scrolling (touch), or while dragging one.
+            if ($rt !== null && $rt->showScrollbar($n)) {
+                $dragging = $rt->dragging($n->scroll);
+                $barAlpha = $t->scrollbarAlpha * $rt->scrollbarFadeAlpha();
                 $r = Scrollbar::track([$n->x, $n->y, $n->w, $n->h], $n->barInsets);
                 $thumb = $n->scrollY ? Scrollbar::thumbOf($r, $n->scroll->extent(), $t->scrollbarWidth, false, $n->rtl) : null;
-                if ($thumb !== null) { self::thumbFill($list, $thumb, false, $dragging, $t->scrollbar, $t->scrollbarAlpha); }
+                if ($thumb !== null) { self::thumbFill($list, $thumb, false, $dragging, $t->scrollbar, $barAlpha); }
                 $thumb = $n->scrollX ? Scrollbar::thumbOf($r, $n->scroll->extentX(), $t->scrollbarWidth, true, $n->rtl) : null;
-                if ($thumb !== null) { self::thumbFill($list, $thumb, true, $dragging, $t->scrollbar, $t->scrollbarAlpha); }
+                if ($thumb !== null) { self::thumbFill($list, $thumb, true, $dragging, $t->scrollbar, $barAlpha); }
             }
         }
     }
@@ -1529,8 +1531,9 @@ final class Painter
         $x = $n->reverse !== $n->rtl ? $n->x + $n->w - $box : $n->x; $y = $n->y + ($n->h - $box) / 2; // reversed, or right to left: the box at the right
         $radius = $n->kind === Node::RADIO ? $t->space(2) : $t->space(1);
         $hovered = $rt?->hovered($n->id) ?? false;
+        $pressed = ($rt?->isTouchFlashing($n->id) ?? false) || ($hovered && ($rt?->input->mouseDown ?? false));
         if ($n->on || $n->mixed) {
-            $list->rect($x, $y, $box, $box, $t->accent, 1.0, $radius);
+            $list->rect($x, $y, $box, $box, $pressed ? $t->accentPressed : $t->accent, 1.0, $radius);
             if ($n->mixed) { // a bar: some of a group checked
                 $list->rect($x + $box * 0.25, $y + $box / 2 - 1, $box * 0.5, 2, $t->accentText, 1.0, 1.0);
             } elseif ($n->kind === Node::RADIO) {
@@ -1542,7 +1545,9 @@ final class Painter
                 $list->line($x + $box * 0.42, $y + $box * 0.71, $x + $box * 0.78, $y + $box * 0.31, $t->accentText, 1.0, $w);
             }
         } else {
-            $list->box($x, $y, $box, $box, [$radius, $radius, $radius, $radius], $t->background, 1.0, [1.0, 1.0, 1.0, 1.0], $hovered ? $t->accent : Theme::mix($t->border, $t->text, 0.25), 1.0); // the background inside a border a point wide (mygo's Background and Border)
+            $fill = $pressed ? $t->surfacePressed : $t->background;
+            $borderColor = ($hovered || $pressed) ? $t->accent : Theme::mix($t->border, $t->text, 0.25);
+            $list->box($x, $y, $box, $box, [$radius, $radius, $radius, $radius], $fill, 1.0, [1.0, 1.0, 1.0, 1.0], $borderColor, 1.0); // the background inside a border a point wide (mygo's Background and Border)
         }
         if ($n->focusVisible) {
             self::paintFocusRing($list, $x, $y, $box, $box, $radius, $t);
@@ -1589,10 +1594,18 @@ final class Painter
         $tw = $t->space(9); $th = $t->space(5); $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
         $sx = $n->rtl ? $n->x + $n->w - $tw : $n->x; // right to left: the switch at the right, on toward the left
-        $list->rect($sx, $y, $tw, $th, Theme::mix(Theme::mix($t->border, $t->text, 0.15), $t->accent, $n->fraction), 1.0, $th / 2);
-        $kx = $n->rtl ? $sx + $tw - $in - $d - $n->fraction * ($tw - $th) : $sx + $in + $n->fraction * ($tw - $th);
-        $list->shadow($kx, $y + $in, $d, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
-        $list->rect($kx, $y + $in, $d, $d, 0xffffff, 1.0, $d / 2);
+        $hovered = $rt?->hovered($n->id) ?? false;
+        $pressed = ($rt?->isTouchFlashing($n->id) ?? false) || ($hovered && ($rt?->input->mouseDown ?? false));
+        $offColor = Theme::mix($t->border, $t->text, $pressed ? 0.28 : 0.15);
+        $onColor = $pressed ? $t->accentPressed : $t->accent;
+        $list->rect($sx, $y, $tw, $th, Theme::mix($offColor, $onColor, $n->fraction), 1.0, $th / 2);
+        $stretch = $pressed ? $t->space(0.75) : 0.0;
+        $kw = $d + $stretch;
+        $kx = $n->rtl
+            ? $sx + $tw - $in - $d - $n->fraction * ($tw - $th) - (1.0 - $n->fraction) * $stretch
+            : $sx + $in + $n->fraction * ($tw - $th) - $n->fraction * $stretch;
+        $list->shadow($kx, $y + $in, $kw, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
+        $list->rect($kx, $y + $in, $kw, $d, 0xffffff, 1.0, $d / 2);
         if ($n->focusVisible) {
             self::paintFocusRing($list, $sx, $y, $tw, $th, $th / 2, $t);
         }

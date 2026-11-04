@@ -86,7 +86,7 @@ final class Backend implements Platform\Backend
         // Process native events
         $f = Android::ffi();
         $ev = $this->event ??= $f->new('MyphpEvent');
-        $timeout = 16;
+        $timeout = 8;
         $needsRender = false;
         while ($f->myphp_read_event(FFI::addr($ev), $timeout) > 0) {
             $timeout = 0; // drain remaining queued events without waiting
@@ -147,7 +147,7 @@ final class Backend implements Platform\Backend
             }
         }
 
-        // Render at most one frame per step, after all input and lifecycle events have been consumed
+        // Render at most one frame per VSync (EVENT_CHOREOGRAPHER), after all input and lifecycle events have been consumed
         if ($needsRender) {
             try {
                 $win = Window::instance();

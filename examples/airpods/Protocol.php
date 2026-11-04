@@ -1163,23 +1163,28 @@ final class L2capProbeResult
                     ctorSignature: $ctorSig,
                 );
             }
+            if ($transport instanceof AndroidBluetoothTransport) {
+                return new self(
+                    verdict: self::VERDICT_NATIVE_READY,
+                    bleBeaconSeen: $ble,
+                    l2capSocketOpened: true,
+                    handshakeAcked: false,
+                    detail: 'Connecting L2CAP PSM 0x1001 in background…',
+                    sdkInt: $sdkInt,
+                    androidRelease: $release,
+                    buildId: $buildId,
+                    ctorSignature: $ctorSig,
+                );
+            }
         }
 
         try {
-            $isAndroid = $transport instanceof AndroidBluetoothTransport;
             $transport->send(AacpProtocol::handshakePacket());
-            if ($isAndroid) { usleep(40000); }
             $transport->send(AacpProtocol::capabilitiesPacket());
             $transport->send(AacpProtocol::requestNotificationsPacket());
             $transport->send(AacpProtocol::extCapabilitiesPacket());
             $transport->send(AacpProtocol::requestProximityKeysPacket());
             $frames = $transport->poll();
-            if ($frames === [] && $isAndroid) {
-                for ($i = 0; $i < 10 && $frames === []; $i++) {
-                    usleep(40000);
-                    $frames = $transport->poll();
-                }
-            }
             $acked = $frames !== [] || $alreadyConnected;
         } catch (\Throwable $e) {
             return new self(
