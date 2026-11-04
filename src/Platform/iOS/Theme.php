@@ -11,14 +11,26 @@ use MyPHP\ThemePreferences;
 final class Theme implements Platform\Theme
 {
     private ?Closure $onChange = null;
+    private \MyPHP\ThemeSource $source = \MyPHP\ThemeSource::System;
+
+    public function setSource(\MyPHP\ThemeSource $source): void
+    {
+        $this->source = $source;
+    }
 
     public function isDark(): bool
     {
-        $tc = ObjC::cls('UITraitCollection')?->msg('currentTraitCollection');
-        if ($tc !== null) {
-            $style = (int)$tc->msg('userInterfaceStyle');
-            return $style === 2; // UIUserInterfaceStyleDark
+        if ($this->source !== \MyPHP\ThemeSource::System) {
+            return $this->source === \MyPHP\ThemeSource::Dark;
         }
+        try {
+            ObjC::boot(['UIKit']);
+            $tc = ObjC::cls('UITraitCollection')?->msg('currentTraitCollection');
+            if ($tc !== null) {
+                $style = (int)$tc->msg('userInterfaceStyle');
+                return $style === 2; // UIUserInterfaceStyleDark
+            }
+        } catch (\Throwable $e) {}
         return false;
     }
 
@@ -30,8 +42,7 @@ final class Theme implements Platform\Theme
     public function preferences(): ThemePreferences
     {
         return new ThemePreferences(
-            dark: $this->isDark(),
-            accent: $this->accentColor(),
+            accent: 0x007AFF, // iOS System Blue
         );
     }
 
