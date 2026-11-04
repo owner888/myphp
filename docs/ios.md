@@ -26,3 +26,10 @@ Native iOS immediate-mode UI support via Metal and CoreText, powered by an embed
 # Package an iOS application (.app and .ipa)
 bin/myphp build -platform ios/arm64 examples/counter-native
 ```
+
+## Running in Simulator
+
+```bash
+# Build and automatically run inside the iOS Simulator
+./scripts/run-ios-app.sh examples/counter-native
+```
