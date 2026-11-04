@@ -8306,6 +8306,8 @@ directly in C (`probe_l2cap_ctor_from_c` / `create_l2cap_socket_from_c`) before
 calling into `MyphpActivity` has no app Java frame on the stack and succeeds
 without a reflection bypass library.
 
+On iOS (`arm64-apple-ios16.0`), `MyphpMetalView` subclasses `MTKView` and hosts a `CAMetalLayer` with `CADisplayLink` added to `NSRunLoopCommonModes` (up to 120Hz ProMotion via `CAFrameRateRangeMake(60, 120, 120)`). Touch events flow through a thread-safe ring buffer into PHP's worker thread, driving the same smooth 8pt touch-slop and exponential momentum fling engine as Android, while `safeAreaInsetsDidChange` dynamically reports notch, Dynamic Island, and home indicator insets to `Window::contentBounds()`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

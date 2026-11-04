@@ -33,6 +33,9 @@ import android.graphics.Typeface;
 import android.graphics.fonts.Font;
 import android.graphics.text.PositionedGlyphs;
 import android.graphics.text.TextRunShaper;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
@@ -70,6 +73,7 @@ import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -734,7 +738,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static volatile String sLastBtError = "";
     private static volatile byte[] sLastAppleBlePayload = null;
     private static volatile int sLastBleRssi = -100;
+    private static volatile String sLastBleMac = "";
     private static volatile String sPairState = "idle";
+    private static volatile boolean sLocalAudioPlaying = false;
+    private static volatile int sAudioStartSeq = 0;
+    private static volatile int sAclConnectSeq = 0;
     private static volatile boolean sBleScanning = false;
     private static volatile boolean sBtReceiverRegistered = false;
     private static final ConcurrentLinkedQueue<byte[]> sBtRxQueue = new ConcurrentLinkedQueue<>();
@@ -749,6 +757,9 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             if (appleData != null && appleData.length >= 27 && (appleData[0] & 0xFF) == 0x07 && (appleData[1] & 0xFF) == 0x19) {
                 sLastAppleBlePayload = Arrays.copyOf(appleData, 27);
                 sLastBleRssi = result.getRssi();
+                if (result.getDevice() != null && result.getDevice().getAddress() != null) {
+                    sLastBleMac = result.getDevice().getAddress();
+                }
                 nativeSignal();
             }
         }
@@ -803,7 +814,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                         sPairState = "failed";
                     }
                     nativeSignal();
-                } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action) || BluetoothDevice.ACTION_UUID.equals(action)) {
+                } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
+                    sAclConnectSeq++;
+                    nativeSignal();
+                } else if (BluetoothDevice.ACTION_UUID.equals(action)) {
                     nativeSignal();
                 }
             } catch (Exception e) {
@@ -821,6 +835,37 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
             filter.addAction(BluetoothDevice.ACTION_UUID);
             sInstance.registerReceiver(sBtReceiver, filter, Context.RECEIVER_EXPORTED);
+
+            AudioManager am = (AudioManager) sInstance.getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                sLocalAudioPlaying = am.isMusicActive();
+                am.registerAudioPlaybackCallback(new AudioManager.AudioPlaybackCallback() {
+                    @Override
+                    public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs) {
+                        boolean playing = am.isMusicActive();
+                        if (!playing && configs != null) {
+                            for (AudioPlaybackConfiguration cfg : configs) {
+                                AudioAttributes attr = cfg.getAudioAttributes();
+                                if (attr != null) {
+                                    int usage = attr.getUsage();
+                                    if (usage == AudioAttributes.USAGE_MEDIA
+                                        || usage == AudioAttributes.USAGE_GAME
+                                        || usage == AudioAttributes.USAGE_VOICE_COMMUNICATION) {
+                                        playing = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (playing && !sLocalAudioPlaying) {
+                            sAudioStartSeq++;
+                            Log.i(TAG, "AudioPlaybackCallback: local audio playback started (seq=" + sAudioStartSeq + ")");
+                        }
+                        sLocalAudioPlaying = playing;
+                        nativeSignal();
+                    }
+                }, null);
+            }
             sBtReceiverRegistered = true;
         } catch (Exception e) {
             Log.e(TAG, "ensureBtReceiverRegistered error", e);
@@ -972,6 +1017,16 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         if (sInstance != null) {
             ensureBtReceiverRegistered();
             try {
+                AudioManager am = (AudioManager) sInstance.getSystemService(Context.AUDIO_SERVICE);
+                if (am != null) {
+                    boolean active = am.isMusicActive();
+                    if (active && !sLocalAudioPlaying) {
+                        sAudioStartSeq++;
+                    }
+                    sLocalAudioPlaying = active || sLocalAudioPlaying;
+                }
+            } catch (Exception ignored) {}
+            try {
                 String secMac = android.provider.Settings.Secure.getString(sInstance.getContentResolver(), "bluetooth_address");
                 if (secMac != null && !secMac.isEmpty() && !"02:00:00:00:00:00".equals(secMac)) {
                     localMac = secMac.toUpperCase();
@@ -1021,7 +1076,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             + "|localMac=" + localMac
             + "|mac=" + bondedMac
             + "|name=" + bondedName.replace("|", " ")
+            + "|bleMac=" + sLastBleMac
             + "|rssi=" + sLastBleRssi
+            + "|audio=" + (sLocalAudioPlaying ? "1" : "0")
+            + "|audioSeq=" + sAudioStartSeq
+            + "|aclSeq=" + sAclConnectSeq
             + "|pair=" + sPairState.replace("|", " ")
             + "|err=" + sLastBtError.replace("|", " ");
     }
