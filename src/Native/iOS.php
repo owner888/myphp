@@ -32,6 +32,8 @@ final class iOS
             void myphp_ios_request_render(void);
             int myphp_ios_poll_touch_event(MyphpTouchEvent *ev);
             int myphp_ios_poll_input_event(MyphpInputEvent *ev);
+            int myphp_ios_poll_open_url(char *out, int max_len);
+            void myphp_ios_haptic_feedback(int style);
             void myphp_ios_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             int myphp_ios_get_dialog_result(int callback_id);
             void myphp_ios_show_notification(const char *title, const char *body, const char *identifier);
@@ -40,6 +42,8 @@ final class iOS
             int myphp_ios_is_network_connected(void);
             int myphp_ios_is_network_cellular(void);
             int myphp_ios_poll_theme_changed(void);
+            int myphp_ios_is_app_paused(void);
+            int myphp_ios_poll_memory_warning(void);
             void myphp_ios_show_keyboard(void);
             void myphp_ios_hide_keyboard(void);
         ");

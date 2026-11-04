@@ -37,6 +37,9 @@ final class Backend implements Platform\Backend
 
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
+        try {
+            ObjC::boot(['UIKit']);
+        } catch (\Throwable $e) {}
         $this->h->ready();
     }
 
@@ -78,11 +81,30 @@ final class Backend implements Platform\Backend
         // Poll native touch events
         $this->mainWindow?->pollEvents();
 
+        // Poll external deep link URLs
+        try {
+            $f = \MyPHP\Native\iOS::ffi();
+            $urlBuf = $f->new('char[512]');
+            while ($f->myphp_ios_poll_open_url(\FFI::cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
+                $urlStr = \FFI::string(\FFI::cast('char*', \FFI::addr($urlBuf)));
+                if ($urlStr !== '') {
+                    $this->h->openURLs([$urlStr]);
+                }
+            }
+        } catch (\Throwable $e) {}
+
         // Process frame if requested
         $this->mainWindow?->onFrame();
 
-        // Yield slightly so worker thread doesn't burn 100% CPU
-        usleep(4000); // ~4ms (250Hz max polling)
+        // Yield slightly so worker thread doesn't burn CPU
+        try {
+            if (\MyPHP\Native\iOS::ffi()->myphp_ios_is_app_paused() > 0) {
+                usleep(100000); // 100ms deep sleep while suspended in background
+                return;
+            }
+        } catch (\Throwable $e) {}
+
+        usleep(4000); // ~4ms (250Hz max polling) while active
     }
 
     public function app(): Platform\AppController
@@ -191,9 +213,11 @@ final class Backend implements Platform\Backend
         return $this->symbols ??= new Symbols();
     }
 
+    private ?Secrets $secrets = null;
+
     public function secrets(): Platform\Secrets
     {
-        throw new Platform\Unsupported('Secrets not implemented on iOS yet');
+        return $this->secrets ??= new Secrets();
     }
 
     public function applications(): array

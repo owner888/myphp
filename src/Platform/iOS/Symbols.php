@@ -10,8 +10,13 @@ final class Symbols implements Platform\Symbols
 {
     public function exists(string $name): bool
     {
-        $img = ObjC::cls('UIImage')?->msg('systemImageNamed:', ObjC::str($name));
-        return $img !== null;
+        try {
+            ObjC::boot(['UIKit']);
+            $img = ObjC::cls('UIImage')?->msg('systemImageNamed:', ObjC::str($name));
+            return $img !== null;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     public function draw(string $name, float $size, float $weight, int $rgb, float $scale): array

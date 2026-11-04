@@ -12,7 +12,12 @@ final class Clipboard implements Platform\Clipboard
 {
     private function pasteboard(): ?object
     {
-        return ObjC::cls('UIPasteboard')?->msg('generalPasteboard');
+        try {
+            ObjC::boot(['UIKit']);
+            return ObjC::cls('UIPasteboard')?->msg('generalPasteboard');
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function readData(array $formats): Data
@@ -70,6 +75,25 @@ final class Clipboard implements Platform\Clipboard
     public function readImage(): string
     {
         return '';
+    }
+
+    public function isImage(string $bytes): bool
+    {
+        return false;
+    }
+
+    public function clear(): void
+    {
+        $this->writeText('');
+    }
+
+    public function availableFormats(): array
+    {
+        return [\MyPHP\Transfer\Format::TEXT];
+    }
+
+    public function writeImage(string $png): void
+    {
     }
 
     public function readFiles(): array

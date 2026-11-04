@@ -33,6 +33,12 @@ static int g_input_head = 0;
 static int g_input_tail = 0;
 static pthread_mutex_t g_input_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#define OPEN_URL_QUEUE_SIZE 16
+static char g_open_url_queue[OPEN_URL_QUEUE_SIZE][512];
+static int g_open_url_head = 0;
+static int g_open_url_tail = 0;
+static pthread_mutex_t g_open_url_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 #define MAX_DIALOG_RESULTS 32
 static struct {
     int callback_id;
@@ -50,6 +56,8 @@ static int g_network_connected = 1;
 static int g_network_is_cellular = 0;
 static nw_path_monitor_t g_path_monitor = NULL;
 static volatile int g_theme_changed = 0;
+static volatile int g_app_paused = 0;
+static volatile int g_memory_warning = 0;
 
 static UIWindow *g_window = NULL;
 static MTKView *g_view = NULL;
@@ -84,6 +92,18 @@ static void push_input_event(int type, const char *text) {
         g_input_head = next;
     }
     pthread_mutex_unlock(&g_input_mutex);
+}
+
+static void push_open_url_event(const char *url) {
+    if (!url) return;
+    pthread_mutex_lock(&g_open_url_mutex);
+    int next = (g_open_url_head + 1) % OPEN_URL_QUEUE_SIZE;
+    if (next != g_open_url_tail) {
+        strncpy(g_open_url_queue[g_open_url_head], url, 511);
+        g_open_url_queue[g_open_url_head][511] = '\0';
+        g_open_url_head = next;
+    }
+    pthread_mutex_unlock(&g_open_url_mutex);
 }
 
 static void set_dialog_result(int callback_id, int btn_idx) {
@@ -148,6 +168,31 @@ int myphp_ios_poll_input_event(MyphpInputEvent *ev) {
     }
     pthread_mutex_unlock(&g_input_mutex);
     return has;
+}
+
+int myphp_ios_poll_open_url(char *out, int max_len) {
+    if (!out || max_len <= 0) return 0;
+    int has = 0;
+    pthread_mutex_lock(&g_open_url_mutex);
+    if (g_open_url_head != g_open_url_tail) {
+        strncpy(out, g_open_url_queue[g_open_url_tail], max_len - 1);
+        out[max_len - 1] = '\0';
+        g_open_url_tail = (g_open_url_tail + 1) % OPEN_URL_QUEUE_SIZE;
+        has = 1;
+    }
+    pthread_mutex_unlock(&g_open_url_mutex);
+    return has;
+}
+
+void myphp_ios_haptic_feedback(int style) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIImpactFeedbackStyle s = UIImpactFeedbackStyleLight;
+        if (style == 1) s = UIImpactFeedbackStyleMedium;
+        else if (style == 2) s = UIImpactFeedbackStyleHeavy;
+        UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:s];
+        [gen prepare];
+        [gen impactOccurred];
+    });
 }
 
 void myphp_ios_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id) {
@@ -239,6 +284,18 @@ int myphp_ios_is_network_cellular(void) {
 int myphp_ios_poll_theme_changed(void) {
     if (g_theme_changed) {
         g_theme_changed = 0;
+        return 1;
+    }
+    return 0;
+}
+
+int myphp_ios_is_app_paused(void) {
+    return g_app_paused;
+}
+
+int myphp_ios_poll_memory_warning(void) {
+    if (g_memory_warning) {
+        g_memory_warning = 0;
         return 1;
     }
     return 0;
@@ -436,6 +493,32 @@ static void* php_worker_thread(void *arg) {
     pthread_detach(g_php_thread);
 
     return YES;
+}
+
+- (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options {
+    if (url) {
+        push_open_url_event([url.absoluteString UTF8String]);
+    }
+    return YES;
+}
+
+- (void)applicationDidEnterBackground:(UIApplication *)application {
+    g_app_paused = 1;
+    if (g_display_link) {
+        g_display_link.paused = YES;
+    }
+}
+
+- (void)applicationWillEnterForeground:(UIApplication *)application {
+    g_app_paused = 0;
+    if (g_display_link) {
+        g_display_link.paused = NO;
+    }
+    g_needs_render = 1;
+}
+
+- (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
+    g_memory_warning = 1;
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {

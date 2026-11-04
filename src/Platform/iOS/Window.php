@@ -7,7 +7,7 @@ use Closure;
 use MyPHP\Native\{iOS, ObjC};
 use MyPHP\Platform;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
-use MyPHP\UI\DisplayList;
+use MyPHP\UI\{DisplayList, Image};
 
 final class Window implements Platform\Window
 {
@@ -15,6 +15,7 @@ final class Window implements Platform\Window
     private ?Closure $frame = null;
     private ?Closure $afterPresent = null;
     private bool $asked = false;
+    private bool $repaintOnly = false;
     private float $scale = 3.0;
     private float $width = 393.0;
     private float $height = 852.0;
@@ -32,6 +33,7 @@ final class Window implements Platform\Window
     /** @var list<array{0: int, 1: float, 2: float}> */
     private array $touchHistory = [];
     private bool $keyboardVisible = false;
+    private int $wakeId = 0;
 
     public function __construct(
         private readonly Backend $b,
@@ -50,14 +52,21 @@ final class Window implements Platform\Window
             $this->height = (float)$f->myphp_ios_get_screen_height();
             $this->scale = max(1.0, $f->myphp_ios_get_screen_scale());
         } catch (\Throwable $e) {
-            $mainScreen = ObjC::cls('UIScreen')?->msg('mainScreen');
-            if ($mainScreen !== null) {
-                $this->scale = max(1.0, (float)$mainScreen->msg('scale'));
-                $bounds = $mainScreen->msg('bounds');
-                if (is_object($bounds) && isset($bounds->w, $bounds->h)) {
-                    $this->width = (float)$bounds->w;
-                    $this->height = (float)$bounds->h;
+            try {
+                ObjC::boot(['UIKit']);
+                $mainScreen = ObjC::cls('UIScreen')?->msg('mainScreen');
+                if ($mainScreen !== null) {
+                    $this->scale = max(1.0, (float)$mainScreen->msg('scale'));
+                    $bounds = $mainScreen->msg('bounds');
+                    if (is_object($bounds) && isset($bounds->w, $bounds->h)) {
+                        $this->width = (float)$bounds->w;
+                        $this->height = (float)$bounds->h;
+                    }
                 }
+            } catch (\Throwable $e2) {
+                $this->width = 393.0;
+                $this->height = 852.0;
+                $this->scale = 3.0;
             }
         }
     }
@@ -84,12 +93,13 @@ final class Window implements Platform\Window
         $this->requestFrame();
     }
 
-    public function requestFrame(bool $repaintOnly = false): void
+    public function requestFrame(int $every = 1, bool $repaint = false): void
     {
         if ($this->asked) {
             return;
         }
         $this->asked = true;
+        $this->repaintOnly = $repaint;
         try {
             iOS::ffi()->myphp_ios_request_render();
         } catch (\Throwable $e) {}
@@ -315,7 +325,7 @@ final class Window implements Platform\Window
 
     public function bounds(): Rectangle
     {
-        return new Rectangle(0.0, 0.0, $this->width, $this->height);
+        return new Rectangle(0, 0, (int)round($this->width), (int)round($this->height));
     }
 
     public function contentBounds(): Rectangle
@@ -331,46 +341,136 @@ final class Window implements Platform\Window
             $b = (float)$bottom->cdata;
             $l = (float)$left->cdata;
             $r = (float)$right->cdata;
-            return new Rectangle($l, $t, max(0.0, $this->width - $l - $r), max(0.0, $this->height - $t - $b));
+            return new Rectangle(
+                (int)round($l),
+                (int)round($t),
+                max(0, (int)round($this->width - $l - $r)),
+                max(0, (int)round($this->height - $t - $b))
+            );
         } catch (\Throwable $e) {
-            return new Rectangle(0.0, 0.0, $this->width, $this->height);
+            return new Rectangle(0, 0, (int)round($this->width), (int)round($this->height));
         }
     }
 
-    public function setBounds(Rectangle $r): void {}
-    public function setContentBounds(Rectangle $r): void {}
-    public function setMinSize(int $w, int $h): void {}
-    public function setMaxSize(int $w, int $h): void {}
-    public function setResizable(bool $res): void {}
-    public function setTitle(string $title): void {}
+    public function restoreFrame(Rectangle $r, bool $onDisplay): void {}
+    public function startFullScreen(): void {}
+    public function startMaximized(): void {}
+    public function isLegacyFullScreen(): bool { return false; }
+    public function hasPopover(): bool { return false; }
+    public function placeWebViews(): void {}
+    public function placeVideos(): void {}
+    public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
+    {
+        return new WebView($this, $page, $scrollToContainer, $transparent);
+    }
+    public function contentView(): mixed { return null; }
+    public function release(): void {}
     public function show(): void {}
+    public function showInactive(): void {}
     public function hide(): void {}
-    public function isVisible(): bool { return true; }
     public function close(): void
     {
         self::$instance = null;
         $this->b->quit();
     }
-
     public function isClosed(): bool
     {
         return self::$instance === null;
     }
+    public function setTitle(string $title): void {}
+    public function setRepresentedFile(string $path): void {}
+    public function setDocumentEdited(bool $edited): void {}
+    public function setBackgroundColor(array $rgba): void {}
+    public function themeChanged(): void {}
+    public function hasVibrancy(): bool { return false; }
+    public function hasSystemMaterials(): bool { return false; }
 
+    public function wake(float $seconds, bool $repaint): void
+    {
+        $id = ++$this->wakeId;
+        App::after($seconds, function () use ($id, $repaint): void {
+            if ($this->wakeId === $id) {
+                $this->requestFrame(repaint: $repaint);
+            }
+        });
+    }
+
+    public function repaintAsked(): bool { return $this->repaintOnly; }
+    public function displayRate(): float { return 120.0; }
+    public function setProgressBar(string $state, float $value): void {}
+    public function lastDraw(): string { return ''; }
+    public function backingScale(): float { return $this->scale; }
+    public function isKey(): bool { return true; }
+    public function setAcceptsFirstMouse(bool $on): void {}
+    public function setDropFormats(array $formats): void {}
+    public function command(string $cmd): void {}
+    public function passThrough(Closure $at): void {}
+    public function lastFrame(): array { return []; }
+    public function capture(): string { return ''; }
+    public function underFrame(): ?array { return null; }
+    public function pageDrag(): void {}
+    public function hasHiddenTitleBar(): bool { return true; }
+    public function sizeLimits(): array { return [0, 0, 0, 0]; }
+    public function frameSize(): array { return [(int)$this->width, (int)$this->height]; }
+    public function startDrag(array $o): void {}
+    public function cancelDrag(): void {}
+    public function titleBar(): array { return [0, 0, 0, 0]; }
+    public function dragWindow(int $clicks): void {}
+    public function refreshRate(): float { return 120.0; }
+    public function showCursor(\MyPHP\UI\Cursor $cursor): void {}
+    public function setVibrancy(string $material): void {}
+    public function showing(): bool { return true; }
+    public function isVisible(): bool { return true; }
     public function focus(): void {}
+    public function blur(): void {}
     public function isFocused(): bool { return true; }
     public function minimize(): void {}
     public function isMinimized(): bool { return false; }
-    public function unminimize(): void {}
     public function maximize(): void {}
-    public function isMaximized(): bool { return true; }
     public function unmaximize(): void {}
-    public function setFullscreen(bool $fs): void {}
-    public function isFullscreen(): bool { return true; }
-    public function setAlwaysOnTop(bool $top): void {}
+    public function isMaximized(): bool { return true; }
+    public function restore(): void {}
+    public function setFullScreen(bool $on): void {}
+    public function isFullScreen(): bool { return true; }
+    public function setLegacyFullScreen(bool $on): void {}
+    public function center(): void {}
+    public function setBounds(Rectangle $r): void {}
+    public function setContentBounds(Rectangle $r): void {}
+    public function magnify(float $by): void {}
+    public function fitVideo(array $o): void {}
+    public function setMinimumSize(int $width, int $height): void {}
+    public function setMaximumSize(int $width, int $height): void {}
+    public function setAspectRatio(float $ratio): void {}
+    public function setResizable(bool $on): void {}
+    public function isResizable(): bool { return false; }
+    public function setMovable(bool $on): void {}
+    public function isMovable(): bool { return false; }
+    public function setFullSizeContentView(bool $on): void {}
+    public function setTitleBarHidden(bool $on): void {}
+    public function setMinimizable(bool $on): void {}
+    public function isMinimizable(): bool { return false; }
+    public function setMaximizable(bool $on): void {}
+    public function isMaximizable(): bool { return false; }
+    public function setClosable(bool $on): void {}
+    public function isClosable(): bool { return false; }
+    public function setAlwaysOnTop(bool $on): void {}
     public function isAlwaysOnTop(): bool { return false; }
-    public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
+    public function setOpacity(float $v): void {}
+    public function opacity(): float { return 1.0; }
+    public function setHasShadow(bool $on): void {}
+    public function hasShadow(): bool { return false; }
+    public function setWindowButtonVisibility(bool $visible): void {}
+    public function setIgnoreMouseEvents(bool $on): void {}
+    public function setContentProtection(bool $on): void {}
+    public function flashFrame(bool $flash): void {}
+    public function setVisibleOnAllWorkspaces(bool $on): void {}
+    public function placePopover(): void {}
+    public function snapshot(float $x, float $y, int $w, int $h): Image
     {
-        return new WebView($this, $page, $scrollToContainer, $transparent);
+        throw new Platform\Unsupported('snapshot not implemented on iOS yet');
     }
+    public function framePending(): bool { return $this->asked; }
+    public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void {}
+    public function automatedText(string $text): void {}
+    public function chooseMenuItem(array $path): void {}
 }

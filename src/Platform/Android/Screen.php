@@ -15,15 +15,15 @@ final class Screen implements Platform\Screen
         $scale = max(1.0, $f->myphp_get_density());
         $w = (float)$f->myphp_get_surface_width() / $scale;
         $h = (float)$f->myphp_get_surface_height() / $scale;
-        $r = new Rectangle(0.0, 0.0, $w, $h);
+        $r = new Rectangle(0, 0, (int)round($w), (int)round($h));
 
         return [
             new \MyPHP\Display(
-                id: '1',
-                name: 'Android Display',
+                id: 1,
+                label: 'Android Display',
                 bounds: $r,
                 workArea: $r,
-                scale: $scale,
+                scaleFactor: $scale,
                 primary: true,
             ),
         ];
@@ -32,5 +32,10 @@ final class Screen implements Platform\Screen
     public function primaryDisplay(): \MyPHP\Display
     {
         return $this->displays()[0];
+    }
+
+    public function cursorPoint(): \MyPHP\Point
+    {
+        return new \MyPHP\Point(0.0, 0.0);
     }
 }
