@@ -75,6 +75,9 @@ final class Backend implements Platform\Backend
         }
         $this->timers = $remaining;
 
+        // Poll native touch events
+        $this->mainWindow?->pollEvents();
+
         // Process frame if requested
         $this->mainWindow?->onFrame();
 
