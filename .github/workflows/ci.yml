@@ -45,3 +45,10 @@ jobs:
       # myphp-runtime resolves to its sources by tsconfig.json's paths: nothing to install.
       - name: Bun tests
         run: bun test packages src/Plugins
+      - name: Platform scripts syntax & permission check
+        run: |
+          bash -n scripts/*.sh
+          ls -l bin/myphp scripts/*.sh
+          test -x bin/myphp
+          test -x scripts/package-android-apk.sh
+          test -x scripts/package-ios-app.sh
