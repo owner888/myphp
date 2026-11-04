@@ -104,8 +104,48 @@ final class Window implements Platform\Window
             while ($f->myphp_ios_poll_touch_event(\FFI::addr($ev)) > 0) {
                 $this->onTouch((int)$ev->type, (float)$ev->x, (float)$ev->y);
             }
+
+            $iev = $f->new('MyphpInputEvent');
+            while ($f->myphp_ios_poll_input_event(\FFI::addr($iev)) > 0) {
+                if ((int)$iev->type === 0) {
+                    $str = \FFI::string(\FFI::cast('char*', \FFI::addr($iev->text)));
+                    $this->onImeCommit($str);
+                } elseif ((int)$iev->type === 1) {
+                    $this->onBackspace();
+                }
+            }
         } catch (\Throwable $e) {
         }
+    }
+
+    public function onImeCommit(string $text): void
+    {
+        $input = $this->w->input;
+        if ($input === null || $text === '') {
+            return;
+        }
+        if ($input->client !== null) {
+            $input->client->replaceText(null, $text);
+        } elseif ($input->focus !== null) {
+            $input->focus->insert($text);
+        } else {
+            $input->push(['insert', $text]);
+        }
+        $this->requestFrame();
+    }
+
+    public function onBackspace(): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        if ($input->focus !== null) {
+            $input->focus->deleteBack();
+        } elseif ($input->client !== null) {
+            $input->push(['key', \MyPHP\UI\Key::BACKSPACE, '', 0, hrtime(true)]);
+        }
+        $this->requestFrame();
     }
 
     public function onTouch(int $type, float $x, float $y): void

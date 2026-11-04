@@ -14,11 +14,22 @@ typedef struct {
     double timestamp;
 } MyphpTouchEvent;
 
+typedef struct {
+    int type; // 0: insert text, 1: backspace
+    char text[256];
+} MyphpInputEvent;
+
 #define TOUCH_QUEUE_SIZE 256
 static MyphpTouchEvent g_touch_queue[TOUCH_QUEUE_SIZE];
 static int g_touch_head = 0;
 static int g_touch_tail = 0;
 static pthread_mutex_t g_touch_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define INPUT_QUEUE_SIZE 128
+static MyphpInputEvent g_input_queue[INPUT_QUEUE_SIZE];
+static int g_input_head = 0;
+static int g_input_tail = 0;
+static pthread_mutex_t g_input_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static float g_safe_top = 0.0f;
 static float g_safe_bottom = 0.0f;
@@ -42,6 +53,22 @@ static void push_touch_event(int type, float x, float y, double ts) {
         g_touch_head = next;
     }
     pthread_mutex_unlock(&g_touch_mutex);
+}
+
+static void push_input_event(int type, const char *text) {
+    pthread_mutex_lock(&g_input_mutex);
+    int next = (g_input_head + 1) % INPUT_QUEUE_SIZE;
+    if (next != g_input_tail) {
+        g_input_queue[g_input_head].type = type;
+        if (text) {
+            strncpy(g_input_queue[g_input_head].text, text, sizeof(g_input_queue[g_input_head].text) - 1);
+            g_input_queue[g_input_head].text[sizeof(g_input_queue[g_input_head].text) - 1] = '\0';
+        } else {
+            g_input_queue[g_input_head].text[0] = '\0';
+        }
+        g_input_head = next;
+    }
+    pthread_mutex_unlock(&g_input_mutex);
 }
 
 // C exports for PHP ext-ffi
@@ -85,9 +112,22 @@ int myphp_ios_poll_touch_event(MyphpTouchEvent *ev) {
     return has;
 }
 
+int myphp_ios_poll_input_event(MyphpInputEvent *ev) {
+    if (!ev) return 0;
+    int has = 0;
+    pthread_mutex_lock(&g_input_mutex);
+    if (g_input_head != g_input_tail) {
+        *ev = g_input_queue[g_input_tail];
+        g_input_tail = (g_input_tail + 1) % INPUT_QUEUE_SIZE;
+        has = 1;
+    }
+    pthread_mutex_unlock(&g_input_mutex);
+    return has;
+}
+
 void myphp_ios_show_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (g_view) {
+        if (g_view && ![g_view isFirstResponder]) {
             [g_view becomeFirstResponder];
         }
     });
@@ -138,12 +178,27 @@ static void* php_worker_thread(void *arg) {
     return NULL;
 }
 
-@interface MyphpMetalView : MTKView
+@interface MyphpMetalView : MTKView <UIKeyInput>
 @end
 
 @implementation MyphpMetalView
 - (BOOL)canBecomeFirstResponder {
     return YES;
+}
+
+// UIKeyInput protocol methods
+- (BOOL)hasText {
+    return YES;
+}
+
+- (void)insertText:(NSString *)text {
+    if (text) {
+        push_input_event(0, [text UTF8String]);
+    }
+}
+
+- (void)deleteBackward {
+    push_input_event(1, NULL);
 }
 
 - (void)safeAreaInsetsDidChange {
