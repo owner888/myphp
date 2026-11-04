@@ -86,6 +86,7 @@ final class Android
             void myphp_clipboard_set_text(const char *text);
             void myphp_open_url(const char *url);
             void myphp_set_keep_screen_on(int on);
+            void myphp_perform_haptic(void);
             void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             void myphp_show_notification(const char *title, const char *body, int id);
             int myphp_is_network_connected(void);

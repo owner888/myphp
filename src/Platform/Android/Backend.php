@@ -67,17 +67,21 @@ final class Backend implements Platform\Backend
 
     public function step(): void
     {
-        // Execute expired timers
+        // Execute expired timers (preserve any new timers added inside callbacks)
         $now = hrtime(true) / 1e9;
-        $keep = [];
-        foreach ($this->timers as $t) {
+        $timers = $this->timers;
+        $this->timers = [];
+        $due = [];
+        foreach ($timers as $t) {
             if ($now >= $t['at']) {
-                ($t['fn'])();
+                $due[] = $t['fn'];
             } else {
-                $keep[] = $t;
+                $this->timers[] = $t;
             }
         }
-        $this->timers = $keep;
+        foreach ($due as $fn) {
+            $fn();
+        }
 
         // Process native events
         $f = Android::ffi();

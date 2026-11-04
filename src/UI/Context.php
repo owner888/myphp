@@ -1740,7 +1740,12 @@ final class Context
             if ($on) { $n->shadow(0, 1, 2, 0, 0x000000, 0.12); }
         }
         $n->focused = $this->runtime?->focused($n->id) ?? false;
-        if (!$on && $this->runtime?->hovered($n->id)) {
+        if (!$on && ($this->runtime?->isTouchFlashing($n->id) ?? false)) {
+            $n->color = $primary ? 0x1d4ed8 : $t->accent;
+            $n->fg = $t->accentText;
+            $n->bordered = true;
+            $n->borderColor = $t->focus;
+        } elseif (!$on && $this->runtime?->hovered($n->id)) {
             $n->color = $this->runtime->input->mouseDown ? $pressed : $hover;
         }
         return $n;

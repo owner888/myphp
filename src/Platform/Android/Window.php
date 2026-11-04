@@ -258,7 +258,9 @@ final class Window implements Platform\Window
     private bool $touchIsScrolling = false;
     private bool $touchLongPressed = false;
     private bool $touchInField = false;
+    private bool $downFrameDrawn = false;
     private int $longPressId = 0;
+    private int $releaseSeq = 0;
     /** @var list<array{0: int, 1: float, 2: float}> [timeNs, x, y] */
     private array $touchHistory = [];
 
@@ -351,6 +353,9 @@ final class Window implements Platform\Window
                 Logger::error("eglSwapBuffers failed: " . $egl->eglGetError(), "android");
             } else {
                 Logger::debug("eglSwapBuffers OK", "android");
+                if ($this->touchActive && ($this->w->input?->mouseDown ?? false)) {
+                    $this->downFrameDrawn = true;
+                }
             }
 
             $this->afterPresent?->__invoke();
@@ -392,6 +397,8 @@ final class Window implements Platform\Window
             case Android::ACTION_DOWN:
                 $this->flingActive = false;
                 $this->touchActive = true;
+                $this->downFrameDrawn = false;
+                $this->releaseSeq++;
                 $this->touchStartX = $ptX;
                 $this->touchStartY = $ptY;
                 $this->touchLastX = $ptX;
@@ -411,6 +418,15 @@ final class Window implements Platform\Window
                         $this->touchInField = true;
                         $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
                     }
+                }
+
+                // Visual pressed highlight & native haptic feedback when touching an interactive control
+                $hitId = $rt?->pressTarget($ptX, $ptY);
+                if ($hitId !== null) {
+                    $input->mouseDown = true;
+                    $rt->flashTouch($hitId, 0.30);
+                    Android::ffi()->myphp_perform_haptic();
+                    $this->drawFrame();
                 }
 
                 $pressId = ++$this->longPressId;
@@ -451,6 +467,10 @@ final class Window implements Platform\Window
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
                 if (!$this->touchIsScrolling && $dist > 8.0) {
                     $this->touchIsScrolling = true;
+                    $input->mouseDown = false;
+                    if ($this->w->runtime !== null) {
+                        $this->w->runtime->touchFlash = [];
+                    }
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
                 }
@@ -484,6 +504,8 @@ final class Window implements Platform\Window
 
                 if ($this->touchIsScrolling) {
                     $this->touchIsScrolling = false;
+                    $input->mouseDown = false;
+                    $input->mouseInside = false;
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];
@@ -502,12 +524,40 @@ final class Window implements Platform\Window
                         }
                     }
                 } else {
-                    // Tap: short click at the exact touch start location
-                    $input->mouse($this->touchStartX, $this->touchStartY);
+                    $rt = $this->w->runtime;
+                    $hitId = $rt?->pressTarget($this->touchStartX, $this->touchStartY);
+                    // Ensure the pressed visual state is presented and visible for at least 90ms before bouncing back
+                    if ($hitId !== null && !$this->downFrameDrawn) {
+                        $rt->flashTouch($hitId, 1.0);
+                        $this->drawFrame();
+                    }
+                    $elapsedNs = hrtime(true) - $this->touchStartTime;
+                    if ($hitId !== null && $elapsedNs < 90_000_000) {
+                        usleep((int)intdiv(90_000_000 - $elapsedNs, 1000));
+                    }
+                    if ($rt !== null) {
+                        $rt->touchFlash = [];
+                    }
+                    // Tap: short click at the exact touch start location, then finger leaves screen (mouseInside = false)
                     $input->push(['down', $this->touchStartX, $this->touchStartY, 0, 1, 0, $this->touchStartTime]);
                     $input->push(['up', $this->touchStartX, $this->touchStartY, 0, 1, 0, $time]);
-                    $this->requestFrame();
+                    $input->mouseDown = false;
+                    $input->mouseInside = false;
+                    $input->mouseX = -1;
+                    $input->mouseY = -1;
+                    $this->drawFrame();
                 }
+                break;
+
+            case Android::ACTION_CANCEL:
+                $this->touchActive = false;
+                $this->touchIsScrolling = false;
+                if ($this->w->runtime !== null) {
+                    $this->w->runtime->touchFlash = [];
+                }
+                $input->mouseDown = false;
+                $input->mouseInside = false;
+                $this->drawFrame();
                 break;
         }
     }

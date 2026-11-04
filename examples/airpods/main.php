@@ -159,7 +159,7 @@ final class AirPodsApp
                 bleBeaconSeen: false,
                 l2capSocketOpened: false,
                 handshakeAcked: false,
-                detail: sprintf('Android %s (SDK %d) Ready · Open AirPods 4 lid or tap Probe L2CAP 0x1001.', $st['release'], $st['sdk']),
+                detail: sprintf('Android %s (SDK %d) Ready · Open lid or tap Probe L2CAP.', $st['release'], $st['sdk']),
                 sdkInt: $st['sdk'],
                 androidRelease: $st['release'],
                 buildId: $st['build'],
@@ -393,7 +393,7 @@ final class AirPodsApp
             }
             $this->runProbe();
         }
-        if ($this->transport->isConnected() && !$this->ownsConnection) {
+        if ($this->transport->isConnected()) {
             $this->takeOverFromPeer();
         }
     }
@@ -604,6 +604,13 @@ final class AirPodsApp
                         $this->logPacket('TX', sprintf('TiPi Announce -> %s (0x0010)', $mac), AacpProtocol::toHex($tPkt));
                         $this->transport->send($mPkt);
                         $this->transport->send($tPkt);
+                        // When connecting as the 3rd device (count >= 3), claim slot within the 1.05s window before HCI 0x14 (LOW_RESOURCES)
+                        if (count($devs) >= 3) {
+                            $this->ownsConnection = true;
+                            $this->transport->send(AacpProtocol::ownsConnectionPacket(true));
+                            $this->transport->send(AacpProtocol::hijackRequestPacket($mac));
+                            $this->logPacket('TX', sprintf('3-Device Slot Claim -> %s (0x0010)', $mac), '');
+                        }
                     }
                 }
                 $this->connectedDevices = $newList;
@@ -744,7 +751,10 @@ function view(Context $c, AirPodsApp $s): void
 
         $c->text($s->probe->detail, 12, $t->textMuted);
         if ($s->probe->ctorSignature !== '') {
-            $c->text('JNI BluetoothSocket Ctor: ' . $s->probe->ctorSignature, 11, $t->accent, Font::MONO);
+            $ctorText = $compact && strlen($s->probe->ctorSignature) > 36
+                ? substr($s->probe->ctorSignature, 0, 36) . '…'
+                : $s->probe->ctorSignature;
+            $c->text('JNI Ctor: ' . $ctorText, 11, $t->accent, Font::MONO);
         }
 
         $c->row(0, 10);
@@ -779,17 +789,15 @@ function view(Context $c, AirPodsApp $s): void
 
       // 1b. Apple VendorID (0x004C) & iPhone Seamless Handoff (TiPi / Smart Routing) Card
       $c->column(12, 8, 0, $t->surface)->radius(8)->border(1, $t->border);
-        $c->row(0, 8);
-          $c->text('Step 2 · iPhone Seamless Handoff (TiPi · 0x004C)', 14, style: Font::BOLD);
-          $c->spacer();
-          $isAppleDid = strcasecmp($s->vendorId, '0x004C') === 0 || $s->vendorId === '76';
+        $c->text('Step 2 · iPhone Seamless Handoff (TiPi · 0x004C)', 14, style: Font::BOLD);
+        $isAppleDid = strcasecmp($s->vendorId, '0x004C') === 0 || $s->vendorId === '76';
+        $c->row(0, 12);
           $c->text($isAppleDid ? 'DID: 0x004C (Apple)' : 'DID: ' . ($s->vendorId ?: 'Default'), 12, $isAppleDid ? $t->success : $t->warning, Font::BOLD | Font::MONO);
+          $audioOwnerLabel = $s->ownsConnection
+              ? 'Audio Owner: Xiaomi 14U'
+              : ($s->audioSourceMac !== '' ? 'Audio Owner: Peer (' . $s->audioSourceMac . ')' : 'Audio Owner: Idle');
+          $c->text($audioOwnerLabel, 12, $s->ownsConnection ? $t->success : $t->accent, Font::MONO);
         $c->end();
-
-        $audioOwnerLabel = $s->ownsConnection
-            ? 'Audio Owner: Xiaomi 14 Ultra (' . $s->localMac . ')'
-            : ($s->audioSourceMac !== '' ? 'Audio Owner: Peer (' . $s->audioSourceMac . ')' : 'Audio Owner: Idle');
-        $c->text($audioOwnerLabel, 12, $s->ownsConnection ? $t->success : $t->accent, Font::MONO);
 
         $activeSlots = [];
         $evictedSlots = [];
@@ -803,8 +811,8 @@ function view(Context $c, AirPodsApp $s): void
         }
         $c->text(
             $activeSlots !== []
-                ? sprintf('Active Multipoint Slots (%d/2): %s', count($activeSlots), implode(' + ', $activeSlots))
-                : sprintf('Active Multipoint Slots (1/2): Xiaomi 14U (%s)', $s->localMac),
+                ? sprintf('Active Multipoint (%d/2): %s', count($activeSlots), implode(' + ', $activeSlots))
+                : 'Active Multipoint (1/2): Xiaomi 14U',
             11,
             $t->textMuted,
         );
@@ -821,7 +829,7 @@ function view(Context $c, AirPodsApp $s): void
         $c->text($keysText, 11, $s->irk !== null ? $t->success : $t->textMuted, Font::MONO);
 
         $autoTake = $s->autoTakeoverEnabled;
-        if ($c->changed($c->key('ctrl-autotake')->switch('Auto-Takeover When Phone Plays Audio (2 & 3-Device)', $autoTake))) {
+        if ($c->changed($c->key('ctrl-autotake')->switch('Auto-Takeover on Phone Play (2 & 3-Device)', $autoTake))) {
             $s->autoTakeoverEnabled = $autoTake;
         }
 
@@ -839,10 +847,10 @@ function view(Context $c, AirPodsApp $s): void
       $c->column(12, 8, 0, $t->surface)->radius(8)->border(1, $t->border);
         $c->row(0, 8);
           $c->text($s->deviceName, 16, style: Font::BOLD);
-          $c->muted($s->modelNumber . ' · FW ' . $s->firmware, 12);
           $c->spacer();
           $c->text($s->lidOpen ? 'Case Lid Open' : 'Case Lid Closed', 12, $s->lidOpen ? $t->accent : $t->textMuted);
         $c->end();
+        $c->muted($s->modelNumber . ' · FW ' . $s->firmware, 12);
         $c->row(0, 8);
           $c->input($s->renameInput, 'AirPods Name', 160);
           if ($c->clicked($c->key('btn-rename')->button('Rename')->disabled(!$connected))) {
@@ -948,9 +956,8 @@ function controlsCard(Context $c, AirPodsApp $s, bool $connected): void
     $c->column(12, 10, 1, $t->surface)->radius(8)->border(1, $t->border);
       $c->text('AirPods 4 Controls (AACP 0x0009 / 0x0017)', 14, style: Font::BOLD);
 
-      $c->row(0, 8);
+      $c->column(0, 4);
         $c->muted('Noise Control (0x0D)', 12);
-        $c->spacer();
         $nc = $s->listeningMode;
         if ($c->changed($c->key('ctrl-nc')->segmented(AirPodsApp::LISTENING_MODES, $nc)->disabled(!$connected))) {
             $s->listeningMode = $nc;
@@ -1095,5 +1102,13 @@ App::whenReady(function () use ($s) {
         height: 640,
         content: Content::view(fn(Context $c) => view($c, $s)),
     ));
+    if (getenv('MYPHP_PLATFORM') === 'android') {
+        $bgPoll = null;
+        $bgPoll = function () use ($s, &$bgPoll): void {
+            $s->pollTransport();
+            App::after(0.2, $bgPoll);
+        };
+        App::after(0.2, $bgPoll);
+    }
 });
 App::run();

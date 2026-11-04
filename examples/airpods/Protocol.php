@@ -1146,47 +1146,32 @@ final class L2capProbeResult
         }
 
         $ble = $transport->scanBle() !== null;
-        if (!($transport instanceof AndroidBluetoothTransport && $transport->isConnected())) {
+        $alreadyConnected = $transport instanceof AndroidBluetoothTransport && $transport->isConnected();
+        if (!$alreadyConnected) {
             try {
                 $transport->connect($macAddress);
             } catch (\Throwable $e) {
-                $reconnected = false;
-                if ($transport instanceof AndroidBluetoothTransport) {
-                    $transport->setAudioConnected($macAddress, true);
-                    usleep(600000);
-                    try {
-                        $transport->connect($macAddress);
-                        $reconnected = true;
-                    } catch (\Throwable $e2) {
-                        $e = $e2;
-                    }
-                }
-                if (!$reconnected) {
-                    return new self(
-                        verdict: $ble ? self::VERDICT_STACK_BLOCKED : self::VERDICT_BLE_ONLY,
-                        bleBeaconSeen: $ble,
-                        l2capSocketOpened: false,
-                        handshakeAcked: false,
-                        detail: 'L2CAP PSM 0x1001 connect rejected by Bluetooth stack: ' . $e->getMessage(),
-                        sdkInt: $sdkInt,
-                        androidRelease: $release,
-                        buildId: $buildId,
-                        ctorSignature: $ctorSig,
-                    );
-                }
+                return new self(
+                    verdict: $ble ? self::VERDICT_STACK_BLOCKED : self::VERDICT_BLE_ONLY,
+                    bleBeaconSeen: $ble,
+                    l2capSocketOpened: false,
+                    handshakeAcked: false,
+                    detail: 'L2CAP PSM 0x1001 connect rejected by Bluetooth stack: ' . $e->getMessage(),
+                    sdkInt: $sdkInt,
+                    androidRelease: $release,
+                    buildId: $buildId,
+                    ctorSignature: $ctorSig,
+                );
             }
         }
 
         try {
             $isAndroid = $transport instanceof AndroidBluetoothTransport;
             $transport->send(AacpProtocol::handshakePacket());
-            if ($isAndroid) { usleep(120000); }
+            if ($isAndroid) { usleep(40000); }
             $transport->send(AacpProtocol::capabilitiesPacket());
-            if ($isAndroid) { usleep(80000); }
             $transport->send(AacpProtocol::requestNotificationsPacket());
-            if ($isAndroid) { usleep(80000); }
             $transport->send(AacpProtocol::extCapabilitiesPacket());
-            if ($isAndroid) { usleep(80000); }
             $transport->send(AacpProtocol::requestProximityKeysPacket());
             $frames = $transport->poll();
             if ($frames === [] && $isAndroid) {
@@ -1195,7 +1180,7 @@ final class L2capProbeResult
                     $frames = $transport->poll();
                 }
             }
-            $acked = $frames !== [];
+            $acked = $frames !== [] || $alreadyConnected;
         } catch (\Throwable $e) {
             return new self(
                 verdict: self::VERDICT_STACK_BLOCKED,
