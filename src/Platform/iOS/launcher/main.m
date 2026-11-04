@@ -31,6 +31,14 @@ static int g_input_head = 0;
 static int g_input_tail = 0;
 static pthread_mutex_t g_input_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#define MAX_DIALOG_RESULTS 32
+static struct {
+    int callback_id;
+    int button_index;
+} g_dialog_results[MAX_DIALOG_RESULTS];
+static int g_dialog_result_count = 0;
+static pthread_mutex_t g_dialog_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static float g_safe_top = 0.0f;
 static float g_safe_bottom = 0.0f;
 static float g_safe_left = 0.0f;
@@ -69,6 +77,16 @@ static void push_input_event(int type, const char *text) {
         g_input_head = next;
     }
     pthread_mutex_unlock(&g_input_mutex);
+}
+
+static void set_dialog_result(int callback_id, int btn_idx) {
+    pthread_mutex_lock(&g_dialog_mutex);
+    if (g_dialog_result_count < MAX_DIALOG_RESULTS) {
+        g_dialog_results[g_dialog_result_count].callback_id = callback_id;
+        g_dialog_results[g_dialog_result_count].button_index = btn_idx;
+        g_dialog_result_count++;
+    }
+    pthread_mutex_unlock(&g_dialog_mutex);
 }
 
 // C exports for PHP ext-ffi
@@ -123,6 +141,51 @@ int myphp_ios_poll_input_event(MyphpInputEvent *ev) {
     }
     pthread_mutex_unlock(&g_input_mutex);
     return has;
+}
+
+void myphp_ios_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id) {
+    NSString *t = title ? [NSString stringWithUTF8String:title] : @"";
+    NSString *m = message ? [NSString stringWithUTF8String:message] : @"";
+    NSMutableArray<NSString *> *btnList = [NSMutableArray array];
+    for (int i = 0; i < button_count; i++) {
+        [btnList addObject:[NSString stringWithUTF8String:buttons[i]]];
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:t message:m preferredStyle:UIAlertControllerStyleAlert];
+        for (int i = 0; i < button_count; i++) {
+            int btn_idx = i;
+            UIAlertAction *act = [UIAlertAction actionWithTitle:btnList[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                set_dialog_result(callback_id, btn_idx);
+            }];
+            [alert addAction:act];
+        }
+        if (button_count == 0) {
+            UIAlertAction *act = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                set_dialog_result(callback_id, 0);
+            }];
+            [alert addAction:act];
+        }
+        UIViewController *root = g_window.rootViewController;
+        while (root.presentedViewController) {
+            root = root.presentedViewController;
+        }
+        [root presentViewController:alert animated:YES completion:nil];
+    });
+}
+
+int myphp_ios_get_dialog_result(int callback_id) {
+    int res = -1;
+    pthread_mutex_lock(&g_dialog_mutex);
+    for (int i = 0; i < g_dialog_result_count; i++) {
+        if (g_dialog_results[i].callback_id == callback_id) {
+            res = g_dialog_results[i].button_index;
+            g_dialog_results[i] = g_dialog_results[g_dialog_result_count - 1];
+            g_dialog_result_count--;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_dialog_mutex);
+    return res;
 }
 
 void myphp_ios_show_keyboard(void) {
