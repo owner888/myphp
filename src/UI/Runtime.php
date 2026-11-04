@@ -616,7 +616,7 @@ final class Runtime
                         $this->menuRelease = true;
                         break;
                     }
-                    if ($this->grabThumb($e[1], $e[2])) {
+                    if (!$this->touchMode && $this->grabThumb($e[1], $e[2])) {
                         break;
                     }
                     if ($this->handles !== [] && $this->dragWindow !== null && $this->onHandle($e[1], $e[2])) {
@@ -701,7 +701,13 @@ final class Runtime
                         $this->moveTextSelection($e[1], $e[2]);
                     }
                     break;
-                case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4], $e[5] ?? true); $this->wheeled = true; break; // ['scroll', x, y, dx, dy, precise]: a mouse wheel's notches are not precise
+                case 'scroll':
+                    $this->scrollAt($e[1], $e[2], $e[3], $e[4], $e[5] ?? true);
+                    $this->wheeled = true;
+                    if ($this->touchMode) {
+                        $this->touchScrollUntil = $this->now / 1e9 + 0.65;
+                    }
+                    break; // ['scroll', x, y, dx, dy, precise]: a mouse wheel's notches are not precise
                 case 'magnify': $this->magnifies[] = [$e[1], $e[2], (float)$e[3], (int)$e[4]]; break;
                 case 'pressure':
                     if ($e[3] >= 2 && $this->pressureStage < 2) { $this->forceClicks[] = [$e[1], $e[2]]; } // once, as it goes deep
@@ -2173,7 +2179,7 @@ final class Runtime
             if ($n->hideScrollbars && $this->drag !== null && $this->drag[0] === $n->scroll) {
                 $this->drag = null; // its bars hid as one was dragged: it lets go (mygo's)
             }
-            if (!$n->hideScrollbars && (($this->drag !== null && $this->drag[0] === $n->scroll) || $this->hovered($n->id))) {
+            if ($this->showScrollbar($n)) {
                 $this->barsShown[$n->id] = true; // its bars show this frame, as the painter draws them: a press on them is theirs next frame
             }
             $this->scrolls[$n->id] = $n->scroll;
@@ -3407,6 +3413,9 @@ final class Runtime
 
     /** @var array<int, float> node id => monotonic timestamp (seconds) until which a touch tap keeps its visual flash highlight */
     public array $touchFlash = [];
+    /** True when the pointer is driven by a touch screen (Android / iOS), where scrollbars show only during active scrolling rather than on tap hover. */
+    public bool $touchMode = false;
+    public float $touchScrollUntil = 0.0;
 
     public function flashTouch(int $id, float $duration = 0.20): void
     {
@@ -3423,6 +3432,63 @@ final class Runtime
             return false;
         }
         return true;
+    }
+
+    /** Whether the current press is actively dragging a slider, range slider, splitter, scrollbar thumb or text selection. */
+    public function isDraggingControl(): bool
+    {
+        if ($this->sliding !== null || $this->drag !== null || $this->selection->dragging || isset($this->hold[7])) {
+            return true;
+        }
+        $id = $this->pointerPress['id'] ?? null;
+        return $id !== null && (isset($this->draggables[$id]) || isset($this->dragSources[$id]) || isset($this->dataSources[$id]) || isset($this->inputs[$id]));
+    }
+
+    /** Cancels an active touch press when finger movement transitions into a container scroll, preventing accidental clicks on release. */
+    public function cancelTouchPress(): void
+    {
+        $this->touchFlash = [];
+        $this->input->mouseDown = false;
+        $this->input->mouseInside = false;
+        $this->pointerPress = null;
+        $this->presses = [];
+        $this->hold = null;
+        $this->sliding = null;
+        $this->drag = null;
+        $this->selection->dragging = false;
+    }
+
+    /** Whether a scroll container's scrollbar thumb should show this frame: on desktop while hovered or dragged; on touch screens only while actively scrolling or fading out. */
+    public function showScrollbar(Node $n): bool
+    {
+        if ($n->scroll === null || $n->hideScrollbars) {
+            return false;
+        }
+        if ($this->dragging($n->scroll)) {
+            return true;
+        }
+        if ($this->touchMode) {
+            $rem = $this->touchScrollUntil - $this->now / 1e9;
+            if ($rem > 0) {
+                $this->needsFrame = true;
+                return true;
+            }
+            return $this->wheeled || $n->scroll->moving();
+        }
+        return $this->hovered($n->id);
+    }
+
+    /** Opacity multiplier (0..1) for scrollbar thumbs during touch-scroll fade-out; 1.0 on desktop. */
+    public function scrollbarFadeAlpha(): float
+    {
+        if (!$this->touchMode) {
+            return 1.0;
+        }
+        $rem = $this->touchScrollUntil - $this->now / 1e9;
+        if ($rem <= 0) {
+            return 1.0;
+        }
+        return $rem >= 0.25 ? 1.0 : max(0.0, $rem / 0.25);
     }
 
     public function hovered(int $id): bool

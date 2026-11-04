@@ -1958,7 +1958,7 @@ final class Context
           }
           $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $n->changed = true; }
-          if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
+          if ($this->hovered($head)) { $head->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
             $this->text($title, $t->fontSize, $t->text)->fontWeight(500)->singleLine();
             $this->spacer();
             $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
@@ -2134,7 +2134,7 @@ final class Context
         $id = $n->id;
         $tb['items'][] = $id;
         $tb['parents'][$id] = $tb['open'][$depth - 1] ?? null;
-        if (!$selected && $this->hovered($n)) { $n->color = $t->surfaceHover; }
+        if (!$selected && $this->hovered($n)) { $n->color = ($rt?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
         if ($rt !== null && $rt->focus === $id) { // the keys, among last frame's items
             $last = $tb['local']->items; $at = array_search($id, $last, true); $to = null;
             if ($this->shortcut(Key::DOWN) && $at !== false && $at + 1 < count($last)) { $to = $last[$at + 1]; }
@@ -2369,7 +2369,7 @@ final class Context
             ->role(Role::TREE_ITEM)->level($sb['depth'] + 1)->checked($chosen);
         $n->choosable = true;
         if ($chosen) { $sb['chosen'] = $n; }
-        if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
+        if (!$chosen && $this->hovered($n)) { $n->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
           if ($icon instanceof SVG) { $this->icon($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
           elseif ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
@@ -4294,7 +4294,7 @@ final class Context
               $seg->on = $i === $index; // Tab enters the group at the one chosen
               $seg->role(Role::RADIO)->checked($seg->on); $seg->segment = true;
               if ($seg->on) { $seg->shadow(0, 1, 2, 0, 0x000000, 0.12); } // raised
-              if ($i !== $index && $this->hovered($seg)) { $seg->color = $t->surfaceHover; }
+              if ($i !== $index && $this->hovered($seg)) { $seg->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
                 $this->text($label, $t->fontSize, $t->text)->singleLine();
               $this->end();
               if ($this->clicked($seg) && $i !== $index) {
@@ -4327,6 +4327,7 @@ final class Context
                 });
             $tab->on = $on;
             $tab->role(Role::TAB)->checked($on);
+            if (!$on && $this->hovered($tab) && ($this->runtime?->input->mouseDown ?? false)) { $tab->color = $t->surfacePressed; }
             $l = $this->text($label, $t->fontSize, $on || $this->hovered($tab) ? $t->text : $t->textMuted);
             if ($on) { $l->fontWeight(600); }
             $this->end();
@@ -4353,7 +4354,7 @@ final class Context
           $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->paddingStart($t->space(0.5))->paddingEnd($t->space(2))->radius($t->radius)->alignItems(Node::CENTER)->alignSelf(Node::START)->focusable()->role(Role::DISCLOSURE);
           $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $root->changed = true; }
-          if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
+          if ($this->hovered($head)) { $head->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
             $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
             $deg = 90 * $p;
             $arrow->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $deg, $p->theme()->textMuted));

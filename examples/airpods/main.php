@@ -127,6 +127,7 @@ final class AirPodsApp
     /** @var list<array{dir: string, summary: string, hex: string}> */
     public array $packets = [];
     private ?string $lastBleRaw = null;
+    private int $lastStatusPollNs = 0;
 
     public function __construct(?SimulatedAirPods4Transport $sim = null)
     {
@@ -400,7 +401,8 @@ final class AirPodsApp
 
     public function pollTransport(): void
     {
-        if ($this->transport instanceof AndroidBluetoothTransport) {
+        if ($this->transport instanceof AndroidBluetoothTransport && (hrtime(true) - $this->lastStatusPollNs) >= 250_000_000) {
+            $this->lastStatusPollNs = hrtime(true);
             $st = $this->transport->getStatus();
             $this->bleRssi = $st['rssi'];
             if ($st['bleMac'] !== '') {
@@ -431,6 +433,12 @@ final class AirPodsApp
                 }
             } elseif (!$prevBonded && $this->isBonded && !$this->transport->isConnected()) {
                 $this->runProbe();
+            }
+
+            if ($st['err'] !== '' && !$this->transport->isConnected()) {
+                $this->probe->l2capSocketOpened = false;
+                $this->probe->handshakeAcked = false;
+                $this->probe->detail = $st['err'];
             }
 
             if ($st['aclSeq'] > $this->lastAclSeq) {

@@ -125,22 +125,19 @@ float myphp_get_density(void) {
 int myphp_read_event(MyphpEvent *ev, int timeout_ms) {
     if (g_event_pipe[0] < 0) return 0;
 
-    // Dispatch pending AChoreographer vsync callbacks without blocking
-    ALooper_pollOnce(0, NULL, NULL, NULL);
+    // 1. Drain any already-queued event in the non-blocking pipe immediately
+    ssize_t n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
+    if (n == sizeof(MyphpEvent)) {
+        return 1;
+    }
 
-    // Wait on event pipe with standard poll()
-    struct pollfd pfd = {
-        .fd = g_event_pipe[0],
-        .events = POLLIN,
-        .revents = 0
-    };
-    int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 0);
-    if (ret > 0 && (pfd.revents & POLLIN)) {
-        ssize_t n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
-        if (n == sizeof(MyphpEvent)) {
-            LOGI("myphp_read_event: got event type=%d", ev->type);
-            return 1;
-        }
+    // 2. Wait in ALooper_pollOnce, which monitors BOTH AChoreographer's 120Hz VSync fd
+    // and g_event_pipe[0] simultaneously with zero polling delay
+    ALooper_pollOnce(timeout_ms > 0 ? timeout_ms : 0, NULL, NULL, NULL);
+
+    n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
+    if (n == sizeof(MyphpEvent)) {
+        return 1;
     }
     return 0;
 }
@@ -233,7 +230,6 @@ int myphp_shape_text(const char *text, float size, int style, float *out_buffer,
 }
 
 int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics, uint8_t *out_pixels, int max_pixels) {
-    LOGI("myphp_rasterize_glyph: gid=%d size=%f style=%d", glyph_id, size, style);
     JNIEnv *env = get_jni_env();
     if (!env || !g_activity_class || !g_mid_rasterize) {
         LOGE("myphp_rasterize_glyph missing env or method: env=%p class=%p mid=%p", env, g_activity_class, g_mid_rasterize);

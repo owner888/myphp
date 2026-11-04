@@ -242,9 +242,14 @@ final class Window implements Platform\Window
 
     public function requestFrame(int $every = 1, bool $repaint = false): void
     {
+        $this->repaintOnly = $this->asked ? ($this->repaintOnly && $repaint) : $repaint;
         $this->asked = true;
-        $this->repaintOnly = $repaint;
         Android::ffi()->myphp_request_frame();
+    }
+
+    public function isFrameRequested(): bool
+    {
+        return $this->asked;
     }
 
     // Touch gesture state
@@ -334,15 +339,26 @@ final class Window implements Platform\Window
         $widthPts = (int)round($wPx / $density);
         $heightPts = (int)round($hPx / $density);
 
-        Logger::debug("drawFrame: {$wPx}x{$hPx} ({$widthPts}x{$heightPts} pt)", 'android');
+        if ($this->flingActive && ($inp = $this->w->input) !== null) {
+            $nowNs = hrtime(true);
+            $dt = max(0.001, min(0.05, ($nowNs - $this->flingLastTime) / 1e9));
+            $this->flingLastTime = $nowNs;
+            $decay = exp(-$dt / 0.325);
+            $this->flingVx *= $decay;
+            $this->flingVy *= $decay;
+            if (hypot($this->flingVx, $this->flingVy) < 18.0) {
+                $this->flingActive = false;
+            } else {
+                $inp->push(['scroll', $this->touchStartX, $this->touchStartY, $this->flingVx * $dt, $this->flingVy * $dt, true, false]);
+                $this->requestFrame();
+            }
+        }
 
         $list = $this->gl->nextList();
         $this->gl->setDark(App::theme()->dark);
 
         try {
             ($this->frame)($list, (float)$widthPts, (float)$heightPts);
-
-            Logger::debug("drawFrame: list->n=" . $list->n, "android");
 
             $clear = [0.0, 0.0, 0.0, 1.0];
             $this->gl->draw($list, max(1, $wPx), max(1, $hPx), $density * $list->zoom, $clear);
@@ -352,7 +368,6 @@ final class Window implements Platform\Window
             if (!$ret) {
                 Logger::error("eglSwapBuffers failed: " . $egl->eglGetError(), "android");
             } else {
-                Logger::debug("eglSwapBuffers OK", "android");
                 if ($this->touchActive && ($this->w->input?->mouseDown ?? false)) {
                     $this->downFrameDrawn = true;
                 }
@@ -390,8 +405,9 @@ final class Window implements Platform\Window
 
         $input->mouse($ptX, $ptY);
         $input->mods = 0;
-
-        Logger::debug("onTouch: action={$action}, pt=({$ptX}, {$ptY})", 'touch');
+        if ($this->w->runtime !== null) {
+            $this->w->runtime->touchMode = true;
+        }
 
         switch ($action) {
             case Android::ACTION_DOWN:
@@ -416,18 +432,17 @@ final class Window implements Platform\Window
                     $r = $rt->rectOf($rt->focus);
                     if ($r !== null && $ptX >= $r[0] && $ptX < $r[0] + $r[2] && $ptY >= $r[1] && $ptY < $r[1] + $r[3]) {
                         $this->touchInField = true;
-                        $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
                     }
                 }
 
-                // Visual pressed highlight & native haptic feedback when touching an interactive control
+                // Push pointer down immediately so all controls (buttons, checkboxes, switches, sliders, steppers) enter their native pressed/dragging state
+                $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
                 $hitId = $rt?->pressTarget($ptX, $ptY);
                 if ($hitId !== null) {
-                    $input->mouseDown = true;
-                    $rt->flashTouch($hitId, 0.30);
+                    $rt->flashTouch($hitId, 2.0);
                     Android::ffi()->myphp_perform_haptic();
-                    $this->drawFrame();
                 }
+                $this->requestFrame();
 
                 $pressId = ++$this->longPressId;
                 \MyPHP\App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
@@ -440,7 +455,6 @@ final class Window implements Platform\Window
                             $input->push(['down', $ptX, $ptY, 0, 2, 0, $time]);
                             $this->requestFrame();
                         }
-                        Logger::debug("longPress triggered at ($ptX, $ptY)", "touch");
                     }
                 });
                 break;
@@ -449,11 +463,11 @@ final class Window implements Platform\Window
                 if (!$this->touchActive) {
                     break;
                 }
-                if ($this->touchInField) {
-                    // Dragging across text field to move cursor
+                $rt = $this->w->runtime;
+                if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && $rt->isDraggingControl())) {
+                    // Dragging across a text field, slider, rangeSlider, splitter or scrollbar thumb
                     $input->mouse($ptX, $ptY);
                     $input->push(['drag', $ptX, $ptY, $time]);
-                    Logger::debug("onTouch MOVE inField: pt=($ptX, $ptY)", "touch");
                     $this->requestFrame();
                     break;
                 }
@@ -465,12 +479,9 @@ final class Window implements Platform\Window
                 }
 
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
-                if (!$this->touchIsScrolling && $dist > 8.0) {
+                if (!$this->touchIsScrolling && $dist > 4.0) {
                     $this->touchIsScrolling = true;
-                    $input->mouseDown = false;
-                    if ($this->w->runtime !== null) {
-                        $this->w->runtime->touchFlash = [];
-                    }
+                    $rt?->cancelTouchPress();
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
                 }
@@ -481,8 +492,7 @@ final class Window implements Platform\Window
                     $this->touchLastX = $ptX;
                     $this->touchLastY = $ptY;
 
-                    $input->push(['scroll', $ptX, $ptY, $dx, $dy, true, false]);
-                    Logger::debug("onTouch MOVE scroll: pt=($ptX, $ptY), delta=($dx, $dy)", "touch");
+                    $input->push(['scroll', $this->touchStartX, $this->touchStartY, $dx, $dy, true, false]);
                     $this->requestFrame();
                 }
                 break;
@@ -492,11 +502,14 @@ final class Window implements Platform\Window
                     break;
                 }
                 $this->touchActive = false;
+                $rt = $this->w->runtime;
+                if ($rt !== null) {
+                    $rt->touchFlash = [];
+                }
 
                 if ($this->touchInField) {
                     $input->mouse($ptX, $ptY);
                     $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
-                    Logger::debug("onTouch UP inField: pt=($ptX, $ptY)", "touch");
                     $this->touchInField = false;
                     $this->requestFrame();
                     break;
@@ -504,60 +517,39 @@ final class Window implements Platform\Window
 
                 if ($this->touchIsScrolling) {
                     $this->touchIsScrolling = false;
-                    $input->mouseDown = false;
-                    $input->mouseInside = false;
+                    $rt?->cancelTouchPress();
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];
                         $dt = ($last[0] - $first[0]) / 1e9;
-                        if ($dt > 0.01 && $dt < 0.2) {
+                        if ($dt > 0.008 && $dt < 0.25) {
                             $vx = ($last[1] - $first[1]) / $dt;
                             $vy = ($last[2] - $first[2]) / $dt;
                             $speed = hypot($vx, $vy);
-                            if ($speed > 60.0) {
-                                // Hand over fling momentum to MyPHP internal MotionChannel smoother (precise=false)
-                                $flingDistanceX = max(-400.0, min(400.0, $vx * 0.22));
-                                $flingDistanceY = max(-400.0, min(400.0, $vy * 0.22));
-                                $input->push(['scroll', $this->touchLastX, $this->touchLastY, $flingDistanceX, $flingDistanceY, false, true]);
-                                $this->requestFrame();
+                            if ($speed > 50.0) {
+                                $this->flingActive = true;
+                                $this->flingVx = max(-3500.0, min(3500.0, $vx));
+                                $this->flingVy = max(-3500.0, min(3500.0, $vy));
+                                $this->flingLastTime = $time;
                             }
                         }
                     }
+                    $this->requestFrame();
                 } else {
-                    $rt = $this->w->runtime;
-                    $hitId = $rt?->pressTarget($this->touchStartX, $this->touchStartY);
-                    // Ensure the pressed visual state is presented and visible for at least 90ms before bouncing back
-                    if ($hitId !== null && !$this->downFrameDrawn) {
-                        $rt->flashTouch($hitId, 1.0);
-                        $this->drawFrame();
-                    }
-                    $elapsedNs = hrtime(true) - $this->touchStartTime;
-                    if ($hitId !== null && $elapsedNs < 90_000_000) {
-                        usleep((int)intdiv(90_000_000 - $elapsedNs, 1000));
-                    }
-                    if ($rt !== null) {
-                        $rt->touchFlash = [];
-                    }
-                    // Tap: short click at the exact touch start location, then finger leaves screen (mouseInside = false)
-                    $input->push(['down', $this->touchStartX, $this->touchStartY, 0, 1, 0, $this->touchStartTime]);
+                    // Release the press at the touch point and clear hover so all controls bounce back to their un-hovered base state
                     $input->push(['up', $this->touchStartX, $this->touchStartY, 0, 1, 0, $time]);
-                    $input->mouseDown = false;
                     $input->mouseInside = false;
                     $input->mouseX = -1;
                     $input->mouseY = -1;
-                    $this->drawFrame();
+                    $this->requestFrame();
                 }
                 break;
 
             case Android::ACTION_CANCEL:
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
-                if ($this->w->runtime !== null) {
-                    $this->w->runtime->touchFlash = [];
-                }
-                $input->mouseDown = false;
-                $input->mouseInside = false;
-                $this->drawFrame();
+                $this->w->runtime?->cancelTouchPress();
+                $this->requestFrame();
                 break;
         }
     }
@@ -671,7 +663,7 @@ final class Window implements Platform\Window
         });
     }
     public function repaintAsked(): bool { return $this->repaintOnly; }
-    public function displayRate(): float { return 60.0; }
+    public function displayRate(): float { return 120.0; }
     public function setProgressBar(string $state, float $value): void {}
     public function lastDraw(): string { return ''; }
     public function backingScale(): float { return $this->density; }
@@ -691,7 +683,7 @@ final class Window implements Platform\Window
     public function cancelDrag(): void {}
     public function titleBar(): array { return [0, 0, 0, 0]; }
     public function dragWindow(int $clicks): void {}
-    public function refreshRate(): float { return 60.0; }
+    public function refreshRate(): float { return 120.0; }
     public function showCursor(\MyPHP\UI\Cursor $cursor): void {}
     public function setVibrancy(string $material): void {}
     public function showing(): bool { return true; }

@@ -52,7 +52,10 @@ final class Gl
     private array $u = [];
     /** @var array<string, int> the blur program's */
     private array $bu = [];
-    private int $quadBuffer, $quadTexture, $xformBuffer, $xformTexture;
+    private const RING = 4;
+    /** @var list<int> ring of quad/xform buffer objects and texture objects so TBDR GPUs (Adreno) never read an overwritten buffer mid-frame */
+    private array $quadBuffers = [], $quadTextures = [], $xformBuffers = [], $xformTextures = [];
+    private int $ringSlot = 0;
     private int $atlasTexture = 0, $imagesTexture = 0;
     private ?Atlas $atlas = null;
     private ?ImageAtlas $images = null;
@@ -102,8 +105,14 @@ final class Gl
         $ids = $f->new('unsigned int[1]');
         (self::$f->epoxy_glGenVertexArrays)(1, $ids);
         $this->vao = $ids[0];
-        [$this->quadBuffer, $this->quadTexture] = $this->bufferTexture($capacity * DisplayList::FLOATS_PER_RECT * 4);
-        [$this->xformBuffer, $this->xformTexture] = $this->bufferTexture(self::TRANSFORMS * DisplayList::FLOATS_PER_TRANSFORM * 4);
+        for ($i = 0; $i < self::RING; $i++) {
+            [$qb, $qt] = $this->bufferTexture($capacity * DisplayList::FLOATS_PER_RECT * 4);
+            [$xb, $xt] = $this->bufferTexture(self::TRANSFORMS * DisplayList::FLOATS_PER_TRANSFORM * 4);
+            $this->quadBuffers[] = $qb;
+            $this->quadTextures[] = $qt;
+            $this->xformBuffers[] = $xb;
+            $this->xformTextures[] = $xt;
+        }
         (self::$f->epoxy_glGenFramebuffers)(1, $ids);
         $this->fbo = $ids[0];
         for ($i = 0; $i < 2; $i++) {
@@ -340,7 +349,6 @@ final class Gl
         $this->prepareShaders($list); // its images' textures, canvases' copied, before the target is bound
         ($g->epoxy_glBindFramebuffer)(self::FRAMEBUFFER, $target);
         $this->target = [$pw / $scale, $ph / $scale, $scale, 1.0, (float)$ph];
-        Logger::debug("Gl::draw target=$target, size={$pw}x{$ph}, scale=$scale, list_n={$list->n}", "gl_diag");
         $this->drawList($list, $target, $pw, $ph, $clear);
         $err = ($g->epoxy_glGetError)();
         if ($err !== 0) {
@@ -429,13 +437,14 @@ final class Gl
         }
     }
 
-    /** Uploads $list's quads and transforms, and draws with the quad program. */
+    /** Uploads $list's quads and transforms into the next ring slot, and draws with the quad program. */
     private function bindList(DisplayList $list, int $extra = 0): void
     {
         $g = self::$f;
-        ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->quadBuffer);
+        $slot = $this->ringSlot = ($this->ringSlot + 1) % self::RING;
+        ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->quadBuffers[$slot]);
         ($g->epoxy_glBufferSubData)(self::TEXTURE_BUFFER, 0, ($list->n + $extra) * DisplayList::FLOATS_PER_RECT * 4, $list->buf);
-        ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->xformBuffer);
+        ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->xformBuffers[$slot]);
         ($g->epoxy_glBufferSubData)(self::TEXTURE_BUFFER, 0, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4, $list->xforms);
         $this->useProgram($this->quadProgram, $this->u);
     }
@@ -455,7 +464,8 @@ final class Gl
         ($g->epoxy_glUniform1f)($u['uDark'], $this->dark);
         ($g->epoxy_glUniform1f)($u['uFlip'], $flip);
         ($g->epoxy_glUniform1f)($u['uTargetH'], $th);
-        foreach ([['uQuads', 0, self::TEXTURE_BUFFER, $this->quadTexture], ['uXforms', 1, self::TEXTURE_BUFFER, $this->xformTexture],
+        $slot = $this->ringSlot;
+        foreach ([['uQuads', 0, self::TEXTURE_BUFFER, $this->quadTextures[$slot]], ['uXforms', 1, self::TEXTURE_BUFFER, $this->xformTextures[$slot]],
                   ['uAtlasTex', 2, self::TEXTURE_2D, $this->atlasTexture], ['uImages', 3, self::TEXTURE_2D_ARRAY, $this->imagesTexture],
                   ['uBackdrop', 4, self::TEXTURE_2D, $this->backdrop]] as [$name, $unit, $kind, $tex]) {
             ($g->epoxy_glActiveTexture)(self::TEXTURE0 + $unit);
@@ -652,10 +662,6 @@ final class Gl
             $start = $at;
         }
         $this->drawRuns($list, $start, $list->n - $start);
-
-        $pix = $g->new('uint8_t[4]');
-        ($g->epoxy_glReadPixels)($pw / 2, $ph / 2, 1, 1, self::RGBA, self::UNSIGNED_BYTE, $pix);
-        Logger::debug("drawList glReadPixels center: R={$pix[0]} G={$pix[1]} B={$pix[2]} A={$pix[3]}", "gl_diag");
     }
 
     /** Draws quads [$from, $from + $count): blended, but the web views' holes, which take away what is there, and the runs shaders draw, which are left out for now. */
