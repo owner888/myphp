@@ -184,9 +184,11 @@ final class Backend implements Platform\Backend
         throw new Platform\Unsupported('Media playback not implemented on iOS yet');
     }
 
+    private ?Symbols $symbols = null;
+
     public function symbols(): Platform\Symbols
     {
-        throw new Platform\Unsupported('Symbols not implemented on iOS yet');
+        return $this->symbols ??= new Symbols();
     }
 
     public function secrets(): Platform\Secrets
