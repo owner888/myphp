@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <MetalKit/MetalKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import <Network/Network.h>
 #import <pthread.h>
 #import <os/log.h>
 
@@ -44,6 +45,10 @@ static float g_safe_top = 0.0f;
 static float g_safe_bottom = 0.0f;
 static float g_safe_left = 0.0f;
 static float g_safe_right = 0.0f;
+
+static int g_network_connected = 1;
+static int g_network_is_cellular = 0;
+static nw_path_monitor_t g_path_monitor = NULL;
 
 static UIWindow *g_window = NULL;
 static MTKView *g_view = NULL;
@@ -222,6 +227,14 @@ void myphp_ios_remove_all_notifications(void) {
     [[UNUserNotificationCenter currentNotificationCenter] removeAllPendingNotificationRequests];
 }
 
+int myphp_ios_is_network_connected(void) {
+    return g_network_connected;
+}
+
+int myphp_ios_is_network_cellular(void) {
+    return g_network_is_cellular;
+}
+
 void myphp_ios_show_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (g_view && ![g_view isFirstResponder]) {
@@ -386,6 +399,16 @@ static void* php_worker_thread(void *arg) {
 @implementation MyphpAppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     os_log(OS_LOG_DEFAULT, "[myphp-ios] Application did finish launching");
+
+    // Start network path monitor
+    g_path_monitor = nw_path_monitor_create();
+    nw_path_monitor_set_queue(g_path_monitor, dispatch_get_main_queue());
+    nw_path_monitor_set_update_handler(g_path_monitor, ^(nw_path_t path) {
+        nw_path_status_t status = nw_path_get_status(path);
+        g_network_connected = (status == nw_path_status_satisfied);
+        g_network_is_cellular = nw_path_uses_interface_type(path, nw_interface_type_cellular);
+    });
+    nw_path_monitor_start(g_path_monitor);
 
     [UNUserNotificationCenter currentNotificationCenter].delegate = self;
 
