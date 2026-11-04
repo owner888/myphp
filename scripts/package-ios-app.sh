@@ -47,7 +47,7 @@ xcrun --sdk iphoneos clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -fo
     "${BUILD_DIR}/libs/libphp.a" \
     "${SYSROOT}/lib/libffi.a" \
     -lz -lm -lresolv \
-    -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore \
+    -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore -framework UserNotifications \
     -o "${APP_DIR}/${APP_NAME}"
 
 # 3. Create Info.plist

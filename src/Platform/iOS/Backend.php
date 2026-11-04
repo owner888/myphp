@@ -206,12 +206,33 @@ final class Backend implements Platform\Backend
 
     public function notificationsSupported(): bool
     {
-        return false;
+        return true;
     }
 
-    public function showNotification(\MyPHP\Notification $n): void {}
-    public function removeNotification(string $id): void {}
-    public function removeAllNotifications(): void {}
+    public function showNotification(\MyPHP\Notification $n): void
+    {
+        try {
+            iOS::ffi()->myphp_ios_show_notification(
+                $n->title,
+                $n->body,
+                $n->id !== '' ? $n->id : null
+            );
+        } catch (\Throwable $e) {}
+    }
+
+    public function removeNotification(string $id): void
+    {
+        try {
+            iOS::ffi()->myphp_ios_remove_notification($id);
+        } catch (\Throwable $e) {}
+    }
+
+    public function removeAllNotifications(): void
+    {
+        try {
+            iOS::ffi()->myphp_ios_remove_all_notifications();
+        } catch (\Throwable $e) {}
+    }
 
     public function webViewAvailable(): bool
     {
