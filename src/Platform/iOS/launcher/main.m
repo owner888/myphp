@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <MetalKit/MetalKit.h>
+#import <UserNotifications/UserNotifications.h>
 #import <pthread.h>
 #import <os/log.h>
 
@@ -188,6 +189,39 @@ int myphp_ios_get_dialog_result(int callback_id) {
     return res;
 }
 
+void myphp_ios_show_notification(const char *title, const char *body, const char *identifier) {
+    NSString *t = title ? [NSString stringWithUTF8String:title] : @"";
+    NSString *b = body ? [NSString stringWithUTF8String:body] : @"";
+    NSString *ident = identifier ? [NSString stringWithUTF8String:identifier] : [NSString stringWithFormat:@"myphp_%f", [[NSDate date] timeIntervalSince1970]];
+
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge) completionHandler:^(BOOL granted, NSError * _Nullable error) {
+        if (granted) {
+            UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
+            content.title = t;
+            content.body = b;
+            content.sound = [UNNotificationSound defaultSound];
+
+            UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:0.1 repeats:NO];
+            UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:ident content:content trigger:trigger];
+            [center addNotificationRequest:request withCompletionHandler:nil];
+        }
+    }];
+}
+
+void myphp_ios_remove_notification(const char *identifier) {
+    if (identifier) {
+        NSString *ident = [NSString stringWithUTF8String:identifier];
+        [[UNUserNotificationCenter currentNotificationCenter] removeDeliveredNotificationsWithIdentifiers:@[ident]];
+        [[UNUserNotificationCenter currentNotificationCenter] removePendingNotificationRequestsWithIdentifiers:@[ident]];
+    }
+}
+
+void myphp_ios_remove_all_notifications(void) {
+    [[UNUserNotificationCenter currentNotificationCenter] removeAllDeliveredNotifications];
+    [[UNUserNotificationCenter currentNotificationCenter] removeAllPendingNotificationRequests];
+}
+
 void myphp_ios_show_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (g_view && ![g_view isFirstResponder]) {
@@ -346,12 +380,14 @@ static void* php_worker_thread(void *arg) {
 }
 @end
 
-@interface MyphpAppDelegate : UIResponder <UIApplicationDelegate>
+@interface MyphpAppDelegate : UIResponder <UIApplicationDelegate, UNUserNotificationCenterDelegate>
 @end
 
 @implementation MyphpAppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     os_log(OS_LOG_DEFAULT, "[myphp-ios] Application did finish launching");
+
+    [UNUserNotificationCenter currentNotificationCenter].delegate = self;
 
     g_window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
     g_window.rootViewController = [[MyphpViewController alloc] init];
@@ -362,6 +398,10 @@ static void* php_worker_thread(void *arg) {
     pthread_detach(g_php_thread);
 
     return YES;
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
+    completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionSound);
 }
 @end
 

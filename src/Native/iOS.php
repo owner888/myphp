@@ -34,6 +34,9 @@ final class iOS
             int myphp_ios_poll_input_event(MyphpInputEvent *ev);
             void myphp_ios_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             int myphp_ios_get_dialog_result(int callback_id);
+            void myphp_ios_show_notification(const char *title, const char *body, const char *identifier);
+            void myphp_ios_remove_notification(const char *identifier);
+            void myphp_ios_remove_all_notifications(void);
             void myphp_ios_show_keyboard(void);
             void myphp_ios_hide_keyboard(void);
         ");
