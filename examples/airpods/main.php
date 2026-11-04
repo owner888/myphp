@@ -496,7 +496,7 @@ final class AirPodsApp
             $this->probe->l2capSocketOpened = true;
             $this->probe->handshakeAcked = true;
             $this->probe->verdict = L2capProbeResult::VERDICT_NATIVE_READY;
-            $this->probe->detail = 'Direct L2CAP PSM 0x1001 + AACP handshake succeeded without Root patch!';
+            $this->probe->detail = 'Direct L2CAP 0x1001 + AACP handshake OK (Rootless)!';
         }
         $d = AacpProtocol::decode($frame);
         $hex = AacpProtocol::toHex($frame);
@@ -508,6 +508,13 @@ final class AirPodsApp
                 $this->serial = $d['serial'] !== '' ? $d['serial'] : $this->serial;
                 $this->renameInput->text = $this->deviceName;
                 $this->logPacket('RX', sprintf('Device Info: %s (%s fw %s)', $this->deviceName, $this->modelNumber, $this->firmware), $hex);
+                // Re-send notification & proximity key requests once 0x001D confirms handshake completion on real hardware
+                if ($this->transport instanceof AndroidBluetoothTransport && $this->irk === null && $this->transport->isConnected()) {
+                    $this->transport->send(AacpProtocol::capabilitiesPacket());
+                    $this->transport->send(AacpProtocol::requestNotificationsPacket());
+                    $this->transport->send(AacpProtocol::extCapabilitiesPacket());
+                    $this->transport->send(AacpProtocol::requestProximityKeysPacket());
+                }
                 break;
 
             case 'battery':
