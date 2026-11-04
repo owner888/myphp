@@ -286,6 +286,12 @@ final class AacpProtocol
         return "\x04\x00\x04\x00\x0f\x00\xff\xff\xfe\xff";
     }
 
+    /** Extended host capabilities packet (Opcode 0x0029) sent before requesting Proximity Keys. */
+    public static function extCapabilitiesPacket(): string
+    {
+        return "\x04\x00\x04\x00\x29\x00\x00\xff\xff\xff\xff\xff\xff\xff";
+    }
+
     /** Requests BLE Magic Pairing keys (IRK = 0x01, ENC_KEY = 0x04) over Opcode 0x0030. */
     public static function requestProximityKeysPacket(int $mask = self::KEY_TYPE_IRK | self::KEY_TYPE_ENC): string
     {
@@ -1172,12 +1178,18 @@ final class L2capProbeResult
         }
 
         try {
+            $isAndroid = $transport instanceof AndroidBluetoothTransport;
             $transport->send(AacpProtocol::handshakePacket());
+            if ($isAndroid) { usleep(120000); }
             $transport->send(AacpProtocol::capabilitiesPacket());
+            if ($isAndroid) { usleep(80000); }
             $transport->send(AacpProtocol::requestNotificationsPacket());
+            if ($isAndroid) { usleep(80000); }
+            $transport->send(AacpProtocol::extCapabilitiesPacket());
+            if ($isAndroid) { usleep(80000); }
             $transport->send(AacpProtocol::requestProximityKeysPacket());
             $frames = $transport->poll();
-            if ($frames === [] && $transport instanceof AndroidBluetoothTransport) {
+            if ($frames === [] && $isAndroid) {
                 for ($i = 0; $i < 10 && $frames === []; $i++) {
                     usleep(40000);
                     $frames = $transport->poll();
