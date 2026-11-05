@@ -12,7 +12,7 @@ PROJECT_DIR="${1:-}"
 OUTPUT_APK="${2:-${BUILD_DIR}/myphp-debug.apk}"
 APP_NAME="${3:-}"
 
-SDK_DIR="${ANDROID_HOME:-/Users/kaka/Library/Android/sdk}"
+SDK_DIR="${ANDROID_HOME:-${HOME}/Library/Android/sdk}"
 BUILD_TOOLS_DIR="${SDK_DIR}/build-tools/35.0.0"
 PLATFORM_JAR="${SDK_DIR}/platforms/android-34/android.jar"
 if [ ! -f "$PLATFORM_JAR" ]; then
@@ -30,11 +30,8 @@ echo "==> Using SDK: $SDK_DIR"
 echo "==> Using Build Tools: $BUILD_TOOLS_DIR"
 echo "==> Using Platform JAR: $PLATFORM_JAR"
 
-# Ensure native libraries exist
-if [ ! -f "${BUILD_DIR}/libs/arm64-v8a/libmyphp.so" ] || [ ! -f "${BUILD_DIR}/libs/arm64-v8a/libphp.so" ]; then
-    echo "==> Native libraries missing, building them now..."
-    "${ROOT_DIR}/scripts/build-android-launcher.sh"
-fi
+# The native libraries: the runtime as it stands (built once, again when its script changed), the launcher compiled anew (one clang, so that a change in src/Platform/Android/launcher is in)
+"${ROOT_DIR}/scripts/build-android-launcher.sh"
 
 WORK_DIR="${BUILD_DIR}/pkg_work"
 rm -rf "$WORK_DIR"

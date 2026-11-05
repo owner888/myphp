@@ -3,6 +3,8 @@
 #import <UserNotifications/UserNotifications.h>
 #import <Network/Network.h>
 #import <WebKit/WebKit.h>
+#import <PhotosUI/PhotosUI.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <pthread.h>
 #import <os/log.h>
 
@@ -18,7 +20,7 @@ typedef struct {
 } MyphpTouchEvent;
 
 typedef struct {
-    int type; // 0: insert text, 1: backspace
+    int type; // 0: insert text, 1: backspace, 2: the text being composed ("" none)
     char text[256];
 } MyphpInputEvent;
 
@@ -48,14 +50,14 @@ static struct {
 static int g_dialog_result_count = 0;
 static pthread_mutex_t g_dialog_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define WEB_MSG_QUEUE_SIZE 64
-typedef struct {
+// A page's messages, whole and in order, strdup'ed in a list: PHP takes the next with
+// myphp_ios_poll_web_message and frees it with myphp_ios_free_web_message. Nothing is dropped.
+typedef struct MyphpWebMsg {
     int page_id;
-    char msg[2048];
+    char *msg;
+    struct MyphpWebMsg *next;
 } MyphpWebMsg;
-static MyphpWebMsg g_web_msg_queue[WEB_MSG_QUEUE_SIZE];
-static int g_web_msg_head = 0;
-static int g_web_msg_tail = 0;
+static MyphpWebMsg *g_web_msg_first = NULL, *g_web_msg_last = NULL;
 static pthread_mutex_t g_web_msg_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static float g_safe_top = 0.0f;
@@ -121,14 +123,13 @@ static void push_open_url_event(const char *url) {
 
 static void push_web_msg(int page_id, const char *msg) {
     if (!msg) return;
+    MyphpWebMsg *m = malloc(sizeof(MyphpWebMsg));
+    m->page_id = page_id;
+    m->msg = strdup(msg);
+    m->next = NULL;
     pthread_mutex_lock(&g_web_msg_mutex);
-    int next = (g_web_msg_head + 1) % WEB_MSG_QUEUE_SIZE;
-    if (next != g_web_msg_tail) {
-        g_web_msg_queue[g_web_msg_head].page_id = page_id;
-        strncpy(g_web_msg_queue[g_web_msg_head].msg, msg, sizeof(g_web_msg_queue[0].msg) - 1);
-        g_web_msg_queue[g_web_msg_head].msg[sizeof(g_web_msg_queue[0].msg) - 1] = '\0';
-        g_web_msg_head = next;
-    }
+    if (g_web_msg_last) g_web_msg_last->next = m; else g_web_msg_first = m;
+    g_web_msg_last = m;
     pthread_mutex_unlock(&g_web_msg_mutex);
 }
 
@@ -178,6 +179,13 @@ void myphp_ios_get_safe_insets(float *top, float *bottom, float *left, float *ri
     if (bottom) *bottom = g_safe_bottom;
     if (left) *left = g_safe_left;
     if (right) *right = g_safe_right;
+}
+
+// How high the keyboard stands over the window's bottom, in points (UIKeyboardWillChangeFrameNotification); 0 hidden.
+static volatile float g_keyboard_height = 0.0f;
+
+float myphp_ios_get_keyboard_height(void) {
+    return g_keyboard_height;
 }
 
 void* myphp_ios_get_view(void) {
@@ -282,6 +290,162 @@ int myphp_ios_get_dialog_result(int callback_id) {
     }
     pthread_mutex_unlock(&g_dialog_mutex);
     return res;
+}
+
+// Dialog::open (src/Platform/iOS/Dialogs.php): UIDocumentPickerViewController, as a copy of each
+// file into tmp/open/<id>/ under its name, or PHPickerViewController when the filters name only
+// pictures and films. The answer waits here by callback id until PHP takes it: paths one per line,
+// "" cancelled, "!message" failed.
+#define MAX_FILES_RESULTS 8
+static struct { int callback_id; char *paths; } g_files_results[MAX_FILES_RESULTS];
+static pthread_mutex_t g_files_mutex = PTHREAD_MUTEX_INITIALIZER;
+static NSMutableDictionary<NSNumber *, id> *g_pickers = nil; // the delegates, alive while their picker shows
+
+static void set_files_result(int callback_id, NSString *paths) {
+    pthread_mutex_lock(&g_files_mutex);
+    for (int i = 0; i < MAX_FILES_RESULTS; i++) {
+        if (g_files_results[i].paths == NULL) {
+            g_files_results[i].callback_id = callback_id;
+            g_files_results[i].paths = strdup([paths UTF8String]);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_files_mutex);
+    [g_pickers removeObjectForKey:@(callback_id)];
+    g_needs_render = 1;
+}
+
+static NSURL *files_dir(int callback_id) {
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingFormat:@"open/%d", callback_id];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    return [NSURL fileURLWithPath:dir isDirectory:YES];
+}
+
+@interface MyphpPicker : NSObject <UIDocumentPickerDelegate, PHPickerViewControllerDelegate>
+@property (nonatomic, assign) int callbackId;
+@end
+
+@implementation MyphpPicker
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    // asCopy:YES: the URLs are the app's own copies in tmp; moved under open/<id>/ so they are kept together
+    NSMutableArray<NSString *> *paths = [NSMutableArray array];
+    NSURL *dir = files_dir(self.callbackId);
+    for (NSURL *u in urls) {
+        NSURL *to = [dir URLByAppendingPathComponent:u.lastPathComponent];
+        NSError *err = nil;
+        [[NSFileManager defaultManager] removeItemAtURL:to error:nil];
+        if (![[NSFileManager defaultManager] moveItemAtURL:u toURL:to error:&err]) {
+            set_files_result(self.callbackId, [NSString stringWithFormat:@"!%@", err.localizedDescription]);
+            return;
+        }
+        [paths addObject:to.path];
+    }
+    set_files_result(self.callbackId, [paths componentsJoinedByString:@"\n"]);
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    set_files_result(self.callbackId, @"");
+}
+
+- (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    if (results.count == 0) {
+        set_files_result(self.callbackId, @"");
+        return;
+    }
+    NSURL *dir = files_dir(self.callbackId);
+    NSMutableArray<NSString *> *paths = [NSMutableArray array];
+    __block int left = (int)results.count;
+    __block NSString *failed = nil;
+    int cb = self.callbackId;
+    for (PHPickerResult *r in results) {
+        NSItemProvider *p = r.itemProvider;
+        NSString *type = [p hasItemConformingToTypeIdentifier:UTTypeMovie.identifier] ? UTTypeMovie.identifier : UTTypeImage.identifier;
+        [p loadFileRepresentationForTypeIdentifier:type completionHandler:^(NSURL *url, NSError *error) {
+            // the file at url lives only during this handler: copied out
+            NSString *path = nil;
+            NSError *fail = error;
+            if (url) {
+                NSURL *to = [dir URLByAppendingPathComponent:url.lastPathComponent];
+                [[NSFileManager defaultManager] removeItemAtURL:to error:nil];
+                if ([[NSFileManager defaultManager] copyItemAtURL:url toURL:to error:&fail]) {
+                    path = to.path;
+                }
+            }
+            @synchronized (paths) {
+                if (path) [paths addObject:path];
+                else if (!failed) failed = fail ? fail.localizedDescription : @"no file";
+                if (--left == 0) {
+                    set_files_result(cb, failed ? [NSString stringWithFormat:@"!%@", failed] : [paths componentsJoinedByString:@"\n"]);
+                }
+            }
+        }];
+    }
+}
+@end
+
+static UIViewController *top_view_controller(void) {
+    UIViewController *root = g_window.rootViewController;
+    while (root.presentedViewController) root = root.presentedViewController;
+    return root;
+}
+
+void myphp_ios_pick_files(const char **extensions, int count, int multiple, int photos, int callback_id) {
+    NSMutableArray<NSString *> *exts = [NSMutableArray array];
+    for (int i = 0; i < count; i++) [exts addObject:[NSString stringWithUTF8String:extensions[i]]];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!g_pickers) g_pickers = [NSMutableDictionary dictionary];
+        MyphpPicker *d = [MyphpPicker new];
+        d.callbackId = callback_id;
+        g_pickers[@(callback_id)] = d;
+        UIViewController *vc;
+        if (photos) {
+            PHPickerConfiguration *conf = [[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];
+            conf.selectionLimit = multiple ? 0 : 1;
+            BOOL images = NO, videos = NO;
+            for (NSString *e in exts) {
+                UTType *t = [UTType typeWithFilenameExtension:e];
+                if ([t conformsToType:UTTypeMovie]) videos = YES; else images = YES;
+            }
+            conf.filter = images && videos ? [PHPickerFilter anyFilterMatchingSubfilters:@[PHPickerFilter.imagesFilter, PHPickerFilter.videosFilter]]
+                        : videos ? PHPickerFilter.videosFilter : PHPickerFilter.imagesFilter;
+            PHPickerViewController *p = [[PHPickerViewController alloc] initWithConfiguration:conf];
+            p.delegate = d;
+            vc = p;
+        } else {
+            NSMutableArray<UTType *> *types = [NSMutableArray array];
+            for (NSString *e in exts) {
+                UTType *t = [UTType typeWithFilenameExtension:e];
+                if (t) [types addObject:t];
+            }
+            if (types.count == 0) [types addObject:UTTypeItem];
+            UIDocumentPickerViewController *p = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types asCopy:YES];
+            p.allowsMultipleSelection = multiple ? YES : NO;
+            p.delegate = d;
+            vc = p;
+        }
+        [top_view_controller() presentViewController:vc animated:YES completion:nil];
+    });
+}
+
+// The paths of callback_id into out (NUL-terminated, truncated to max_len), their length; -1 when none yet.
+int myphp_ios_take_files_result(int callback_id, char *out, int max_len) {
+    int len = -1;
+    pthread_mutex_lock(&g_files_mutex);
+    for (int i = 0; i < MAX_FILES_RESULTS; i++) {
+        if (g_files_results[i].paths != NULL && g_files_results[i].callback_id == callback_id) {
+            len = (int)strlen(g_files_results[i].paths);
+            if (out && max_len > 0) {
+                strncpy(out, g_files_results[i].paths, max_len - 1);
+                out[max_len - 1] = 0;
+            }
+            free(g_files_results[i].paths);
+            g_files_results[i].paths = NULL;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_files_mutex);
+    return len;
 }
 
 void myphp_ios_show_notification(const char *title, const char *body, const char *identifier) {
@@ -434,19 +598,24 @@ void myphp_ios_place_web_view(int page_id, float x, float y, float w, float h, i
     });
 }
 
-int myphp_ios_poll_web_message(int *out_page_id, char *out_buf, int max_len) {
-    if (!out_page_id || !out_buf || max_len <= 0) return 0;
-    int has = 0;
+// The next message a page sent, whole, or NULL: PHP copies it and frees it with myphp_ios_free_web_message.
+char *myphp_ios_poll_web_message(int *out_page_id) {
+    char *msg = NULL;
     pthread_mutex_lock(&g_web_msg_mutex);
-    if (g_web_msg_head != g_web_msg_tail) {
-        *out_page_id = g_web_msg_queue[g_web_msg_tail].page_id;
-        strncpy(out_buf, g_web_msg_queue[g_web_msg_tail].msg, max_len - 1);
-        out_buf[max_len - 1] = '\0';
-        g_web_msg_tail = (g_web_msg_tail + 1) % WEB_MSG_QUEUE_SIZE;
-        has = 1;
+    MyphpWebMsg *m = g_web_msg_first;
+    if (m) {
+        g_web_msg_first = m->next;
+        if (!g_web_msg_first) g_web_msg_last = NULL;
+        *out_page_id = m->page_id;
+        msg = m->msg;
+        free(m);
     }
     pthread_mutex_unlock(&g_web_msg_mutex);
-    return has;
+    return msg;
+}
+
+void myphp_ios_free_web_message(char *msg) {
+    free(msg);
 }
 
 void myphp_ios_show_keyboard(void) {
@@ -475,6 +644,7 @@ static void* php_worker_thread(void *arg) {
         setenv("TMPDIR", [tmpDir UTF8String], 1);
         setenv("MYPHP_BUNDLE", [bundlePath UTF8String], 1);
         setenv("MYPHP_PLATFORM", "ios", 1);
+        setenv("SSL_CERT_FILE", [[bundlePath stringByAppendingPathComponent:@"cacert.pem"] UTF8String], 1); // what curl's OpenSSL trusts (package-ios-app.sh)
 
         char *php_argv[] = {"myphp", NULL};
 
@@ -502,28 +672,193 @@ static void* php_worker_thread(void *arg) {
     return NULL;
 }
 
-@interface MyphpMetalView : MTKView <UIKeyInput>
+// UITextInput for the input methods that compose (Chinese, Japanese): the view's document is the
+// marked text alone, as Android's BaseInputConnection sees it, which the keyboard edits in place
+// (input event 2: the marked text, "" unmarked) until it commits (insertText: event 0). The window's
+// own text is PHP's (UI\TextState), which the keyboard never reads.
+@interface MyphpTextPosition : UITextPosition
+@property (nonatomic, assign) NSInteger index;
++ (instancetype)at:(NSInteger)i;
+@end
+@implementation MyphpTextPosition
++ (instancetype)at:(NSInteger)i { MyphpTextPosition *p = [MyphpTextPosition new]; p.index = i; return p; }
+@end
+
+@interface MyphpTextRange : UITextRange
+@property (nonatomic, assign) NSInteger from, to;
++ (instancetype)from:(NSInteger)a to:(NSInteger)b;
+@end
+@implementation MyphpTextRange
++ (instancetype)from:(NSInteger)a to:(NSInteger)b { MyphpTextRange *r = [MyphpTextRange new]; r.from = MIN(a, b); r.to = MAX(a, b); return r; }
+- (BOOL)isEmpty { return self.from == self.to; }
+- (UITextPosition *)start { return [MyphpTextPosition at:self.from]; }
+- (UITextPosition *)end { return [MyphpTextPosition at:self.to]; }
+@end
+
+@interface MyphpMetalView : MTKView <UITextInput>
+@property (nonatomic, strong) NSMutableString *marked;   // the text being composed
+@property (nonatomic, assign) NSRange markedSelection;    // the keyboard's selection in it
+@property (nonatomic, strong) UITextInputStringTokenizer *tokenizerObject;
 @end
 
 @implementation MyphpMetalView
+@synthesize inputDelegate = _inputDelegate;
+@synthesize markedTextStyle = _markedTextStyle;
+@synthesize selectedTextRange = _selectedTextRange;
+
 - (BOOL)canBecomeFirstResponder {
     return YES;
 }
 
-// UIKeyInput protocol methods
+- (BOOL)resignFirstResponder {
+    [self clearMarked];
+    return [super resignFirstResponder];
+}
+
+- (NSMutableString *)markedBuffer {
+    if (!_marked) _marked = [NSMutableString string];
+    return _marked;
+}
+
+- (void)clearMarked {
+    [[self markedBuffer] setString:@""];
+    self.markedSelection = NSMakeRange(0, 0);
+}
+
+- (void)composeChanged {
+    push_input_event(2, [[self markedBuffer] UTF8String]);
+    g_needs_render = 1;
+}
+
+// UIKeyInput
 - (BOOL)hasText {
     return YES;
 }
 
 - (void)insertText:(NSString *)text {
+    if ([self markedBuffer].length > 0) { [self clearMarked]; } // the composition commits as this text
     if (text) {
         push_input_event(0, [text UTF8String]);
     }
+    g_needs_render = 1;
 }
 
 - (void)deleteBackward {
+    if ([self markedBuffer].length > 0) { // a backspace inside the composition edits it, not the field
+        NSMutableString *m = [self markedBuffer];
+        NSRange sel = self.markedSelection;
+        if (sel.length == 0 && sel.location > 0) { sel = [m rangeOfComposedCharacterSequenceAtIndex:sel.location - 1]; }
+        if (sel.length > 0) { [m deleteCharactersInRange:sel]; self.markedSelection = NSMakeRange(sel.location, 0); }
+        [self composeChanged];
+        return;
+    }
     push_input_event(1, NULL);
+    g_needs_render = 1;
 }
+
+// UITextInput: the marked text
+- (UITextRange *)markedTextRange {
+    return [self markedBuffer].length == 0 ? nil : [MyphpTextRange from:0 to:[self markedBuffer].length];
+}
+
+- (void)setMarkedText:(NSString *)markedText selectedRange:(NSRange)selectedRange {
+    [[self markedBuffer] setString:markedText ?: @""];
+    self.markedSelection = NSMakeRange(MIN(selectedRange.location, [self markedBuffer].length), MIN(selectedRange.length, [self markedBuffer].length - MIN(selectedRange.location, [self markedBuffer].length)));
+    [self composeChanged];
+}
+
+- (void)unmarkText {
+    if ([self markedBuffer].length > 0) { // what was composed stays as typed
+        NSString *text = [[self markedBuffer] copy];
+        [self clearMarked];
+        push_input_event(2, "");
+        push_input_event(0, [text UTF8String]);
+        g_needs_render = 1;
+    }
+}
+
+- (UITextRange *)selectedTextRange {
+    return [MyphpTextRange from:self.markedSelection.location to:self.markedSelection.location + self.markedSelection.length];
+}
+
+- (void)setSelectedTextRange:(UITextRange *)range {
+    MyphpTextRange *r = (MyphpTextRange *)range;
+    if (r) { self.markedSelection = NSMakeRange(r.from, r.to - r.from); }
+}
+
+- (NSString *)textInRange:(UITextRange *)range {
+    MyphpTextRange *r = (MyphpTextRange *)range;
+    NSMutableString *m = [self markedBuffer];
+    if (!r || r.from < 0 || r.to > (NSInteger)m.length) return @"";
+    return [m substringWithRange:NSMakeRange(r.from, r.to - r.from)];
+}
+
+- (void)replaceRange:(UITextRange *)range withText:(NSString *)text {
+    MyphpTextRange *r = (MyphpTextRange *)range;
+    NSMutableString *m = [self markedBuffer];
+    if (!r || r.from < 0 || r.to > (NSInteger)m.length) return;
+    [m replaceCharactersInRange:NSMakeRange(r.from, r.to - r.from) withString:text ?: @""];
+    self.markedSelection = NSMakeRange(r.from + (text ? text.length : 0), 0);
+    [self composeChanged];
+}
+
+// Positions and ranges, over the marked text
+- (UITextPosition *)beginningOfDocument { return [MyphpTextPosition at:0]; }
+- (UITextPosition *)endOfDocument { return [MyphpTextPosition at:[self markedBuffer].length]; }
+
+- (UITextRange *)textRangeFromPosition:(UITextPosition *)fromPosition toPosition:(UITextPosition *)toPosition {
+    return [MyphpTextRange from:((MyphpTextPosition *)fromPosition).index to:((MyphpTextPosition *)toPosition).index];
+}
+
+- (UITextPosition *)positionFromPosition:(UITextPosition *)position offset:(NSInteger)offset {
+    NSInteger i = ((MyphpTextPosition *)position).index + offset;
+    if (i < 0 || i > (NSInteger)[self markedBuffer].length) return nil;
+    return [MyphpTextPosition at:i];
+}
+
+- (UITextPosition *)positionFromPosition:(UITextPosition *)position inDirection:(UITextLayoutDirection)direction offset:(NSInteger)offset {
+    return [self positionFromPosition:position offset:(direction == UITextLayoutDirectionLeft || direction == UITextLayoutDirectionUp) ? -offset : offset];
+}
+
+- (NSComparisonResult)comparePosition:(UITextPosition *)position toPosition:(UITextPosition *)other {
+    NSInteger a = ((MyphpTextPosition *)position).index, b = ((MyphpTextPosition *)other).index;
+    return a < b ? NSOrderedAscending : a > b ? NSOrderedDescending : NSOrderedSame;
+}
+
+- (NSInteger)offsetFromPosition:(UITextPosition *)from toPosition:(UITextPosition *)toPosition {
+    return ((MyphpTextPosition *)toPosition).index - ((MyphpTextPosition *)from).index;
+}
+
+- (id<UITextInputTokenizer>)tokenizer {
+    if (!_tokenizerObject) _tokenizerObject = [[UITextInputStringTokenizer alloc] initWithTextInput:self];
+    return _tokenizerObject;
+}
+
+- (UITextPosition *)positionWithinRange:(UITextRange *)range farthestInDirection:(UITextLayoutDirection)direction {
+    return (direction == UITextLayoutDirectionLeft || direction == UITextLayoutDirectionUp) ? range.start : range.end;
+}
+
+- (UITextRange *)characterRangeByExtendingPosition:(UITextPosition *)position inDirection:(UITextLayoutDirection)direction {
+    NSInteger i = ((MyphpTextPosition *)position).index;
+    return (direction == UITextLayoutDirectionLeft || direction == UITextLayoutDirectionUp) ? [MyphpTextRange from:0 to:i] : [MyphpTextRange from:i to:[self markedBuffer].length];
+}
+
+- (NSWritingDirection)baseWritingDirectionForPosition:(UITextPosition *)position inDirection:(UITextStorageDirection)direction {
+    return NSWritingDirectionNatural;
+}
+
+- (void)setBaseWritingDirection:(NSWritingDirection)writingDirection forRange:(UITextRange *)range {}
+
+// Geometry: the field is PHP's; the keyboard's candidates sit over the keyboard whatever these say
+- (CGRect)firstRectForRange:(UITextRange *)range { return CGRectZero; }
+- (CGRect)caretRectForPosition:(UITextPosition *)position { return CGRectZero; }
+- (NSArray<UITextSelectionRect *> *)selectionRectsForRange:(UITextRange *)range { return @[]; }
+- (UITextPosition *)closestPositionToPoint:(CGPoint)point { return [self endOfDocument]; }
+- (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range { return range.end; }
+- (UITextRange *)characterRangeAtPoint:(CGPoint)point { return nil; }
+
+- (UITextAutocorrectionType)autocorrectionType { return UITextAutocorrectionTypeNo; }
+- (UITextSpellCheckingType)spellCheckingType { return UITextSpellCheckingTypeNo; }
 
 - (void)safeAreaInsetsDidChange {
     [super safeAreaInsetsDidChange];
@@ -631,6 +966,14 @@ static void* php_worker_thread(void *arg) {
     nw_path_monitor_start(g_path_monitor);
 
     [UNUserNotificationCenter currentNotificationCenter].delegate = self;
+
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillChangeFrameNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
+        CGRect end = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+        CGRect screen = [UIScreen mainScreen].bounds;
+        float h = (float)(CGRectGetMaxY(screen) - CGRectGetMinY(end));
+        g_keyboard_height = h > 0 && h <= CGRectGetHeight(screen) ? h : 0.0f; // off the bottom edge: hidden
+        g_needs_render = 1;
+    }];
 
     g_window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
     g_window.rootViewController = [[MyphpViewController alloc] init];

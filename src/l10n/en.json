@@ -657,6 +657,10 @@
   "@cancel": {
     "description": "A button of a dialog that cancels what it asks about."
   },
+  "back": "Back",
+  "@back": {
+    "description": "The button of a navigation bar that goes back to the previous page, when that page has no title."
+  },
   "save": "Save",
   "@save": {
     "description": "A button of a dialog that saves a document."

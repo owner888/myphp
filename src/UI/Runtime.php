@@ -62,6 +62,10 @@ final class Runtime
     public ?Closure $dragWindow = null;
     /** Called after a frame in which an Escape came that nothing took (mygo's host escape): a flyout or a panel closes on it. */
     public ?Closure $escape = null;
+    /** A touch screen (Android, iOS): a press on nothing to focus takes the focus from a field too, which closes the keyboard, as a tap beside a field is meant on a phone; with a mouse a field keeps it (mygo's). */
+    public bool $touch = false;
+    /** Called after a frame in which a Back (Key::BACK) came that nothing took, no router with a page to go back to: the system's Back on Android ends the app (Window::back). */
+    public ?Closure $back = null;
     /** The drag handles of last frame (id => rect), and the links (ids), which keep their presses from a handle. */
     private array $handles = [], $links = [];
     /** @var array<int, string> nodes with tooltips by id, from last frame */
@@ -820,6 +824,13 @@ final class Runtime
             foreach ($this->keys as $k) {
                 if (!$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { // no control nor shortcut took it
                     ($this->escape)();
+                }
+            }
+        }
+        if ($this->back !== null) {
+            foreach ($this->keys as $k) {
+                if (!$k[3] && $k[1] === Key::BACK && $k[2] === 0) {
+                    ($this->back)();
                 }
             }
         }
@@ -2469,8 +2480,8 @@ final class Runtime
             }
         }
         if ($best === null) {
-            if ($this->focusedText() !== null) {
-                $this->focus = null; // a press on nothing to focus takes it from selectable text, as mygo's pointerDown
+            if ($this->focusedText() !== null || ($this->touch && $this->focus !== null && isset($this->fields[$this->focus]))) {
+                $this->focus = null; // a press on nothing to focus takes it from selectable text, as mygo's pointerDown; on a touch screen from a field too
             }
             return;
         }

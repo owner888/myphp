@@ -91,6 +91,12 @@ final class AirPodsApp
     public bool $localAudioPlaying = false;
     private int $lastAudioSeq = 0;
     private int $lastAclSeq = 0;
+    private int $lastTakeoverNs = 0;
+    private int $lastAutoProbeNs = 0;
+    private bool $wasConnected = false;
+    private bool $wasConnecting = false;
+    private bool $pendingTakeover = false;
+    private bool $evictedToStandby = false;
     public string $audioSourceMac = '';
     public int $audioSourceType = AacpProtocol::AUDIO_NONE;
     /** @var list<array{mac: string, info1: int, info2: int, type: string}> */
@@ -160,13 +166,16 @@ final class AirPodsApp
                 bleBeaconSeen: false,
                 l2capSocketOpened: false,
                 handshakeAcked: false,
-                detail: sprintf('Android %s (SDK %d) Ready · Open lid or tap Probe L2CAP.', $st['release'], $st['sdk']),
+                detail: sprintf('Android %s (SDK %d) Ready · Auto-connecting L2CAP 0x1001…', $st['release'], $st['sdk']),
                 sdkInt: $st['sdk'],
                 androidRelease: $st['release'],
                 buildId: $st['build'],
                 ctorSignature: $st['ctor'],
             );
             $this->logPacket('SYS', sprintf('SDK %d (%s) ctor=%s', $st['sdk'], $st['release'], $st['ctor']), $st['build']);
+            if ($this->isBonded && $this->macAddress !== '' && (($st['acl'] ?? false) || ($st['audio'] ?? false))) {
+                $this->runProbe();
+            }
         }
     }
 
@@ -231,6 +240,7 @@ final class AirPodsApp
             $this->caseBattery ??= $ble->caseBattery;
         }
 
+        $this->lastAutoProbeNs = hrtime(true);
         $this->announcedPeers = [];
         $this->probe = L2capProbeResult::run($this->transport, $this->macAddress);
         if ($this->probe->ctorSignature !== '') {
@@ -297,38 +307,53 @@ final class AirPodsApp
         $this->pollTransport();
     }
 
-    /** Returns the MAC address of the active peer device (e.g. iPhone/Mac) connected simultaneously via TiPi, if any. */
-    public function peerMac(): ?string
+    /**
+     * Returns all active peer MAC addresses (e.g. both macOS and iPhone in a 3-device setup),
+     * prioritizing the device currently streaming audio ($this->audioSourceMac).
+     * @return list<string>
+     */
+    public function peerMacs(): array
     {
+        $peers = [];
+        if ($this->audioSourceMac !== '' && strcasecmp($this->audioSourceMac, $this->localMac) !== 0) {
+            $peers[strtoupper($this->audioSourceMac)] = $this->audioSourceMac;
+        }
         foreach ($this->connectedDevices as $dev) {
             if ($dev['info1'] > 0 && strcasecmp($dev['mac'], $this->localMac) !== 0) {
-                return $dev['mac'];
+                $peers[strtoupper($dev['mac'])] = $dev['mac'];
             }
         }
         foreach ($this->connectedDevices as $dev) {
             if (strcasecmp($dev['mac'], $this->localMac) !== 0) {
-                return $dev['mac'];
+                $peers[strtoupper($dev['mac'])] = $dev['mac'];
             }
         }
-        return null;
+        return array_values($peers);
+    }
+
+    /** Returns the primary active peer MAC address (e.g. macOS/iPhone), if any. */
+    public function peerMac(): ?string
+    {
+        $peers = $this->peerMacs();
+        return $peers[0] ?? null;
     }
 
     /**
-     * Claims audio ownership from the peer iPhone (Smart Routing / TiPi Hijackv2)
-     * and shows the "Moved to Android [Move back to iPhone]" banner on the iPhone.
+     * Claims audio ownership from all connected peers (iPhone + macOS via Smart Routing / TiPi Hijackv2)
+     * and shows the "Moved to Android" banner on the peer.
      */
     public function takeOverFromPeer(): void
     {
         if (!$this->transport->isConnected()) {
             return;
         }
+        $this->lastTakeoverNs = hrtime(true);
         $this->ownsConnection = true;
         $ownPkt = AacpProtocol::ownsConnectionPacket(true);
         $this->logPacket('TX', 'Claim Ownership (0x09 id=0x06 val=0x01)', AacpProtocol::toHex($ownPkt));
         $this->transport->send($ownPkt);
 
-        $peer = $this->peerMac();
-        if ($peer !== null) {
+        foreach ($this->peerMacs() as $peer) {
             $mediaPkt = AacpProtocol::mediaInformationPacket($this->localMac, $peer, true);
             $uiPkt = AacpProtocol::smartRoutingShowUiPacket($peer);
             $hijackPkt = AacpProtocol::hijackRequestPacket($peer);
@@ -346,28 +371,26 @@ final class AirPodsApp
     }
 
     /**
-     * Releases audio ownership and hands the AirPods stream back to the peer iPhone.
+     * Releases audio ownership and hands the AirPods stream back to the peer iPhone/Mac.
      */
     public function handBackToPeer(): void
     {
         if (!$this->transport->isConnected()) {
             return;
         }
+        $this->pendingTakeover = false;
+        $this->lastTakeoverNs = 0;
         $this->ownsConnection = false;
         $ownPkt = AacpProtocol::ownsConnectionPacket(false);
         $this->logPacket('TX', 'Release Ownership (0x09 id=0x06 val=0x00)', AacpProtocol::toHex($ownPkt));
         $this->transport->send($ownPkt);
 
-        $peer = $this->peerMac();
-        if ($peer !== null) {
+        foreach ($this->peerMacs() as $peer) {
             $mediaPkt = AacpProtocol::mediaInformationPacket($this->localMac, $peer, false);
             $revPkt = AacpProtocol::hijackReversedPacket($peer);
             $this->logPacket('TX', sprintf('TiPi HandBack -> %s (0x0010)', $peer), AacpProtocol::toHex($revPkt));
             $this->transport->send($mediaPkt);
             $this->transport->send($revPkt);
-        }
-        if ($this->transport instanceof AndroidBluetoothTransport) {
-            $this->transport->setAudioConnected($this->macAddress, false);
         }
         $this->pollTransport();
     }
@@ -379,7 +402,7 @@ final class AirPodsApp
      *   immediately sends TiPi Hijackv2 to take over audio from iPhone/Mac.
      * - If in a 3-device setup (Mac + iPhone held the 2 slots, so Xiaomi 14U was
      *   in standby), pulls Xiaomi 14U into an active Multipoint slot, reconnects
-     *   L2CAP 0x1001, and takes over audio.
+     *   L2CAP 0x1001, and takes over audio as soon as 0x002E arrives.
      */
     public function onLocalAudioStarted(): void
     {
@@ -387,15 +410,30 @@ final class AirPodsApp
             return;
         }
         $this->localAudioPlaying = true;
+        $this->pendingTakeover = true;
+        $this->evictedToStandby = false;
+        $this->ownsConnection = true;
         $this->logPacket('SYS', 'Local audio playback started -> Auto-Takeover', '');
         if (!$this->transport->isConnected() && $this->isBonded && $this->macAddress !== '') {
-            if ($this->transport instanceof AndroidBluetoothTransport) {
-                $this->transport->setAudioConnected($this->macAddress, true);
-            }
             $this->runProbe();
         }
         if ($this->transport->isConnected()) {
             $this->takeOverFromPeer();
+        }
+    }
+
+    public function onLocalAudioStopped(): void
+    {
+        $this->localAudioPlaying = false;
+        $this->pendingTakeover = false;
+        $this->ownsConnection = false;
+        $this->logPacket('SYS', 'Local audio playback stopped -> Releasing ownership', '');
+        if ($this->transport->isConnected()) {
+            $this->transport->send(AacpProtocol::ownsConnectionPacket(false));
+            foreach ($this->peerMacs() as $peer) {
+                $mediaPkt = AacpProtocol::mediaInformationPacket($this->localMac, $peer, false);
+                $this->transport->send($mediaPkt);
+            }
         }
     }
 
@@ -453,7 +491,38 @@ final class AirPodsApp
             if (($st['audioSeq'] > $this->lastAudioSeq) || ($st['audio'] && !$wasPlaying)) {
                 $this->lastAudioSeq = $st['audioSeq'];
                 $this->onLocalAudioStarted();
+            } elseif ($wasPlaying && !$this->localAudioPlaying) {
+                $this->onLocalAudioStopped();
             }
+
+            $nowConnecting = $st['connecting'] ?? false;
+            if ($this->wasConnecting && !$nowConnecting) {
+                $this->lastAutoProbeNs = hrtime(true);
+            }
+            $this->wasConnecting = $nowConnecting;
+
+            $nowConnected = $this->transport->isConnected();
+            if ($this->wasConnected && !$nowConnected) {
+                $this->lastAutoProbeNs = hrtime(true);
+                $this->probe->l2capSocketOpened = false;
+                $this->probe->handshakeAcked = false;
+                if (count($this->connectedDevices) >= 3 && !$this->localAudioPlaying && !$this->pendingTakeover) {
+                    $this->evictedToStandby = true;
+                    $this->probe->detail = '3-Device BLE Standby (auto-connects when local audio plays)';
+                    $this->logPacket('SYS', 'L2CAP closed -> 3-Device BLE Standby', '');
+                } else {
+                    $this->probe->detail = 'L2CAP disconnected · Auto-reconnecting…';
+                    $this->logPacket('SYS', 'L2CAP disconnected (auto-reconnect armed)', '');
+                }
+            } elseif (!$this->wasConnected && $nowConnected) {
+                $this->evictedToStandby = false;
+                $this->probe->l2capSocketOpened = true;
+                $this->logPacket('SYS', 'L2CAP 0x1001 connected automatically', '');
+                if ($this->pendingTakeover || $this->localAudioPlaying) {
+                    $this->takeOverFromPeer();
+                }
+            }
+            $this->wasConnected = $nowConnected;
 
             $bleRaw = $this->transport->scanBle();
             if ($bleRaw !== null && $bleRaw !== $this->lastBleRaw) {
@@ -463,11 +532,11 @@ final class AirPodsApp
                 $wasClosed = !$this->lidOpen;
                 $this->lidOpen = $ble->lidOpen;
                 $this->blePairingMode = $ble->pairingMode;
-                if (!$ble->lidOpen && !$this->transport->isConnected()) {
+                if (!$ble->lidOpen && !$nowConnected) {
                     $this->popupDismissed = false;
                 } elseif ($wasClosed && !$this->popupDismissed && $this->bleRssi >= -75) {
                     $this->popupOpen = true;
-                    if ($this->isBonded && !$this->transport->isConnected()) {
+                    if ($this->isBonded && !$nowConnected && !$nowConnecting) {
                         $this->runProbe();
                     }
                 }
@@ -477,7 +546,7 @@ final class AirPodsApp
                 if ($decBat !== null) {
                     $this->bleConnState = $decBat['connState'];
                 }
-                if (!$this->transport->isConnected() && !$ble->pairingMode) {
+                if (!$nowConnected && !$ble->pairingMode) {
                     $this->leftBattery = $decBat['leftBattery'] ?? $ble->leftBattery;
                     $this->rightBattery = $decBat['rightBattery'] ?? $ble->rightBattery;
                     $this->caseBattery = $decBat['caseBattery'] ?? $ble->caseBattery;
@@ -491,6 +560,17 @@ final class AirPodsApp
                     $this->secondaryEar = $ble->rightInEar ? AacpProtocol::EAR_IN_EAR : AacpProtocol::EAR_OUT_OF_EAR;
                 }
                 $this->logPacket('BLE', sprintf('%s (0x%04X)%s Lid:%s L:%s%% R:%s%% C:%s%%', $ble->modelName, $ble->modelId, $ble->pairingMode ? ' [PAIRING]' : '', $ble->lidOpen ? 'Open' : 'Closed', (string)($this->leftBattery ?? '-'), (string)($this->rightBattery ?? '-'), (string)($this->caseBattery ?? '-')), AacpProtocol::toHex($bleRaw));
+            }
+
+            if ($this->isBonded && $this->macAddress !== '' && !$nowConnected && !$nowConnecting) {
+                $elapsedNs = hrtime(true) - $this->lastAutoProbeNs;
+                $budsAwake = ($st['acl'] ?? false)
+                    || ($this->bleRssi >= -82 && ($this->lidOpen || $this->primaryEar === AacpProtocol::EAR_IN_EAR || $this->secondaryEar === AacpProtocol::EAR_IN_EAR));
+                if (($this->pendingTakeover || $this->localAudioPlaying) && $elapsedNs >= 2_500_000_000) {
+                    $this->runProbe();
+                } elseif ((($st['acl'] ?? false) || (!$this->evictedToStandby && $budsAwake)) && $elapsedNs >= 4_000_000_000) {
+                    $this->runProbe();
+                }
             }
         }
         foreach ($this->transport->poll() as $frame) {
@@ -623,19 +703,21 @@ final class AirPodsApp
                 }
                 $this->connectedDevices = $newList;
                 $this->logPacket('RX', sprintf('Connected Devices (%d): %s', count($newList), implode(', ', array_column($newList, 'mac'))), $hex);
+                if ($this->pendingTakeover || $this->localAudioPlaying) {
+                    $this->pendingTakeover = false;
+                    $this->takeOverFromPeer();
+                }
                 break;
 
             case 'audio_source':
                 $this->audioSourceMac = $d['mac'] ?? '';
                 $this->audioSourceType = $d['audioType'] ?? AacpProtocol::AUDIO_NONE;
-                if ($this->audioSourceMac !== '' && strcasecmp($this->audioSourceMac, $this->localMac) !== 0 && $this->audioSourceType !== AacpProtocol::AUDIO_NONE) {
+                $inTakeoverGrace = $this->lastTakeoverNs > 0 && (hrtime(true) - $this->lastTakeoverNs) < 3_000_000_000;
+                if ($this->audioSourceMac !== '' && $this->localMac !== '' && strcasecmp($this->audioSourceMac, $this->localMac) !== 0 && $this->audioSourceType !== AacpProtocol::AUDIO_NONE && !$inTakeoverGrace && !$this->localAudioPlaying) {
                     if ($this->ownsConnection) {
                         $this->ownsConnection = false;
                         if ($this->transport->isConnected()) {
                             $this->transport->send(AacpProtocol::ownsConnectionPacket(false));
-                        }
-                        if ($this->transport instanceof AndroidBluetoothTransport) {
-                            $this->transport->setAudioConnected($this->macAddress, false);
                         }
                     }
                 } elseif (strcasecmp($this->audioSourceMac, $this->localMac) === 0 && $this->audioSourceType !== AacpProtocol::AUDIO_NONE) {
@@ -661,14 +743,13 @@ final class AirPodsApp
                     }
                 }
                 unset($cd);
-                if (!empty($d['setOwnershipFalse']) && $this->transport->isConnected()) {
+                $inTakeoverGrace = $this->lastTakeoverNs > 0 && (hrtime(true) - $this->lastTakeoverNs) < 3_000_000_000;
+                $shouldRelease = (!empty($d['setOwnershipFalse']) || !empty($d['reverseBannerTapped'])) && !$inTakeoverGrace;
+                if ($shouldRelease && $this->transport->isConnected()) {
                     $this->ownsConnection = false;
                     $this->transport->send(AacpProtocol::ownsConnectionPacket(false));
-                    if ($this->transport instanceof AndroidBluetoothTransport) {
-                        $this->transport->setAudioConnected($this->macAddress, false);
-                    }
                 }
-                $this->logPacket('RX', sprintf('SmartRouting from %s (%s)%s', $sender, $devType, !empty($d['setOwnershipFalse']) ? ' [Hijacked]' : ''), $hex);
+                $this->logPacket('RX', sprintf('SmartRouting from %s (%s)%s', $sender, $devType, $shouldRelease ? ' [Released]' : ''), $hex);
                 break;
 
             case 'proximity_keys':

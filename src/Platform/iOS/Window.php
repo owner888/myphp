@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
-use MyPHP\Native\{iOS, ObjC};
+use MyPHP\Native\iOS;
 use MyPHP\Platform;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
-use MyPHP\UI\{DisplayList, Image};
+use MyPHP\UI\{DisplayList, Image, TextInputRange, TextState};
 
 final class Window implements Platform\Window
 {
@@ -46,29 +46,10 @@ final class Window implements Platform\Window
         }
         self::$instance = $this;
 
-        try {
-            $f = iOS::ffi();
-            $this->width = (float)$f->myphp_ios_get_screen_width();
-            $this->height = (float)$f->myphp_ios_get_screen_height();
-            $this->scale = max(1.0, $f->myphp_ios_get_screen_scale());
-        } catch (\Throwable $e) {
-            try {
-                ObjC::boot(['UIKit']);
-                $mainScreen = ObjC::cls('UIScreen')?->msg('mainScreen');
-                if ($mainScreen !== null) {
-                    $this->scale = max(1.0, (float)$mainScreen->msg('scale'));
-                    $bounds = $mainScreen->msg('bounds');
-                    if (is_object($bounds) && isset($bounds->w, $bounds->h)) {
-                        $this->width = (float)$bounds->w;
-                        $this->height = (float)$bounds->h;
-                    }
-                }
-            } catch (\Throwable $e2) {
-                $this->width = 393.0;
-                $this->height = 852.0;
-                $this->scale = 3.0;
-            }
-        }
+        $f = iOS::ffi();
+        $this->width = (float)$f->myphp_ios_get_screen_width();
+        $this->height = (float)$f->myphp_ios_get_screen_height();
+        $this->scale = max(1.0, $f->myphp_ios_get_screen_scale());
     }
 
     public static function instance(): ?self
@@ -100,9 +81,7 @@ final class Window implements Platform\Window
         }
         $this->asked = true;
         $this->repaintOnly = $repaint;
-        try {
-            iOS::ffi()->myphp_ios_request_render();
-        } catch (\Throwable $e) {}
+        iOS::ffi()->myphp_ios_request_render();
         $this->b->signal();
     }
 
@@ -122,6 +101,8 @@ final class Window implements Platform\Window
                     $this->onImeCommit($str);
                 } elseif ((int)$iev->type === 1) {
                     $this->onBackspace();
+                } elseif ((int)$iev->type === 2) {
+                    $this->onImeCompose(\FFI::string(\FFI::cast('char*', \FFI::addr($iev->text))));
                 }
             }
 
@@ -130,7 +111,25 @@ final class Window implements Platform\Window
                 $this->requestFrame();
             }
         } catch (\Throwable $e) {
+            Logger::error('pollEvents: ' . $e->getMessage(), 'ios');
+            throw $e;
         }
+    }
+
+    /** The text the input method is composing (UITextInput's marked text), '' once it commits or gives up: shown in the field, underlined, as on the desktop. */
+    public function onImeCompose(string $text): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        if ($input->client !== null) {
+            $u = TextState::utf16Index($text, strlen($text));
+            $input->client->setMarkedText(null, $text, new TextInputRange($u, $u));
+        } elseif ($input->focus !== null) {
+            $input->focus->setMarked($text, strlen($text));
+        }
+        $this->requestFrame();
     }
 
     public function onImeCommit(string $text): void
@@ -334,14 +333,10 @@ final class Window implements Platform\Window
         $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
         if ($hasInputFocus && !$this->keyboardVisible) {
             $this->keyboardVisible = true;
-            try {
-                iOS::ffi()->myphp_ios_show_keyboard();
-            } catch (\Throwable $e) {}
+            iOS::ffi()->myphp_ios_show_keyboard();
         } elseif (!$hasInputFocus && $this->keyboardVisible) {
             $this->keyboardVisible = false;
-            try {
-                iOS::ffi()->myphp_ios_hide_keyboard();
-            } catch (\Throwable $e) {}
+            iOS::ffi()->myphp_ios_hide_keyboard();
         }
     }
 
@@ -352,26 +347,29 @@ final class Window implements Platform\Window
 
     public function contentBounds(): Rectangle
     {
-        try {
-            $f = iOS::ffi();
-            $top = $f->new('float');
-            $bottom = $f->new('float');
-            $left = $f->new('float');
-            $right = $f->new('float');
-            $f->myphp_ios_get_safe_insets(\FFI::addr($top), \FFI::addr($bottom), \FFI::addr($left), \FFI::addr($right));
-            $t = (float)$top->cdata;
-            $b = (float)$bottom->cdata;
-            $l = (float)$left->cdata;
-            $r = (float)$right->cdata;
-            return new Rectangle(
-                (int)round($l),
-                (int)round($t),
-                max(0, (int)round($this->width - $l - $r)),
-                max(0, (int)round($this->height - $t - $b))
-            );
-        } catch (\Throwable $e) {
-            return new Rectangle(0, 0, (int)round($this->width), (int)round($this->height));
-        }
+        [$t, $r, $b, $l] = $this->safeAreaInsets();
+        return new Rectangle(
+            (int)round($l),
+            (int)round($t),
+            max(0, (int)round($this->width - $l - $r)),
+            max(0, (int)round($this->height - $t - $b))
+        );
+    }
+
+    public function safeAreaInsets(): array
+    {
+        $f = iOS::ffi();
+        $top = $f->new('float');
+        $bottom = $f->new('float');
+        $left = $f->new('float');
+        $right = $f->new('float');
+        $f->myphp_ios_get_safe_insets(\FFI::addr($top), \FFI::addr($bottom), \FFI::addr($left), \FFI::addr($right));
+        return [(float)$top->cdata, (float)$right->cdata, (float)$bottom->cdata, (float)$left->cdata];
+    }
+
+    public function keyboardHeight(): float
+    {
+        return (float)iOS::ffi()->myphp_ios_get_keyboard_height();
     }
 
     public function restoreFrame(Rectangle $r, bool $onDisplay): void {}

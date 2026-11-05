@@ -384,14 +384,15 @@ final class AacpProtocol
      */
     public static function addTiPiDevicePacket(string $selfMac, string $targetMac): string
     {
-        $body = self::macToReversedBytes($targetMac)
-            . "\x52\x00\x01\xe5\x48"
-            . 'idleTime' . "\x08\x47"
-            . 'newTipi' . "\x01\x49"
-            . 'btAddress' . "\x51" . strtoupper($selfMac)
-            . "\x46" . 'btName' . "\x47" . 'Android'
+        $opack = "\xe6"
+            . "\x48" . 'idleTime' . "\x08"
+            . "\x47" . 'newTipi' . "\x01"
+            . "\x49" . 'btAddress' . "\x51" . strtoupper($selfMac)
+            . "\x46" . 'btName' . "\x46" . 'iPhone'
+            . "\x47" . 'version' . "\x43" . '2.0'
             . "\x50" . 'nearbyAudioScore' . "\x0e";
-        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 90, "\x00");
+        $body = self::macToReversedBytes($targetMac) . pack('nC', strlen($opack), 0x01) . $opack;
+        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 102, "\x00");
     }
 
     /**
@@ -400,61 +401,63 @@ final class AacpProtocol
      */
     public static function mediaInformationPacket(string $selfMac, string $targetMac, bool $streaming = true): string
     {
-        $body = self::macToReversedBytes($targetMac)
-            . "\x82\x00\x01\xe5\x4a"
-            . 'PlayingApp' . "\x56" . 'com.google.ios.youtube'
-            . "\x52" . 'HostStreamingState' . "\x42" . ($streaming ? 'YES' : 'NO')
+        $stateStr = $streaming ? 'YES' : 'NO';
+        $opack = "\xe6"
+            . "\x4a" . 'playingApp' . "\x56" . 'com.google.ios.youtube'
+            . "\x52" . 'hostStreamingState' . chr(0x40 | strlen($stateStr)) . $stateStr
             . "\x49" . 'btAddress' . "\x51" . strtoupper($selfMac)
-            . 'btName' . "\x47" . 'Android'
-            . "\x58" . 'otherDeviceAudioCategory' . "\x31\x2d\x01";
+            . "\x46" . 'btName' . "\x46" . 'iPhone'
+            . "\x47" . 'version' . "\x43" . '2.0'
+            . "\x58" . 'otherDeviceAudioCategory' . ($streaming ? "\x31\x2d\x01" : "\x30\x64");
+        $body = self::macToReversedBytes($targetMac) . pack('nC', strlen($opack), 0x01) . $opack;
+        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 148, "\x00");
+    }
+
+    /**
+     * Triggers the native "Moved to iPhone [Move back to Mac]" banner on
+     * the peer Mac/iPhone over Opcode 0x0010 (138-byte payload).
+     */
+    public static function smartRoutingShowUiPacket(string $targetMac): string
+    {
+        $opack = "\xe6"
+            . "\x5b" . 'SmartRoutingKeyShowNearbyUI' . "\x01"
+            . "\x4a" . 'localscore' . "\x31\x2d\x01"
+            . "\x46" . 'reason' . "\x48" . 'Hijackv2'
+            . "\x51" . 'audioRoutingScore' . "\x31\x2d\x01"
+            . "\x5f" . 'audioRoutingSetOwnershipToFalse' . "\x01"
+            . "\x4b" . 'remotescore' . "\x31\x2d\x01";
+        $body = self::macToReversedBytes($targetMac) . pack('nC', strlen($opack), 0x01) . $opack;
         return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 138, "\x00");
     }
 
     /**
-     * Triggers the native "Moved to Android [Move back to iPhone]" banner on
-     * the peer iPhone over Opcode 0x0010 (134-byte payload).
-     */
-    public static function smartRoutingShowUiPacket(string $targetMac): string
-    {
-        $body = self::macToReversedBytes($targetMac)
-            . "\x7e\x00\x01\xe6\x5b"
-            . 'SmartRoutingKeyShowNearbyUI' . "\x01\x4a"
-            . 'localscore' . "\x31\x2d\x01\x46"
-            . 'reasonHhijackv2' . "\x51"
-            . 'audioRoutingScore' . "\xa2\x5f"
-            . 'audioRoutingSetOwnershipToFalse' . "\x01\x4b"
-            . 'remotescore' . "\xa2";
-        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 134, "\x00");
-    }
-
-    /**
-     * Requests audio takeover (Hijackv2) from the peer iPhone over Opcode
-     * 0x0010 (106-byte payload).
+     * Requests audio takeover (Hijackv2) from the peer iPhone/Mac over Opcode
+     * 0x0010 (112-byte payload).
      */
     public static function hijackRequestPacket(string $targetMac): string
     {
-        $body = self::macToReversedBytes($targetMac)
-            . "\x62\x00\x01\xe5\x4a"
-            . 'localscore' . "\x30\x64\x46"
-            . 'reason' . "\x48" . 'Hijackv2' . "\x51"
-            . 'audioRoutingScore' . "\x31\x2d\x01\x5f"
-            . 'audioRoutingSetOwnershipToFalse' . "\x01\x4b"
-            . 'remotescore' . "\xa5";
-        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 106, "\x00");
+        $opack = "\xe5"
+            . "\x4a" . 'localscore' . "\x30\x64"
+            . "\x46" . 'reason' . "\x48" . 'Hijackv2'
+            . "\x51" . 'audioRoutingScore' . "\x31\x2d\x01"
+            . "\x5f" . 'audioRoutingSetOwnershipToFalse' . "\x01"
+            . "\x4b" . 'remotescore' . "\x31\x2d\x01";
+        $body = self::macToReversedBytes($targetMac) . pack('nC', strlen($opack), 0x01) . $opack;
+        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 112, "\x00");
     }
 
     /**
-     * Hands audio back to the peer iPhone (ReverseBannerTapped) over Opcode
-     * 0x0010 (97-byte payload).
+     * Hands audio back to the peer iPhone/Mac (ReverseBannerTapped) over Opcode
+     * 0x0010 (98-byte payload).
      */
     public static function hijackReversedPacket(string $targetMac): string
     {
-        $body = self::macToReversedBytes($targetMac)
-            . "\x59\x00\x01\xe3\x5f"
-            . 'audioRoutingSetOwnershipToFalse' . "\x01\x59"
-            . 'audioRoutingShowReverseUI' . "\x01\x46"
-            . 'reason' . "\x53" . 'ReverseBannerTapped';
-        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 97, "\x00");
+        $opack = "\xe3"
+            . "\x5f" . 'audioRoutingSetOwnershipToFalse' . "\x01"
+            . "\x59" . 'audioRoutingShowReverseUI' . "\x01"
+            . "\x46" . 'reason' . "\x53" . 'ReverseBannerTapped';
+        $body = self::macToReversedBytes($targetMac) . pack('nC', strlen($opack), 0x01) . $opack;
+        return self::HEADER . pack('v', self::OPCODE_SMART_ROUTING) . str_pad($body, 98, "\x00");
     }
 
     /**
@@ -1482,7 +1485,9 @@ final class AndroidBluetoothTransport implements AirPodsTransport
             'rssi' => (int)($kv['rssi'] ?? -100),
             'audio' => ($kv['audio'] ?? '0') === '1',
             'audioSeq' => (int)($kv['audioSeq'] ?? 0),
+            'acl' => ($kv['acl'] ?? '0') === '1',
             'aclSeq' => (int)($kv['aclSeq'] ?? 0),
+            'connecting' => ($kv['connecting'] ?? '0') === '1',
             'pair' => $kv['pair'] ?? 'idle',
             'err' => $kv['err'] ?? '',
         ];

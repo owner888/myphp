@@ -10,14 +10,10 @@ use MyPHP\Transfer\Data;
 
 final class Clipboard implements Platform\Clipboard
 {
-    private function pasteboard(): ?object
+    private function pasteboard(): object
     {
-        try {
-            ObjC::boot(['UIKit']);
-            return ObjC::cls('UIPasteboard')?->msg('generalPasteboard');
-        } catch (\Throwable $e) {
-            return null;
-        }
+        ObjC::boot(['UIKit']);
+        return ObjC::cls('UIPasteboard')->msg('generalPasteboard');
     }
 
     public function readData(array $formats): Data
@@ -50,9 +46,6 @@ final class Clipboard implements Platform\Clipboard
     public function readText(): string
     {
         $pb = $this->pasteboard();
-        if ($pb === null) {
-            return '';
-        }
         $str = $pb->msg('string');
         return $str !== null ? (string)ObjC::string($str) : '';
     }
@@ -60,9 +53,6 @@ final class Clipboard implements Platform\Clipboard
     public function writeText(string $text): void
     {
         $pb = $this->pasteboard();
-        if ($pb === null) {
-            return;
-        }
         $nsStr = ObjC::str($text);
         $pb->msg('setString:', $nsStr);
     }

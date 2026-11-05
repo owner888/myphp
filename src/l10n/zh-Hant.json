@@ -143,6 +143,7 @@
   "untitled": "未命名",
   "untitledNumbered": "未命名 {n, number, ::group-off}",
   "cancel": "取消",
+  "back": "返回",
   "save": "儲存",
   "saveEllipsis": "儲存…",
   "saveAs": "另存新檔…",

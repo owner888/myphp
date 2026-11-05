@@ -10,11 +10,7 @@ OUT_DIR="${BUILD_DIR}/libs/arm64-v8a"
 ANDROID_API=31
 
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
-    if [ -d "/Users/kaka/Library/Android/sdk/ndk/28.2.13676358" ]; then
-        ANDROID_NDK_HOME="/Users/kaka/Library/Android/sdk/ndk/28.2.13676358"
-    else
-        ANDROID_NDK_HOME="$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)"
-    fi
+    ANDROID_NDK_HOME="$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)"
 fi
 
 TOOLCHAIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/darwin-x86_64"
@@ -24,10 +20,8 @@ fi
 
 CC="${TOOLCHAIN}/bin/aarch64-linux-android${ANDROID_API}-clang"
 
-if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
-    echo "Error: libphp.so not found at ${PHP_DIR}/libs/libphp.so. Run scripts/build-android-php.sh first." >&2
-    exit 1
-fi
+# The PHP runtime (libffi, OpenSSL, libcurl.so, libphp.so), built once, and again when its script changed
+"${ROOT_DIR}/scripts/build-android-php.sh"
 
 mkdir -p "$OUT_DIR"
 
@@ -47,8 +41,9 @@ $CC -shared -fPIC -O2 \
     -Wl,-z,max-page-size=16384 \
     -o "${OUT_DIR}/libmyphp.so"
 
-echo "==> Copying libphp.so..."
+echo "==> Copying libphp.so and libcurl.so..."
 cp "${PHP_DIR}/libs/libphp.so" "${OUT_DIR}/libphp.so"
+cp "${BUILD_DIR}/sysroot/lib/libcurl.so" "${OUT_DIR}/libcurl.so"
 
 echo "==> Built launcher:"
 ls -lh "${OUT_DIR}"

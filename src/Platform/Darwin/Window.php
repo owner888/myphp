@@ -518,6 +518,16 @@ final class Window implements Platform\Window
         return true;
     }
 
+    public function safeAreaInsets(): array
+    {
+        return [0.0, 0.0, 0.0, 0.0];
+    }
+
+    public function keyboardHeight(): float
+    {
+        return 0.0;
+    }
+
     /** Whether a material shows behind the content (setVibrancy, or a popover's): native UI leaves it room. */
     public function hasVibrancy(): bool
     {

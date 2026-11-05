@@ -10,13 +10,13 @@ SYSROOT="${BUILD_DIR}/sysroot"
 
 PHP_VERSION="8.3.16"
 LIBFFI_TAG="v3.4.6"
+OPENSSL_VERSION="3.4.1"
+CURL_VERSION="8.12.1"
 ANDROID_API=31
 
 # Detect NDK
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
-    if [ -d "/Users/kaka/Library/Android/sdk/ndk/28.2.13676358" ]; then
-        ANDROID_NDK_HOME="/Users/kaka/Library/Android/sdk/ndk/28.2.13676358"
-    elif [ -d "${HOME}/Library/Android/sdk/ndk" ]; then
+    if [ -d "${HOME}/Library/Android/sdk/ndk" ]; then
         LATEST_NDK=$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)
         ANDROID_NDK_HOME="$LATEST_NDK"
     else
@@ -74,9 +74,57 @@ if [ ! -f "${SYSROOT}/lib/libffi.a" ]; then
     echo "==> libffi installed to $SYSROOT"
 fi
 
-# 2. Build PHP
+# 2. Build OpenSSL, static: inside libcurl.so, and PHP's openssl extension
+if [ ! -f "${SYSROOT}/lib/libssl.a" ]; then
+    echo "==> Preparing OpenSSL ${OPENSSL_VERSION}..."
+    cd "$BUILD_DIR"
+    if [ ! -f "openssl-${OPENSSL_VERSION}.tar.gz" ]; then
+        curl -L -o "openssl-${OPENSSL_VERSION}.tar.gz" "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+    fi
+    rm -rf "openssl-${OPENSSL_VERSION}"
+    tar -xzf "openssl-${OPENSSL_VERSION}.tar.gz"
+    cd "openssl-${OPENSSL_VERSION}"
+    export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+    PATH="${TOOLCHAIN}/bin:${PATH}" ./Configure android-arm64 -D__ANDROID_API__=${ANDROID_API} \
+        --prefix="$SYSROOT" --libdir=lib no-shared no-tests no-apps no-docs
+    PATH="${TOOLCHAIN}/bin:${PATH}" make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" build_libs
+    PATH="${TOOLCHAIN}/bin:${PATH}" make install_dev
+    echo "==> OpenSSL installed to $SYSROOT"
+fi
+
+# 3. Build curl as libcurl.so (OpenSSL inside): Native\Curl loads it by name, as PHP's curl extension does.
+# No CA bundle nor path is built in: the launcher sets SSL_CERT_FILE (the system's certificates, MyphpActivity
+# writes them as PEM), which OpenSSL's default paths honor (--with-ca-fallback).
+if [ ! -f "${SYSROOT}/lib/libcurl.so" ]; then
+    echo "==> Preparing curl ${CURL_VERSION}..."
+    cd "$BUILD_DIR"
+    if [ ! -f "curl-${CURL_VERSION}.tar.gz" ]; then
+        curl -L -o "curl-${CURL_VERSION}.tar.gz" "https://curl.se/download/curl-${CURL_VERSION}.tar.gz"
+    fi
+    rm -rf "curl-${CURL_VERSION}"
+    tar -xzf "curl-${CURL_VERSION}.tar.gz"
+    cd "curl-${CURL_VERSION}"
+    export CFLAGS="-fPIC -O2 -I${SYSROOT}/include"
+    export LDFLAGS="-L${SYSROOT}/lib"
+    ./configure \
+        --host=aarch64-linux-android \
+        --prefix="$SYSROOT" \
+        --enable-shared --disable-static \
+        --with-openssl="$SYSROOT" --with-zlib \
+        --with-ca-fallback --without-ca-bundle --without-ca-path \
+        --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-mqtt --disable-smb \
+        --without-libpsl --without-libidn2 --without-brotli --without-zstd --without-nghttp2 --without-librtmp \
+        --disable-manual --disable-docs
+    make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+    make install # libtool names an Android library libcurl.so, unversioned, as the APK's lib/arm64-v8a takes it
+    echo "==> curl installed to $SYSROOT"
+fi
+
+# 4. Build PHP
 PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"
-if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
+# Built again when this script changed since (an extension added, as curl was): the one stamp of what libphp has.
+if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so" ]; then
+    rm -f "${PHP_DIR}/libs/libphp.so"
     echo "==> Preparing PHP ${PHP_VERSION}..."
     cd "$BUILD_DIR"
     if [ ! -f "php-${PHP_VERSION}.tar.gz" ]; then
@@ -90,8 +138,9 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
     export YACC="/opt/homebrew/opt/bison/bin/bison -y"
     export RE2C="/opt/homebrew/bin/re2c"
     export CFLAGS="-fPIC -O2 -I${SYSROOT}/include"
-    export LDFLAGS="-L${SYSROOT}/lib"
+    export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN'"
     export LIBS=""
+    export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
 
     echo "==> Configuring PHP..."
     ./configure \
@@ -108,6 +157,8 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
         --enable-opcache \
         --enable-mbstring \
         --with-zlib \
+        --with-curl \
+        --with-openssl \
         --without-sqlite3 \
         --without-pdo-sqlite \
         --without-pear \
@@ -160,4 +211,4 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
 fi
 
 echo "==> PHP built successfully!"
-ls -lh "${PHP_DIR}/libs/libphp.so"
+ls -lh "${PHP_DIR}/libs/libphp.so" "${SYSROOT}/lib/libcurl.so"

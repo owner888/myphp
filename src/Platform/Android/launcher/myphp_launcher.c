@@ -40,6 +40,8 @@ enum MyphpEventType {
     MYPHP_EVENT_CONFIGURATION = 13,
     MYPHP_EVENT_DIALOG_RESULT = 14,
     MYPHP_EVENT_WEB_MESSAGE = 15,
+    MYPHP_EVENT_FILES_RESULT = 16,
+    MYPHP_EVENT_BACK = 17,
 };
 
 typedef struct {
@@ -52,6 +54,7 @@ typedef struct {
     int64_t time_ms;
     int32_t insets[4];
     int32_t night_mode;
+    int32_t keyboard;
     char text[256];
 } MyphpEvent;
 
@@ -182,6 +185,9 @@ static jmethodID g_mid_keep_screen_on = NULL;
 static jmethodID g_mid_perform_haptic = NULL;
 static jmethodID g_mid_show_alert_dialog = NULL;
 static jmethodID g_mid_show_notification = NULL;
+static jmethodID g_mid_pick_files = NULL;
+static jmethodID g_mid_save_file = NULL;
+static jmethodID g_mid_finish_activity = NULL;
 static jmethodID g_mid_is_network_connected = NULL;
 static jmethodID g_mid_create_web_view = NULL;
 static jmethodID g_mid_destroy_web_view = NULL;
@@ -263,6 +269,9 @@ static void* php_worker_thread(void *arg) {
     setenv("XDG_CONFIG_HOME", g_files_dir, 1);
     setenv("XDG_CACHE_HOME", g_cache_dir, 1);
     setenv("XDG_DATA_HOME", g_files_dir, 1);
+    char ca_file[1100];
+    snprintf(ca_file, sizeof(ca_file), "%s/cacerts.pem", g_files_dir);
+    setenv("SSL_CERT_FILE", ca_file, 1); // what libcurl.so's OpenSSL trusts: the system's certificates (MyphpActivity.writeCaCertificates)
 
     ALooper *looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
     if (g_event_pipe[0] >= 0) {
@@ -305,6 +314,10 @@ static void* php_worker_thread(void *arg) {
 
     LOGI("PHP bootstrap execution completed. Shutting down SAPI...");
     php_embed_shutdown();
+    JNIEnv *env = get_jni_env();
+    if (env && g_activity_class && g_mid_finish_activity) { // the app ended (App::quit, Back at the first page): no activity left over a dead run loop
+        (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_finish_activity);
+    }
     return NULL;
 }
 
@@ -339,6 +352,9 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_perform_haptic = (*env)->GetStaticMethodID(env, clazz, "performHapticFeedback", "()V");
     g_mid_show_alert_dialog = (*env)->GetStaticMethodID(env, clazz, "showAlertDialog", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V");
     g_mid_show_notification = (*env)->GetStaticMethodID(env, clazz, "showNotification", "(Ljava/lang/String;Ljava/lang/String;I)V");
+    g_mid_pick_files = (*env)->GetStaticMethodID(env, clazz, "pickFiles", "([Ljava/lang/String;ZZI)V");
+    g_mid_save_file = (*env)->GetStaticMethodID(env, clazz, "saveFile", "(Ljava/lang/String;Ljava/lang/String;I)V");
+    g_mid_finish_activity = (*env)->GetStaticMethodID(env, clazz, "finishActivity", "()V");
     g_mid_is_network_connected = (*env)->GetStaticMethodID(env, clazz, "isNetworkConnected", "()Z");
     g_mid_create_web_view = (*env)->GetStaticMethodID(env, clazz, "createWebView", "(I)V");
     g_mid_destroy_web_view = (*env)->GetStaticMethodID(env, clazz, "destroyWebView", "(I)V");
@@ -517,13 +533,14 @@ Java_com_owner888_myphp_MyphpActivity_nativeResume(JNIEnv *env, jclass clazz) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_owner888_myphp_MyphpActivity_nativeConfigurationChanged(JNIEnv *env, jclass clazz, jboolean isDark, jint insetTop, jint insetBottom, jint insetLeft, jint insetRight) {
-    LOGI("nativeConfigurationChanged: dark=%d insets=[%d, %d, %d, %d]", isDark, insetTop, insetBottom, insetLeft, insetRight);
+Java_com_owner888_myphp_MyphpActivity_nativeConfigurationChanged(JNIEnv *env, jclass clazz, jboolean isDark, jint insetTop, jint insetBottom, jint insetLeft, jint insetRight, jint keyboard) {
+    LOGI("nativeConfigurationChanged: dark=%d insets=[%d, %d, %d, %d] keyboard=%d", isDark, insetTop, insetBottom, insetLeft, insetRight, keyboard);
     if (g_event_pipe[1] >= 0) {
         MyphpEvent ev = {
             .type = MYPHP_EVENT_CONFIGURATION,
             .night_mode = isDark ? 1 : 0,
-            .insets = {insetTop, insetBottom, insetLeft, insetRight}
+            .insets = {insetTop, insetBottom, insetLeft, insetRight},
+            .keyboard = keyboard
         };
         write(g_event_pipe[1], &ev, sizeof(ev));
     }
@@ -626,6 +643,76 @@ Java_com_owner888_myphp_MyphpActivity_nativeDialogResult(JNIEnv *env, jclass cla
     }
 }
 
+// Dialog::open / Dialog::save: MyphpActivity.pickFiles / saveFile answer through nativeFilesResult,
+// kept here by callback id (the paths can be long, the event's text cannot) until PHP takes them.
+#define MAX_FILES_RESULTS 8
+static struct { int callback_id; char *paths; } g_files_results[MAX_FILES_RESULTS];
+static pthread_mutex_t g_files_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void myphp_pick_files(const char **mime_types, int mime_count, int multiple, int photos, int callback_id) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_pick_files) return;
+    jclass string_cls = (*env)->FindClass(env, "java/lang/String");
+    jobjectArray jtypes = (*env)->NewObjectArray(env, mime_count, string_cls, NULL);
+    for (int i = 0; i < mime_count; i++) {
+        jstring s = (*env)->NewStringUTF(env, mime_types[i]);
+        (*env)->SetObjectArrayElement(env, jtypes, i, s);
+        (*env)->DeleteLocalRef(env, s);
+    }
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_pick_files, jtypes, (jboolean)(multiple ? JNI_TRUE : JNI_FALSE), (jboolean)(photos ? JNI_TRUE : JNI_FALSE), callback_id);
+    (*env)->DeleteLocalRef(env, jtypes);
+    (*env)->DeleteLocalRef(env, string_cls);
+}
+
+void myphp_save_file(const char *mime_type, const char *name, int callback_id) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_save_file) return;
+    jstring jmime = (*env)->NewStringUTF(env, mime_type ? mime_type : "");
+    jstring jname = (*env)->NewStringUTF(env, name ? name : "");
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_save_file, jmime, jname, callback_id);
+    (*env)->DeleteLocalRef(env, jmime);
+    (*env)->DeleteLocalRef(env, jname);
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeFilesResult(JNIEnv *env, jclass clazz, jint callbackId, jstring jpaths) {
+    const char *chars = jpaths ? (*env)->GetStringUTFChars(env, jpaths, NULL) : "";
+    pthread_mutex_lock(&g_files_mutex);
+    for (int i = 0; i < MAX_FILES_RESULTS; i++) {
+        if (g_files_results[i].paths == NULL) {
+            g_files_results[i].callback_id = callbackId;
+            g_files_results[i].paths = strdup(chars);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_files_mutex);
+    if (jpaths) (*env)->ReleaseStringUTFChars(env, jpaths, chars);
+    if (g_event_pipe[1] >= 0) {
+        MyphpEvent ev = { .type = MYPHP_EVENT_FILES_RESULT, .width = callbackId };
+        write(g_event_pipe[1], &ev, sizeof(ev));
+    }
+}
+
+// The paths of callback_id into out (NUL-terminated, truncated to max_len), their length; -1 when none yet.
+int myphp_take_files_result(int callback_id, char *out, int max_len) {
+    int len = -1;
+    pthread_mutex_lock(&g_files_mutex);
+    for (int i = 0; i < MAX_FILES_RESULTS; i++) {
+        if (g_files_results[i].paths != NULL && g_files_results[i].callback_id == callback_id) {
+            len = (int)strlen(g_files_results[i].paths);
+            if (out && max_len > 0) {
+                strncpy(out, g_files_results[i].paths, max_len - 1);
+                out[max_len - 1] = 0;
+            }
+            free(g_files_results[i].paths);
+            g_files_results[i].paths = NULL;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_files_mutex);
+    return len;
+}
+
 void myphp_show_notification(const char *title, const char *body, int id) {
     JNIEnv *env = get_jni_env();
     if (!env || !g_activity_class || !g_mid_show_notification) return;
@@ -693,20 +780,53 @@ void myphp_place_web_view(int page_id, int x, int y, int w, int h, int visible) 
     (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_place_web_view, page_id, x, y, w, h, (jboolean)(visible ? JNI_TRUE : JNI_FALSE));
 }
 
+// A page's messages, whole (the event's text could not hold one): strdup'ed in a list, in order, one
+// event each; PHP takes the next with myphp_take_web_message and frees it. Nothing is dropped.
+typedef struct MyphpWebMsg { char *msg; struct MyphpWebMsg *next; } MyphpWebMsg;
+static MyphpWebMsg *g_web_msg_first = NULL, *g_web_msg_last = NULL;
+static pthread_mutex_t g_web_msg_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 JNIEXPORT void JNICALL
 Java_com_owner888_myphp_MyphpActivity_nativeOnWebMessage(JNIEnv *env, jclass clazz, jint pageId, jstring jmsg) {
     if (g_event_pipe[1] < 0 || !jmsg) return;
     const char *chars = (*env)->GetStringUTFChars(env, jmsg, NULL);
     if (!chars) return;
-
-    MyphpEvent ev = {
-        .type = MYPHP_EVENT_WEB_MESSAGE,
-        .action = pageId
-    };
-    strncpy(ev.text, chars, sizeof(ev.text) - 1);
+    MyphpWebMsg *m = malloc(sizeof(MyphpWebMsg));
+    m->msg = strdup(chars);
+    m->next = NULL;
     (*env)->ReleaseStringUTFChars(env, jmsg, chars);
-
+    pthread_mutex_lock(&g_web_msg_mutex);
+    if (g_web_msg_last) g_web_msg_last->next = m; else g_web_msg_first = m;
+    g_web_msg_last = m;
+    pthread_mutex_unlock(&g_web_msg_mutex);
+    MyphpEvent ev = { .type = MYPHP_EVENT_WEB_MESSAGE, .action = pageId };
     write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+char *myphp_take_web_message(void) {
+    char *msg = NULL;
+    pthread_mutex_lock(&g_web_msg_mutex);
+    MyphpWebMsg *m = g_web_msg_first;
+    if (m) {
+        g_web_msg_first = m->next;
+        if (!g_web_msg_first) g_web_msg_last = NULL;
+        msg = m->msg;
+        free(m);
+    }
+    pthread_mutex_unlock(&g_web_msg_mutex);
+    return msg;
+}
+
+void myphp_free_web_message(char *msg) {
+    free(msg);
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeBack(JNIEnv *env, jclass clazz) {
+    if (g_event_pipe[1] >= 0) {
+        MyphpEvent ev = { .type = MYPHP_EVENT_BACK };
+        write(g_event_pipe[1], &ev, sizeof(ev));
+    }
 }
 
 JNIEXPORT void JNICALL

@@ -232,6 +232,9 @@ final class Router
     /** The title of the page shown, as its Route set it in the last frame. */
     public function title(): string { return $this->current()->title; }
 
+    /** The title of the page before the one shown, which back() shows, as its Route set it while it showed; '' with no page before, or no title (a navigationBar's "Back"). Not mygo's. */
+    public function previousTitle(): string { return $this->at > 0 ? $this->entries[$this->at - 1]->title : ''; }
+
     /** Asks for a frame showing the page now current: another pass of the frame being built, or a frame. */
     private function changed(): void
     {
@@ -377,10 +380,9 @@ final class Router
         if (!($owner === $box->id || ($owner === null && $first))) {
             return;
         }
-        $back = $c->shortcut(Key::BRACKET_LEFT, Key::COMMAND) | $c->shortcut(Key::BACK);
-        $forward = $c->shortcut(Key::BRACKET_RIGHT, Key::COMMAND) | $c->shortcut(Key::FORWARD);
-        if ($back) { $this->back(); }
-        if ($forward) { $this->forward(); }
+        // taken only with a page to go to: a Back nothing takes ends the app on Android (Window::back)
+        if ($this->canGoBack() && ($c->shortcut(Key::BRACKET_LEFT, Key::COMMAND) | $c->shortcut(Key::BACK))) { $this->back(); }
+        if ($this->canGoForward() && ($c->shortcut(Key::BRACKET_RIGHT, Key::COMMAND) | $c->shortcut(Key::FORWARD))) { $this->forward(); }
     }
 
     /** Starts view $v showing entry $cur in place of the entry it shows: the transition, and where the keyboard focus goes. */

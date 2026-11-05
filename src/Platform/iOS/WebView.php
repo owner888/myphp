@@ -33,20 +33,18 @@ final class WebView implements Platform\WebView
             return;
         }
 
-        try {
-            $f = iOS::ffi();
-            if ($frame === null || $frame[2] <= 0 || $frame[3] <= 0) {
-                $f->myphp_ios_place_web_view($this->page->id, 0.0, 0.0, 0.0, 0.0, 0);
-                return;
-            }
+        $f = iOS::ffi();
+        if ($frame === null || $frame[2] <= 0 || $frame[3] <= 0) {
+            $f->myphp_ios_place_web_view($this->page->id, 0.0, 0.0, 0.0, 0.0, 0);
+            return;
+        }
 
-            $x = (float)$frame[0];
-            $y = (float)$frame[1];
-            $w = (float)$frame[2];
-            $h = (float)$frame[3];
+        $x = (float)$frame[0];
+        $y = (float)$frame[1];
+        $w = (float)$frame[2];
+        $h = (float)$frame[3];
 
-            $f->myphp_ios_place_web_view($this->page->id, $x, $y, $w, $h, 1);
-        } catch (\Throwable $e) {}
+        $f->myphp_ios_place_web_view($this->page->id, $x, $y, $w, $h, 1);
     }
 
     public function setAlpha(float $alpha): void {}

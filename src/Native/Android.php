@@ -25,6 +25,8 @@ final class Android
     public const EVENT_CONFIGURATION = 13;
     public const EVENT_DIALOG_RESULT = 14;
     public const EVENT_WEB_MESSAGE = 15;
+    public const EVENT_FILES_RESULT = 16;
+    public const EVENT_BACK = 17;
 
     // MotionEvent action constants
     public const ACTION_DOWN = 0;
@@ -70,6 +72,7 @@ final class Android
                 int64_t time_ms;
                 int32_t insets[4];
                 int32_t night_mode;
+                int32_t keyboard;
                 char text[256];
             } MyphpEvent;
 
@@ -89,6 +92,11 @@ final class Android
             void myphp_perform_haptic(void);
             void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             void myphp_show_notification(const char *title, const char *body, int id);
+            void myphp_pick_files(const char **mime_types, int mime_count, int multiple, int photos, int callback_id);
+            void myphp_save_file(const char *mime_type, const char *name, int callback_id);
+            int myphp_take_files_result(int callback_id, char *out, int max_len);
+            char *myphp_take_web_message(void);
+            void myphp_free_web_message(char *msg);
             int myphp_is_network_connected(void);
             void myphp_create_web_view(int page_id);
             void myphp_destroy_web_view(int page_id);

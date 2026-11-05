@@ -129,13 +129,21 @@ final class Backend implements Platform\Backend
                         break;
                     case Android::EVENT_CONFIGURATION:
                         \MyPHP\App::setTheme($ev->night_mode ? \MyPHP\UI\Theme::dark() : \MyPHP\UI\Theme::light());
-                        $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3]);
+                        $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3], (int)$ev->keyboard);
                         break;
                     case Android::EVENT_DIALOG_RESULT:
                         Dialogs::onDialogResult((int)$ev->width, (int)$ev->action);
                         break;
+                    case Android::EVENT_BACK:
+                        $win?->onBack();
+                        break;
+                    case Android::EVENT_FILES_RESULT:
+                        Dialogs::onFilesResult((int)$ev->width);
+                        break;
                     case Android::EVENT_WEB_MESSAGE:
-                        Page::onWebMessage((int)$ev->action, \FFI::string($ev->text));
+                        $msg = $f->myphp_take_web_message(); // whole, however long
+                        Page::onWebMessage((int)$ev->action, \FFI::string($msg));
+                        $f->myphp_free_web_message($msg);
                         break;
                     case Android::EVENT_SIGNAL:
                         $this->h->dispatch();
@@ -144,6 +152,7 @@ final class Backend implements Platform\Backend
                 }
             } catch (\Throwable $e) {
                 \MyPHP\Logger::error("Exception in event dispatch: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
+                throw $e;
             }
         }
 
@@ -154,6 +163,7 @@ final class Backend implements Platform\Backend
                 $win?->onFrame();
             } catch (\Throwable $e) {
                 \MyPHP\Logger::error("Exception in onFrame: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
+                throw $e;
             }
         }
     }

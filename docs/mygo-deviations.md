@@ -2805,3 +2805,62 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     battery) on macOS require crisp resolution-independent SF Symbols and
     compact two-line metrics that match Apple's native status bar baseline.
 
+
+## The phone (v1.173)
+
+mygo has no mobile platform, so none of this is mygo's; it is myphp's own,
+kept together in `src/UI/ContextMobile.php`, `Window::back` and the two
+mobile backends. The sizes are UIKit's, the one design on every platform.
+
+- **The safe area and the keyboard**: `Platform\Window::safeAreaInsets()`
+  (top, right, bottom, left; zeros on the desktop) and `keyboardHeight()`
+  reach the view as `Context::$safeArea` and `$keyboard`. `safeArea($fn)`
+  pads a column by them, the keyboard taking the bottom's place while it
+  is up. On Android the keyboard is apart from the bars
+  (`WindowInsets.Type.ime()`); on iOS it follows
+  `UIKeyboardWillChangeFrameNotification`.
+- **Input methods on iOS**: the Metal view is a `UITextInput` whose
+  document is the marked text alone (as Android's `BaseInputConnection`):
+  what a Chinese or Japanese keyboard composes shows in the field,
+  underlined (`TextState::setMarked`), a backspace edits the composition,
+  and the candidate chosen commits as typed text. No caret geometry: the
+  candidates sit over the keyboard.
+- **`tabBar($items, &$index)`**: UITabBar's — 49 points (the hairline
+  above it included) over the safe area's bottom, which it fills; items
+  of a 25-point icon over a 10-point label, in the accent when chosen,
+  muted otherwise, sharing the width.
+- **`navigationBar($title, ?$router, ?$trailing)`**: UINavigationBar's —
+  44 points (the hairline below it included) under the safe area's top,
+  which it fills; the title 17 semibold centered; with a router that can
+  go back, a chevron and `Router::previousTitle()` (new; "Back" without
+  one) in the accent lead, and a tap goes back; margins 8.
+- **`sheet(&$open, $fn)`**: a UISheetPresentationController's — rises
+  from the bottom (0.35 s), its top corners rounded 10, a 36×5 grabber,
+  content padded 16 over the safe area's bottom, at most the window less
+  the top inset and 10; the window dimmed 0.4 and inert as under `modal`;
+  a tap outside or Escape closes it (`dismissed()`).
+- **`actionSheet(&$open, $title, ...$actions)`**: UIAlertController's
+  action sheet — a group with corners 13 at 8 from the edges, the title
+  13 muted, rows 57 high in 20 points (accent; "!" first marks a
+  destructive one, in `danger`), a separate bold Cancel 8 below, 8 over
+  the safe area's bottom; returns the action's index, `SHEET_DISMISSED`
+  (-2) for Cancel, a tap outside or Escape, -1 otherwise, as
+  `alertDialog`.
+- **`Window::back()`**: the system's Back (Android's button and gesture,
+  `OnBackInvokedDispatcher` on API 33+, `onBackPressed` before), one step
+  a press: a field with the keyboard loses the focus (the keyboard goes),
+  else an Escape (a dialog, a popover, a menu closes), else a `Key::BACK`
+  (the router shown goes back a page: `Router` now takes Back and Forward
+  only with a page to go to), else the app ends (`App::quit`; the
+  activity finishes as PHP's run loop ends). `Runtime::$back` is called
+  for a Back nothing took, as `$escape` is for an Escape.
+- **`Dialog::open` on the phone** is the system's picker: SAF's
+  `ACTION_OPEN_DOCUMENT` or, with filters naming only pictures and films,
+  the photo picker (`ACTION_PICK_IMAGES` on API 33+, PHPicker on iOS);
+  `UIDocumentPickerViewController` otherwise. What is chosen is a copy
+  under its name in the app's cache (`open/<id>/`), since a content: URI
+  or a security-scoped URL is no path and the name matters to an upload.
+  `Dialog::save` on Android is `ACTION_CREATE_DOCUMENT`, the path
+  `/proc/self/fd/N` written through; on iOS, and `prompt`, `login` and a
+  directory anywhere, `Platform\Unsupported` — never an empty answer.
+  `Platform\FileTypes` maps the filters.

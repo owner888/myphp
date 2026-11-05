@@ -28,9 +28,7 @@ final class Page implements Platform\Page
         $this->onMessage = $onMessage;
         self::$pages[$this->id] = $this;
 
-        try {
-            iOS::ffi()->myphp_ios_create_web_view($this->id);
-        } catch (\Throwable $e) {}
+        iOS::ffi()->myphp_ios_create_web_view($this->id);
     }
 
     public static function onWebMessage(int $pageId, string $message): void
@@ -105,9 +103,7 @@ final class Page implements Platform\Page
     public function loadHTML(string $html, string $baseURL = ''): void
     {
         if (!$this->closed) {
-            try {
-                iOS::ffi()->myphp_ios_load_html($this->id, $html, $baseURL);
-            } catch (\Throwable $e) {}
+            iOS::ffi()->myphp_ios_load_html($this->id, $html, $baseURL);
         }
     }
 
@@ -119,9 +115,7 @@ final class Page implements Platform\Page
     public function loadURL(string $url): void
     {
         if (!$this->closed) {
-            try {
-                iOS::ffi()->myphp_ios_load_url($this->id, $url);
-            } catch (\Throwable $e) {}
+            iOS::ffi()->myphp_ios_load_url($this->id, $url);
         }
     }
 
@@ -139,9 +133,7 @@ final class Page implements Platform\Page
     public function evaluate(string $js, $completion = null): void
     {
         if (!$this->closed) {
-            try {
-                iOS::ffi()->myphp_ios_eval_js($this->id, $js);
-            } catch (\Throwable $e) {}
+            iOS::ffi()->myphp_ios_eval_js($this->id, $js);
         }
     }
 
@@ -160,9 +152,7 @@ final class Page implements Platform\Page
         if (!$this->closed) {
             $this->closed = true;
             unset(self::$pages[$this->id]);
-            try {
-                iOS::ffi()->myphp_ios_destroy_web_view($this->id);
-            } catch (\Throwable $e) {}
+            iOS::ffi()->myphp_ios_destroy_web_view($this->id);
         }
     }
 }

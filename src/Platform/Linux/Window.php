@@ -938,6 +938,16 @@ final class Window implements Platform\Window
         return false;
     }
 
+    public function safeAreaInsets(): array
+    {
+        return [0.0, 0.0, 0.0, 0.0];
+    }
+
+    public function keyboardHeight(): float
+    {
+        return 0.0;
+    }
+
     /** Asks for a frame at the frame clock's next tick; $repaint: one that only paints the last frame's nodes again, while every ask says so. */
     public function requestFrame(int $every = 1, bool $repaint = false): void
     {
