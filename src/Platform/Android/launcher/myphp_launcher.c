@@ -297,13 +297,13 @@ static void* php_worker_thread(void *arg) {
         char init_code[2048];
         snprintf(init_code, sizeof(init_code),
             "putenv('MYPHP_PLATFORM=android');"
+            "require '%s/src/autoload.php';" // the framework the APK carries: an app needs no autoloader of its own, as on the desktop with Composer's
+            // why PHP ended, in the log: the error that ended it (a fatal is written before the bailout, but not always through ub_write), an uncaught exception's trace
+            "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
             "$app = '%s/app.php';"
-            "if (file_exists($app)) {"
-            "    require $app;"
-            "} else {"
-            "    echo \"[myphp] no app.php found at \" . $app . \"\\n\";"
-            "}",
-            g_files_dir
+            "if (!file_exists($app)) { error_log('[myphp] no app.php at ' . $app); }"
+            "try { require $app; } catch (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); throw $e; }",
+            g_files_dir, g_files_dir
         );
 
         LOGI("Executing app.php...");

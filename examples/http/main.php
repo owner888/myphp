@@ -10,7 +10,7 @@ use MyPHP\{App, Menu, MenuItem, Process, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
 use MyPHP\UI\{Content, Context, Font, Key, ListState, Node, Span, TableColumn, TextState, Theme};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 final class Http
 {

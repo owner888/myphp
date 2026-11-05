@@ -196,6 +196,14 @@ void myphp_ios_request_render(void) {
     g_needs_render = 1;
 }
 
+int myphp_ios_take_needs_render(void) {
+    if (g_needs_render) {
+        g_needs_render = 0;
+        return 1;
+    }
+    return 0;
+}
+
 int myphp_ios_poll_touch_event(MyphpTouchEvent *ev) {
     if (!ev) return 0;
     int has = 0;
@@ -400,7 +408,7 @@ void myphp_ios_pick_files(const char **extensions, int count, int multiple, int 
         g_pickers[@(callback_id)] = d;
         UIViewController *vc;
         if (photos) {
-            PHPickerConfiguration *conf = [[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];
+            PHPickerConfiguration *conf = [[PHPickerConfiguration alloc] init]; // the picker's own library access: no Photos framework, no permission of the app's
             conf.selectionLimit = multiple ? 0 : 1;
             BOOL images = NO, videos = NO;
             for (NSString *e in exts) {
@@ -618,6 +626,97 @@ void myphp_ios_free_web_message(char *msg) {
     free(msg);
 }
 
+// The system services PHP asks for from its own thread, each done on the main thread as UIKit requires
+// (src/Platform/iOS/*.php): the appearance, the clipboard, a URL opened, the idle timer, an SF Symbol's pixels.
+static volatile int g_is_dark = 0;
+
+int myphp_ios_is_dark(void) {
+    return g_is_dark;
+}
+
+static void update_is_dark(UITraitCollection *tc) {
+    g_is_dark = tc.userInterfaceStyle == UIUserInterfaceStyleDark ? 1 : 0;
+}
+
+// The pasteboard's text, strdup'ed (myphp_ios_free_string frees it); NULL for none.
+char *myphp_ios_clipboard_get_text(void) {
+    __block char *out = NULL;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        NSString *s = [UIPasteboard generalPasteboard].string;
+        if (s) out = strdup([s UTF8String]);
+    });
+    return out;
+}
+
+void myphp_ios_clipboard_set_text(const char *text) {
+    NSString *s = text ? [NSString stringWithUTF8String:text] : @"";
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        [UIPasteboard generalPasteboard].string = s;
+    });
+}
+
+void myphp_ios_free_string(char *s) {
+    free(s);
+}
+
+void myphp_ios_open_url(const char *url) {
+    NSURL *u = url ? [NSURL URLWithString:[NSString stringWithUTF8String:url]] : nil;
+    if (!u) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[UIApplication sharedApplication] openURL:u options:@{} completionHandler:nil];
+    });
+}
+
+void myphp_ios_set_idle_timer_disabled(int disabled) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [UIApplication sharedApplication].idleTimerDisabled = disabled ? YES : NO;
+    });
+}
+
+int myphp_ios_symbol_exists(const char *name) {
+    NSString *n = name ? [NSString stringWithUTF8String:name] : @"";
+    __block int has = 0;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        has = [UIImage systemImageNamed:n] != nil ? 1 : 0;
+    });
+    return has;
+}
+
+// The SF Symbol name at size points and weight (NSFontWeight, -0.8 ultralight to 0.62 black, as Platform\Symbols
+// takes it), in color rgb, rendered at scale: its width and height in pixels into out_w/out_h, its premultiplied
+// RGBA pixels into out, the byte count they take, or 0 when the symbol does not exist or out is too small.
+int myphp_ios_draw_symbol(const char *name, float size, float weight, int rgb, float scale, int *out_w, int *out_h, uint8_t *out, int max_bytes) {
+    NSString *n = name ? [NSString stringWithUTF8String:name] : @"";
+    __block int bytes = 0;
+    // NSFontWeight to UIImageSymbolWeight, the nearest of ultralight -0.8, thin -0.6, light -0.4, regular 0, medium 0.23, semibold 0.3, bold 0.4, heavy 0.56, black 0.62
+    static const float weights[] = {-0.8f, -0.6f, -0.4f, 0.0f, 0.23f, 0.3f, 0.4f, 0.56f, 0.62f};
+    int w_index = 0;
+    for (int i = 1; i < 9; i++) { if (fabsf(weights[i] - weight) < fabsf(weights[w_index] - weight)) w_index = i; }
+    UIImageSymbolWeight symbolWeight = (UIImageSymbolWeight)(w_index + 1);
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        UIImageSymbolConfiguration *conf = [UIImageSymbolConfiguration configurationWithPointSize:size weight:symbolWeight];
+        UIImage *img = [UIImage systemImageNamed:n withConfiguration:conf];
+        if (!img) return;
+        UIColor *color = [UIColor colorWithRed:((rgb >> 16) & 255) / 255.0 green:((rgb >> 8) & 255) / 255.0 blue:(rgb & 255) / 255.0 alpha:1.0];
+        img = [img imageWithTintColor:color renderingMode:UIImageRenderingModeAlwaysOriginal];
+        int w = (int)ceil(img.size.width * scale), h = (int)ceil(img.size.height * scale);
+        if (w <= 0 || h <= 0 || w * h * 4 > max_bytes) return;
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef ctx = CGBitmapContextCreate(out, w, h, 8, w * 4, cs, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+        CGColorSpaceRelease(cs);
+        if (!ctx) return;
+        memset(out, 0, w * h * 4);
+        UIGraphicsPushContext(ctx);
+        CGContextTranslateCTM(ctx, 0, h);
+        CGContextScaleCTM(ctx, scale, -scale);
+        [img drawInRect:CGRectMake(0, 0, img.size.width, img.size.height)];
+        UIGraphicsPopContext();
+        CGContextRelease(ctx);
+        *out_w = w; *out_h = h; bytes = w * h * 4;
+    });
+    return bytes;
+}
+
 void myphp_ios_show_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (g_view && ![g_view isFirstResponder]) {
@@ -630,6 +729,16 @@ void myphp_ios_hide_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [g_window endEditing:YES];
     });
+}
+
+// PHP's output and its log (warnings, fatals: "PHP Request Startup: …") into the system log, where `myphp run` reads them
+static size_t myphp_ub_write(const char *str, size_t len) {
+    os_log(OS_LOG_DEFAULT, "[myphp-ios] %{public}.*s", (int)len, str);
+    return len;
+}
+
+static void myphp_log_message(const char *message, int syslog_type_int) {
+    os_log_error(OS_LOG_DEFAULT, "[myphp-ios] %{public}s", message);
 }
 
 static void* php_worker_thread(void *arg) {
@@ -649,6 +758,8 @@ static void* php_worker_thread(void *arg) {
         char *php_argv[] = {"myphp", NULL};
 
         os_log(OS_LOG_DEFAULT, "[myphp-ios] Initializing PHP Embed SAPI on iOS...");
+        php_embed_module.ub_write = myphp_ub_write;
+        php_embed_module.log_message = myphp_log_message;
         php_embed_init(1, php_argv);
 
         NSString *appPhp = [bundlePath stringByAppendingPathComponent:@"app.php"];
@@ -657,6 +768,12 @@ static void* php_worker_thread(void *arg) {
         } else {
             os_log(OS_LOG_DEFAULT, "[myphp-ios] Executing app.php...");
             zend_first_try {
+                // the framework the app carries: an app needs no autoloader of its own, as on the desktop with Composer's;
+                // and why PHP ended, in the log: a fatal error, an uncaught exception's trace (as the Android launcher's)
+                NSString *autoload = [NSString stringWithFormat:@"require '%@/src/autoload.php';"
+                    "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
+                    "set_exception_handler(function (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); });", bundlePath]; // PHP ends after the handler, as with no handler
+                zend_eval_string((char *)[autoload UTF8String], NULL, "myphp_bootstrap");
                 zend_file_handle file_handle;
                 zend_stream_init_filename(&file_handle, [appPhp UTF8String]);
                 php_execute_script(&file_handle);
@@ -867,6 +984,7 @@ static void* php_worker_thread(void *arg) {
     g_safe_bottom = (float)insets.bottom;
     g_safe_left = (float)insets.left;
     g_safe_right = (float)insets.right;
+    g_needs_render = 1;
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -920,14 +1038,12 @@ static void* php_worker_thread(void *arg) {
 }
 
 - (void)onDisplayLink:(CADisplayLink *)link {
-    if (g_needs_render && g_view) {
-        g_needs_render = 0;
-        [g_view draw];
-    }
+    // the frames are PHP's thread's (Metal::render from the backend's run loop); the view is never drawn from here
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    update_is_dark(self.traitCollection);
     if (!g_display_link) {
         g_display_link = [CADisplayLink displayLinkWithTarget:self selector:@selector(onDisplayLink:)];
         if (@available(iOS 15.0, *)) {
@@ -939,12 +1055,50 @@ static void* php_worker_thread(void *arg) {
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
+    update_is_dark(self.traitCollection);
     g_theme_changed = 1;
     g_needs_render = 1;
 }
 
 - (BOOL)prefersStatusBarHidden {
     return NO;
+}
+@end
+
+// The one scene: its window holds the Metal view, and PHP starts once the window is there (the app has one window; a
+// second scene is never asked for: UIApplicationSupportsMultipleScenes is false in Info.plist).
+@interface MyphpSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (nonatomic, strong) UIWindow *window;
+@end
+
+@implementation MyphpSceneDelegate
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+    UIWindowScene *ws = (UIWindowScene *)scene;
+    self.window = [[UIWindow alloc] initWithWindowScene:ws];
+    self.window.rootViewController = [[MyphpViewController alloc] init];
+    [self.window makeKeyAndVisible];
+    g_window = self.window;
+    for (NSUserActivity *a in connectionOptions.userActivities) { if (a.webpageURL) { push_open_url_event([a.webpageURL.absoluteString UTF8String]); } }
+    for (UIOpenURLContext *u in connectionOptions.URLContexts) { push_open_url_event([u.URL.absoluteString UTF8String]); }
+    if (!g_php_thread) {
+        pthread_create(&g_php_thread, NULL, php_worker_thread, NULL);
+        pthread_detach(g_php_thread);
+    }
+}
+
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+    for (UIOpenURLContext *u in URLContexts) { push_open_url_event([u.URL.absoluteString UTF8String]); }
+}
+
+- (void)sceneDidEnterBackground:(UIScene *)scene {
+    g_app_paused = 1;
+    if (g_display_link) { g_display_link.paused = YES; }
+}
+
+- (void)sceneWillEnterForeground:(UIScene *)scene {
+    g_app_paused = 0;
+    if (g_display_link) { g_display_link.paused = NO; }
+    g_needs_render = 1;
 }
 @end
 
@@ -975,37 +1129,14 @@ static void* php_worker_thread(void *arg) {
         g_needs_render = 1;
     }];
 
-    g_window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-    g_window.rootViewController = [[MyphpViewController alloc] init];
-    [g_window makeKeyAndVisible];
-
-    // Spawn PHP worker thread
-    pthread_create(&g_php_thread, NULL, php_worker_thread, NULL);
-    pthread_detach(g_php_thread);
-
+    // the window and PHP start as the scene connects (MyphpSceneDelegate): the SDK requires the scene life cycle
     return YES;
 }
 
-- (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options {
-    if (url) {
-        push_open_url_event([url.absoluteString UTF8String]);
-    }
-    return YES;
-}
-
-- (void)applicationDidEnterBackground:(UIApplication *)application {
-    g_app_paused = 1;
-    if (g_display_link) {
-        g_display_link.paused = YES;
-    }
-}
-
-- (void)applicationWillEnterForeground:(UIApplication *)application {
-    g_app_paused = 0;
-    if (g_display_link) {
-        g_display_link.paused = NO;
-    }
-    g_needs_render = 1;
+- (UISceneConfiguration *)application:(UIApplication *)application configurationForConnectingSceneSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options {
+    UISceneConfiguration *c = [[UISceneConfiguration alloc] initWithName:@"Default" sessionRole:session.role];
+    c.delegateClass = [MyphpSceneDelegate class];
+    return c;
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {

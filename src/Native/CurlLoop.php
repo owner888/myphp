@@ -115,6 +115,10 @@ final class CurlLoop
     /** Watches socket $fd for what curl waits for ($what, CURL_POLL_*), or lets it go. */
     private static function watch(int $fd, int $what): void
     {
+        if (App::isAndroid() || App::isIOS()) { // no loop of the system's runs PHP's callbacks there: the backend polls
+            if ($what === self::POLL_REMOVE) { unset(self::$sockets[$fd]); } else { self::$sockets[$fd] = $what; }
+            return;
+        }
         if (PHP_OS_FAMILY !== 'Darwin') {
             self::watchGlib($fd, $what);
             return;
@@ -134,6 +138,17 @@ final class CurlLoop
         }
         self::$sockets[$fd] = $what;
         self::arm($fd);
+    }
+
+    /**
+     * @internal The mobile backends, every step of their run loop (Android's ALooper is the launcher's, iOS's main run loop
+     * another thread's: neither runs PHP's callbacks): the sockets ready for what curl waits for, told to curl, no waiting.
+     */
+    public static function pollSockets(): void
+    {
+        foreach (array_keys(self::$sockets) as $fd) { // act may take a socket off the list, or watch it anew
+            if (isset(self::$sockets[$fd]) && ($events = self::ready($fd, self::$sockets[$fd])) !== 0) { self::act($fd, $events); }
+        }
     }
 
     private static ?CData $glibCallback = null;
@@ -209,8 +224,8 @@ final class CurlLoop
 
     /** How many times a socket is acted on in a turn, before the next turn goes on with it. */
     private const DRAIN = 64;
-    /** POLLIN, POLLOUT. */
-    private const POLLIN = 1, POLLOUT = 4;
+    /** poll(2)'s POLLIN, POLLOUT, POLLERR, POLLHUP, the same on Linux and Darwin. */
+    private const POLLIN = 1, POLLOUT = 4, POLLERR = 8, POLLHUP = 16;
 
     /**
      * Acts on socket $fd while it is ready for what curl waits for, then
@@ -245,14 +260,15 @@ final class CurlLoop
     /** What socket $fd is ready for now of what curl waits for ($what, CURL_POLL_*), as CURL_CSELECT_* bits; 0 for nothing. */
     private static function ready(int $fd, int $what): int
     {
-        $c = self::$libc ??= FFI::cdef('struct pollfd { int fd; short events; short revents; }; int poll(struct pollfd*, unsigned int, int);');
+        $c = self::$libc ??= FFI::cdef('struct pollfd { int fd; short events; short revents; }; int poll(struct pollfd*, ' . (PHP_OS_FAMILY === 'Darwin' ? 'unsigned int' : 'unsigned long') . ', int);'); // nfds_t: Linux's is a long
         $p = $c->new('struct pollfd');
         $p->fd = $fd;
         $p->events = (($what & self::POLL_IN) ? self::POLLIN : 0) | (($what & self::POLL_OUT) ? self::POLLOUT : 0);
         if ($p->events === 0 || $c->poll(FFI::addr($p), 1, 0) <= 0) {
             return 0;
         }
-        return (($p->revents & self::POLLIN) ? self::CSELECT_IN : 0) | (($p->revents & self::POLLOUT) ? self::CSELECT_OUT : 0);
+        // a hangup reads as ready to read (the end of the data), an error is told as one
+        return (($p->revents & (self::POLLIN | self::POLLHUP)) ? self::CSELECT_IN : 0) | (($p->revents & self::POLLOUT) ? self::CSELECT_OUT : 0) | (($p->revents & self::POLLERR) ? self::CSELECT_ERR : 0);
     }
 
     /** Tells curl socket $fd is ready for $events (or its timeout came), then what ended. */

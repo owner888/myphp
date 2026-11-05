@@ -21,13 +21,19 @@ myphp build -platform android/arm64            # the APK alone; ios/arm64 the .i
 ```
 
 The first run for a phone builds its PHP runtime (libffi, OpenSSL,
-libcurl, libphp: the NDK for Android, `arm64`, minSdk 31; Xcode for iOS
-16; 10-20 minutes), kept under `build/android` and `build/ios` and built
-again when its script changes. The scripts under `scripts/` are the CLI's
+libcurl, libxml2, libphp: the NDK for Android, `arm64`, minSdk 31; Xcode
+for iOS 16; 10-20 minutes), kept under `build/android`, `build/ios` (an
+iPhone) and `build/ios-simulator` (the simulator, another slice of the
+same libraries) and built again when its script changes. The scripts under `scripts/` are the CLI's
 internals, not to be run by hand.
 
 A device runs the `.ipa` signed with your own certificate, or through
 Xcode's Devices window.
+
+The app's `main.php` becomes the package's `app.php`, with the framework
+under `src/` beside it; the launcher requires `src/autoload.php` before
+it, so the app registers no autoloader of its own (its desktop one, if it
+has one, is never reached for MyPHP's classes).
 
 Text is the system's: `TextRunShaper` and `Canvas.drawGlyphs` on Android,
 CoreText on iOS, so Chinese, Japanese and emoji come with the system's
@@ -56,6 +62,11 @@ $c->safeArea(function () use ($c) {
 });
 ```
 
+A `navigationBar` or a `tabView` takes the edge it fills off `$c->safeArea`
+for what is built after it, so a `safeArea()` below the bar pads for the
+bar's edge no second time; `$c->windowSafeArea` keeps the window's own,
+which the sheets keep out of.
+
 A field focused brings the keyboard up, with the system's input method
 (Chinese, Japanese: composing text shows in the field); the focus leaving
 takes it down. A `tabBar` or `navigationBar` extends into the safe area
@@ -67,15 +78,19 @@ A `Router` (docs/ui/navigation.md) is the page stack: `push()` a page,
 `back()` to the one before. The bars of a phone go round it:
 
 ```php
-$c->column(0, 0, 1)->fill();
-  $c->navigationBar($this->router->title(), $this->router);   // "‹ Home  Note", the way back
-  $c->safeArea(function () use ($c) {
-      $this->router->view($c, fn(Route $r) => $this->page($c, $r));
-  });
-  $c->tabBar([[$home, '首页'], [$search, '搜索'], [$me, '我的']], $this->tab);
-  if ($c->changed($bar)) { $this->router->replace(['/home', '/search', '/me'][$this->tab]); }
-$c->end();
+$tabs = $c->tabView([[$home, '首页'], [$search, '搜索'], [$me, '我的']], $this->tab, function (int $tab, string $where) use ($c) {
+    $c->navigationBar($this->router->title(), $this->router);   // "‹ Home  Note", the way back
+    $c->safeArea(function () use ($c) {
+        $this->router->view($c, fn(Route $r) => $this->page($c, $r));
+    });
+});
+if ($c->changed($tabs)) { $this->router->replace(['/home', '/search', '/me'][$this->tab]); }
 ```
+
+The same code is a tab bar on a phone, tabs across the top on an iPad held
+upright, and a sidebar on an iPad on its side or on the Mac, as SwiftUI's
+`TabView` adapts; `tabBar()` alone is the bar for an app that wants it
+everywhere.
 
 Each tab keeps a router of its own when its pages must survive a switch.
 
@@ -118,6 +133,7 @@ with inertia — a phone has, in `src/UI/ContextMobile.php`:
 
 | | |
 |---|---|
+| `tabView($items, &$index, $content)` | the tabs where Apple puts them: bottom on a phone, top on a tablet upright, a sidebar on its side and on the desktop |
 | `tabBar($items, &$index)` | across the bottom: icons over labels, the chosen one in the accent |
 | `navigationBar($title, ?$router, ?$trailing)` | across the top: the title, the way back, buttons at the end |
 | `sheet(&$open, $fn)` | a panel rising from the bottom, a grabber over it; a tap outside closes it |
@@ -126,6 +142,33 @@ with inertia — a phone has, in `src/UI/ContextMobile.php`:
 
 Their sizes are UIKit's, the one design on every platform
 (`tests/mobile_test.php` checks them headless).
+
+## Coming from SwiftUI or Flutter
+
+The shape of an app is the desktop's, immediate mode: the view builds the
+tree every frame (`$c->column(); … $c->end()`), a value's state is passed
+as `&$ref` (SwiftUI's `Binding`), a lifetime's as a State object
+(Flutter's controllers), and a widget reports through `changed()`,
+`clicked()`, `dismissed()` rather than callbacks. Names and sizes follow
+UIKit; what Apple has no name for takes Flutter's.
+
+| SwiftUI | Flutter | myphp |
+|---|---|---|
+| `NavigationStack` + `navigationTitle` | `Navigator` + `AppBar` | `Router` + `navigationBar($title, $router)` |
+| `NavigationLink` / `path.append` | `Navigator.push` | `$router->push('/note/42')` |
+| `dismiss()` / the back button | `Navigator.pop` | `$router->back()`; the bar's chevron, Android's Back |
+| `TabView` (`.sidebarAdaptable`) | `Scaffold.bottomNavigationBar` / `NavigationRail` | `tabView($items, &$index, $content)`: bottom on a phone, top on a tablet upright, a sidebar on its side and the desktop; `tabBar` is the bar alone |
+| `.safeAreaInset`, `ignoresSafeArea` | `SafeArea` | `safeArea($fn)`; `$c->safeArea`, `$c->keyboard` |
+| `.sheet(isPresented:)` | `showModalBottomSheet` | `sheet(&$open, $fn)` |
+| `.confirmationDialog` | a bottom sheet of `ListTile`s | `actionSheet(&$open, $title, ...$actions)` |
+| `.alert` | `showDialog` + `AlertDialog` | `alertDialog(&$open, $title, $message, ...$buttons)` |
+| — | `SnackBar` | `toast($message)` |
+| `TextField` + `@State` | `TextField` + `TextEditingController` | `input($state)` + `TextState` |
+| `List` / `ScrollView` | `ListView.builder` + `ScrollController` | `list($state, $n, $row)` + `ListState`; `scroll()` + `ScrollState` |
+| `Button("…") { }` | `ElevatedButton(onPressed:)` | `if ($c->clicked($c->button('…'))) { }` |
+| `.padding()`, `.cornerRadius()` | `Padding`, `ClipRRect` | `->padding()`, `->radius()` (modifiers on the node) |
+| `PhotosPicker`, `fileImporter` | `image_picker`, `file_picker` | `Dialog::open()` with filters |
+| `URLSession` | `http` | `Http::get()`, in `App::go()` |
 
 ## Checking on a device
 

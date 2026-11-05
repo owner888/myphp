@@ -30,6 +30,7 @@ final class iOS
             void myphp_ios_get_safe_insets(float *top, float *bottom, float *left, float *right);
             void* myphp_ios_get_view(void);
             void myphp_ios_request_render(void);
+            int myphp_ios_take_needs_render(void);
             int myphp_ios_poll_touch_event(MyphpTouchEvent *ev);
             int myphp_ios_poll_input_event(MyphpInputEvent *ev);
             int myphp_ios_poll_open_url(char *out, int max_len);
@@ -39,6 +40,14 @@ final class iOS
             void myphp_ios_pick_files(const char **extensions, int count, int multiple, int photos, int callback_id);
             int myphp_ios_take_files_result(int callback_id, char *out, int max_len);
             float myphp_ios_get_keyboard_height(void);
+            int myphp_ios_is_dark(void);
+            char *myphp_ios_clipboard_get_text(void);
+            void myphp_ios_clipboard_set_text(const char *text);
+            void myphp_ios_free_string(char *s);
+            void myphp_ios_open_url(const char *url);
+            void myphp_ios_set_idle_timer_disabled(int disabled);
+            int myphp_ios_symbol_exists(const char *name);
+            int myphp_ios_draw_symbol(const char *name, float size, float weight, int rgb, float scale, int *out_w, int *out_h, uint8_t *out, int max_bytes);
             void myphp_ios_show_notification(const char *title, const char *body, const char *identifier);
             void myphp_ios_remove_notification(const char *identifier);
             void myphp_ios_remove_all_notifications(void);

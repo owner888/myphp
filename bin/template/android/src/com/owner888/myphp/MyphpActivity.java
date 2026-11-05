@@ -108,6 +108,12 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         sInstance = this;
 
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        // Edge to edge: the content under the status and navigation bars, which are transparent, their insets the
+        // safe area PHP keeps out of (Context::$safeArea); the bars' icons dark or light with the theme (notifyConfiguration)
+        getWindow().setDecorFitsSystemWindows(false);
+        getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().setNavigationBarContrastEnforced(false);
         try {
             WindowManager.LayoutParams lp = getWindow().getAttributes();
             lp.preferredRefreshRate = 120.0f;
@@ -223,6 +229,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
 
     private void notifyConfiguration(WindowInsets windowInsets) {
         boolean isDark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        android.view.WindowInsetsController bars = getWindow().getInsetsController();
+        if (bars != null) { // dark icons on the light theme's bars, light ones on the dark theme's
+            int light = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            bars.setSystemBarsAppearance(isDark ? 0 : light, light);
+        }
         if (windowInsets == null && surfaceView != null) {
             windowInsets = surfaceView.getRootWindowInsets();
         }

@@ -8308,6 +8308,82 @@ without a reflection bypass library.
 
 On iOS (`arm64-apple-ios16.0`), `MyphpMetalView` subclasses `MTKView` and hosts a `CAMetalLayer` with `CADisplayLink` added to `NSRunLoopCommonModes` (up to 120Hz ProMotion via `CAFrameRateRangeMake(60, 120, 120)`). Touch events flow through a thread-safe ring buffer into PHP's worker thread, driving the same smooth 8pt touch-slop and exponential momentum fling engine as Android, while `safeAreaInsetsDidChange` dynamically reports notch, Dynamic Island, and home indicator insets to `Window::contentBounds()`.
 
+## The phone, made to work (v1.173)
+
+What the first real app on a phone turned up, each a paragraph:
+
+**HTTPS on a phone** is the APK's own `libcurl.so` (OpenSSL inside) or the
+`libcurl.a` linked into the iOS app, built by the runtime scripts; the
+desktop keeps the system's libcurl and its trust store. The OpenSSL in the
+app trusts nothing by itself, and curl's `--with-ca-fallback` did not pick
+up `SSL_CERT_FILE` as hoped (the peer failed verification), so every handle
+is told its bundle outright: `Native\Curl::trust($h)` sets `CURLOPT_CAINFO`
+to the file `SSL_CERT_FILE` names (Android: the system store written out
+as PEM by the activity at every start, user-added roots included; iOS:
+curl's `cacert.pem` in the bundle), throwing when the file is missing. The
+six places that make a handle call it after `NetProxy::apply`.
+
+**The transfers' sockets on a phone** are polled: `CurlLoop::watch` uses
+`CFFileDescriptor` on macOS and GLib's sources on Linux, both loops that
+call PHP back on the thread PHP runs on; Android's `ALooper` belongs to the
+launcher and iOS's main run loop to the UI thread, neither of which runs
+PHP's callbacks. So on the phones `watch` only records what curl waits for,
+and the backends' `step` calls `CurlLoop::pollSockets()` every turn, which
+`poll(2)`s each socket for 0 ms (`ready()`, `nfds_t` a long on Linux) and
+tells curl. The first attempt loaded `libgtk-3.so.0` on Android and threw
+from inside curl's socket callback, which PHP forbids ("Throwing from FFI
+callbacks is not allowed") and which ended the app.
+
+**An app's autoloader on a phone**: the launcher requires the framework's
+`src/autoload.php` before `app.php`, so an app needs none. The examples'
+one-liner `fn($c) => require __DIR__ . '/../../src/' . …` required a file
+for every class asked for, and `class_exists(Normalizer::class)`
+(MediaPlayerKeys) asks for one: on the desktop ext-intl answers before any
+autoloader runs, on the phone's libphp without intl the example's closure
+ran and failed on a missing file, ending the app in 4 ms with no message.
+The examples guard it with `str_starts_with($c, 'MyPHP\\') &&`, and the
+Android bootstrap logs why PHP ended (a shutdown function for a fatal, a
+catch that logs and rethrows an uncaught exception): the 4 ms exit had
+left nothing in the log.
+
+**SVG on a phone needs libxml2**: `UI\Svg\Elem` reads with `XMLReader`;
+the phones' libphp was built without libxml, so the tab bar's icons ended
+the app. The runtime scripts build libxml2 static and PHP's xml,
+xmlreader, xmlwriter, dom and simplexml with it; `myphp doctor` names it.
+
+**Edge to edge on Android**: the activity's theme was
+`NoActionBar.Fullscreen` (no status bar, so a top inset of 0) and the
+insets came from two sources that disagreed (the view's listener, the root
+window's raw insets on resume). Now `setDecorFitsSystemWindows(false)`, the
+bars transparent with their icons set by the theme's darkness, so the
+insets are the real safe area both ways; the keyboard's inset is reported
+apart from the bars (`Context::$safeArea`, `$keyboard`).
+
+**The system's Back ends the app at the first page** (`Window::back`), and
+the activity finishes as PHP's run loop ends (`myphp_finish_activity` after
+`php_embed_shutdown`): before, an ended PHP left a black activity. So any
+early exit of PHP now looks like "the app did not start" — the log's
+`[myphp]` lines say why.
+
+**The iOS simulator on Xcode 27 and its Metal view**: Xcode 27 replaced
+`Simulator.app` with `DeviceHub.app` (`com.apple.dt.Devices`), which opens
+a booted simulator's window at `devices://device/open?id=<udid>`; `myphp
+run -d ios` checks `open -Ra Simulator` first and falls back to
+`com.apple.dt.Devices`. On iOS, `Metal::adopt` takes the UI thread's
+`MTKView` while `Metal::render` runs on PHP's worker thread: touching
+`view.layer.presentsWithTransaction` from PHP's thread tripped UIKit's
+main-thread layer assertion (`_raiseExceptionForBackgroundThreadLayerPropertyModification`),
+so adopted views leave `presentsWithTransaction` at its default `NO` and
+present via `presentDrawable:`; `UIViewControllerBasedStatusBarAppearance`
+is omitted from `Info.plist` so UIKit 27 does not assert on the deprecated
+`-[UIApplication statusBarStyle]`; and `g_needs_render` from the UI thread
+(safe-area insets, keyboard frame, picker results) is polled by PHP's
+window loop (`myphp_ios_take_needs_render`). `navigationBar` and `tabView`
+zero the safe-area edges they consume so a nested `safeArea()` does not
+pad for them a second time, and `Route::title` triggers another build pass
+when it changes a page's title so a `navigationBar` built above
+`Router::view` shows the title on the first frame.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

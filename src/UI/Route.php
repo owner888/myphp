@@ -99,7 +99,10 @@ final class Route
     /** Names the page: screen readers read it as the page shows, and the history buttons list it; inside a layout, the title of the page inside names the entry. */
     public function title(string $title): void
     {
-        $this->entry->title = $title;
+        if ($this->entry->title !== $title) {
+            $this->entry->title = $title;
+            $this->router->titleChanged();
+        }
     }
 
     /**

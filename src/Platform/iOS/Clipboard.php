@@ -4,18 +4,12 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
-use MyPHP\Native\ObjC;
+use MyPHP\Native\iOS;
 use MyPHP\Platform;
 use MyPHP\Transfer\Data;
 
 final class Clipboard implements Platform\Clipboard
 {
-    private function pasteboard(): object
-    {
-        ObjC::boot(['UIKit']);
-        return ObjC::cls('UIPasteboard')->msg('generalPasteboard');
-    }
-
     public function readData(array $formats): Data
     {
         $d = new Data();
@@ -45,16 +39,19 @@ final class Clipboard implements Platform\Clipboard
 
     public function readText(): string
     {
-        $pb = $this->pasteboard();
-        $str = $pb->msg('string');
-        return $str !== null ? (string)ObjC::string($str) : '';
+        $f = iOS::ffi();
+        $p = $f->myphp_ios_clipboard_get_text();
+        if ($p === null) {
+            return '';
+        }
+        $text = \FFI::string($p);
+        $f->myphp_ios_free_string($p);
+        return $text;
     }
 
     public function writeText(string $text): void
     {
-        $pb = $this->pasteboard();
-        $nsStr = ObjC::str($text);
-        $pb->msg('setString:', $nsStr);
+        iOS::ffi()->myphp_ios_clipboard_set_text($text);
     }
 
     public function readHTML(): string

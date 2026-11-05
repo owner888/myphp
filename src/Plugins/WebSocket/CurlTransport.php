@@ -35,6 +35,7 @@ final class CurlTransport implements Transport
         // A PHP int goes to the variadic setopt as a 64-bit integer, libcurl's long.
         $f->curl_easy_setopt($this->h, Curl::OPT_URL, $url);
         \MyPHP\Native\NetProxy::apply($this->h, $url); // the system's proxy
+        \MyPHP\Native\Curl::trust($this->h); // what it trusts: the phones' bundle
         $f->curl_easy_setopt($this->h, Curl::OPT_CONNECT_ONLY, 1);
         $f->curl_easy_setopt($this->h, Curl::OPT_NOSIGNAL, 1);
         $f->curl_easy_setopt($this->h, Curl::OPT_PROTOCOLS_STR, 'http,https');

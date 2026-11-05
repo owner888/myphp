@@ -599,6 +599,8 @@ final class Metal
     private array $backdropSize = [0, 0, 0];
     /** @var array<int, string> each view's drawable size as its last frame drew it: a frame for a new size presents with the transaction */
     private array $drawn = [];
+    /** @var array<int, true> views adopted from another thread (iOS): their layer is the UI thread's */
+    private array $adopted = [];
     private $blurParams;
     private $queue;
     private $pipeline;
@@ -833,6 +835,33 @@ final class Metal
         return $view;
     }
 
+    /**
+     * Takes an MTKView made elsewhere (the iOS launcher's) to draw in with
+     * render(): set up as createView sets one, but with no delegate and no
+     * display link of its own — on a phone PHP's own thread draws each frame
+     * as the backend's run loop asks, the view's display link being the UI
+     * thread's.
+     */
+    public function adopt($view): void
+    {
+        $this->adopted[ObjC::addr($view)] = true;
+        ObjC::msg('v:p', $view, 'setDevice:', $this->device);
+        ObjC::msg('v:b', $view, 'setPaused:', true);
+        ObjC::msg('v:b', $view, 'setEnableSetNeedsDisplay:', false);
+        ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_BGRA8);
+        ObjC::msg('v:b', $view, 'setFramebufferOnly:', false); // the glass reads a copy of the drawable
+    }
+
+    /** Draws a frame of an adopted view now, on the calling thread, from the ring's list $fill fills; presented as createView's frames are. */
+    public function render($view, Closure $fill): void
+    {
+        $list = $this->lists[$this->frame % self::RING];
+        $list->reset(); $list->zoom = 1.0;
+        $fill($list);
+        $this->present($view, $list);
+        $this->frame++;
+    }
+
     /** Sets what the view clears to before each frame. */
     public static function setClearColor($view, int $rgb, float $alpha = 1.0): void
     {
@@ -1030,12 +1059,14 @@ final class Metal
         // (MTKView sets its layer from its own property) before it hands out the drawable, which presents as set then.
         $ds = ObjC::msg('z:', $view, 'drawableSize');
         $size = "{$ds->w}x{$ds->h}";
-        $sync = ($this->drawn[ObjC::addr($view)] ?? '') !== $size;
-        $this->drawn[ObjC::addr($view)] = $size;
-        ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setPresentsWithTransaction:', $sync);
+        $key = ObjC::addr($view);
+        $sync = ($this->drawn[$key] ?? '') !== $size;
+        $this->drawn[$key] = $size;
+        if (!isset($this->adopted[$key])) {
+            ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setPresentsWithTransaction:', $sync);
+        }
         $list->showWide($this->useWide($view, $list)); // its wide colors, as its drawables show them
         $this->viewUniforms($view, $list);
-        $key = ObjC::addr($view);
         $damage = self::$damage[$key] ??= new FrameDamage();
         if ($sync) { self::letGo($key); } // a new size: new drawables, drawn whole
         $canvases = $this->imagesTexture !== null ? CanvasAtlas::take() : [];
@@ -1146,7 +1177,9 @@ final class Metal
         $this->uniforms[0] = $bounds->w / $list->zoom;
         $this->uniforms[1] = $bounds->h / $list->zoom;
         $window = ObjC::msg('p:', $view, 'window');
-        $this->uniforms[4] = ($window === null ? $this->uniforms[5] : ObjC::msg('d:', $window, 'backingScaleFactor')) * $list->zoom;
+        // the pixels a point takes: the window's backing scale (AppKit); a UIWindow has none, the view's content scale says (UIKit)
+        $scale = $window === null ? $this->uniforms[5] : (ObjC::msg('b:p', $window, 'respondsToSelector:', ObjC::sel('backingScaleFactor')) ? ObjC::msg('d:', $window, 'backingScaleFactor') : ObjC::msg('d:', $view, 'contentScaleFactor'));
+        $this->uniforms[4] = $scale * $list->zoom;
     }
 
     /** $list drawn on a texture of $view's drawable's size, read back. */

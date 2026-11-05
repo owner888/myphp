@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
-use MyPHP\Native\ObjC;
+use MyPHP\Native\iOS;
 use MyPHP\Platform;
 
 final class Power implements Platform\Power
@@ -48,10 +48,6 @@ final class Power implements Platform\Power
 
     private function updateScreenState(): void
     {
-        ObjC::boot(['UIKit']);
-        $app = ObjC::cls('UIApplication')?->msg('sharedApplication');
-        if ($app !== null) {
-            $app->msg('setIdleTimerDisabled:', $this->keepAwakeCount > 0);
-        }
+        iOS::ffi()->myphp_ios_set_idle_timer_disabled($this->keepAwakeCount > 0 ? 1 : 0);
     }
 }

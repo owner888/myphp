@@ -2825,6 +2825,14 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   underlined (`TextState::setMarked`), a backspace edits the composition,
   and the candidate chosen commits as typed text. No caret geometry: the
   candidates sit over the keyboard.
+- **`tabView($items, &$index, $content)`**: SwiftUI's TabView with the
+  sidebarAdaptable style — the tabs where Apple puts them, by the screen
+  being touched and the window's size (`tabsPlacement()`): a `tabBar`
+  across the bottom on a phone (a touch screen under 600 by 500 points,
+  either way round), a `segmented` of the labels across the top on a
+  tablet upright (iPadOS's), a `sidebar` of the items on a tablet on its
+  side and on the desktop. The content builds its own `navigationBar` and
+  `safeArea`; with the tabs across the top, the top inset is theirs.
 - **`tabBar($items, &$index)`**: UITabBar's — 49 points (the hairline
   above it included) over the safe area's bottom, which it fills; items
   of a 25-point icon over a 10-point label, in the accent when chosen,

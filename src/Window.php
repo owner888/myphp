@@ -260,7 +260,7 @@ final class Window
                 [$w, $h] = [$width / $z, $height / $z];
                 $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
                 $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
-                $c->safeArea = array_map(fn(float $v): float => $v / $z, $this->native->safeAreaInsets()); $c->keyboard = $this->native->keyboardHeight() / $z; // the mobile platforms' bars and keyboard
+                $c->windowSafeArea = $c->safeArea = array_map(fn(float $v): float => $v / $z, $this->native->safeAreaInsets()); $c->keyboard = $this->native->keyboardHeight() / $z; // the mobile platforms' bars and keyboard
                 $c->vibrancy = $this->native->hasVibrancy(); // a popover draws its material
                 $this->runtime->systemMaterials = $this->native->hasSystemMaterials(); // else Node::systemMaterial draws myphp's
                 ($content->view)($c);

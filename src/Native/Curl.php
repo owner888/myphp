@@ -49,7 +49,7 @@ final class Curl
     public const OPT_URL = 10002, OPT_WRITEFUNCTION = 20011, OPT_HEADERFUNCTION = 20079, OPT_HTTPHEADER = 10023,
         OPT_CUSTOMREQUEST = 10036, OPT_POSTFIELDS = 10015, OPT_POSTFIELDSIZE_LARGE = 30120, OPT_FOLLOWLOCATION = 52,
         OPT_MAXREDIRS = 68, OPT_NOBODY = 44, OPT_NOSIGNAL = 99, OPT_PROTOCOLS_STR = 10318, OPT_REDIR_PROTOCOLS_STR = 10319,
-        OPT_ACCEPT_ENCODING = 10102, OPT_POST = 47, OPT_CONNECT_ONLY = 141, OPT_HTTPPROXYTUNNEL = 61, OPT_USERAGENT = 10018;
+        OPT_ACCEPT_ENCODING = 10102, OPT_POST = 47, OPT_CONNECT_ONLY = 141, OPT_HTTPPROXYTUNNEL = 61, OPT_USERAGENT = 10018, OPT_CAINFO = 10065;
     public const INFO_RESPONSE_CODE = 0x200002, INFO_EFFECTIVE_URL = 0x100001, INFO_REDIRECT_COUNT = 0x200014;
     public const MSG_DONE = 1;
     /** CURLE_TOO_MANY_REDIRECTS. */
@@ -58,6 +58,23 @@ final class Curl
     public const E_AGAIN = 81;
 
     private static ?FFI $ffi = null;
+
+    /**
+     * What handle $h trusts: on the phones the bundle of certificates the launcher names in SSL_CERT_FILE (Android's
+     * system store written out by the activity, curl's cacert.pem in the iOS app), since the OpenSSL in the app has no
+     * trust store of its own; the desktop's libcurl trusts the system's.
+     */
+    public static function trust(CData $h): void
+    {
+        if (!App::isAndroid() && !App::isIOS()) {
+            return;
+        }
+        $file = (string)getenv('SSL_CERT_FILE');
+        if ($file === '' || !is_file($file)) {
+            throw new RuntimeException("no CA bundle to trust: SSL_CERT_FILE is '$file'");
+        }
+        self::ffi()->curl_easy_setopt($h, self::OPT_CAINFO, $file);
+    }
 
     /** The list of request headers $headers (name => value), owned (curl_slist_free_all it once its transfer ended); null for none. @param array<string, string> $headers */
     public static function headers(array $headers): ?CData

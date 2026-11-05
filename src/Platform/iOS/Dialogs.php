@@ -42,7 +42,7 @@ final class Dialogs implements Platform\Dialogs
             foreach ($buttons as $i => $btn) {
                 $keep[] = $buf = $f->new('char[' . (strlen($btn) + 1) . ']');
                 \FFI::memcpy($buf, $btn, strlen($btn));
-                $btnArray[$i] = \FFI::cast('char*', \FFI::addr($buf));
+                $btnArray[$i] = $f->cast('char*', \FFI::addr($buf));
             }
         }
 
@@ -91,7 +91,7 @@ final class Dialogs implements Platform\Dialogs
         foreach ($ext as $i => $e) {
             $keep[] = $buf = $f->new('char[' . (strlen($e) + 1) . ']');
             \FFI::memcpy($buf, $e, strlen($e));
-            $arr[$i] = \FFI::cast('char*', \FFI::addr($buf));
+            $arr[$i] = $f->cast('char*', \FFI::addr($buf));
         }
         $f->myphp_ios_pick_files(\FFI::addr($arr[0]), $n, $o->multiple ? 1 : 0, $photos ? 1 : 0, $id);
         $buf = $f->new('char[65536]');

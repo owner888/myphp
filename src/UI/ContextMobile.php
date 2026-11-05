@@ -20,6 +20,81 @@ trait ContextMobile
     /** What actionSheet returns in the frame its cancel button, a tap outside or Escape closes it, choosing no action. */
     public const SHEET_DISMISSED = -2;
 
+    /** Where tabView put its tabs: across the bottom (a phone), across the top (a tablet upright), as a sidebar (a tablet on its side, the desktop). */
+    public const TABS_BOTTOM = 'bottom', TABS_TOP = 'top', TABS_SIDEBAR = 'sidebar';
+
+    /**
+     * The tabs of an app, placed as Apple places them (SwiftUI's TabView
+     * with the sidebarAdaptable style): a tab bar across the bottom on a
+     * phone — a touch screen of compact width or height, under 600 by 500
+     * points — the tabs across the top, as iPadOS's, on a tablet held
+     * upright, and a sidebar on a tablet on its side and on the desktop.
+     * $items are [SVG icon, label] pairs; $content builds the page of tab
+     * $index, told the placement too, and builds its own navigationBar and
+     * safeArea inside (tabView takes the safe area's top itself when the
+     * tabs are across the top). Fills what holds it; changed() reports a
+     * tab chosen. tabsPlacement() tells the placement alone.
+     * @param list<array{0: SVG, 1: string}> $items @param Closure(int, string): void $content
+     */
+    public function tabView(array $items, int &$index, Closure $content): Node
+    {
+        $t = $this->theme;
+        $index = max(0, min($index, count($items) - 1));
+        $where = $this->tabsPlacement();
+        if ($where === self::TABS_BOTTOM) {
+            $bottom = $this->safeArea[2];
+            $n = $this->column(0, 0, 1)->fill();
+              $this->safeArea[2] = 0.0; // the tabBar takes the bottom safe area below the page
+              $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
+                $content($index, $where);
+              $this->end();
+              $this->safeArea[2] = $bottom;
+              $bar = $this->tabBar($items, $index);
+              if ($bar->changed) { $n->changed = true; }
+            $this->end();
+            return $n;
+        }
+        if ($where === self::TABS_TOP) {
+            $top = $this->safeArea[0];
+            $n = $this->column(0, 0, 1)->fill();
+              $this->row(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 44 + $top)->padding($top, 16, 0, 16)->alignItems(Node::CENTER)->justify(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
+                $seg = $this->segmented(array_map(static fn(array $it): string => $it[1], $items), $index);
+                if ($seg->changed) { $n->changed = true; }
+              $this->end();
+              $this->safeArea[0] = 0.0; // the tabs took the top: the page's navigationBar sits under them
+              $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
+                $content($index, $where);
+              $this->end();
+              $this->safeArea[0] = $top;
+            $this->end();
+            return $n;
+        }
+        $n = $this->row(0, 0, 1)->fill()->alignItems(Node::STRETCH);
+          $selected = (string)$index;
+          $side = $this->sidebar($selected, function () use ($items): void {
+              foreach ($items as $i => [$icon, $label]) { $this->sidebarItem((string)$i, $label, $icon); }
+          });
+          $side->padding($t->space(2.5) + $this->safeArea[0], $t->space(2.5), $t->space(2.5) + $this->safeArea[2], $t->space(2.5) + $this->safeArea[3]); // its own padding, and the safe area it fills
+          if ($side->changed) { $index = (int)$selected; $n->changed = true; }
+          $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
+            $content($index, $where);
+          $this->end();
+        $this->end();
+        return $n;
+    }
+
+    /** Where tabView puts the tabs for this window (TABS_BOTTOM, TABS_TOP, TABS_SIDEBAR): by the screen being touched and the window's size. */
+    public function tabsPlacement(): string
+    {
+        if (!($this->runtime?->touch ?? false)) {
+            return self::TABS_SIDEBAR;
+        }
+        if ($this->width < 600 || $this->height < 500) {
+            return self::TABS_BOTTOM;
+        }
+        return $this->width < $this->height ? self::TABS_TOP : self::TABS_SIDEBAR;
+    }
+
     /**
      * A column of what $fn builds kept out of the safe area: padded by
      * the system's bars and the cutout on each side, and at the bottom
@@ -82,6 +157,7 @@ trait ContextMobile
     {
         $t = $this->theme;
         $top = $this->safeArea[0];
+        $this->safeArea[0] = 0.0; // the bar took the top: a safeArea() built below it starts at the bar's bottom
         $n = $this->row(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 44 + $top)->padding($top, 8, 0, 8)->alignItems(Node::CENTER)
             ->borderWidth(0, 0, 1, 0)->borderColor($t->border)->role(Role::TOOLBAR);
           // the leading third, the title and the trailing third share the width, so the title centers in the bar
@@ -124,7 +200,7 @@ trait ContextMobile
         $this->overlay(function () use (&$back, &$panel, $t, $rt, $fn): void {
             $back = $this->key('sheet')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->block();
             $back->alpha = 0.4;
-              $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($this->height - $this->safeArea[0] - 10)->role(Role::DIALOG);
+              $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($this->height - $this->windowSafeArea[0] - 10)->role(Role::DIALOG);
               $h = $rt?->rectOf($panel->id)[3] ?? 0.0;
               $p = $this->animate($panel, 'rise', 1, 0.35);
               $panel->translate(0, (1 - $p) * $h); // rises from below the window
@@ -132,7 +208,7 @@ trait ContextMobile
                 $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                   $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
                 $this->end();
-                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding(16, 16, 16 + $this->safeArea[2], 16);
+                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding(16, 16, 16 + $this->windowSafeArea[2], 16);
                   $fn();
                 $this->end();
               $this->end();
@@ -168,7 +244,7 @@ trait ContextMobile
         $this->overlay(function () use (&$back, &$panel, &$cancel, &$chosen, $t, $rt, $title, $actions): void {
             $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->block();
             $back->alpha = 0.4;
-              $panel = $this->column(0, 8)->alignSelf(Node::STRETCH)->padding(0, 8, 8 + $this->safeArea[2], 8)->role(Role::MENU)->label($title);
+              $panel = $this->column(0, 8)->alignSelf(Node::STRETCH)->padding(0, 8, 8 + $this->windowSafeArea[2], 8)->role(Role::MENU)->label($title);
               $h = $rt?->rectOf($panel->id)[3] ?? 0.0;
               $p = $this->animate($panel, 'rise', 1, 0.35);
               $panel->translate(0, (1 - $p) * $h);

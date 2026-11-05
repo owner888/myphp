@@ -83,6 +83,8 @@ final class Backend implements Platform\Backend
             $fn();
         }
 
+        \MyPHP\Native\CurlLoop::pollSockets(); // the transfers' sockets: no loop of the system's watches them for PHP here
+
         // Process native events
         $f = Android::ffi();
         $ev = $this->event ??= $f->new('MyphpEvent');

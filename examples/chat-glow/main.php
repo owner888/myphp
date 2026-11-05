@@ -20,7 +20,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Animation, ConicGradient, Content, Context, Cursor, GradientStop, Key, ListState, Node, Painter, Path, Span, TextState, Theme};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 // THINK_TIME is how long the assistant thinks before it writes, in
 // seconds, and WORDS_PER_SECOND how fast it writes.

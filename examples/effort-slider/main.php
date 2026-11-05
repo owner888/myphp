@@ -17,7 +17,7 @@ use MyPHP\Text\Glyph;
 use MyPHP\UI\{Content, Context, Image, LinearGradient, Node, Painter, Path, TextStyle};
 use MyPHP\UI\Svg\Path as SvgPath;
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 // The window shows the demo's frame: the card a little above the middle.
 const WINDOW_W = 472;
