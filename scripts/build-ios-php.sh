@@ -5,15 +5,19 @@ set -euo pipefail
 # Part of myphp iOS platform toolchain.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/ios"
+# MYPHP_IOS_SDK=iphonesimulator builds the simulator's runtime (build/ios-simulator), the device's by default (build/ios)
+IOS_SDK="${MYPHP_IOS_SDK:-iphoneos}"
+BUILD_DIR="${ROOT_DIR}/build/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
 SYSROOT="${BUILD_DIR}/sysroot"
 PHP_BUILD_DIR="${BUILD_DIR}/php-build"
 PHP_SRC_DIR="${ROOT_DIR}/build/android/php-8.3.16"
 
-SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
-IOS_TARGET="arm64-apple-ios16.0"
+SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
+IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator)"
+OPENSSL_TARGET="$([ "$IOS_SDK" = iphonesimulator ] && echo iossimulator-arm64-xcrun || echo ios64-xcrun)"
 OPENSSL_VERSION="3.4.1"
 CURL_VERSION="8.12.1"
+LIBXML2_VERSION="2.13.6"
 
 echo "==> Using iOS SDK: ${SDK_PATH}"
 echo "==> Target Architecture: ${IOS_TARGET}"
@@ -21,8 +25,8 @@ echo "==> Target Architecture: ${IOS_TARGET}"
 mkdir -p "${BUILD_DIR}" "${SYSROOT}/lib" "${SYSROOT}/include"
 
 export PATH="/opt/homebrew/opt/bison/bin:/opt/homebrew/bin:${PATH}"
-export CC="$(xcrun --sdk iphoneos -f clang)"
-export CXX="$(xcrun --sdk iphoneos -f clang++)"
+export CC="$(xcrun --sdk "$IOS_SDK" -f clang)"
+export CXX="$(xcrun --sdk "$IOS_SDK" -f clang++)"
 export AR="ar"
 export RANLIB="ranlib"
 
@@ -36,9 +40,9 @@ if [ ! -f "${SYSROOT}/lib/libffi.a" ]; then
     if [ ! -f "${ROOT_DIR}/build/android/libffi-src/configure" ]; then
         (cd "${ROOT_DIR}/build/android/libffi-src" && ./autogen.sh)
     fi
-    mkdir -p "${ROOT_DIR}/build/android/libffi-src/build-ios-arm64"
-    cd "${ROOT_DIR}/build/android/libffi-src/build-ios-arm64"
-    ../configure \
+    mkdir -p "${BUILD_DIR}/libffi-build"
+    cd "${BUILD_DIR}/libffi-build"
+    "${ROOT_DIR}/build/android/libffi-src/configure" \
         --host=arm64-apple-darwin \
         --prefix="${SYSROOT}" \
         --enable-static \
@@ -63,7 +67,7 @@ if [ ! -f "${SYSROOT}/lib/libssl.a" ]; then
     rm -rf "openssl-${OPENSSL_VERSION}"
     tar -xzf "openssl-${OPENSSL_VERSION}.tar.gz"
     cd "openssl-${OPENSSL_VERSION}"
-    ./Configure ios64-xcrun --prefix="${SYSROOT}" --libdir=lib no-shared no-tests no-apps no-docs no-async \
+    ./Configure "$OPENSSL_TARGET" --prefix="${SYSROOT}" --libdir=lib no-shared no-tests no-apps no-docs no-async \
         CC="${CC}" CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC"
     make -j8 build_libs
     make install_dev
@@ -88,6 +92,7 @@ if [ ! -f "${SYSROOT}/lib/libcurl.a" ]; then
         --without-libpsl --without-libidn2 --without-brotli --without-zstd --without-nghttp2 --without-librtmp \
         --disable-manual --disable-docs \
         CC="${CC}" CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -I${SYSROOT}/include" \
+        CPPFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -I${SYSROOT}/include" \
         LDFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -L${SYSROOT}/lib" \
         PKG_CONFIG_PATH="${SYSROOT}/lib/pkgconfig"
     make -j8
@@ -95,6 +100,27 @@ if [ ! -f "${SYSROOT}/lib/libcurl.a" ]; then
 fi
 
 # 3. Configure & Build PHP embed static library
+# libxml2, static: PHP's xml, xmlreader, xmlwriter, dom and simplexml (UI\Svg reads SVG with XMLReader)
+if [ ! -f "${SYSROOT}/lib/libxml2.a" ]; then
+    echo "==> Preparing libxml2 ${LIBXML2_VERSION} for iOS..."
+    cd "${BUILD_DIR}"
+    if [ ! -f "libxml2-${LIBXML2_VERSION}.tar.xz" ]; then
+        curl -L -o "libxml2-${LIBXML2_VERSION}.tar.xz" "https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-${LIBXML2_VERSION}.tar.xz"
+    fi
+    rm -rf "libxml2-${LIBXML2_VERSION}"
+    tar -xf "libxml2-${LIBXML2_VERSION}.tar.xz"
+    cd "libxml2-${LIBXML2_VERSION}"
+    ./configure \
+        --host=arm64-apple-darwin \
+        --prefix="${SYSROOT}" \
+        --enable-static --disable-shared \
+        --without-python --without-lzma --without-zlib --without-iconv --without-icu --without-http --without-debug \
+        CC="${CC}" CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC" \
+        CPPFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH}"
+    make -j8
+    make install
+fi
+
 # The PHP source, shared with the Android build
 if [ ! -f "${PHP_SRC_DIR}/configure" ]; then
     mkdir -p "${ROOT_DIR}/build/android"
@@ -117,9 +143,11 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
     export CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -DDARWIN -DBIND_8_COMPAT -I${SYSROOT}/include"
     export CXXFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -DDARWIN -DBIND_8_COMPAT -I${SYSROOT}/include"
     export LDFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -L${SYSROOT}/lib"
+    export CPPFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -I${SYSROOT}/include"
     export PKG_CONFIG_PATH="${SYSROOT}/lib/pkgconfig"
     export PKG_CONFIG="pkg-config --static" # libcurl.a's and OpenSSL's own dependencies into libphp.a's link line
     export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
+    export LIBXML_CFLAGS="-I${SYSROOT}/include/libxml2" LIBXML_LIBS="-L${SYSROOT}/lib -lxml2 -lm"
 
     if [ ! -f "Makefile" ]; then
         "${PHP_SRC_DIR}/configure" \
@@ -137,9 +165,17 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
             --disable-opcache-jit \
             --enable-mbstring \
             --disable-mbregex \
+            --enable-ctype \
+            --enable-filter \
             --with-zlib \
             --with-curl \
             --with-openssl \
+            --with-libxml \
+            --enable-dom \
+            --enable-simplexml \
+            --enable-xml \
+            --enable-xmlreader \
+            --enable-xmlwriter \
             --without-pcre-jit \
             ac_cv_type_long_double=yes \
             ac_cv_type_uid_t=yes \

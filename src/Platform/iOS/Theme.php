@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
-use MyPHP\Native\ObjC;
+use MyPHP\Native\iOS;
 use MyPHP\Platform;
 use MyPHP\ThemePreferences;
 
@@ -23,13 +23,7 @@ final class Theme implements Platform\Theme
         if ($this->source !== \MyPHP\ThemeSource::System) {
             return $this->source === \MyPHP\ThemeSource::Dark;
         }
-        ObjC::boot(['UIKit']);
-        $tc = ObjC::cls('UITraitCollection')?->msg('currentTraitCollection');
-        if ($tc !== null) {
-            $style = (int)$tc->msg('userInterfaceStyle');
-            return $style === 2; // UIUserInterfaceStyleDark
-        }
-        return false;
+        return iOS::ffi()->myphp_ios_is_dark() === 1; // the view's trait collection, kept by the launcher
     }
 
     public function accentColor(): array

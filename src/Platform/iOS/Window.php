@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
-use MyPHP\Native\iOS;
+use MyPHP\Native\{iOS, Metal, ObjC};
 use MyPHP\Platform;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
 use MyPHP\UI\{DisplayList, Image, TextInputRange, TextState};
@@ -33,6 +33,8 @@ final class Window implements Platform\Window
     /** @var list<array{0: int, 1: float, 2: float}> */
     private array $touchHistory = [];
     private bool $keyboardVisible = false;
+    private $view = null;
+    private ?Metal $metal = null;
     private int $wakeId = 0;
 
     public function __construct(
@@ -71,6 +73,11 @@ final class Window implements Platform\Window
     {
         $this->frame = $frame;
         $this->afterPresent = $afterPresent;
+        // the launcher's MTKView, drawn by the one Metal renderer from PHP's thread (Metal::render), each frame the run loop asks for
+        $this->view = ObjC::import(iOS::ffi()->myphp_ios_get_view());
+        $this->metal = Backend::metal();
+        $this->metal->adopt($this->view);
+        Metal::setClearColor($this->view, App::theme()->background);
         $this->requestFrame();
     }
 
@@ -97,17 +104,21 @@ final class Window implements Platform\Window
             $iev = $f->new('MyphpInputEvent');
             while ($f->myphp_ios_poll_input_event(\FFI::addr($iev)) > 0) {
                 if ((int)$iev->type === 0) {
-                    $str = \FFI::string(\FFI::cast('char*', \FFI::addr($iev->text)));
+                    $str = \FFI::string($iev->text);
                     $this->onImeCommit($str);
                 } elseif ((int)$iev->type === 1) {
                     $this->onBackspace();
                 } elseif ((int)$iev->type === 2) {
-                    $this->onImeCompose(\FFI::string(\FFI::cast('char*', \FFI::addr($iev->text))));
+                    $this->onImeCompose(\FFI::string($iev->text));
                 }
             }
 
             if ($f->myphp_ios_poll_theme_changed() > 0) {
                 $this->b->theme()->notifyChanged();
+                $this->requestFrame();
+            }
+
+            if ($f->myphp_ios_take_needs_render() > 0) {
                 $this->requestFrame();
             }
         } catch (\Throwable $e) {
@@ -323,10 +334,18 @@ final class Window implements Platform\Window
         }
         $this->asked = false;
 
-        $dl = new DisplayList();
-        ($this->frame)($dl, $this->width, $this->height, $this->scale);
+        $this->metal->setDark(App::theme()->dark);
+        Metal::setClearColor($this->view, App::theme()->background);
+        $this->metal->render($this->view, function (DisplayList $list): void {
+            $bounds = ObjC::msg('r:', $this->view, 'bounds');
+            ($this->frame)($list, (float)$bounds->w, (float)$bounds->h);
+        });
         if ($this->afterPresent !== null) {
             ($this->afterPresent)();
+        }
+        $this->w->runtime?->framePresented();
+        if (iOS::ffi()->myphp_ios_take_needs_render() > 0) {
+            $this->requestFrame();
         }
 
         // Manage soft keyboard visibility

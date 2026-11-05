@@ -12,6 +12,7 @@ PHP_VERSION="8.3.16"
 LIBFFI_TAG="v3.4.6"
 OPENSSL_VERSION="3.4.1"
 CURL_VERSION="8.12.1"
+LIBXML2_VERSION="2.13.6"
 ANDROID_API=31
 
 # Detect NDK
@@ -120,7 +121,28 @@ if [ ! -f "${SYSROOT}/lib/libcurl.so" ]; then
     echo "==> curl installed to $SYSROOT"
 fi
 
-# 4. Build PHP
+# 4. Build libxml2, static: PHP's xml, xmlreader, xmlwriter, dom and simplexml (UI\Svg reads SVG with XMLReader)
+if [ ! -f "${SYSROOT}/lib/libxml2.a" ]; then
+    echo "==> Preparing libxml2 ${LIBXML2_VERSION}..."
+    cd "$BUILD_DIR"
+    if [ ! -f "libxml2-${LIBXML2_VERSION}.tar.xz" ]; then
+        curl -L -o "libxml2-${LIBXML2_VERSION}.tar.xz" "https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-${LIBXML2_VERSION}.tar.xz"
+    fi
+    rm -rf "libxml2-${LIBXML2_VERSION}"
+    tar -xf "libxml2-${LIBXML2_VERSION}.tar.xz"
+    cd "libxml2-${LIBXML2_VERSION}"
+    export CFLAGS="-fPIC -O2"
+    ./configure \
+        --host=aarch64-linux-android \
+        --prefix="$SYSROOT" \
+        --enable-static --disable-shared \
+        --without-python --without-lzma --without-zlib --without-iconv --without-icu --without-http --without-debug
+    make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+    make install
+    echo "==> libxml2 installed to $SYSROOT"
+fi
+
+# 5. Build PHP
 PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"
 # Built again when this script changed since (an extension added, as curl was): the one stamp of what libphp has.
 if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so" ]; then
@@ -141,6 +163,7 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN'"
     export LIBS=""
     export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
+    export LIBXML_CFLAGS="-I${SYSROOT}/include/libxml2" LIBXML_LIBS="-L${SYSROOT}/lib -lxml2 -lm"
 
     echo "==> Configuring PHP..."
     ./configure \
@@ -164,12 +187,12 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
         --without-pear \
         --disable-mbregex \
         --without-iconv \
-        --without-libxml \
-        --disable-dom \
-        --disable-simplexml \
-        --disable-xml \
-        --disable-xmlreader \
-        --disable-xmlwriter \
+        --with-libxml \
+        --enable-dom \
+        --enable-simplexml \
+        --enable-xml \
+        --enable-xmlreader \
+        --enable-xmlwriter \
         --disable-phar \
         --disable-fileinfo \
         ac_cv_func_strlcpy=yes \

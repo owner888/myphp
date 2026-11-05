@@ -9,7 +9,7 @@ declare(strict_types=1);
 use MyPHP\{App, Document, Documents, DocumentsOptions, DocumentType, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Node, TextState};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 function note(Context $c, Document $doc, TextState $text): void
 {

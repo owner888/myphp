@@ -10,7 +10,7 @@ declare(strict_types=1);
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, ListState, Menu, Node, Selection, SVG, TextState};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 $s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'when' => new DateTimeImmutable('today 09:30'), 'color' => 0x3b82f6, 'alpha' => 1.0, 'name' => new TextState, 'size' => 1, 'notify' => true, 'resetting' => false, 'mail' => true, 'calendar' => false, 'crumb' => 3, 'steps' => ['Plan', 'Design', 'Build', 'Test', 'Ship'], 'stepList' => new ListState, 'last' => 'nothing yet'];
 $s['stepList']->selected = -1; $s['stepList']->selection = new Selection; $s['stepList']->key = function (int $i) use (&$s) { return $s['steps'][$i]; }; // the choice follows the steps as they move (by reference: an arrow function would keep the steps as they were)

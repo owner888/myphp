@@ -153,6 +153,7 @@ final class Http
             $set = fn(int $opt, mixed $v) => $f->curl_easy_setopt($h, $opt, $v);
             $set(Curl::OPT_URL, $url);
             \MyPHP\Native\NetProxy::apply($h, $url); // the system's proxy
+            \MyPHP\Native\Curl::trust($h); // what it trusts: the phones' bundle
             $set(Curl::OPT_NOSIGNAL, 1);
             $set(Curl::OPT_PROTOCOLS_STR, 'http,https');
             $set(Curl::OPT_REDIR_PROTOCOLS_STR, 'http,https');

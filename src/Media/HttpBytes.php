@@ -243,6 +243,7 @@ final class HttpBytes implements Bytes, CacheMember
         $set = fn(int $opt, mixed $v) => $f->curl_easy_setopt($easy, $opt, $v);
         $set(Curl::OPT_URL, $this->url);
         \MyPHP\Native\NetProxy::apply($easy, $this->url); // the system's proxy
+        \MyPHP\Native\Curl::trust($easy); // what it trusts: the phones' bundle
         $set(Curl::OPT_NOSIGNAL, 1);
         $set(Curl::OPT_PROTOCOLS_STR, 'http,https');
         $set(Curl::OPT_REDIR_PROTOCOLS_STR, 'http,https');

@@ -241,6 +241,12 @@ final class Router
         $this->rt?->changed();
     }
 
+    /** @internal asks for another pass of the frame when a Route's title changes after navigationBar read it */
+    public function titleChanged(): void
+    {
+        $this->rt?->changed();
+    }
+
     /** Whether a link's target is a path within the app, as "/notes/42", "edit" or "?tab=info", rather than a URL with a scheme. */
     public static function isPath(string $target): bool
     {

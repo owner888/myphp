@@ -12,7 +12,7 @@ use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, ListState, Node, ScrollState, TextState};
 use MyPHP\UI\Markdown\{Markdown, Options};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 /** The notes folder: files, the chosen one, its text in the editor, and saving. */
 final class Notes

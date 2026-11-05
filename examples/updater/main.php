@@ -16,7 +16,7 @@ use MyPHP\Plugins\Updater\{Options, Release, Updater};
 use MyPHP\Plugins\Updater\Native\Native;
 use MyPHP\UI\{Content, Context};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 App::setName('Updater Demo');
 $native = in_array('--native', $argv, true);

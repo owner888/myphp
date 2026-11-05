@@ -10,7 +10,7 @@ declare(strict_types=1);
 use MyPHP\{ActivationPolicy, App, Clipboard, CloseEvent, Menu, MenuItem, Point, QuitEvent, Screen, Tray, TrayOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, Handle, Key, TextState};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 /** A PNG of 32 × 32 pixels, black in the rectangles [x0, y0, x1, y1], transparent elsewhere, for macOS to tint as a template. */
 function trayIcon(array $rects): string

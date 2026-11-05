@@ -11,7 +11,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Player, Sound};
 use MyPHP\UI\{Content, Context, InputEvent, Key, Node, Painter, Theme};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 /** The keyboard spans three octaves, C3 to C6, in MIDI note numbers. */
 const LOWEST = 48;

@@ -61,7 +61,7 @@ final class Dialogs implements Platform\Dialogs
                 $len = strlen($btn) + 1;
                 $buf = $f->new("char[$len]");
                 \FFI::memcpy($buf, $btn, strlen($btn));
-                $btnArray[$i] = \FFI::cast('char*', \FFI::addr($buf));
+                $btnArray[$i] = $f->cast('char*', \FFI::addr($buf));
             }
         }
 
@@ -107,7 +107,7 @@ final class Dialogs implements Platform\Dialogs
         foreach ($types as $i => $t) {
             $keep[] = $buf = $f->new('char[' . (strlen($t) + 1) . ']');
             \FFI::memcpy($buf, $t, strlen($t));
-            $arr[$i] = \FFI::cast('char*', \FFI::addr($buf));
+            $arr[$i] = $f->cast('char*', \FFI::addr($buf));
         }
         $f->myphp_pick_files(\FFI::addr($arr[0]), $n, $o->multiple ? 1 : 0, $photos ? 1 : 0, $id);
         $answer = $this->waitFiles($id);

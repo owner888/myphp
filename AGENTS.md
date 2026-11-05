@@ -31,6 +31,10 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
     them takes another's state. Put it in a container of its own, or key what follows it.
 14. **Logs go through `MyPHP\Logger` at their level** (the developer's rule): `verbose` (step by step), `debug` (what it did), `warn` (went on
     without something), `error` (failed), with a subsystem; never `error_log`/`echo`/`fwrite(STDERR)`. Dev apps log debug up, `myphp build` warn up.
+15. **Mobile widgets, which mygo has none of** (the developer's rule): written as the desktop's — immediate mode, a value's state as `&$ref`,
+    a lifetime's as a State object (TextState, ListState), `changed()`/`dismissed()` to report — named and sized after UIKit and the HIG;
+    a notion Apple has no name for takes Flutter's (`safeArea`); never a Flutter `Scaffold`/`AppBar`/`SnackBar`-style API. Each goes in
+    `docs/mygo-deviations.md`; docs/mobile.md maps SwiftUI's and Flutter's names to them, for anyone (an agent) coming from either.
 
 ## What this is
 
@@ -186,14 +190,5 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 
 ## Roadmap
 
-Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
-focus (ring on keyboard focus only), shortcuts, single-line fields with
-input methods; App/Window, menus, dialogs (sheets), pages with IPC + TS
-client; virtualized lists with scroll bars, glides, keys and selection;
-text areas (wrapping, undo, caret blink); theme; images (paged atlas);
-rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
-radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
-sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
-Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
-events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left; inspector; audio; mygo's element and layout API; widgets and context; app, page, menus, web views in native UI.
-Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; what building real apps turns up (see examples/logview, notes, photos, http).
+Done: everything mygo has on macOS (the README's table), Android and iOS (docs/mobile.md).
+Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; images decoded on Android; prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).

@@ -10,13 +10,15 @@ APP_NAME="${3:-MyphpApp}"
 OUT_DIR="${4:-dist/ios}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/ios"
+# MYPHP_IOS_SDK=iphonesimulator packages for the simulator (its runtime under build/ios-simulator), a device by default
+IOS_SDK="${MYPHP_IOS_SDK:-iphoneos}"
+BUILD_DIR="${ROOT_DIR}/build/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
 SYSROOT="${BUILD_DIR}/sysroot"
 PHP_BUILD="${BUILD_DIR}/php-build"
 PHP_SRC="${ROOT_DIR}/build/android/php-8.3.16"
 
-SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
-IOS_TARGET="arm64-apple-ios16.0"
+SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
+IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator)"
 
 echo "==> Packaging iOS App: ${APP_NAME} (${BUNDLE_ID})"
 echo "==> Entry file: ${ENTRY}"
@@ -30,7 +32,7 @@ mkdir -p "${APP_DIR}"
 
 # 2. Compile launcher binary
 echo "==> Compiling native iOS launcher..."
-xcrun --sdk iphoneos clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -fobjc-arc \
+xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -fobjc-arc \
     -I"${PHP_BUILD}" \
     -I"${PHP_BUILD}/main" \
     -I"${PHP_BUILD}/Zend" \
@@ -44,7 +46,7 @@ xcrun --sdk iphoneos clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -fo
     "${BUILD_DIR}/libs/libphp.a" \
     "${SYSROOT}/lib/libffi.a" \
     -Wl,-force_load,"${SYSROOT}/lib/libcurl.a" \
-    "${SYSROOT}/lib/libssl.a" "${SYSROOT}/lib/libcrypto.a" \
+    "${SYSROOT}/lib/libssl.a" "${SYSROOT}/lib/libcrypto.a" "${SYSROOT}/lib/libxml2.a" \
     -lz -lm -lresolv \
     -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore -framework UserNotifications -framework Network -framework Security -framework WebKit -framework AudioToolbox -framework PhotosUI -framework UniformTypeIdentifiers \
     -o "${APP_DIR}/${APP_NAME}"
@@ -73,6 +75,23 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>MyphpSceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>arm64</string>
@@ -84,8 +103,6 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
         <string>UIInterfaceOrientationLandscapeLeft</string>
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
-    <key>UIViewControllerBasedStatusBarAppearance</key>
-    <false/>
 </dict>
 </plist>
 PLIST

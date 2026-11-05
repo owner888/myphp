@@ -9,7 +9,7 @@ declare(strict_types=1);
 use MyPHP\{App, Event, Ipc, WebView, WebViewOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, Node};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 const ZOOMS = ['75%' => 0.75, '100%' => 1.0, '125%' => 1.25, '150%' => 1.5];
 const MENU = ['Like the note', 'Open the dialog', 'Show a toast'];

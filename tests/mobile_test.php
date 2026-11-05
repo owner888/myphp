@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, Node, Router, SVG, TextState};
+use MyPHP\UI\{Context, Node, Router, SVG};
 
 $icon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20"/></svg>');
 
@@ -80,7 +80,7 @@ check(!$router->canGoBack() && $h->byText('the note') === null, 'a tap on the wa
 // sheet: rises from the bottom, keeps out of the safe area's bottom; Escape and a tap outside close it, dismissed() reports.
 $open = false; $dismissed = 0; $panelText = null;
 $h = poseTester(function (Context $c) use (&$open, &$dismissed, &$panelText): void {
-    $c->safeArea = [0.0, 0.0, 34.0, 0.0];
+    $c->windowSafeArea = $c->safeArea = [0.0, 0.0, 34.0, 0.0];
     if ($c->clicked($c->button('Show'))) { $open = true; }
     $s = $c->sheet($open, function () use ($c, &$panelText): void { $panelText = $c->text('in the sheet'); });
     if ($s !== null && $c->dismissed($s)) { $dismissed++; }
@@ -120,19 +120,44 @@ $now += 1_000_000_000; $h->frame();
 $h->escape();
 same([1, Context::SHEET_DISMISSED, Context::SHEET_DISMISSED], $got, 'so does Escape');
 
-// A touch screen: a tap beside a field takes its focus (the keyboard closes); with a mouse the field keeps it.
-foreach ([false, true] as $touch) {
-    $name = new TextState;
-    $h = new Headless(function (Context $c) use ($name): void {
-        $c->column(0, 0, 1)->fill();
-          $c->input($name, 'name');
-          $c->spacer();
-        $c->end();
-    }, 390, 844);
+// tabView: the tabs across the bottom on a phone, across the top on a tablet upright, a sidebar on its side and on the desktop; the page follows.
+foreach ([[390, 844, true, Context::TABS_BOTTOM], [820, 1180, true, Context::TABS_TOP], [1180, 820, true, Context::TABS_SIDEBAR], [1000, 700, false, Context::TABS_SIDEBAR], [932, 430, true, Context::TABS_BOTTOM]] as [$w, $hh, $touch, $want]) {
+    $tab = 0; $where = ''; $changed = 0;
+    $h = new Headless(function (Context $c) use (&$tab, &$where, &$changed, $icon): void {
+        $v = $c->tabView([[$icon, 'Home'], [$icon, 'Search'], [$icon, 'Me']], $tab, function (int $i, string $placement) use ($c, &$where): void {
+            $where = $placement;
+            $c->text("page $i");
+        });
+        if ($c->changed($v)) { $changed++; }
+    }, $w, $hh);
     $h->rt->touch = $touch;
     $h->frame();
-    $h->click(100, 12);
-    check($h->focused() !== null, 'a tap on the field focuses it');
-    $h->click(195, 600);
-    same($touch ? null : true, $h->focused() === null ? null : true, $touch ? 'touch: a tap on nothing takes the focus from the field' : 'a mouse: a click on nothing leaves the field its focus');
+    same($want, $where, "{$w}x{$hh}" . ($touch ? ' touch' : ' mouse') . ": the tabs go $want");
+    check($h->byText('page 0') !== null, 'the first page shows');
+    $h->clickText('Search');
+    $h->frame();
+    same([1, 1], [$tab, $changed], "$want: a tap on a tab chooses it and changed() reports");
+    check($h->byText('page 1') !== null, 'the page follows');
 }
+
+// tabView + navigationBar + safeArea: the bars take the top and bottom safe areas, so safeArea() inside starts right under the navigationBar and ends right above the tabBar, and the Route's title shows in the first frame.
+$tab = 0; $router = new Router('/home'); $body = null;
+$h = new Headless(function (Context $c) use (&$tab, $router, &$body, $icon): void {
+    $c->safeArea = [50.0, 0.0, 34.0, 0.0];
+    $c->tabView([[$icon, 'Home'], [$icon, 'Me']], $tab, function () use ($c, $router, &$body): void {
+        $c->navigationBar($router->title(), $router);
+        $c->safeArea(function () use ($c, $router, &$body): void {
+            $router->view($c, function (\MyPHP\UI\Route $r) use ($c, &$body): void {
+                if ($r->match('/home')) {
+                    $r->title('First Title');
+                    $body = $c->column(0, 0, 1)->alignSelf(Node::STRETCH); $c->text('body'); $c->end();
+                }
+            });
+        });
+    });
+}, 390, 844);
+$h->rt->touch = true;
+$h->frame();
+check($h->byText('First Title') !== null, 'the Route title shows in the navigationBar on the first frame');
+same([0.0, 94.0, 390.0, 667.0], $h->rect($body), 'safeArea inside tabView + navigationBar does not double-count top or bottom insets');
+

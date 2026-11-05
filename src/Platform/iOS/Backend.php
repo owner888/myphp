@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Platform\iOS;
 
 use Closure;
-use MyPHP\Native\{CoreText, ObjC};
+use MyPHP\Native\{CoreText, iOS, ObjC};
 use MyPHP\Platform;
 use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler};
 
@@ -76,14 +76,16 @@ final class Backend implements Platform\Backend
         }
         $this->timers = $remaining;
 
+        \MyPHP\Native\CurlLoop::pollSockets(); // the transfers' sockets: no loop of the system's watches them for PHP here
+
         // Poll native touch events
         $this->mainWindow?->pollEvents();
 
         // Poll external deep link URLs
         $f = \MyPHP\Native\iOS::ffi();
         $urlBuf = $f->new('char[512]');
-        while ($f->myphp_ios_poll_open_url(\FFI::cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
-            $urlStr = \FFI::string(\FFI::cast('char*', \FFI::addr($urlBuf)));
+        while ($f->myphp_ios_poll_open_url($f->cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
+            $urlStr = \FFI::string($urlBuf);
             if ($urlStr !== '') {
                 $this->h->openURLs([$urlStr]);
             }
@@ -146,14 +148,23 @@ final class Backend implements Platform\Backend
         throw new Platform\Unsupported('Tray is not supported on iOS');
     }
 
+    private static ?\MyPHP\Native\Metal $metal = null;
+
+    /** The one Metal renderer, with the text's atlases, as Darwin's. */
+    public static function metal(): \MyPHP\Native\Metal
+    {
+        if (self::$metal === null) {
+            $text = \MyPHP\App::text();
+            self::$metal = new \MyPHP\Native\Metal();
+            self::$metal->attachAtlas($text->atlas, $text->scale());
+            self::$metal->attachImages($text->images);
+        }
+        return self::$metal;
+    }
+
     public function fonts(): Platform\Fonts
     {
-        if ($this->fonts === null) {
-            $mainScreen = ObjC::cls('UIScreen')?->msg('mainScreen');
-            $scale = $mainScreen !== null ? max(1.0, (float)$mainScreen->msg('scale')) : 3.0;
-            $this->fonts = new CoreText($scale);
-        }
-        return $this->fonts;
+        return $this->fonts ??= new CoreText(max(1.0, (float)iOS::ffi()->myphp_ios_get_screen_scale()));
     }
 
     public function rescaled(float $scale): void

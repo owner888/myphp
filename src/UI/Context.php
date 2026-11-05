@@ -74,6 +74,8 @@ final class Context
     public array $titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
     /** The safe area on the mobile platforms: how far from the window's top, right, bottom and left edges the system's bars, the cutout and the home indicator reach (zeros on the desktop); safeArea() keeps content out of it, a tabBar or navigationBar extends into it. Not mygo's. */
     public array $safeArea = [0.0, 0.0, 0.0, 0.0];
+    /** The window's safe area as the system gives it, which $safeArea starts as each frame: a navigationBar or tabView takes its edge off $safeArea for what it builds below, while an overlay (sheet, actionSheet) keeps out of the window's own. Not mygo's. */
+    public array $windowSafeArea = [0.0, 0.0, 0.0, 0.0];
     /** How high the software keyboard stands over the window's bottom edge; 0 while hidden, and on the desktop. Not mygo's. */
     public float $keyboard = 0.0;
 

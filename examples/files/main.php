@@ -12,7 +12,7 @@ declare(strict_types=1);
 use MyPHP\{App, Menu, MenuItem, Shell, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, GridState, Image, Key, ListState, Node, Selection, SVG, TableColumn, TextState};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 /** The folder shown: its entries, how they are shown and chosen, the find bar. */
 final class Files

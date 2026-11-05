@@ -12,7 +12,7 @@ declare(strict_types=1);
 use MyPHP\{App, CloseEvent, Dialog, FileDropEvent, FileFilter, GlobalShortcut, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, SaveDialogOptions, Tray, TrayOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Context};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
 $s = ['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null];
 $log = function (string $line) use (&$s) { $s['log'][] = $line; $s['window']?->invalidate(); };
