@@ -41,7 +41,10 @@ import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 import android.os.ParcelUuid;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -159,6 +162,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         }, new IntentFilter("com.owner888.myphp.IME_COMMIT"), Context.RECEIVER_EXPORTED);
 
         copyAssetsToFilesDir();
+        writeCaCertificates(new File(getFilesDir(), "cacerts.pem"));
 
         DisplayMetrics dm = getResources().getDisplayMetrics();
         float density = dm.density;
@@ -166,6 +170,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         File filesDir = getFilesDir();
         File cacheDir = getCacheDir();
         nativeInit(filesDir.getAbsolutePath(), cacheDir.getAbsolutePath(), density);
+        registerBack();
     }
 
     @Override
@@ -190,35 +195,81 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         notifyConfiguration(null);
     }
 
+    // The system's Back goes to PHP (Window::back: the keyboard, then a dialog, then the page, then
+    // the app ends); on API 33+ through OnBackInvokedDispatcher, which the predictive gesture needs
+    // (android:enableOnBackInvokedCallback in the manifest), before that through onBackPressed.
+    private void registerBack() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> nativeBack());
+        }
+    }
+
     @Override
     public void onBackPressed() {
-        if (surfaceView != null) {
-            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm != null && imm.isAcceptingText()) {
-                imm.hideSoftInputFromWindow(surfaceView.getWindowToken(), 0);
-                return;
-            }
+        if (Build.VERSION.SDK_INT >= 33) {
+            super.onBackPressed();
+            return;
         }
-        super.onBackPressed();
+        nativeBack();
+    }
+
+    /** PHP's run loop ended (App::quit, or Back at the first page): the activity goes. */
+    public static void finishActivity() {
+        if (sInstance != null) {
+            sInstance.runOnUiThread(() -> sInstance.finish());
+        }
     }
 
     private void notifyConfiguration(WindowInsets windowInsets) {
         boolean isDark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        int top = 0, bottom = 0, left = 0, right = 0;
-        if (windowInsets != null) {
-            Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
-            top = insets.top;
-            bottom = insets.bottom;
-            left = insets.left;
-            right = insets.right;
-        } else if (surfaceView != null && surfaceView.getRootWindowInsets() != null) {
-            Insets insets = surfaceView.getRootWindowInsets().getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
-            top = insets.top;
-            bottom = insets.bottom;
-            left = insets.left;
-            right = insets.right;
+        if (windowInsets == null && surfaceView != null) {
+            windowInsets = surfaceView.getRootWindowInsets();
         }
-        nativeConfigurationChanged(isDark, top, bottom, left, right);
+        int top = 0, bottom = 0, left = 0, right = 0, keyboard = 0;
+        if (windowInsets != null) {
+            // the safe area (status and navigation bars, the cutout) apart from the keyboard: a tab bar
+            // extends into the first, what the keyboard covers moves for the second (Context::$safeArea, $keyboard)
+            Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            top = insets.top;
+            bottom = insets.bottom;
+            left = insets.left;
+            right = insets.right;
+            keyboard = windowInsets.getInsets(WindowInsets.Type.ime()).bottom;
+        }
+        nativeConfigurationChanged(isDark, top, bottom, left, right, keyboard);
+    }
+
+    /**
+     * The certificates the system trusts (its own and the user's), as one PEM file for the app's
+     * OpenSSL (libcurl.so, PHP's openssl): the launcher sets SSL_CERT_FILE to it. Written at every
+     * start, so that a certificate added or revoked since shows; a failure is a failure, HTTPS would
+     * trust nothing.
+     */
+    private void writeCaCertificates(File out) {
+        try {
+            java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidCAStore");
+            ks.load(null, null);
+            StringBuilder pem = new StringBuilder();
+            java.util.Enumeration<String> aliases = ks.aliases();
+            while (aliases.hasMoreElements()) {
+                java.security.cert.Certificate c = ks.getCertificate(aliases.nextElement());
+                if (c == null) continue;
+                pem.append("-----BEGIN CERTIFICATE-----\n");
+                pem.append(android.util.Base64.encodeToString(c.getEncoded(), android.util.Base64.NO_WRAP));
+                pem.append("\n-----END CERTIFICATE-----\n");
+            }
+            File tmp = new File(out.getPath() + ".tmp");
+            try (FileOutputStream os = new FileOutputStream(tmp)) {
+                os.write(pem.toString().getBytes("UTF-8"));
+            }
+            if (!tmp.renameTo(out)) {
+                throw new IOException("cannot rename " + tmp + " to " + out);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "writeCaCertificates", e);
+            throw new RuntimeException("writing the CA certificates failed: " + e, e);
+        }
     }
 
     private void copyAssetsToFilesDir() {
@@ -550,6 +601,120 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         });
     }
 
+    // Dialog::open and Dialog::save (see src/Platform/Android/Dialogs.php): the system's document
+    // picker (SAF), or the photo picker when every type asked for is an image or a video. What is
+    // chosen is copied into the cache under its own name, as iOS's picker does, and the paths go to
+    // PHP one per line; "" when the user cancelled, "!message" when it failed. A saved file is
+    // /proc/self/fd/N of the descriptor SAF opened, which PHP writes through.
+    private static final int REQUEST_PICK_FILES = 0x4d50;
+    private static final int REQUEST_SAVE_FILE = 0x4d51;
+    private static int sFilesCallbackId = 0;
+
+    public static void pickFiles(String[] mimeTypes, boolean multiple, boolean photos, int callbackId) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            Intent intent;
+            if (photos && Build.VERSION.SDK_INT >= 33) {
+                intent = new Intent(MediaStore.ACTION_PICK_IMAGES);
+                if (multiple) {
+                    intent.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, MediaStore.getPickImagesMaxLimit());
+                }
+                if (mimeTypes.length == 1) {
+                    intent.setType(mimeTypes[0]); // "image/*" or "video/*"; both: unset, the picker shows both
+                }
+            } else {
+                // API 31–32 have no photo picker: the document picker, limited to the image and video types
+                intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                if (mimeTypes.length > 0) {
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+                }
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, multiple);
+            }
+            sFilesCallbackId = callbackId;
+            try {
+                sInstance.startActivityForResult(intent, REQUEST_PICK_FILES);
+            } catch (Exception e) {
+                Log.e(TAG, "pickFiles", e);
+                nativeFilesResult(callbackId, "!" + e);
+            }
+        });
+    }
+
+    public static void saveFile(String mimeType, String name, int callbackId) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType(mimeType.isEmpty() ? "application/octet-stream" : mimeType);
+            if (!name.isEmpty()) {
+                intent.putExtra(Intent.EXTRA_TITLE, name);
+            }
+            sFilesCallbackId = callbackId;
+            try {
+                sInstance.startActivityForResult(intent, REQUEST_SAVE_FILE);
+            } catch (Exception e) {
+                Log.e(TAG, "saveFile", e);
+                nativeFilesResult(callbackId, "!" + e);
+            }
+        });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_PICK_FILES && requestCode != REQUEST_SAVE_FILE) return;
+        int callbackId = sFilesCallbackId;
+        if (resultCode != RESULT_OK || data == null) {
+            nativeFilesResult(callbackId, "");
+            return;
+        }
+        try {
+            if (requestCode == REQUEST_SAVE_FILE) {
+                ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(data.getData(), "rwt");
+                nativeFilesResult(callbackId, "/proc/self/fd/" + pfd.detachFd());
+                return;
+            }
+            java.util.List<Uri> uris = new java.util.ArrayList<>();
+            ClipData clip = data.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount(); i++) uris.add(clip.getItemAt(i).getUri());
+            } else if (data.getData() != null) {
+                uris.add(data.getData());
+            }
+            File dir = new File(getCacheDir(), "open/" + callbackId);
+            dir.mkdirs();
+            StringBuilder out = new StringBuilder();
+            for (Uri uri : uris) {
+                File f = new File(dir, displayName(uri));
+                try (InputStream in = getContentResolver().openInputStream(uri);
+                     OutputStream os = new FileOutputStream(f)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+                }
+                if (out.length() > 0) out.append('\n');
+                out.append(f.getAbsolutePath());
+            }
+            nativeFilesResult(callbackId, out.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "onActivityResult", e);
+            nativeFilesResult(callbackId, "!" + e);
+        }
+    }
+
+    private String displayName(Uri uri) {
+        try (android.database.Cursor c = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                String name = c.getString(0);
+                if (name != null && !name.isEmpty()) return name.replace('/', '_');
+            }
+        }
+        String last = uri.getLastPathSegment();
+        return last == null ? "file" : last.replace('/', '_').replace(':', '_');
+    }
+
     private static final String NOTIF_CHANNEL_ID = "myphp_notifications";
 
     public static void showNotification(String title, String body, int id) {
@@ -848,6 +1013,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
                     sAclConnectSeq++;
                     nativeSignal();
+                } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
+                    Log.i(TAG, "ACTION_ACL_DISCONNECTED: addr=" + dev.getAddress());
+                    btDisconnect();
+                    nativeSignal();
                 } else if (BluetoothDevice.ACTION_UUID.equals(action)) {
                     nativeSignal();
                 }
@@ -864,6 +1033,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             filter.addAction(BluetoothDevice.ACTION_FOUND);
             filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
             filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+            filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
             filter.addAction(BluetoothDevice.ACTION_UUID);
             sInstance.registerReceiver(sBtReceiver, filter, Context.RECEIVER_EXPORTED);
 
@@ -1068,6 +1238,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         String buildId = Build.ID != null ? Build.ID : "";
         boolean perm = hasBluetoothPermissions();
         boolean btOn = false;
+        boolean aclConnected = false;
         String bondedMac = "";
         String bondedName = "";
         String localMac = "";
@@ -1113,6 +1284,13 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                             if (hasAacp || dName.toLowerCase().contains("airpods")) {
                                 bondedMac = dev.getAddress();
                                 bondedName = dName;
+                                try {
+                                    java.lang.reflect.Method isConn = dev.getClass().getMethod("isConnected");
+                                    Object r = isConn.invoke(dev);
+                                    if (r instanceof Boolean) {
+                                        aclConnected = (Boolean) r;
+                                    }
+                                } catch (Exception ignored) {}
                                 break;
                             }
                             if (bondedMac.isEmpty()) {
@@ -1138,6 +1316,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             + "|rssi=" + sLastBleRssi
             + "|audio=" + (sLocalAudioPlaying ? "1" : "0")
             + "|audioSeq=" + sAudioStartSeq
+            + "|acl=" + (aclConnected ? "1" : "0")
             + "|aclSeq=" + sAclConnectSeq
             + "|connecting=" + (sL2capConnecting ? "1" : "0")
             + "|pair=" + sPairState.replace("|", " ")
@@ -1222,8 +1401,15 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "btConnectL2capSocket async error", e);
-                sL2capConnecting = false;
                 sLastBtError = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "connect failed");
+            } finally {
+                sL2capConnecting = false;
+                if (sBtSocket == socket) {
+                    sBtSocket = null;
+                }
+                try {
+                    socket.close();
+                } catch (Exception ignored) {}
                 nativeSignal();
             }
         }, "MyPHP-AACP-Reader");
@@ -1258,6 +1444,8 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             return true;
         } catch (Exception e) {
             sLastBtError = "L2CAP send failed: " + e.getMessage();
+            btDisconnect();
+            nativeSignal();
             return false;
         }
     }
@@ -1281,8 +1469,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeKeyEvent(int keyCode, int action, int unicodeChar);
     private static native void nativePause();
     private static native void nativeResume();
-    private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight);
+    private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight, int keyboard);
     private static native void nativeDialogResult(int callbackId, int buttonIndex);
+    private static native void nativeFilesResult(int callbackId, String paths);
+    private static native void nativeBack();
     private static native void nativeOnWebMessage(int pageId, String message);
     private static native void nativeSignal();
 }

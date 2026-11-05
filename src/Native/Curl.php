@@ -5,6 +5,7 @@ namespace MyPHP\Native;
 
 use FFI;
 use FFI\CData;
+use MyPHP\App;
 use RuntimeException;
 
 /**
@@ -66,15 +67,24 @@ final class Curl
         return $list;
     }
 
-    /** libcurl: the system's, /usr/lib/libcurl.4.dylib on macOS. */
+    /**
+     * libcurl: the system's, /usr/lib/libcurl.4.dylib on macOS, libcurl.so.4 on Linux; on Android the
+     * APK's own libcurl.so (scripts/build-android-php.sh), on iOS the one linked into the app, whose
+     * symbols the process has (scripts/build-ios-php.sh, package-ios-app.sh).
+     */
     public static function ffi(): FFI
     {
         if (self::$ffi === null) {
-            $lib = PHP_OS_FAMILY === 'Darwin' ? '/usr/lib/libcurl.4.dylib' : 'libcurl.so.4';
+            $lib = match (true) {
+                App::isIOS() => null,
+                App::isAndroid() => 'libcurl.so',
+                PHP_OS_FAMILY === 'Darwin' => '/usr/lib/libcurl.4.dylib',
+                default => 'libcurl.so.4',
+            };
             try {
-                self::$ffi = FFI::cdef(self::CDEF, $lib);
+                self::$ffi = $lib === null ? FFI::cdef(self::CDEF) : FFI::cdef(self::CDEF, $lib);
             } catch (\FFI\Exception $e) {
-                throw new RuntimeException("cannot load $lib: {$e->getMessage()}");
+                throw new RuntimeException('cannot load ' . ($lib ?? 'libcurl (the app\'s own)') . ": {$e->getMessage()}");
             }
         }
         return self::$ffi;

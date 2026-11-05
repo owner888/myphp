@@ -23,14 +23,12 @@ final class Theme implements Platform\Theme
         if ($this->source !== \MyPHP\ThemeSource::System) {
             return $this->source === \MyPHP\ThemeSource::Dark;
         }
-        try {
-            ObjC::boot(['UIKit']);
-            $tc = ObjC::cls('UITraitCollection')?->msg('currentTraitCollection');
-            if ($tc !== null) {
-                $style = (int)$tc->msg('userInterfaceStyle');
-                return $style === 2; // UIUserInterfaceStyleDark
-            }
-        } catch (\Throwable $e) {}
+        ObjC::boot(['UIKit']);
+        $tc = ObjC::cls('UITraitCollection')?->msg('currentTraitCollection');
+        if ($tc !== null) {
+            $style = (int)$tc->msg('userInterfaceStyle');
+            return $style === 2; // UIUserInterfaceStyleDark
+        }
         return false;
     }
 

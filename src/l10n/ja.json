@@ -143,6 +143,7 @@
   "untitled": "名称未設定",
   "untitledNumbered": "名称未設定 {n, number, ::group-off}",
   "cancel": "キャンセル",
+  "back": "戻る",
   "save": "保存",
   "saveEllipsis": "保存…",
   "saveAs": "別名で保存…",

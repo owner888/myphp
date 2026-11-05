@@ -36,6 +36,9 @@ final class iOS
             void myphp_ios_haptic_feedback(int style);
             void myphp_ios_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             int myphp_ios_get_dialog_result(int callback_id);
+            void myphp_ios_pick_files(const char **extensions, int count, int multiple, int photos, int callback_id);
+            int myphp_ios_take_files_result(int callback_id, char *out, int max_len);
+            float myphp_ios_get_keyboard_height(void);
             void myphp_ios_show_notification(const char *title, const char *body, const char *identifier);
             void myphp_ios_remove_notification(const char *identifier);
             void myphp_ios_remove_all_notifications(void);
@@ -50,7 +53,8 @@ final class iOS
             void myphp_ios_load_html(int page_id, const char *html, const char *base_url);
             void myphp_ios_eval_js(int page_id, const char *script);
             void myphp_ios_place_web_view(int page_id, float x, float y, float w, float h, int visible);
-            int myphp_ios_poll_web_message(int *out_page_id, char *out_buf, int max_len);
+            char *myphp_ios_poll_web_message(int *out_page_id);
+            void myphp_ios_free_web_message(char *msg);
             void myphp_ios_show_keyboard(void);
             void myphp_ios_hide_keyboard(void);
         ");

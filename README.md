@@ -340,7 +340,7 @@ styling, motion and drawing, with examples that run (`tests/docs_examples_test.p
 side: [the app](docs/app.md), [windows](docs/windows.md), [menus](docs/menus.md), [desktop APIs](docs/native.md),
 [bindings](docs/bindings.md), [the frontend](docs/frontend.md), [clipboard and drag data](docs/data-transfer.md),
 [languages](docs/i18n.md), [the CLI](docs/cli.md), [configuration](docs/configuration.md),
-[building and distributing](docs/distribution.md). Plugins: [fetch](docs/plugins/fetch.md),
+[building and distributing](docs/distribution.md), [Android and iOS](docs/mobile.md). Plugins: [fetch](docs/plugins/fetch.md),
 [SQLite](docs/plugins/sqlite.md), [watch](docs/plugins/watch.md), [WebSocket](docs/plugins/websocket.md),
 [updater](docs/plugins/updater.md), [loading](docs/plugins/loading.md), [glass](docs/plugins/glass.md),
 [game](docs/plugins/game.md), [terminal](docs/plugins/terminal.md), [automation](docs/automation.md).
@@ -691,7 +691,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 示例都能运行（`tests/docs_examples_test.php` 会构建它们）。应用侧：[应用](docs/app.md)、[窗口](docs/windows.md)、
 [菜单](docs/menus.md)、[桌面 API](docs/native.md)、[绑定](docs/bindings.md)、[前端](docs/frontend.md)、
 [剪贴板与拖拽数据](docs/data-transfer.md)、[多语言](docs/i18n.md)、[命令行](docs/cli.md)、[配置](docs/configuration.md)、
-[构建与分发](docs/distribution.md)。插件：[fetch](docs/plugins/fetch.md)、[SQLite](docs/plugins/sqlite.md)、
+[构建与分发](docs/distribution.md)、[Android 与 iOS](docs/mobile.md)。插件：[fetch](docs/plugins/fetch.md)、[SQLite](docs/plugins/sqlite.md)、
 [watch](docs/plugins/watch.md)、[WebSocket](docs/plugins/websocket.md)、[updater](docs/plugins/updater.md)、
 [loading](docs/plugins/loading.md)、[glass](docs/plugins/glass.md)、[game](docs/plugins/game.md)、
 [terminal](docs/plugins/terminal.md)、[automation](docs/automation.md)。

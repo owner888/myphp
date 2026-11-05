@@ -10,18 +10,16 @@ final class Shell implements Platform\Shell
 {
     public function openExternal(string $url): void
     {
-        try {
-            ObjC::boot(['UIKit']);
-            $app = ObjC::cls('UIApplication')?->msg('sharedApplication');
-            if ($app === null) {
-                return;
-            }
-            $nsUrl = ObjC::cls('NSURL')?->msg('URLWithString:', ObjC::str($url));
-            if ($nsUrl !== null) {
-                $emptyDict = ObjC::cls('NSDictionary')?->msg('dictionary');
-                $app->msg('openURL:options:completionHandler:', $nsUrl, $emptyDict, null);
-            }
-        } catch (\Throwable $e) {}
+        ObjC::boot(['UIKit']);
+        $app = ObjC::cls('UIApplication')?->msg('sharedApplication');
+        if ($app === null) {
+            return;
+        }
+        $nsUrl = ObjC::cls('NSURL')?->msg('URLWithString:', ObjC::str($url));
+        if ($nsUrl !== null) {
+            $emptyDict = ObjC::cls('NSDictionary')?->msg('dictionary');
+            $app->msg('openURL:options:completionHandler:', $nsUrl, $emptyDict, null);
+        }
     }
 
     public function showItemInFolder(string $path): void
@@ -41,9 +39,7 @@ final class Shell implements Platform\Shell
 
     public function beep(): void
     {
-        try {
-            \MyPHP\Native\iOS::ffi()->myphp_ios_haptic_feedback(0);
-        } catch (\Throwable $e) {}
+        \MyPHP\Native\iOS::ffi()->myphp_ios_haptic_feedback(0);
     }
 
     public function fileIcon(string $path, int $size): string

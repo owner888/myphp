@@ -12,6 +12,8 @@ PHP_SRC_DIR="${ROOT_DIR}/build/android/php-8.3.16"
 
 SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
 IOS_TARGET="arm64-apple-ios16.0"
+OPENSSL_VERSION="3.4.1"
+CURL_VERSION="8.12.1"
 
 echo "==> Using iOS SDK: ${SDK_PATH}"
 echo "==> Target Architecture: ${IOS_TARGET}"
@@ -28,8 +30,11 @@ export RANLIB="ranlib"
 if [ ! -f "${SYSROOT}/lib/libffi.a" ]; then
     echo "==> Preparing libffi for iOS..."
     if [ ! -d "${ROOT_DIR}/build/android/libffi-src" ]; then
-        echo "Error: libffi-src not found. Clone it first." >&2
-        exit 1
+        mkdir -p "${ROOT_DIR}/build/android"
+        git clone --depth 1 --branch v3.4.6 https://github.com/libffi/libffi.git "${ROOT_DIR}/build/android/libffi-src"
+    fi
+    if [ ! -f "${ROOT_DIR}/build/android/libffi-src/configure" ]; then
+        (cd "${ROOT_DIR}/build/android/libffi-src" && ./autogen.sh)
     fi
     mkdir -p "${ROOT_DIR}/build/android/libffi-src/build-ios-arm64"
     cd "${ROOT_DIR}/build/android/libffi-src/build-ios-arm64"
@@ -46,7 +51,64 @@ if [ ! -f "${SYSROOT}/lib/libffi.a" ]; then
     make install
 fi
 
-# 2. Configure & Build PHP embed static library
+# 2. OpenSSL and curl, static, into the app's binary (package-ios-app.sh links them): PHP's curl and openssl
+# extensions, and Native\Curl over FFI, which finds libcurl's symbols in the process. No CA bundle is built
+# in: main.m sets SSL_CERT_FILE to the app's cacert.pem, which OpenSSL's default paths honor (--with-ca-fallback).
+if [ ! -f "${SYSROOT}/lib/libssl.a" ]; then
+    echo "==> Preparing OpenSSL ${OPENSSL_VERSION} for iOS..."
+    cd "${BUILD_DIR}"
+    if [ ! -f "openssl-${OPENSSL_VERSION}.tar.gz" ]; then
+        curl -L -o "openssl-${OPENSSL_VERSION}.tar.gz" "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+    fi
+    rm -rf "openssl-${OPENSSL_VERSION}"
+    tar -xzf "openssl-${OPENSSL_VERSION}.tar.gz"
+    cd "openssl-${OPENSSL_VERSION}"
+    ./Configure ios64-xcrun --prefix="${SYSROOT}" --libdir=lib no-shared no-tests no-apps no-docs no-async \
+        CC="${CC}" CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC"
+    make -j8 build_libs
+    make install_dev
+fi
+
+if [ ! -f "${SYSROOT}/lib/libcurl.a" ]; then
+    echo "==> Preparing curl ${CURL_VERSION} for iOS..."
+    cd "${BUILD_DIR}"
+    if [ ! -f "curl-${CURL_VERSION}.tar.gz" ]; then
+        curl -L -o "curl-${CURL_VERSION}.tar.gz" "https://curl.se/download/curl-${CURL_VERSION}.tar.gz"
+    fi
+    rm -rf "curl-${CURL_VERSION}"
+    tar -xzf "curl-${CURL_VERSION}.tar.gz"
+    cd "curl-${CURL_VERSION}"
+    ./configure \
+        --host=arm64-apple-darwin \
+        --prefix="${SYSROOT}" \
+        --enable-static --disable-shared \
+        --with-openssl="${SYSROOT}" --with-zlib \
+        --with-ca-fallback --without-ca-bundle --without-ca-path \
+        --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-mqtt --disable-smb \
+        --without-libpsl --without-libidn2 --without-brotli --without-zstd --without-nghttp2 --without-librtmp \
+        --disable-manual --disable-docs \
+        CC="${CC}" CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -I${SYSROOT}/include" \
+        LDFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -L${SYSROOT}/lib" \
+        PKG_CONFIG_PATH="${SYSROOT}/lib/pkgconfig"
+    make -j8
+    make install
+fi
+
+# 3. Configure & Build PHP embed static library
+# The PHP source, shared with the Android build
+if [ ! -f "${PHP_SRC_DIR}/configure" ]; then
+    mkdir -p "${ROOT_DIR}/build/android"
+    cd "${ROOT_DIR}/build/android"
+    if [ ! -f "php-8.3.16.tar.gz" ]; then
+        curl -L -o "php-8.3.16.tar.gz" "https://www.php.net/distributions/php-8.3.16.tar.gz"
+    fi
+    tar -xzf "php-8.3.16.tar.gz"
+fi
+
+# Built again when this script changed since (an extension added, as curl was): configured anew, the one stamp of what libphp has.
+if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ "$0" -nt "${BUILD_DIR}/libs/libphp.a" ]; then
+    rm -f "${BUILD_DIR}/libs/libphp.a" "${PHP_BUILD_DIR}/Makefile"
+fi
 if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
     echo "==> Configuring PHP for iOS..."
     mkdir -p "${PHP_BUILD_DIR}"
@@ -56,6 +118,8 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
     export CXXFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -DDARWIN -DBIND_8_COMPAT -I${SYSROOT}/include"
     export LDFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -L${SYSROOT}/lib"
     export PKG_CONFIG_PATH="${SYSROOT}/lib/pkgconfig"
+    export PKG_CONFIG="pkg-config --static" # libcurl.a's and OpenSSL's own dependencies into libphp.a's link line
+    export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
 
     if [ ! -f "Makefile" ]; then
         "${PHP_SRC_DIR}/configure" \
@@ -74,6 +138,8 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
             --enable-mbstring \
             --disable-mbregex \
             --with-zlib \
+            --with-curl \
+            --with-openssl \
             --without-pcre-jit \
             ac_cv_type_long_double=yes \
             ac_cv_type_uid_t=yes \

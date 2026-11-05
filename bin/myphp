@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.172.0';
+const VERSION = '1.173.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -2434,14 +2434,27 @@ function doctor(array $args): void
     }
     $sdkOk = is_dir($androidSdk);
     $aapt2 = trim((string)@shell_exec("find '$androidSdk' -name aapt2 -type f 2>/dev/null | head -n 1"));
+    $ndk = getenv('ANDROID_NDK_HOME') ?: '';
+    if ($ndk === '' && $sdkOk) { $ndks = glob("$androidSdk/ndk/*", GLOB_ONLYDIR) ?: []; natsort($ndks); $ndk = $ndks === [] ? '' : end($ndks); }
+    $ndkOk = $ndk !== '' && is_dir("$ndk/toolchains/llvm");
     $section("Android Toolchain", [
         [$adb !== '', $adb !== '' ? "Android Debug Bridge ($adb)" : "adb not found", "Install platform-tools or add adb to PATH"],
         [$javac !== '', $javac !== '' ? "Java Development Kit ($javac)" : "JDK javac not found", "Install OpenJDK 17+ (brew install openjdk@17)"],
         [$sdkOk, $sdkOk ? "Android SDK ($androidSdk)" : "Android SDK not found", "Set ANDROID_HOME environment variable"],
         [$aapt2 !== '', $aapt2 !== '' ? "Android Build-Tools (aapt2, d8, zipalign)" : "Android Build-Tools missing", "Install build-tools via sdkmanager"],
+        [$ndkOk, $ndkOk ? "Android NDK ($ndk)" : "Android NDK not found", "Install the NDK via sdkmanager, or set ANDROID_NDK_HOME"],
     ]);
 
-    // 4. Connected Devices
+    // 4. The PHP runtime of each phone platform: built by the first myphp run or build for it (scripts/build-*-php.sh), again when its script changes
+    $androidPhp = FRAMEWORK . '/build/android/php-8.3.16/libs/libphp.so';
+    $iosPhp = FRAMEWORK . '/build/ios/libs/libphp.a';
+    $stale = fn(string $lib, string $script): bool => is_file($lib) && filemtime(FRAMEWORK . "/scripts/$script") > filemtime($lib);
+    $section("Phone runtimes (libphp with ffi, curl and openssl)", [
+        [is_file($androidPhp) && !$stale($androidPhp, 'build-android-php.sh'), is_file($androidPhp) ? ($stale($androidPhp, 'build-android-php.sh') ? 'Android: built before its script last changed' : 'Android: built') : 'Android: not built yet', 'myphp run -d android <dir> builds it (10-20 minutes the first time)'],
+        [is_file($iosPhp) && !$stale($iosPhp, 'build-ios-php.sh'), is_file($iosPhp) ? ($stale($iosPhp, 'build-ios-php.sh') ? 'iOS: built before its script last changed' : 'iOS: built') : 'iOS: not built yet', 'myphp run -d ios <dir> builds it'],
+    ]);
+
+    // 5. Connected Devices
     $devices = DeviceManager::listDevices();
     $deviceCount = count($devices);
     $deviceItems = [];

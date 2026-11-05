@@ -8,7 +8,7 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 2. No third-party packages without asking the developer; small things are written here (`composer.json`: `php`, `ext-ffi`).
 3. Git is the developer's: commit/push/tag only when the developer explicitly requests a release; change files, run checks, report which changed.
 4. Files in git never carry the developer's name: "the developer" / 「开发者」 when one is needed.
-5. GUI examples run only on the developer's Mac (ask for the output); `php -l` and pure-PHP checks run anywhere.
+5. GUI examples run only on the developer's Mac (ask for the output): `myphp run -d <platform>` for every platform, as Flutter's; `php -l` and pure-PHP checks run anywhere.
 6. Small and literal: no speculative abstractions, no silent fallbacks, no magic numbers that make a symptom go away. Unclear? Ask before changing.
 7. Delete dead code when you touch it; never comment it out.
 8. `bin/myphp` stays executable: `chmod 755 bin/myphp` after any change, checked with `ls -l` (file syncs drop the bit).
@@ -45,7 +45,9 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 ## Layout
 
 ```
-bin/myphp          CLI: init, dev (restart on change, TS client, --lang), generate, i18n check, build (.app; Linux .deb), micro,
+bin/myphp          CLI, as Flutter's, the one way to run and build on every platform: init, dev (restart on change, TS client, --lang), generate,
+                   i18n check, run -d android|ios|macos|linux (packages, installs, starts, follows the log; builds a phone's PHP runtime the
+                   first time, scripts/ are its internals, never run by hand), devices, doctor, build (.app/.dmg, .deb, APK, .ipa), micro,
                    screenshot (runs the app once: a PNG of its window, its elements; Xvfb without a display); bin/cldr-tables
 src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenURL/File, single instance, recent
                    documents, open at login), Dock, Shell, Screen, Theme, Window (+ on(event), CloseEvent, FileDropEvent,
@@ -76,7 +78,7 @@ src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + st
 src/UI/            Node, Direction, Inspector* (dev tools), Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/ (scales, plot, marks), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/decimalInput/spinner/badge/divider/spacer/input/searchField/
-                   textarea(minLines, maxLines)/image/box/list/scroll/radioGroup/editableText/shape; clicked/changed/hovered/dragged/shortcut; ->tooltip()/at()/
+                   textarea(minLines, maxLines)/image/box/list/scroll/radioGroup/editableText/shape; the phone's (ContextMobile: tabBar/navigationBar/sheet/actionSheet/safeArea; Window::back; docs/mobile.md); clicked/changed/hovered/dragged/shortcut; ->tooltip()/at()/
                    radius()/material()/alignItems()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
                    minWidth()/minHeight()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,

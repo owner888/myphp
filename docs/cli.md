@@ -178,6 +178,23 @@ myphp screenshot -data /tmp/shots -theme dark -out dark.png
 Both variables count only where the automation plugin does: in a run from
 the project's files in development (`App::isDev()`, not packaged).
 
+## myphp run
+
+`myphp run [-d device] [dir]` builds the app and runs it: on an Android
+phone over adb (the APK packaged and signed, installed, started, its log
+followed: `adb logcat -s MyPHP`), in an iOS simulator (the .app installed
+and launched), or on the desktop. `-d` takes a device id or name from
+`myphp devices`, or a platform (`android`, `ios`, `macos`, `linux`). The
+first run for a phone builds its PHP runtime (libffi, OpenSSL, libcurl,
+libphp; 10-20 minutes), built again when its build script changes; `myphp
+doctor` tells where it stands. As Flutter's `run`, it is the one way to a
+device: the scripts under `scripts/` are its internals (docs/mobile.md).
+
+## myphp devices
+
+Lists the phones connected over adb and the iOS simulators, with their ids
+and states, for `myphp run -d`.
+
 ## myphp micro
 
 Builds the static PHP (phpmicro of static-php-cli) that apps built with

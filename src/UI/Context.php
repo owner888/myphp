@@ -13,6 +13,7 @@ final class Context
     use ContextMotion;
     use ContextTransfer;
     use ContextBase;
+    use ContextMobile;
 
     public Node $root;
     /** @var Node[] */
@@ -71,6 +72,10 @@ final class Context
 
     /** The room the window controls take in a window with a hidden title bar (Window::titleBar): height, left, right; zero elsewhere. */
     public array $titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
+    /** The safe area on the mobile platforms: how far from the window's top, right, bottom and left edges the system's bars, the cutout and the home indicator reach (zeros on the desktop); safeArea() keeps content out of it, a tabBar or navigationBar extends into it. Not mygo's. */
+    public array $safeArea = [0.0, 0.0, 0.0, 0.0];
+    /** How high the software keyboard stands over the window's bottom edge; 0 while hidden, and on the desktop. Not mygo's. */
+    public float $keyboard = 0.0;
 
     /**
      * The room the window controls take in a window with a hidden title

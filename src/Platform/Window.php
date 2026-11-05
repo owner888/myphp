@@ -64,6 +64,12 @@ interface Window
     /** Whether the system draws Node::systemMaterial's materials under the content's holes; else myphp's own draws them (Node::systemMaterial). */
     public function hasSystemMaterials(): bool;
 
+    /** The safe area: how far the content keeps from the window's top, right, bottom and left edges clear of the system's bars, the cutout and the home indicator (the mobile platforms; zeros on the desktop, whose title bar titleBar() tells). @return array{0: float, 1: float, 2: float, 3: float} */
+    public function safeAreaInsets(): array;
+
+    /** How high the software keyboard stands over the window's bottom edge, in points; 0 while it is hidden, and on the desktop. */
+    public function keyboardHeight(): float;
+
     public function requestFrame(int $every = 1, bool $repaint = false): void;
 
     public function wake(float $seconds, bool $repaint): void;

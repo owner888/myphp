@@ -21,11 +21,8 @@ IOS_TARGET="arm64-apple-ios16.0"
 echo "==> Packaging iOS App: ${APP_NAME} (${BUNDLE_ID})"
 echo "==> Entry file: ${ENTRY}"
 
-# 1. Ensure libphp.a and libffi.a are present
-if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
-    echo "==> Building PHP iOS embed library first..."
-    "${ROOT_DIR}/scripts/build-ios-php.sh"
-fi
+# 1. The PHP runtime (libffi, OpenSSL, libcurl.a, libphp.a), built once, and again when its script changed
+"${ROOT_DIR}/scripts/build-ios-php.sh"
 
 APP_DIR="${OUT_DIR}/${APP_NAME}.app"
 rm -rf "${OUT_DIR}"
@@ -46,8 +43,10 @@ xcrun --sdk iphoneos clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -fo
     "${ROOT_DIR}/src/Platform/iOS/launcher/main.m" \
     "${BUILD_DIR}/libs/libphp.a" \
     "${SYSROOT}/lib/libffi.a" \
+    -Wl,-force_load,"${SYSROOT}/lib/libcurl.a" \
+    "${SYSROOT}/lib/libssl.a" "${SYSROOT}/lib/libcrypto.a" \
     -lz -lm -lresolv \
-    -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore -framework UserNotifications -framework Network -framework Security -framework WebKit -framework AudioToolbox \
+    -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore -framework UserNotifications -framework Network -framework Security -framework WebKit -framework AudioToolbox -framework PhotosUI -framework UniformTypeIdentifiers \
     -o "${APP_DIR}/${APP_NAME}"
 
 # 3. Create Info.plist
@@ -100,11 +99,18 @@ else
 fi
 cp -R "${ROOT_DIR}/src" "${APP_DIR}/src"
 
-# 5. Ad-Hoc code sign
+# 5. The CA certificates HTTPS trusts (curl's copy of Mozilla's): OpenSSL in the app has no way to the system's
+if [ ! -f "${BUILD_DIR}/cacert.pem" ]; then
+    echo "==> Fetching the CA bundle..."
+    curl -L -o "${BUILD_DIR}/cacert.pem" "https://curl.se/ca/cacert.pem"
+fi
+cp "${BUILD_DIR}/cacert.pem" "${APP_DIR}/cacert.pem"
+
+# 6. Ad-Hoc code sign
 echo "==> Code signing application..."
 codesign -s - --force --deep --timestamp=none "${APP_DIR}"
 
-# 6. Generate .ipa archive
+# 7. Generate .ipa archive
 echo "==> Packaging .ipa archive..."
 (
     cd "${OUT_DIR}"

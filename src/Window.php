@@ -5,7 +5,7 @@ namespace MyPHP;
 
 use MyPHP\Native\{FitContent, WindowStates};
 use MyPHP\Transfer\{Data, DragOptions, Format, Operation, Result};
-use MyPHP\UI\{Context, DataDragEvent, DisplayList, Image, Input, Layout, Painter, Runtime};
+use MyPHP\UI\{Context, DataDragEvent, DisplayList, Image, Input, Key, Layout, Painter, Runtime};
 use RuntimeException;
 
 /**
@@ -31,6 +31,8 @@ final class Window
     /** The limits and last size of a window that takes its page's content's (FlyoutOptions::$fitContent, WindowOptions::$fitContent), null for others. */
     private ?FitContent $fit = null;
     private bool $panel = false;
+    /** back()'s step: 1 its Escape sent, 2 its Back sent (escape()), 0 none, or taken by what it closed or moved. */
+    private int $backStage = 0;
     /** What Window::flyout hands the constructor. */
     private static ?array $creating = null;
     /** How many windows are closing their children: the last window to close is reported once they all are. */
@@ -127,6 +129,8 @@ final class Window
             };
             $this->runtime->readClipboard = fn() => App::backend()->clipboard()->readText();
             $this->runtime->escape = $this->escape(...);
+            $this->runtime->back = $this->backUntaken(...);
+            $this->runtime->touch = App::isAndroid() || App::isIOS(); // a tap beside a field closes the keyboard
             $this->runtime->requestFrame = $this->invalidate(...); // a router's page changed from outside a frame
             $this->runtime->showWindow = function (bool $on): void {
                 if (!$on) { $this->hide(); return; }
@@ -249,12 +253,14 @@ final class Window
             $this->runtime->beginRepaint();
             $root = $this->drawnRoot;
         } else {
+            $stage = $this->backStage;
             $root = $this->drawnRoot = $this->runtime->frame(function () use ($content, $text, $width, $height, $in) {
                 $in?->startPass();
                 $z = $this->runtime->frameZoom; // zoomed (Context::setZoom), laid out in a window 1/z its size
                 [$w, $h] = [$width / $z, $height / $z];
                 $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
                 $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
+                $c->safeArea = array_map(fn(float $v): float => $v / $z, $this->native->safeAreaInsets()); $c->keyboard = $this->native->keyboardHeight() / $z; // the mobile platforms' bars and keyboard
                 $c->vibrancy = $this->native->hasVibrancy(); // a popover draws its material
                 $this->runtime->systemMaterials = $this->native->hasSystemMaterials(); // else Node::systemMaterial draws myphp's
                 ($content->view)($c);
@@ -267,6 +273,7 @@ final class Window
                 return $c->root;
             });
             $this->runtime->builtAt($at);
+            if ($this->backStage === $stage) { $this->backStage = 0; } // the frame moved it on neither way: its key was taken, the Back is answered
         }
         $z = $this->runtime->frameZoom;
         if ($z !== $this->zoomDrawn) { // glyphs rasterized at the screen's scale times the zoom: as sharp as at that size
@@ -1265,6 +1272,42 @@ final class Window
     {
         if ($this->flyout !== null || $this->panel) {
             App::later($this->close(...));
+        }
+        if ($this->backStage === 1 && $this->input !== null) { // the system's Back closed nothing: the page goes back
+            $this->backStage = 2;
+            $this->input->push(['key', Key::BACK, '', 0, hrtime(true)]);
+            $this->invalidate();
+        }
+    }
+
+    /**
+     * The system's Back (Android's button or gesture; not mygo's), one step at a time: a field with the
+     * keyboard loses the focus, which closes the keyboard; else what Escape closes closes (a dialog, a
+     * popover, a menu); else the router shown goes back a page (Key::BACK); and with none of these left,
+     * the app ends, as Android's apps do at the first page.
+     */
+    public function back(): void
+    {
+        if ($this->input === null || $this->runtime === null) {
+            return;
+        }
+        if ($this->input->focus !== null || $this->input->client !== null) {
+            $this->runtime->focus = null;
+            $this->input->focus = null;
+            $this->invalidate();
+            return;
+        }
+        $this->backStage = 1;
+        $this->input->push(['key', Key::ESCAPE, '', 0, hrtime(true)]);
+        $this->invalidate();
+    }
+
+    /** A Back (Key::BACK) nothing took: the app ends when the system's Back asked for it (back()); a mouse's back button alone does nothing. */
+    private function backUntaken(): void
+    {
+        if ($this->backStage === 2) {
+            $this->backStage = 0;
+            App::later(App::quit(...));
         }
     }
 

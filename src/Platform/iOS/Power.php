@@ -48,12 +48,10 @@ final class Power implements Platform\Power
 
     private function updateScreenState(): void
     {
-        try {
-            ObjC::boot(['UIKit']);
-            $app = ObjC::cls('UIApplication')?->msg('sharedApplication');
-            if ($app !== null) {
-                $app->msg('setIdleTimerDisabled:', $this->keepAwakeCount > 0);
-            }
-        } catch (\Throwable $e) {}
+        ObjC::boot(['UIKit']);
+        $app = ObjC::cls('UIApplication')?->msg('sharedApplication');
+        if ($app !== null) {
+            $app->msg('setIdleTimerDisabled:', $this->keepAwakeCount > 0);
+        }
     }
 }

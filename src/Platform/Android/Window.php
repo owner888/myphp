@@ -7,7 +7,7 @@ use FFI;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\{Android, Gl};
 use MyPHP\Platform;
-use MyPHP\UI\{DisplayList, Image, Key};
+use MyPHP\UI\{DisplayList, Image, Key, TextInputRange, TextState};
 
 /**
  * Android Window backed by Activity SurfaceView, rendered via EGL & GLES 3.2.
@@ -282,6 +282,8 @@ final class Window implements Platform\Window
     private bool $paused = false;
     /** @var array{0: float, 1: float, 2: float, 3: float} top, bottom, left, right in points */
     private array $insets = [0.0, 0.0, 0.0, 0.0];
+    /** How high the keyboard stands over the window's bottom, in points; 0 while hidden. */
+    private float $keyboard = 0.0;
 
     public function onPause(): void
     {
@@ -297,7 +299,7 @@ final class Window implements Platform\Window
         $this->requestFrame();
     }
 
-    public function setInsets(int $topPx, int $bottomPx, int $leftPx, int $rightPx): void
+    public function setInsets(int $topPx, int $bottomPx, int $leftPx, int $rightPx, int $keyboardPx): void
     {
         $density = max(1.0, $this->density);
         $this->insets = [
@@ -306,8 +308,19 @@ final class Window implements Platform\Window
             $leftPx / $density,
             $rightPx / $density,
         ];
-        Logger::debug("Window insets updated (pt): top={$this->insets[0]}, bottom={$this->insets[1]}, left={$this->insets[2]}, right={$this->insets[3]}", 'android');
+        $this->keyboard = $keyboardPx / $density;
+        Logger::debug("Window insets updated (pt): top={$this->insets[0]}, bottom={$this->insets[1]}, left={$this->insets[2]}, right={$this->insets[3]}, keyboard={$this->keyboard}", 'android');
         $this->requestFrame();
+    }
+
+    public function safeAreaInsets(): array
+    {
+        return [$this->insets[0], $this->insets[3], $this->insets[1], $this->insets[2]];
+    }
+
+    public function keyboardHeight(): float
+    {
+        return $this->keyboard;
     }
 
     public function onFrame(): void
@@ -622,6 +635,12 @@ final class Window implements Platform\Window
             }
             $this->requestFrame();
         }
+    }
+
+    /** The system's Back (the button, the gesture): the window's chain, Window::back. */
+    public function onBack(): void
+    {
+        $this->w->back();
     }
 
     public function restoreFrame(Rectangle $r, bool $onDisplay): void {}

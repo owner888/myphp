@@ -37,9 +37,7 @@ final class Backend implements Platform\Backend
 
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
-        try {
-            ObjC::boot(['UIKit']);
-        } catch (\Throwable $e) {}
+        ObjC::boot(['UIKit']);
         $this->h->ready();
     }
 
@@ -82,35 +80,31 @@ final class Backend implements Platform\Backend
         $this->mainWindow?->pollEvents();
 
         // Poll external deep link URLs
-        try {
-            $f = \MyPHP\Native\iOS::ffi();
-            $urlBuf = $f->new('char[512]');
-            while ($f->myphp_ios_poll_open_url(\FFI::cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
-                $urlStr = \FFI::string(\FFI::cast('char*', \FFI::addr($urlBuf)));
-                if ($urlStr !== '') {
-                    $this->h->openURLs([$urlStr]);
-                }
+        $f = \MyPHP\Native\iOS::ffi();
+        $urlBuf = $f->new('char[512]');
+        while ($f->myphp_ios_poll_open_url(\FFI::cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
+            $urlStr = \FFI::string(\FFI::cast('char*', \FFI::addr($urlBuf)));
+            if ($urlStr !== '') {
+                $this->h->openURLs([$urlStr]);
             }
+        }
 
-            // Poll web view IPC messages
-            $pageId = $f->new('int');
-            $msgBuf = $f->new('char[2048]');
-            while ($f->myphp_ios_poll_web_message(\FFI::addr($pageId), \FFI::cast('char*', \FFI::addr($msgBuf)), 2048) > 0) {
-                $msgStr = \FFI::string(\FFI::cast('char*', \FFI::addr($msgBuf)));
-                Page::onWebMessage((int)$pageId->cdata, $msgStr);
-            }
-        } catch (\Throwable $e) {}
+        // Poll web view IPC messages
+        $pageId = $f->new('int');
+        while (($msg = $f->myphp_ios_poll_web_message(\FFI::addr($pageId))) !== null) { // whole, however long
+            $msgStr = \FFI::string($msg);
+            $f->myphp_ios_free_web_message($msg);
+            Page::onWebMessage((int)$pageId->cdata, $msgStr);
+        }
 
         // Process frame if requested
         $this->mainWindow?->onFrame();
 
         // Yield slightly so worker thread doesn't burn CPU
-        try {
-            if (\MyPHP\Native\iOS::ffi()->myphp_ios_is_app_paused() > 0) {
-                usleep(100000); // 100ms deep sleep while suspended in background
-                return;
-            }
-        } catch (\Throwable $e) {}
+        if (\MyPHP\Native\iOS::ffi()->myphp_ios_is_app_paused() > 0) {
+            usleep(100000); // 100ms deep sleep while suspended in background
+            return;
+        }
 
         usleep(4000); // ~4ms (250Hz max polling) while active
     }
@@ -245,27 +239,21 @@ final class Backend implements Platform\Backend
 
     public function showNotification(\MyPHP\Notification $n): void
     {
-        try {
-            iOS::ffi()->myphp_ios_show_notification(
-                $n->title,
-                $n->body,
-                $n->id !== '' ? $n->id : null
-            );
-        } catch (\Throwable $e) {}
+        iOS::ffi()->myphp_ios_show_notification(
+            $n->title,
+            $n->body,
+            $n->id !== '' ? $n->id : null
+        );
     }
 
     public function removeNotification(string $id): void
     {
-        try {
-            iOS::ffi()->myphp_ios_remove_notification($id);
-        } catch (\Throwable $e) {}
+        iOS::ffi()->myphp_ios_remove_notification($id);
     }
 
     public function removeAllNotifications(): void
     {
-        try {
-            iOS::ffi()->myphp_ios_remove_all_notifications();
-        } catch (\Throwable $e) {}
+        iOS::ffi()->myphp_ios_remove_all_notifications();
     }
 
     public function webViewAvailable(): bool
