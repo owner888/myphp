@@ -24,7 +24,7 @@ $page = function (Context $c, Route $r) use (&$pick, &$fetch): void {
         $i = $r->param('i');
         $r->title("第 $i 行");
         $c->column(16, 12, 1)->alignSelf(Node::STRETCH);
-          $c->text("这是第 $i 行的详情页让我们来试试看 hot reloahhvi。", 17);
+          $c->text("这是第 $i 行的详情页。", 17);
           $c->text('导航栏的返回、Android 的返回键和手势都回到列表，列表停在原处。', 15, $t->textMuted);
           if ($c->clicked($c->button('再推一页'))) { $this->router->push('/row/' . ((int)$i + 1)); }
         $c->end();

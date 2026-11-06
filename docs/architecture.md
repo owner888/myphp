@@ -8390,6 +8390,24 @@ pad for them a second time, and `Route::title` triggers another build pass
 when it changes a page's title so a `navigationBar` built above
 `Router::view` shows the title on the first frame.
 
+## Hot reload on the phones (v1.176)
+
+`Content::file` hot reloads a view file when the file
+`Content::hotReloadFile()` names lists it, looked at by a repeating
+`App::after` — and on the phones it never fired, for two reasons. The
+launchers run the app through an eval that first requires
+`src/autoload.php`, so neither `$_SERVER['SCRIPT_FILENAME']` nor the first
+of `get_included_files()` is `app.php`: the app looked for `.myphp-reload`
+in `src/`. The launchers now set `MYPHP_HOT_RELOAD` beside `app.php`, and
+the file's relative lines start from its own directory. And iOS's
+`Backend::step()` ran the due timers while it walked its list, then wrote
+back the list it had walked, so a timer set inside a callback (every
+repeating timer) was dropped after its first run; it now takes the due
+timers out first and runs them after, as Android's does. iOS's PHP,
+configured with `--disable-all`, also lacked the tokenizer, which
+`Content::declared()` reads a view file with (`PhpToken`):
+`build-ios-php.sh` enables it, as Android's PHP has it by default.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

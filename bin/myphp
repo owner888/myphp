@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.176.0';
+const VERSION = '1.176.1';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -137,12 +137,33 @@ function logEntry(string $line, string $platform): ?array
     return ['time' => $time, 'level' => $level, 'msg' => $msg, 'ours' => $ours];
 }
 
-/** Runs $cmd as sh() does, its output kept back: printed, its last 60 lines, only when it fails. */
+/**
+ * Runs $cmd as sh() does, its output kept back: printed, its last 60 lines, only when it fails. The steps that take
+ * minutes, which the build scripts announce ("==> Preparing OpenSSL…", "==> Configuring PHP…", "==> Compiling PHP…":
+ * a phone's PHP runtime, built once and again when its script changes), are said as they start, with the time the
+ * one before took, so that a long build is not silent.
+ */
 function quiet(array $cmd, ?string $cwd = null): int
 {
     $out = tempnam(sys_get_temp_dir(), 'myphp-');
-    $p = proc_open($cmd, [0 => ['file', 'php://stdin', 'r'], 1 => ['file', $out, 'w'], 2 => ['file', $out, 'a']], $pipes, $cwd);
+    $log = fopen($out, 'w');
+    $p = proc_open($cmd, [0 => ['file', 'php://stdin', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, $cwd);
+    $step = null;
+    $since = microtime(true);
+    while (($line = fgets($pipes[1])) !== false) {
+        fwrite($log, $line);
+        if (preg_match('/^==> ((Preparing|Configuring|Compiling PHP|Building PHP).*?)\.*\s*$/', $line, $m)) {
+            $took = $step !== null ? sprintf(' (%s took %d s)', $step, microtime(true) - $since) : ' (the phone\'s PHP runtime, built once: 10-20 minutes)';
+            logf(lcfirst($m[1]) . '…' . $took);
+            [$step, $since] = [lcfirst($m[1]), microtime(true)];
+        }
+    }
+    fclose($pipes[1]);
+    fclose($log);
     $code = proc_close($p);
+    if ($step !== null && $code === 0) {
+        logf(sprintf('%s took %d s', $step, microtime(true) - $since));
+    }
     if ($code !== 0) {
         $lines = file($out, FILE_IGNORE_NEW_LINES) ?: [];
         fwrite(STDERR, implode("\n", array_slice($lines, -60)) . "\n");
