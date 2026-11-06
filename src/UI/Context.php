@@ -2374,11 +2374,12 @@ final class Context
 
     /**
      * An item of a sidebar choosing $id, showing $label after $icon (an
-     * SVG in the accent, a glyph, or null), as mygo's SidebarItem; $trailing builds what sits at
+     * SVG in the accent, a glyph, a closure making an Image in the color it
+     * is given, a symbol, or null), as mygo's SidebarItem; $trailing builds what sits at
      * its end, a badge say. Chosen, it is the accent while the sidebar has
      * the focus and gray otherwise, as AppKit's.
      */
-    public function sidebarItem(string $id, string $label, string|SVG|null $icon = null, ?Closure $trailing = null): Node
+    public function sidebarItem(string $id, string $label, string|SVG|Closure|null $icon = null, ?Closure $trailing = null): Node
     {
         $t = $this->theme;
         $sb = &$this->sidebars[count($this->sidebars) - 1];
@@ -2392,6 +2393,7 @@ final class Context
         if (!$chosen && $this->hovered($n)) { $n->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
           if ($icon instanceof SVG) { $this->icon($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
+          elseif ($icon instanceof Closure) { $this->image($icon($chosen && $focused ? $t->accentText : $t->accent), 16, 16)->role(Role::NONE); }
           elseif ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
           $this->text($label, $t->fontSize, $fg)->singleLine();
           if ($trailing !== null) { $this->spacer(); $trailing(); }

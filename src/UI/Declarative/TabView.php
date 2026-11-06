@@ -32,7 +32,7 @@ final class TabView extends View
     {
         $index = 0;
         foreach ($this->tabs as $i => $t) { if ($t->value === $this->selection) { $index = $i; } }
-        $items = array_map(fn(Tab $t) => [$t->image, $t->title], $this->tabs);
+        $items = array_map(fn(Tab $t) => [$t->image, Localized::string($t->title, $env)], $this->tabs);
         $n = $c->tabView($items, $index, function (int $i) use ($c, $env): void {
             $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
             $c->column(0, 0, 1)->alignSelf(Node::STRETCH);

@@ -23,7 +23,24 @@ final class ListView extends View
     private ?Closure $row = null;
 
     /** @param array<mixed>|int|null $items an int $n for the rows 0 to $n - 1, as SwiftUI's List(0..<n) */
-    public function __construct(public readonly array|int|null $items = null, public readonly string|Closure|null $id = null) {}
+    private ?string $selection = null;
+    private bool $selects = false;
+
+    /** $selection: the tag of the row chosen, bound, in a NavigationSplitView's sidebar. */
+    public function __construct(public readonly array|int|null $items = null, public readonly string|Closure|null $id = null, ?string &$selection = null, bool $selects = false)
+    {
+        if ($selects) { $this->selection = &$selection; $this->selects = true; }
+    }
+
+    /** The binding of the row chosen, which a sidebar writes. @internal */
+    public function &selection(): ?string
+    {
+        if (!$this->selects) { throw new \LogicException("a NavigationSplitView's sidebar is a ListView(selection: …): ListView(selection: \$this->page)( Label('Inbox', systemImage: 'tray')->tag('inbox'), … )"); }
+        return $this->selection;
+    }
+
+    /** Its views. @internal @return array<mixed> */
+    public function content(): array { return $this->content; }
 
     /** The sections and rows; or, of data, the row of an item: fn($item) => …. */
     public function __invoke(View|array|Closure|null ...$content): static
@@ -79,12 +96,12 @@ final class ListView extends View
         if ($v instanceof NavigationLink || $v instanceof Section || $v instanceof LabeledContent) { // cells of their own
             $n = $v->render($c, $env);
         } elseif ($v instanceof Button && $v->label === null) {
-            $n = $c->cell($v->title);
+            $n = $c->cell(Localized::string($v->title, $env));
             if ($n !== null && $c->clicked($n)) { $v->run(); }
             if ($v->role !== \ButtonRole::destructive) { $n->kids[0]?->textColor($env->tint?->rgb($env) ?? $env->theme->accent); } else { $n->kids[0]?->textColor($env->theme->danger); }
         } else {
             $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(11, 16)->alignItems(Node::CENTER);
-              View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false]), is_array($v) ? $v : [$v]);
+              View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true]), is_array($v) ? $v : [$v]);
             $c->end();
         }
         if ($separator && $n !== null) { $n->borderWidth(0, 0, 1, 0)->borderColor($env->theme->border); }

@@ -64,7 +64,7 @@ $welcome = function (Context $c) use (&$fileChip): Text {
     return Text::of(
         new Paragraph(new ParagraphStyle(heading: 1), [new Run('Welcome to Notes')]),
         new Paragraph(runs: [new Run('Write with '), new Run('bold', new Attributes(weight: 700)), new Run(', '), new Run('italic', new Attributes(italic: true)), new Run(', '),
-            new Run('links', new Attributes(link: 'https://github.com/egoist/mygo')), new Run(' and lists, from the toolbar, the Format menu or the keyboard.')]),
+            new Run('links', new Attributes(link: 'https://github.com/owner888/myphp')), new Run(' and lists, from the toolbar, the Format menu or the keyboard.')]),
         new Paragraph(new ParagraphStyle(heading: 2), [new Run('Try')]),
         new Paragraph(new ParagraphStyle(list: ListKind::Tasks, checked: true), [new Run('Open this note')]),
         new Paragraph(new ParagraphStyle(list: ListKind::Tasks), [new Run('Type '), new Run('- ', $code), new Run(' to start a list, '), new Run('# ', $code), new Run(' for a heading')]),

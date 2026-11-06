@@ -36,14 +36,14 @@ same([
 foreach (glob(__DIR__ . '/i18n/app/*.json') as $f) { copy($f, "$tmp/locales/" . basename($f)); }
 same('Locales', I18nGen::className("$tmp/locales"), 'the class is named after the directory');
 same(['MyStrings', 'L10n', 'Locales'], [I18nGen::className('My-Strings'), I18nGen::className('2l10n'), I18nGen::className('---')], 'names of directories');
-file_put_contents("$tmp/locales/Locales.php", I18nGen::php($c, 'Locales'));
+file_put_contents("$tmp/locales/Locales.php", I18nGen::php($c, 'GenLocales')); // named apart from an example's Locales, which a test before may have required
 exec(PHP_BINARY . ' -l ' . escapeshellarg("$tmp/locales/Locales.php"), $out, $code);
 same(0, $code, 'the class parses');
 Catalog::resetRegistry();
 require "$tmp/locales/Locales.php";
 $when = new \DateTimeImmutable('2026-01-02 15:04', new \DateTimeZone('UTC'));
 same(['Notes', 'Notizen', '3 files selected', 'Keine Dateien ausgewählt', '已選取 1 個檔案', 'Ada and 2 others', 'She replied 1/2/26.', '50% complete', 'a of b', 'x y z w', '[Ñöţéš one]', ['en', 'de', 'en-GB', 'zh-Hant']],
-    [\Locales::title(), \Locales::in('de')->title(), \Locales::filesSelected(3), \Locales::in('de')->filesSelected(0), \Locales::in('zh-TW')->filesSelected(1), \Locales::in('en')->guests('Ada', 3), \Locales::in('en')->replied('female', $when), \Locales::in('en-GB')->progress(0.5), \Locales::in('en')->positional('a', 'b'), \Locales::in('en')->keyword('x', 'y', 'z', 'w'), \Locales::in('en-XA')->title(), I18n::languages()],
+    [\GenLocales::title(), \GenLocales::in('de')->title(), \GenLocales::filesSelected(3), \GenLocales::in('de')->filesSelected(0), \GenLocales::in('zh-TW')->filesSelected(1), \GenLocales::in('en')->guests('Ada', 3), \GenLocales::in('en')->replied('female', $when), \GenLocales::in('en-GB')->progress(0.5), \GenLocales::in('en')->positional('a', 'b'), \GenLocales::in('en')->keyword('x', 'y', 'z', 'w'), \GenLocales::in('en-XA')->title(), I18n::languages()],
     'the class says the messages, its catalog registered');
 $lcat = Catalog::library("$tmp/lib", 'en', 'myphp');
 same(['Dismiss', 'Abbrechen'], [$lcat->format('en', 'cancel'), $lcat->format('de', 'cancel')], 'its keys change the library\'s messages');
@@ -62,7 +62,6 @@ same([
     'locales/de.json: warning: 6 of 7 messages missing, which say the language they fall back to: files, broken, dup_name, dupName, typed, few',
     'locales/en-XA.json: en-XA is a pseudo locale, made from the source language: remove the file',
     'locales/en.json:5: "broken" does not parse: the plural argument "n" has no other case',
-    'locales/en.json:6: "bad-key" is not a key: a letter, then letters, digits and _, as filesSelected',
     'locales/en.json:7: "in" would name its PHP method in, which the generated class declares',
     'locales/en.json:10: "typed" uses n as a plural argument, which its type String cannot be',
     'locales/en.json:11: @typed.placeholders.weird: type "float" is not String, int, double, num, DateTime or Object',

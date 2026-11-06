@@ -85,8 +85,8 @@ function form(Context $c, array &$s): void
             }
             $s['greeting'] = '';
         }
-        if ($c->clicked($c->button('Open mygo on GitHub'))) {
-            \MyPHP\Shell::openExternal('https://github.com/egoist/mygo');
+        if ($c->clicked($c->button('Open myphp on GitHub'))) {
+            \MyPHP\Shell::openExternal('https://github.com/owner888/myphp');
         }
       $c->end();
 

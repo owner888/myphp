@@ -17,14 +17,24 @@ final class Lifecycle
 {
     /** @var list<Closure> */
     private array $gone = [];
+    private bool $noted = false;
+    /** @var array<int, mixed> the values onChange() saw last, by its place among the view's */
+    private array $seen = [];
+    private bool $hovered = false;
 
-    /** Notes the lifecycle $events (kind, action) of $node. @internal @param list<array{0: string, 1: Closure}> $events */
-    public static function note(Context $c, Node $node, array $events): void
+    /** The lifecycle of $node, made the first frame it is built; null without a runtime (a test's single build). @internal */
+    public static function of(Context $c, Node $node): ?self
     {
         $rt = $c->runtime;
-        if ($rt === null) { return; }
-        if (isset($rt->lifecycles[$node->id])) { return; }
-        $self = $rt->lifecycles[$node->id] = new self();
+        return $rt === null ? null : $rt->lifecycles[$node->id] ??= new self();
+    }
+
+    /** Notes the lifecycle $events (kind, action) of $node, run as it appears. @internal @param list<array{0: string, 1: Closure}> $events */
+    public static function note(Context $c, Node $node, array $events): void
+    {
+        $self = self::of($c, $node);
+        if ($self === null || $self->noted) { return; }
+        $self->noted = true;
         foreach ($events as [$kind, $action]) {
             match ($kind) {
                 'appear' => $action(),
@@ -32,6 +42,23 @@ final class Lifecycle
                 'disappear' => $self->gone[] = $action,
             };
         }
+    }
+
+    /** Whether $value, the $i-th onChange's, differs from what it was the frame before (not the first frame), as SwiftUI's onChange; the old value in $old. @internal */
+    public function changed(int $i, mixed $value, mixed &$old): bool
+    {
+        $known = array_key_exists($i, $this->seen);
+        $old = $this->seen[$i] ?? null;
+        $this->seen[$i] = $value;
+        return $known && $old !== $value;
+    }
+
+    /** Whether the pointer's being over the view changed to $now since the frame before. @internal */
+    public function hoverChanged(bool $now): bool
+    {
+        $was = $this->hovered;
+        $this->hovered = $now;
+        return $was !== $now;
     }
 
     public function __destruct()

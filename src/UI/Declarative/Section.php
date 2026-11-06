@@ -19,12 +19,15 @@ final class Section extends View
         return $this;
     }
 
+    /** Its views. @internal @return array<mixed> */
+    public function content(): array { return $this->content; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         $rows = ListView::flat($this->content);
         $rowEnv = $env->along(Node::COLUMN)->with(['inList' => true]);
-        return $c->section($this->header, function () use ($c, $rowEnv, $rows): void {
+        return $c->section(Localized::string($this->header, $env), function () use ($c, $rowEnv, $rows): void {
             foreach ($rows as $v) { ListView::row($c, $rowEnv, $v); }
-        }, $this->footer);
+        }, Localized::string($this->footer, $env));
     }
 }

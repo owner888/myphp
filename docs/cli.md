@@ -58,7 +58,12 @@ app's icon and resources, whose launcher runs the project's files.
 A saved PHP file hot reloads the app, as Flutter's run: the app loads its
 views of files (`Content::file`) again with its state kept, and says in its
 log which other files changed, which `R` takes ([view
-files](ui/views.md#view-files-and-hot-reload)). Changes to the
+files](ui/views.md#view-files-and-hot-reload)). A saved entry
+(`main.php`, whose classes the state is made of) or a framework file is
+what a hot reload cannot take: the app restarts, as `R` does. A view that
+throws shows its error in the window, as Flutter's red screen, the app and
+its state kept, until the view, saved fixed, reloads (`UI\ViewError`; a
+packaged app ends on the error as before). Changes to the
 configuration, the icon, the resources or the catalogs of messages, and to
 PHP files when the app has a TypeScript client, rebuild the app,
 regenerate the TypeScript client and the accessors of the catalogs, and

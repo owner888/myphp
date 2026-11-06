@@ -258,12 +258,20 @@ final class Window
                 $in?->startPass();
                 $z = $this->runtime->frameZoom; // zoomed (Context::setZoom), laid out in a window 1/z its size
                 [$w, $h] = [$width / $z, $height / $z];
-                $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
-                $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
-                $c->windowSafeArea = $c->safeArea = array_map(fn(float $v): float => $v / $z, $this->native->safeAreaInsets()); $c->keyboard = $this->native->keyboardHeight() / $z; // the mobile platforms' bars and keyboard
-                $c->vibrancy = $this->native->hasVibrancy(); // a popover draws its material
+                $make = function () use ($text, $in, $w, $h, $z): Context {
+                    $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
+                    $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
+                    $c->windowSafeArea = $c->safeArea = array_map(fn(float $v): float => $v / $z, $this->native->safeAreaInsets()); $c->keyboard = $this->native->keyboardHeight() / $z; // the mobile platforms' bars and keyboard
+                    $c->vibrancy = $this->native->hasVibrancy(); // a popover draws its material
+                    return $c;
+                };
                 $this->runtime->systemMaterials = $this->native->hasSystemMaterials(); // else Node::systemMaterial draws myphp's
-                ($content->view)($c);
+                if (App::isDev()) { // a view that throws shows its error, the app and its state kept, until a hot reload fixes it (UI\ViewError)
+                    $c = UI\ViewError::guard($make, $content->view);
+                } else {
+                    $c = $make();
+                    ($content->view)($c);
+                }
                 $c->toasts(); // over everything the view built
                 if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $w, $h); $in->lap(0); } // beside the content
                 $this->frameStats?->lap(UI\FrameStats::BUILD);

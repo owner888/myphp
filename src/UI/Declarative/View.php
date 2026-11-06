@@ -121,6 +121,47 @@ abstract class View
     /** A tooltip on the desktop; what screen readers say after the label. */
     public function help(string $text): static { $this->events[] = ['help', $text]; return $this; }
 
+    /** Runs $action(old, new) when $value differs from the frame before, as SwiftUI's onChange(of:). */
+    public function onChange(mixed $of, Closure $action): static { $this->events[] = ['change', [$of, $action]]; return $this; }
+
+    /** Runs $action(true) as the pointer comes over the view and $action(false) as it leaves, as SwiftUI's onHover. */
+    public function onHover(Closure $action): static { $this->events[] = ['hover', $action]; return $this; }
+
+    /** The menu a secondary click on the view opens: Buttons, Toggles, Dividers, Sections and Menus, as SwiftUI's contextMenu. */
+    public function contextMenu(View|array|null ...$items): static { $this->events[] = ['menu', $items]; return $this; }
+
+    /** A popover pointing at the view while $isPresented, of the view $content returns; a click outside or Escape closes it. */
+    public function popover(bool &$isPresented, Closure $content): static
+    {
+        $this->events[] = ['popover', [&$isPresented, $content]];
+        return $this;
+    }
+
+    /** Whether the text inside can be selected and copied, as SwiftUI's textSelection(.enabled). */
+    public function textSelection(\TextSelectability $s): static { $this->events[] = ['select', $s]; return $this; }
+
+    /** The appearance the app takes while the view shows: light, dark, or null to follow the system, as SwiftUI's preferredColorScheme. */
+    public function preferredColorScheme(?\ColorScheme $scheme): static { $this->events[] = ['scheme', $scheme]; return $this; }
+
+    /** How the Pickers inside draw: menu, segmented, radioGroup, inline. */
+    public function pickerStyle(\PickerStyle $style): static { $this->sets['pickerStyle'] = $style; return $this; }
+
+    /**
+     * The language the views inside say their text in, a BCP 47 tag
+     * ('zh-Hans'), as SwiftUI's environment(\.locale, …): their keys looked
+     * up in the app's catalogs in it, its numbers and dates.
+     */
+    public function environment(?string $locale = null): static { $this->sets['locale'] = $locale; return $this; }
+
+    /** The controls inside show no title, which stays their accessibility label, as SwiftUI's labelsHidden. */
+    public function labelsHidden(): static { $this->sets['labelsHidden'] = true; return $this; }
+
+    /** Radio buttons in a row rather than a column, as SwiftUI's horizontalRadioGroupLayout. */
+    public function horizontalRadioGroupLayout(): static { $this->sets['radioRow'] = true; return $this; }
+
+    /** How the DatePickers inside draw: a field (compact, field) or the calendar (graphical). */
+    public function datePickerStyle(\DatePickerStyle $style): static { $this->sets['datePickerStyle'] = $style; return $this; }
+
     public function accessibilityLabel(string $label): static { $this->events[] = ['label', $label]; return $this; }
 
     /**
@@ -198,7 +239,7 @@ abstract class View
     {
         $env = $this->sets === [] ? $env : $env->with($this->sets);
         foreach ($this->wraps as [$kind, $a]) {
-            if ($kind === 'title') { $env->route?->title($a); }
+            if ($kind === 'title') { $env->route?->title(Localized::string($a, $env)); }
             if ($kind === 'toolbar') { $env->stack?->setToolbar($env, $a); }
         }
         if ($this->swipe !== null) {
@@ -303,17 +344,45 @@ abstract class View
         if ($flex & ~$along & (self::FLEX_X | self::FLEX_Y)) { $n->alignSelf(Node::STRETCH); }
     }
 
+    /** @var list<?\ColorScheme> the appearance preferredColorScheme() set last, none before */
+    private static array $scheme = [];
+
     /** The events and accessibility of $node. */
     private function events(Context $c, Node $node, Env $env): void
     {
+        $changes = 0;
         foreach ($this->events as [$kind, $a]) {
             switch ($kind) {
+                case 'change':
+                    if (Lifecycle::of($c, $node)?->changed($changes++, $a[0], $old)) { ($a[1])($old, $a[0]); }
+                    break;
+                case 'hover':
+                    $over = $c->hovered($node);
+                    if (Lifecycle::of($c, $node)?->hoverChanged($over)) { ($a)($over); }
+                    break;
+                case 'select':
+                    $a === \TextSelectability::enabled ? $node->selectable() : $node->unselectable();
+                    break;
+                case 'scheme':
+                    if (self::$scheme !== [$a]) { // the app's appearance, set as it changes
+                        self::$scheme = [$a];
+                        \MyPHP\App::setTheme(match ($a) { \ColorScheme::light => \MyPHP\UI\Theme::light(), \ColorScheme::dark => \MyPHP\UI\Theme::dark(), null => null });
+                    }
+                    break;
+                case 'menu':
+                    $items = $a;
+                    $node->contextMenu(static fn(\MyPHP\UI\Menu $m) => Menu::items($m, $items, $env));
+                    break;
+                case 'popover':
+                    $content = $a[1];
+                    $c->popover($node, $a[0], static function () use ($c, $env, $content): void { View::renderAll($c, $env->along(Node::COLUMN), $content()); }); // $a[0] the binding: an array's reference stays one in its copies
+                    break;
                 case 'tap':
                     $node->focusable(false);
                     if ($a[1] === 2 ? $c->doubleClicked($node) : $c->clicked($node)) { ($a[0])(); }
                     break;
-                case 'help': $node->tooltip($a); break;
-                case 'label': $node->label($a); break;
+                case 'help': $node->tooltip(Localized::string($a, $env)); break;
+                case 'label': $node->label(Localized::string($a, $env)); break;
                 case 'shortcut':
                     if ($c->shortcut($a[0], $a[1])) { $this->shortcut(); }
                     break;

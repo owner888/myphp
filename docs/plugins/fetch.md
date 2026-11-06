@@ -172,14 +172,14 @@ App::whenReady(function () use (&$repo) {
             $c->column(20, 8);
               match ($repo['state']) {
                   'loading' => $c->spinner(),
-                  'done' => $c->text("egoist/mygo has {$repo['stars']} stars"),
+                  'done' => $c->text("owner888/myphp has {$repo['stars']} stars"),
                   'failed' => $c->text("Could not load it: {$repo['error']}"),
               };
             $c->end();
         })));
     App::go(function () use (&$repo, $win) {
         try {
-            $r = Http::get('https://api.github.com/repos/egoist/mygo', ['Accept' => 'application/vnd.github+json']);
+            $r = Http::get('https://api.github.com/repos/owner888/myphp', ['Accept' => 'application/vnd.github+json']);
             $next = $r->ok() ? ['state' => 'done', 'stars' => $r->json()['stargazers_count'], 'error' => '']
                 : ['state' => 'failed', 'stars' => 0, 'error' => "HTTP {$r->status}"];
         } catch (RuntimeException $e) {

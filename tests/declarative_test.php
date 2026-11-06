@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Content, Context, Node};
-use View, Font, Color, ButtonStyle, KeyEquivalent, Edge;
+use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis;
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 
@@ -86,3 +86,126 @@ same('/notes/2', $nav->path->path(), 'a NavigationLink of Each in a section push
 check($h->byText('Note 2 is an int: int') !== null, 'navigationDestination gets {id} as the int it asks for');
 $h->clickLabel('Back'); $h->frame(3);
 check($nav->path->isEmpty() && $h->byText('Groceries') !== null, 'Back pops to the list');
+
+// Controls, as SwiftUI's, each writing its binding: Picker (tags of any type, a pop-up menu, a segmented control,
+// radio buttons), Slider (stepped, int bound), Stepper, Toggle in a Menu, onChange (not the first frame, old and new),
+// onHover, DisclosureGroup keeping its own state, ProgressView, a Form row leading a control with its title.
+$ctl = new class {
+    public string $flavor = 'vanilla';
+    public int $size = 1;
+    public string $mode = 'a';
+    public int $volume = 50;
+    public int $qty = 2;
+    public bool $reverse = false;
+    public array $changes = [];
+    public array $hovers = [];
+    public string $chosen = '';
+};
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack(spacing: 8)(
+    Picker('Flavor', selection: $ctl->flavor)(Text('Vanilla')->tag('vanilla'), Text('Chocolate')->tag('chocolate')),
+    Picker('Size', selection: $ctl->size)(Each(['S', 'M', 'L'])(fn(string $s, int $i) => Text($s)->tag($i)))->pickerStyle(PickerStyle::segmented),
+    Picker('Mode', selection: $ctl->mode)(Text('Mode A')->tag('a'), Text('Mode B')->tag('b'))->pickerStyle(PickerStyle::radioGroup),
+    Slider(value: $ctl->volume, in: [0, 100], step: 10),
+    Stepper('Quantity', value: $ctl->qty, in: [1, 3]),
+    Menu('Actions')(Button('Rename', action: fn() => $ctl->chosen = 'rename'), Divider(), Toggle('Reverse', isOn: $ctl->reverse)),
+    Text("Size {$ctl->size}")->onChange(of: $ctl->size, action: function ($old, $new) use ($ctl) { $ctl->changes[] = "{$old}→{$new}"; })
+        ->onHover(function (bool $over) use ($ctl) { $ctl->hovers[] = $over; }),
+    DisclosureGroup('Advanced')(Text('Hidden inside')),
+    ProgressView('Copying', value: 3, total: 4),
+    Form()(Section()(Stepper('In a form', value: $ctl->qty, in: [1, 3]))),
+), $c), 700, 900);
+$h->frame(2);
+$h->clickText('L'); $h->frame(2);
+same(2, $ctl->size, 'a segmented Picker writes the tag of the segment clicked');
+same(['1→2'], $ctl->changes, 'onChange runs with the old and the new value, not on the first frame');
+$h->clickText('Mode B'); $h->frame(2);
+same('b', $ctl->mode, 'a radioGroup Picker writes its tag');
+check($h->byLabel('Flavor') !== null, 'a menu Picker shows, labeled by its title');
+check($h->byText('Hidden inside') === null, 'DisclosureGroup starts closed');
+$h->clickText('Advanced'); $h->frame(2);
+check($h->byText('Hidden inside') !== null, 'and opens on a click, keeping its own state');
+$h->clickOn($h->byText('Size 2')); $h->frame(2);
+check(in_array(true, $ctl->hovers, true), 'onHover hears the pointer come over the view');
+$row = $h->byText('In a form');
+check($row !== null && $h->rect($row)[0] < 120, 'in a Form, a control is led by its title at the start of the row');
+$find = function (Node $n, \Closure $is) use (&$find): ?Node {
+    if ($is($n)) { return $n; }
+    foreach ($n->kids as $k) { if (($r = $find($k, $is)) !== null) { return $r; } }
+    return null;
+};
+$stepper = $find($h->root, fn(Node $n) => $n->role === \MyPHP\UI\Role::STEPPER);
+[$x, $y, $w, $hh] = $h->rect($stepper);
+$h->click($x + $w / 2, $y + $hh / 4); $h->frame(2);
+same(3, $ctl->qty, "a Stepper's upper arrow steps its value up");
+$h->click($x + $w / 2, $y + $hh / 4); $h->frame(2);
+same(3, $ctl->qty, 'and not past the end of its range');
+$slider = $find($h->root, fn(Node $n) => $n->kind === Node::SLIDER);
+$find = null;
+[$x, $y, $w, $hh] = $h->rect($slider);
+$h->click($x + $w - 2, $y + $hh / 2); $h->frame(2);
+check($ctl->volume === 100 && is_int($ctl->volume), 'a Slider bound to an int writes an int, by its step: ' . var_export($ctl->volume, true));
+$h->clickText('Actions'); $h->frame();
+same(['Rename', '-', 'Reverse'], $h->menuLabels(), "a Menu's Buttons, Divider and Toggle are its items");
+$h->chooseMenuItem('Reverse'); $h->frame();
+check($ctl->reverse, 'choosing a Toggle in a Menu switches it');
+$h->clickText('Actions'); $h->frame(); $h->chooseMenuItem('Rename'); $h->frame();
+same('rename', $ctl->chosen, "choosing a Button in a Menu runs its action");
+check($h->byText('Copying') !== null, 'ProgressView shows its title over its bar');
+
+// NavigationSplitView: a sidebar of tagged Labels in Sections, bound to the page; a click chooses, the detail follows;
+// a section folds; the split takes the window.
+$app = new class { public ?string $page = 'inbox'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => NavigationSplitView(
+    sidebar: ListView(selection: $app->page)(
+        Label('Inbox', systemImage: 'tray')->tag('inbox'),
+        Section('Folders')(Text('Work')->tag('work'), Text('Travel')->tag('travel')),
+    ),
+    detail: Text("Showing {$app->page}"),
+), $c), 800, 500);
+$h->frame(2);
+check($h->byText('Showing inbox') !== null, 'the detail shows the page the sidebar binds');
+$h->clickText('Travel'); $h->frame(2);
+same('travel', $app->page, 'a click on a sidebar item writes its tag');
+check($h->byText('Showing travel') !== null, 'and the detail follows');
+same([0.0, 0.0, 800.0, 500.0], $h->rect($h->root->kids[0]), 'the split view takes the window');
+$h->clickText('Folders'); $h->frame(3);
+check($h->byText('Work') === null, 'a section folds on a click on its title');
+
+// A field of lines (axis: vertical) and a TextEditor keep their caret and what is typed from frame to frame: their state
+// is keyed by the text area they build, not a one-line field's id, which the runtime let go every frame.
+$lines = new class { public string $a = '', $b = ''; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(
+    TextField('Lines', text: $lines->a, axis: Axis::vertical),
+    TextEditor(text: $lines->b)->frame(width: 200, height: 80),
+), $c), 500, 400);
+$h->frame(2);
+$areas = [];
+$walk = function (Node $n) use (&$walk, &$areas) { if ($n->kind === Node::TEXTAREA) { $areas[] = $n; } foreach ($n->kids as $k) { $walk($k); } };
+$walk($h->root); $walk = null;
+$h->clickOn($areas[0]); $h->type('one'); $h->frame(2);
+$h->clickOn($areas[1]); $h->type('two'); $h->frame(2);
+same(['one', 'two'], [$lines->a, $lines->b], 'a field of lines and a TextEditor write what is typed');
+
+// ScrollView(.horizontal) is as high as what it shows, inside a vertical ScrollView whose height has no end, and a
+// Button with a label view has a button's face (bordered).
+$h = new Headless(fn(Context $c) => Content::render(fn() => ScrollView()(VStack()(
+    ScrollView(Axis::horizontal)(HStack()(Each(range(0, 40))(fn(int $i) => Text("Tag $i")))),
+    Button(action: fn() => null, label: Text('A card'))->buttonStyle(ButtonStyle::bordered),
+)), $c), 400, 300);
+$h->frame(2);
+check($h->rect($h->byText('Tag 0'))[3] > 0 && $h->rect($h->byText('Tag 0'))[1] < 50, 'a horizontal ScrollView shows its content inside a vertical one: ' . json_encode($h->rect($h->byText('Tag 0'))));
+$card = $h->byText('A card');
+$face = null;
+$up = function (Node $n) use (&$up, $card, &$face): bool { foreach ($n->kids as $k) { if ($k === $card || $up($k)) { if ($face === null && $n->role === \MyPHP\UI\Role::BUTTON) { $face = $n; } return true; } } return false; };
+$up($h->root); $up = null;
+check($face !== null && $face->bordered && $face->sides()[0] > 0, "a Button with a label view has a bordered button's face");
+
+// Text without a catalog having its key: shown as it is, its ICU placeholders filled in the environment's language;
+// Text(verbatim:) neither filled nor read as Markdown.
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(
+    Text('Hello, {name}!', ['name' => 'Ada']),
+    Text('{n, plural, one {# file} other {# files}}', ['n' => 3]),
+    Text(verbatim: '{n} **stays**'),
+)->environment(locale: 'en'), $c), 400, 200);
+$h->frame(2);
+check($h->byText('Hello, Ada!') !== null && $h->byText('3 files') !== null && $h->byText('{n} **stays**') !== null, 'Text fills its placeholders, a plural too; verbatim shows as it is: ' . json_encode($h->texts()));

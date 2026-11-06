@@ -21,7 +21,7 @@ final class NavigationLink extends View
         if (!$env->inList) {
             return (new Button($this->title, $go, null, $this->label))->render($c, $env->with(['buttonStyle' => $env->buttonStyle ?? \ButtonStyle::borderless]));
         }
-        $n = $this->label === null ? $c->cell($this->title, '', true) : self::row($c, $env, $this->label, true);
+        $n = $this->label === null ? $c->cell(Localized::string($this->title, $env), '', true) : self::row($c, $env, $this->label, true);
         if ($c->clicked($n)) { $go(); }
         return $n;
     }

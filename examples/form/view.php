@@ -1,77 +1,63 @@
 <?php
-// The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
+// The window's view of the Profile main.php makes, $this in it (Content::file): saved, it hot reloads. Its text is
+// the key of its translation in locales/, said in the language the Profile chose (environment(locale:)).
 declare(strict_types=1);
 
-use MyPHP\App;
-use MyPHP\UI\{Context, Font, Key, Span, TextState, Theme};
+/** A field led by its label, muted, the labels one width. */
+$labeled = fn(string $label, View $field): View => HStack(alignment: VerticalAlignment::top, spacing: 12)(
+    Text($label)->foregroundStyle(Color::secondary)->frame(width: 70, alignment: Alignment::leading),
+    $field,
+);
 
-return function (Context $c): void {
-    $c->column(24, 14, 1);
-      $c->text('Profile', 20);
-      foreach (['name' => 'Name', 'city' => 'City（试试中文输入法）'] as $key => $label) {
-          $c->row(0, 12);
-            $c->column(0, 0); $c->muted($label); $c->end();
-            $field = $c->input($this->{$key}, $label, 320);
-            if ($c->submitted($field)) { $this->submits++; $this->greeting = "Hello, {$this->name->text} from {$this->city->text}"; }
-          $c->end();
-      }
-      $c->row(0, 12);
-        $c->column(0, 0); $c->muted('Note'); $c->end();
-        $c->textarea($this->note, 'A few lines: Enter breaks, Up/Down move, Cmd+Z undoes', 320, 96); // wraps at the width
-      $c->end();
-      // A message field: one line that grows with what is typed, up to four, Enter sends it (the key taken before the field sees it), Shift+Enter breaks a line; the log below is read-only, selectable and copyable.
-      $c->row(0, 12);
-        $c->column(0, 0); $c->muted('Message'); $c->end();
-        $this->draft->onTextKey = function (int $code, string $chars, int $mods, TextState $d): bool {
-            if ($code !== Key::RETURN || $mods & Key::SHIFT) { return false; }
-            if (trim($d->text) !== '') { $this->log->text .= ($this->log->text === '' ? '' : "\n") . trim($d->text); $this->log->setCursor(strlen($this->log->text)); }
-            $d->selectAll(); $d->insert('');
-            return true;
-        };
-        $c->textarea($this->draft, 'Enter sends, Shift+Enter breaks a line', 320, 0, null, 1, 4);
-      $c->end();
-      $c->row(0, 12);
-        $c->column(0, 0); $c->muted('Sent'); $c->end();
-        $c->textarea($this->log, 'Nothing sent yet', 320, 64);
-      $c->end();
-      // A strip wider than the window: scrolls sideways with the trackpad or its thumb.
-      $c->row(8, 8, 0, $t = $c->theme->surface)->scroll($this->strip, horizontal: true, vertical: false);
-        for ($i = 0; $i < 30; $i++) {
-            $c->column(6, 2, 0, $c->theme->background); $c->text("Tag $i"); $c->muted(sprintf('#%06x', ($i * 2654435761) & 0xffffff), 11); $c->end();
-        }
-      $c->end();
-      // Controls: a checkbox, radios, a slider and a select, each writing straight into $s.
-      $c->row(0, 16);
-        $c->checkbox('Subscribe', $this->subscribe);
-        // The theme: fixed light or dark, or following the system (with its accent).
-        $c->radio('Light', $this->mode, 'light'); $c->radio('Dark', $this->mode, 'dark'); $c->radio('System', $this->mode, 'system');
-        if ($this->mode !== $this->applied) { // a radio changed it: the theme follows on the next frame
-            $this->applied = $this->mode;
-            App::setTheme(match ($this->mode) { 'light' => Theme::light(), 'dark' => Theme::dark(), default => null });
-        }
-        $c->slider($this->volume, 0, 100, 140);
-        $c->column(0, 0)->size(40); $c->muted(sprintf('%.0f%%', $this->volume)); $c->end(); // a fixed width, so the number does not push the select about
-        $c->select(['English', '中文', 'Español'], $this->lang);
-      $c->end();
-      // A focusable card: Tab reaches it, Enter or a click activates it, hover tints it; the text wraps at the card's width.
-      $card = $c->column(10, 4, 0, $c->theme->surface)->focusable();
-        if ($c->hovered($card)) { $card->color = $c->theme->surfaceHover; }
-        if ($c->clicked($card)) { $this->submits++; $this->greeting = 'card activated'; }
-        $c->richText([new Span('A card. ', style: Font::BOLD), new Span('Tab to it and press Enter, or click it. This sentence wraps at the width the window gives the card, '
-            . 'so make the window narrower and watch it reflow — 中文也会在合适的地方换行。')]);
-      $c->end();
-      // A link, a determinate bar following the slider, an indeterminate one; the Submit button has a tip.
-      $c->row(0, 12);
-        $c->link('mygo on GitHub', 'https://github.com/egoist/mygo');
-        $c->progress($this->volume / 100, 140)->tooltip('follows the slider');
-        $c->progress(-1, 100)->tooltip('indeterminate: animates');
-      $c->end();
-      $c->row(0, 8);
-        if ($c->clicked($c->primaryButton('Submit')->tooltip('Sends the form; Enter in a field does too'))) { $this->submits++; $this->greeting = "Hello, {$this->name->text} from {$this->city->text}"; }
-        if ($c->clicked($c->button('Clear'))) { foreach (['name', 'city', 'note'] as $k) { $this->{$k}->text = ''; $this->{$k}->setCursor(0); } $this->greeting = ''; }
-      $c->end();
-      $c->text($this->greeting === '' ? 'Submit, or press Enter in a field.' : $this->greeting . " (#{$this->submits})", 15);
-      $n = $this->name;
-      $c->muted(sprintf('name: %d bytes, cursor %d, anchor %d%s', strlen($n->text), $n->cursor, $n->anchor, $n->marked !== null ? ", composing \"{$n->marked}\"" : ''), 12);
-    $c->end();
-};
+return fn() => ScrollView()(VStack(alignment: HorizontalAlignment::leading, spacing: 14)(
+    Text('Profile')->font(Font::title2),
+    $labeled('Name', TextField('Name', text: $this->name)->onSubmit(fn() => $this->submit())->frame(width: 320)),
+    $labeled('City', TextField('City (try an input method)', text: $this->city)->onSubmit(fn() => $this->submit())->frame(width: 320)),
+    $labeled('Note', TextEditor(text: $this->note)->frame(width: 320, height: 96)), // wraps at the width; Enter breaks a line
+    // A message field: a line that grows with what is typed, Return sends it, Shift+Return breaks a line.
+    $labeled('Message', TextField('Return sends, Shift+Return breaks a line', text: $this->draft, axis: Axis::vertical)
+        ->onKeyPress(KeyEquivalent::return, function (KeyPress $key): KeyPressResult {
+            if (in_array(EventModifiers::shift, $key->modifiers, true)) { return KeyPressResult::ignored; }
+            $this->send();
+            return KeyPressResult::handled;
+        })
+        ->frame(width: 320)),
+    $labeled('Sent', ScrollView()(Text(verbatim: $this->log === '' ? 'Nothing sent yet' : $this->log)->textSelection(TextSelectability::enabled)->frame(maxWidth: INF, alignment: Alignment::topLeading))->frame(width: 320, height: 64)),
+    // A strip wider than the window: scrolls sideways with the trackpad or its thumb.
+    ScrollView(Axis::horizontal)(HStack(spacing: 8)(
+        Each(range(0, 29))(fn(int $i) => VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+            Text('Tag {i}', ['i' => $i]),
+            Text(verbatim: sprintf('#%06x', ($i * 2654435761) & 0xffffff))->font(Font::caption)->foregroundStyle(Color::secondary),
+        )->padding(6)->background(Color::background)),
+    )->padding(8))->background(Color::gray->opacity(0.12)),
+    // Controls, each writing straight into the Profile, two rows of them to fit the window; the theme follows the radio buttons.
+    HStack(spacing: 16)(
+        Toggle('Subscribe', isOn: $this->subscribe)->toggleStyle(ToggleStyle::checkbox),
+        Picker('Theme', selection: $this->mode)(Text('Light')->tag('light'), Text('Dark')->tag('dark'), Text('System')->tag('system'))
+            ->pickerStyle(PickerStyle::radioGroup)->horizontalRadioGroupLayout(),
+    )->labelsHidden()->preferredColorScheme(match ($this->mode) { 'light' => ColorScheme::light, 'dark' => ColorScheme::dark, default => null }),
+    HStack(spacing: 16)(
+        Slider(value: $this->volume, in: [0, 100])->frame(width: 140),
+        Text(verbatim: sprintf('%.0f%%', $this->volume))->foregroundStyle(Color::secondary)->frame(width: 40), // a fixed width, so the number does not push the picker about
+        Picker('Language', selection: $this->lang)(Each(['en' => 'English', 'zh-Hans' => '中文', 'es' => 'Español'])(fn(string $name, string $tag) => Text(verbatim: $name)->tag($tag))), // each in its own language
+    )->labelsHidden(),
+    // A card: Tab reaches it, Space or a click activates it; its text wraps at the card's width.
+    Button(action: fn() => $this->activate(), label: Text('**A card.** Tab to it and press Space, or click it. This sentence wraps at the width the window gives the card, '
+        . 'so make the window narrower and watch it reflow.'))->buttonStyle(ButtonStyle::bordered),
+    // A link, a bar following the slider, a spinner; Submit has a tip.
+    HStack(spacing: 12)(
+        WebLink('myphp on GitHub', destination: 'https://github.com/owner888/myphp'),
+        ProgressView(value: $this->volume / 100)->frame(width: 140)->help('follows the slider'),
+        ProgressView()->help('indeterminate: animates'),
+    ),
+    HStack(spacing: 8)(
+        Button('Submit', action: fn() => $this->submit())->buttonStyle(ButtonStyle::borderedProminent)->help('Sends the form; Return in a field does too'),
+        Button('Clear', action: fn() => $this->clear()),
+    ),
+    match ($this->greeting) {
+        'hello' => Text('Hello, {name} from {city} (#{count})', ['name' => $this->name, 'city' => $this->city, 'count' => $this->submits]),
+        'card' => Text('Card activated (#{count})', ['count' => $this->submits]),
+        default => Text('Submit, or press Return in a field.'),
+    },
+    Text('name: {bytes, plural, one {# byte} other {# bytes}}', ['bytes' => strlen($this->name)])->font(Font::caption)->foregroundStyle(Color::secondary),
+)->padding(24))->environment(locale: $this->lang);
