@@ -28,6 +28,21 @@ digits of one width for numbers that change, `fontFeatures('liga=0')` turns
 ligatures off. `textOutline()`, `textShadow()` and `textBlur()` draw an
 outline, a shadow and a blur of the glyphs.
 
+`preferredFont()` gives the text one of UIKit's text styles instead of a
+size: `Font::LARGE_TITLE`, `TITLE1`, `TITLE2`, `TITLE3`, `HEADLINE`,
+`BODY`, `CALLOUT`, `SUBHEADLINE`, `FOOTNOTE`, `CAPTION1`, `CAPTION2`, at
+the HIG's size and weight — macOS's on the desktop (body 13, headline 13
+bold, large title 26), iOS's on a phone or tablet (17, 17 semibold, 34) —
+scaled with the theme's text size, so the system's larger text scales
+them. A modifier after it, as `->fontWeight(400)`, overrides its part.
+
+```php
+$c->column(gap: 4);
+  $c->text('Settings')->preferredFont(Font::TITLE1);
+  $c->text('12 files')->preferredFont(Font::FOOTNOTE)->textColor($c->theme->textMuted);
+$c->end();
+```
+
 Text in Arabic, Hebrew and the other scripts written so reads right to
 left, mixed with text reading left to right as Unicode's bidirectional
 algorithm says: a paragraph reads in the direction of its first strongly

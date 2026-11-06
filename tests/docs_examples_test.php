@@ -80,7 +80,7 @@ $docClasses = docClasses();
 $docCwd = getcwd();
 chdir(__DIR__ . '/testdata/docs');
 $docs = dirname(__DIR__) . '/docs';
-$docBlocks = docBlocks("$docs/ui/*.md", "$docs/plugins/*.md", "$docs/getting-started.md");
+$docBlocks = docBlocks("$docs/ui/*.md", "$docs/plugins/*.md", "$docs/getting-started.md", "$docs/swiftui.md");
 foreach ($docBlocks as $i => $b) {
     $where = "{$b['file']}:{$b['line']}";
     $errors = count($failures);

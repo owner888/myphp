@@ -6,11 +6,13 @@
 
 ## English
 
-**Desktop apps in PHP, with native UI or a web frontend.**
+**Desktop and mobile apps in PHP, with native UI or a web frontend.**
 
 MyPHP is a port of the ideas in [mygo](https://github.com/egoist/mygo) to PHP 8:
 one process, one language, no C extension of its own. The operating system's
-libraries are reached through `ext-ffi`.
+libraries are reached through `ext-ffi`. The same `main.php` runs on macOS,
+Linux, Android and iOS; the CLI builds, installs and starts it as Flutter's
+does (`myphp run -d ios`).
 
 Each window shows one of two kinds of interface:
 
@@ -41,7 +43,7 @@ App::run();
 
 ### Status
 
-Early. What works today, on macOS / Apple Silicon:
+What works today, macOS first (the rows name the version that brought them):
 
 | piece | state |
 |---|---|
@@ -238,8 +240,14 @@ Early. What works today, on macOS / Apple Silicon:
 | Poses (a node moved, scaled, turned and faded after its transform) and content transitions (text rolling as a counter's digits or fading across, icons replaced, pictures crossfading) (mygo's pose.go and content.go) | new |
 | Transitions: nodes moving and resizing from where the last frame showed them, entering and leaving (moved, faded, collapsed, scaled, turned), colors fading, matched nodes coming from where their match was (mygo's transition.go) | new |
 | Animation: curves, springs, delays, jumps, colors, keyframes and loops by node and key (mygo's motion), timelines of tweens placed along one playhead (paused, sought, reversed, repeated), Reduce Motion; the switch, sliders, collapsibles, accordions and sidebar sections move as mygo's | new |
-| Linux and Windows | next |
-| Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
+| A platform layer (v1.146): `src/Platform` interfaces — app, menus, tray, dock, system services, windows, dialogs, theme, the screen — with the macOS backend in `Platform/Darwin`, so a platform is a folder of implementations | works |
+| Linux (GTK 3 + OpenGL, WebKitGTK, D-Bus portals): native UI, the system services (clipboard, dialogs, notifications, secrets, shortcuts, the tray, Now Playing), web views, `myphp build -platform linux/amd64,linux/arm64` making the app, its .tar.gz, a .deb and a PKGBUILD; the player on FFmpeg's libav* | works (tested on the developer's Linux machine) |
+| Android (v1.147–v1.158, v1.172): libphp cross-compiled with the NDK, a C launcher and a thin Java shell, GLES 3 rendering, the system's text (`TextRunShaper`), touch with fling inertia, the IME, the lifecycle with EGL kept, the system services, an embedded WebView with the IPC bridge, `myphp build -platform android/arm64` (aapt2/d8/apksigner, no Gradle; 16 KB alignment), 120 Hz VSync and a glyph cache | works (`myphp run -d android`) |
+| iOS (v1.159–v1.169): Metal and CoreText, MTKView and CADisplayLink, touch and the safe area, the soft keyboard, UIAlertController, SF Symbols, local notifications, Network.framework, dark and light following the system, the Keychain, deep links, the Taptic Engine, the simulator | works (`myphp run -d ios`) |
+| The phone's widgets (v1.173): `tabBar`, `navigationBar`, `sheet`, `actionSheet`, `safeArea` (UIKit's sizes), the system's photo and document pickers, Android's Back in order (keyboard, overlay, page, exit), `UITextInput` for Chinese and Japanese, curl + OpenSSL cross-compiled for HTTPS | works (`examples/mobile`, `tests/mobile_test.php`) |
+| `tabView` adapting as SwiftUI's TabView (v1.174): a tab bar on a phone, tabs across the top on a tablet upright, a sidebar on its side and on the desktop; iOS rendering through Metal with the UIScene life cycle, a simulator runtime, libxml2 on phones | works |
+| Written for people and agents who know SwiftUI (v1.175): [docs/swiftui.md](docs/swiftui.md) maps every SwiftUI view, modifier and pattern to myphp; `preferredFont()` with UIKit's text styles at the HIG's sizes (iOS's on a phone, macOS's on the desktop); `Haptics` (impact, selection, success, warning, error); Dynamic Type and Reduce Motion followed on phones as the desktop's settings are; `section()` and `cell()` for inset grouped lists as Settings'; the bundled `myphp-app` skill chooses widgets by need | works (`tests/text_styles_test.php`, `tests/haptics_test.php`, `tests/mobile_preferences_test.php`; the phones need the developer's devices) |
+| Windows (Win32/WebView2) | planned |
 
 Measured in `examples/inbox 1000` on an M-series Mac: 9 000 nodes rebuilt,
 laid out and painted per frame in about 6 ms with real text, 60 fps while
@@ -247,17 +255,26 @@ scrolling; frames are only built when something changes.
 
 ### The command line
 
+`bin/myphp` is the CLI (`myphp-cli` on npm), with Flutter's shape: one way to a device on every platform.
+
 ```sh
-bin/myphp init my-app              # a native-UI project (-template web for a page calling PHP)
-cd my-app && ../myphp/bin/myphp dev   # runs it, restarts on changes, regenerates the TS client
-../myphp/bin/myphp build           # build/darwin-arm64/my-app.app and its .dmg, a launcher that execs this machine's php; the plugins' native libraries (the terminal's libghostty-vt) in its Resources
-../myphp/bin/myphp build -launcher micro    # one static binary: fetches static-php-cli and builds phpmicro the first time
+myphp init my-app                  # a native-UI project (-template web for a page calling PHP)
+myphp doctor                       # the toolchain: PHP, the NDK, Xcode, adb, the phone runtimes
+myphp devices                      # phones over adb, and the simulators
+myphp run -d macos|linux|android|ios   # packages, installs, starts, follows the log (the first run builds a phone's PHP runtime)
+myphp dev                          # the desktop app in development: restarts on changes, regenerates the TS client
+myphp build                        # build/darwin-arm64/my-app.app and its .dmg; -platform linux/amd64 the Linux packages, android/arm64 the APK, ios/arm64 the .ipa
+myphp build -launcher micro        # one static binary: fetches static-php-cli and builds phpmicro the first time
+myphp screenshot                   # runs the app once, saves a PNG of its window and its elements (for agents without a display)
+myphp install-skills               # the bundled agent skills into the project's .agents/skills
 ```
+
+See [the CLI](docs/cli.md) for every command and flag.
 
 ### Requirements
 
 - PHP ≥ 8.3 with `ext-ffi` and `ext-intl` (Homebrew's `php` has both), OPcache JIT recommended
-- macOS on Apple Silicon for now
+- macOS on Apple Silicon: everything; Linux: the native UI, the system services, packaging and the player; Android and iOS: the native UI in one full-screen window, built by the CLI with the NDK or Xcode (`myphp doctor` lists what is missing); Windows: planned
 
 A window with a web page, whose frontend calls PHP:
 
@@ -340,10 +357,14 @@ styling, motion and drawing, with examples that run (`tests/docs_examples_test.p
 side: [the app](docs/app.md), [windows](docs/windows.md), [menus](docs/menus.md), [desktop APIs](docs/native.md),
 [bindings](docs/bindings.md), [the frontend](docs/frontend.md), [clipboard and drag data](docs/data-transfer.md),
 [languages](docs/i18n.md), [the CLI](docs/cli.md), [configuration](docs/configuration.md),
-[building and distributing](docs/distribution.md), [Android and iOS](docs/mobile.md). Plugins: [fetch](docs/plugins/fetch.md),
+[building and distributing](docs/distribution.md), [Android and iOS](docs/mobile.md), [coming from SwiftUI](docs/swiftui.md). Plugins: [fetch](docs/plugins/fetch.md),
 [SQLite](docs/plugins/sqlite.md), [watch](docs/plugins/watch.md), [WebSocket](docs/plugins/websocket.md),
 [updater](docs/plugins/updater.md), [loading](docs/plugins/loading.md), [glass](docs/plugins/glass.md),
 [game](docs/plugins/game.md), [terminal](docs/plugins/terminal.md), [automation](docs/automation.md).
+
+For coding agents: `myphp install-skills` puts the `myphp-app` skill (`bin/skills/myphp-app`) into a project's
+`.agents/skills`; it turns a request such as "make me a notepad" into a widget list, the app's shape, a headless
+test and a screenshot check.
 
 ### Layout
 
@@ -365,10 +386,11 @@ MIT.
 
 ## 中文
 
-**用 PHP 写桌面应用，原生 UI 或网页前端二选一。**
+**用 PHP 写桌面和手机应用，原生 UI 或网页前端二选一。**
 
 MyPHP 把 [mygo](https://github.com/egoist/mygo) 的思路搬到 PHP 8 上：
-一个进程、一种语言、不写自己的 C 扩展，系统库全部通过 `ext-ffi` 调用。
+一个进程、一种语言、不写自己的 C 扩展，系统库全部通过 `ext-ffi` 调用。同一个 `main.php`
+跑在 macOS、Linux、Android 和 iOS 上；命令行像 Flutter 一样负责打包、安装、启动（`myphp run -d ios`）。
 
 每个窗口显示两种界面之一：
 
@@ -397,7 +419,7 @@ App::run();
 
 ### 现状
 
-早期。目前在 macOS / Apple Silicon 上能跑的：
+目前能跑的，以 macOS 为先（各行标注引入它的版本）：
 
 | 部分 | 状态 |
 |---|---|
@@ -593,24 +615,39 @@ App::run();
 | 姿态（在变换之后平移、缩放、旋转、淡出节点）和内容过渡（文字像计数器数字那样滚动或淡入淡出、图标替换、图片交叉淡化）（mygo 的 pose.go 和 content.go） | 新加 |
 | 过渡：节点从上一帧的位置和尺寸移动、缩放到新布局，进场和离场（平移、淡入淡出、折叠、缩放、旋转），颜色渐变，匹配节点从对应节点原来的位置过来（mygo 的 transition.go） | 新加 |
 | 动画：按节点和键的曲线、弹簧、延迟、跳变、颜色、关键帧和循环（mygo 的 motion），沿同一播放头编排补间的时间线（可暂停、拖动定位、倒放、重复），遵循「减弱动态效果」；开关、滑块、折叠区、手风琴和侧边栏分组按 mygo 的方式动起来 | 新加 |
-| Linux 和 Windows | 下一步 |
-| Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
+| 平台层（v1.146）：`src/Platform` 接口——应用、菜单、托盘、Dock、系统服务、窗口、对话框、主题、屏幕——macOS 实现在 `Platform/Darwin`，一个平台就是一个实现目录 | 可用 |
+| Linux（GTK 3 + OpenGL、WebKitGTK、D-Bus portal）：原生 UI、系统服务（剪贴板、对话框、通知、密钥、快捷键、托盘、Now Playing）、web view，`myphp build -platform linux/amd64,linux/arm64` 产出应用、.tar.gz、.deb 和 PKGBUILD；播放器走 FFmpeg 的 libav* | 可用（在开发者的 Linux 机器上测） |
+| Android（v1.147–v1.158、v1.172）：NDK 交叉编译 libphp，C 启动器加薄 Java 壳，GLES 3 渲染，系统排版（`TextRunShaper`），触摸与惯性滑动，输入法，生命周期与 EGL 保留，系统服务，内嵌 WebView 与 IPC 桥，`myphp build -platform android/arm64`（aapt2/d8/apksigner，不用 Gradle；16 KB 对齐），120 Hz VSync 与字形缓存 | 可用（`myphp run -d android`） |
+| iOS（v1.159–v1.169）：Metal 与 CoreText，MTKView 与 CADisplayLink，触摸与安全区，软键盘，UIAlertController，SF Symbols，本地通知，Network.framework，跟随系统的深浅模式，Keychain，深链接，Taptic Engine，模拟器 | 可用（`myphp run -d ios`） |
+| 手机控件（v1.173）：`tabBar`、`navigationBar`、`sheet`、`actionSheet`、`safeArea`（尺寸按 UIKit），系统的相册与文件选择器，Android 返回键的顺序（键盘、浮层、页面、退出），中日输入法的 `UITextInput`，交叉编译的 curl + OpenSSL 做 HTTPS | 可用（`examples/mobile`、`tests/mobile_test.php`） |
+| 像 SwiftUI TabView 一样自适应的 `tabView`（v1.174）：手机底部标签栏、iPad 竖放顶部标签、横放和桌面侧边栏；iOS 走 Metal 渲染与 UIScene 生命周期，模拟器运行时，手机上的 libxml2 | 可用 |
+| 面向会 SwiftUI 的人和 agent（v1.175）：[docs/swiftui.md](docs/swiftui.md) 把 SwiftUI 的每个视图、修饰符和模式对应到 myphp；`preferredFont()` 用 UIKit 的文字层级、HIG 的尺寸（手机取 iOS 的，桌面取 macOS 的）；`Haptics`（impact、selection、success、warning、error）；手机的动态字体和减弱动态效果像桌面设置一样被主题跟随；`section()` 与 `cell()` 做设置页那种 inset grouped 列表；内置的 `myphp-app` skill 按需求选控件 | 可用（`tests/text_styles_test.php`、`tests/haptics_test.php`、`tests/mobile_preferences_test.php`；真机要开发者的设备） |
+| Windows（Win32/WebView2） | 计划中 |
 
 在 M 系列 Mac 上用 `examples/inbox 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
 
 ### 命令行
 
+`bin/myphp` 是命令行工具（npm 上叫 `myphp-cli`），形态对齐 Flutter：任何平台都只有这一条路到设备。
+
 ```sh
-bin/myphp init my-app              # 原生 UI 项目（-template web 是调用 PHP 的网页项目）
-cd my-app && ../myphp/bin/myphp dev   # 运行，文件改动自动重启，重新生成 TS client
-../myphp/bin/myphp build           # build/darwin-arm64/my-app.app 和它的 .dmg，启动器 exec 本机的 php；插件要的原生库（终端的 libghostty-vt）放进 Resources
-../myphp/bin/myphp build -launcher micro    # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
+myphp init my-app                  # 原生 UI 项目（-template web 是调用 PHP 的网页项目）
+myphp doctor                       # 检查工具链：PHP、NDK、Xcode、adb、手机运行时
+myphp devices                      # adb 连着的手机和模拟器
+myphp run -d macos|linux|android|ios   # 打包、安装、启动、跟日志（手机第一次运行会先编它的 PHP 运行时）
+myphp dev                          # 桌面开发模式：文件改动自动重启，重新生成 TS client
+myphp build                        # build/darwin-arm64/my-app.app 和 .dmg；-platform linux/amd64 出 Linux 包，android/arm64 出 APK，ios/arm64 出 .ipa
+myphp build -launcher micro        # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
+myphp screenshot                   # 跑一次应用，存窗口的 PNG 和元素树（给没有显示器的 agent 自检）
+myphp install-skills               # 把内置的 agent skill 装进项目的 .agents/skills
 ```
+
+所有命令和参数见[命令行](docs/cli.md)。
 
 ### 环境要求
 
 - PHP ≥ 8.3，带 `ext-ffi` 和 `ext-intl`（Homebrew 的 `php` 都自带），建议开 OPcache JIT
-- 目前仅支持 Apple Silicon 的 macOS
+- Apple Silicon 的 macOS：全部；Linux：原生 UI、系统服务、打包和播放器；Android 和 iOS：一个全屏窗口的原生 UI，由命令行用 NDK 或 Xcode 构建（`myphp doctor` 会列出缺什么）；Windows：计划中
 
 一个网页窗口，前端直接调用 PHP：
 
@@ -691,10 +728,13 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 示例都能运行（`tests/docs_examples_test.php` 会构建它们）。应用侧：[应用](docs/app.md)、[窗口](docs/windows.md)、
 [菜单](docs/menus.md)、[桌面 API](docs/native.md)、[绑定](docs/bindings.md)、[前端](docs/frontend.md)、
 [剪贴板与拖拽数据](docs/data-transfer.md)、[多语言](docs/i18n.md)、[命令行](docs/cli.md)、[配置](docs/configuration.md)、
-[构建与分发](docs/distribution.md)、[Android 与 iOS](docs/mobile.md)。插件：[fetch](docs/plugins/fetch.md)、[SQLite](docs/plugins/sqlite.md)、
+[构建与分发](docs/distribution.md)、[Android 与 iOS](docs/mobile.md)、[从 SwiftUI 过来](docs/swiftui.md)。插件：[fetch](docs/plugins/fetch.md)、[SQLite](docs/plugins/sqlite.md)、
 [watch](docs/plugins/watch.md)、[WebSocket](docs/plugins/websocket.md)、[updater](docs/plugins/updater.md)、
 [loading](docs/plugins/loading.md)、[glass](docs/plugins/glass.md)、[game](docs/plugins/game.md)、
 [terminal](docs/plugins/terminal.md)、[automation](docs/automation.md)。
+
+给 coding agent：`myphp install-skills` 把 `myphp-app` skill（`bin/skills/myphp-app`）装进项目的 `.agents/skills`；
+它把「帮我做个记事本」这样的需求变成控件清单、应用骨架、headless 测试和截图自检。
 
 ### 目录
 

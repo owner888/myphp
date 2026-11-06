@@ -278,4 +278,68 @@ trait ContextMobile
         if ($chosen !== -1) { $open = false; }
         return $chosen;
     }
+
+    /**
+     * A section of an inset grouped list, as UITableView's insetGrouped
+     * style (Settings) and SwiftUI's Section in a List or Form: $header in
+     * 13-point capitals, muted; the rows $rows builds in a group of the
+     * theme's surface, its corners rounded 10, inset 16 from the sides,
+     * a hairline between each two rows starting 16 in, as UITableView's
+     * separators; $footer below in 13 points, muted. The header and the
+     * footer sit 16 in from the group's edge. Stretches across its
+     * parent; build sections one under the other in a scroll(). cell()
+     * builds a row of UIKit's. Not mygo's.
+     * @param Closure(): void $rows
+     */
+    public function section(string $header, Closure $rows, string $footer = ''): Node
+    {
+        $t = $this->theme;
+        $n = $this->column(0, 0)->alignSelf(Node::STRETCH)->padding(0, 16)->role(Role::GROUP);
+        if ($header !== '') { $n->label($header); }
+          if ($header !== '') {
+              $this->text(mb_strtoupper($header, 'UTF-8'), 13, $t->textMuted)->padding(16, 16, 7, 16)->role(Role::HEADING);
+          }
+          $group = $this->column(0, 0, 0, $t->surface)->alignSelf(Node::STRETCH)->radius(10)->clip();
+            $rows();
+          $this->end();
+          $group->drawOver(static function (Painter $p, array $r) use ($group): void { // the separators: under each row but the last, from 16 in to the end
+              $rows = array_values(array_filter($group->kids, static fn(Node $k): bool => !$k->absolute));
+              for ($i = 0, $last = count($rows) - 1; $i < $last; $i++) {
+                  $k = $rows[$i];
+                  $p->fill([$r[0] + 16, $k->y + $k->h - 0.5, $r[2] - 16, 1.0], $p->theme()->border);
+              }
+          });
+          if ($footer !== '') {
+              $this->text($footer, 13, $t->textMuted)->padding(7, 16, 16, 16);
+          }
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * A row of an inset grouped list, as UITableViewCell with the value1
+     * style and SwiftUI's LabeledContent: $title in 17 points at the start,
+     * $detail in 17 points muted at the end, and with $disclosure a
+     * chevron after it, as a row that opens a page; 44 points high at
+     * least, padded 16 at the sides. Takes the focus and reports clicked();
+     * pressed, it fills with the theme's pressed surface. Build it in a
+     * section(). Not mygo's.
+     */
+    public function cell(string $title, string $detail = '', bool $disclosure = false): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $n = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($detail === '' ? $title : "$title, $detail");
+        if ($this->hovered($n) && ($rt?->input->mouseDown ?? false)) { $n->color = $t->surfacePressed; }
+          $this->text($title, 17, $t->text)->singleLine()->grow(1);
+          if ($detail !== '') {
+              $this->text($detail, 17, $t->textMuted)->singleLine()->shrink(0);
+          }
+          if ($disclosure) {
+              $a = $this->box(8, 20, 0)->shrink(0); $a->color = null;
+              $a->draw(static fn(Painter $p, array $r) => self::disclosure($p->displayList(), [$r[0] - 6, $r[1], 20, 20], 0, Theme::mix($p->theme()->textMuted, $p->theme()->surface, 0.3)));
+          }
+        $this->end();
+        return $n;
+    }
 }

@@ -48,6 +48,9 @@ final class Shell implements Platform\Shell
         if (!$ok) { Gtk::fail($error, "cannot move $path to the trash"); }
     }
 
+    /** Linux has no haptics API for a desktop: nothing plays, as on a Mac without a trackpad. */
+    public function haptic(string $kind): void {}
+
     public function beep(): void
     {
         $f = Gtk::ffi();

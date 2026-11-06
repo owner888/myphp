@@ -114,7 +114,7 @@ final class Window implements Platform\Window
             }
 
             if ($f->myphp_ios_poll_theme_changed() > 0) {
-                $this->b->theme()->notifyChanged();
+                $this->b->h->themeChanged(); // App::systemChanged: the theme follows the appearance, the text size and Reduce Motion anew
                 $this->requestFrame();
             }
 

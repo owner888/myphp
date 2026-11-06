@@ -23,15 +23,29 @@ Everything below is in that checkout:
 - `docs/app.md`, `docs/windows.md`, `docs/menus.md`, `docs/native.md`
   (dialogs, notifications, tray, clipboard), `docs/plugins/` (fetch,
   sqlite, watch, websocket, updater…).
-- This skill's `references/`: `pitfalls.md` (read it before you write),
-  `async.md` (HTTP, SQLite, child processes, stale answers),
-  `windows.md` (several windows, menus, asking before closing) and
-  `web.md` (the web template: PHP services and a TypeScript page).
+- This skill's `references/`: `widgets.md` (which widget for which need,
+  and how to turn "make me a notepad" into a widget list — start here),
+  `pitfalls.md` (read it before you write), `async.md` (HTTP, SQLite,
+  child processes, stale answers), `windows.md` (several windows, menus,
+  asking before closing) and `web.md` (the web template: PHP services and
+  a TypeScript page).
+- `docs/swiftui.md` when the request or a design is in SwiftUI terms
+  (`VStack`, `@State`, `.sheet`…): it maps each to myphp. `docs/mobile.md`
+  for Android and iOS: the safe area, `tabView`, `navigationBar`,
+  `sheet`, and `myphp run -d android|ios`.
 - `examples/`: whole apps (`counter-native`, `todo`, `notes`, `widgets`,
   `gallery`, `inbox`, `photos`…). Find the closest one and follow it.
 - Before calling a method you have not seen in the docs, confirm it in
   `src/UI/` (`grep -n "function name(" src/UI/*.php`). If it is not
   there, it does not exist: see `references/pitfalls.md`.
+
+## From the request to a widget list
+
+Before writing code, turn the request into needs and pick a widget for
+each from `references/widgets.md` (the first match is the simpler one),
+then read those widgets' pages in `docs/ui/`. Prefer the framework's
+widget over a hand-built one every time one fits; say which widgets you
+chose and why in a line before you build.
 
 ## Shape of an app
 

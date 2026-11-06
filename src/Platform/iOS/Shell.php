@@ -33,6 +33,14 @@ final class Shell implements Platform\Shell
         \MyPHP\Native\iOS::ffi()->myphp_ios_haptic_feedback(0);
     }
 
+    /** The launcher's codes for myphp_ios_haptic_feedback: UIImpactFeedbackGenerator's styles 0–4, UISelectionFeedbackGenerator 10, UINotificationFeedbackGenerator's types 20–22. */
+    public const CODES = ['light' => 0, 'medium' => 1, 'heavy' => 2, 'soft' => 3, 'rigid' => 4, 'selection' => 10, 'success' => 20, 'warning' => 21, 'error' => 22];
+
+    public function haptic(string $kind): void
+    {
+        \MyPHP\Native\iOS::ffi()->myphp_ios_haptic_feedback(self::CODES[$kind]);
+    }
+
     public function fileIcon(string $path, int $size): string
     {
         return '';

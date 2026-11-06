@@ -87,6 +87,12 @@ final class Theme
         return $n * ($this->fontSize > 0 ? $this->fontSize : 13.0);
     }
 
+    /** How many times larger than the default (13 points) the theme's text is: 1 for a theme that follows no larger text; what Font::preferred() and the text styles scale by. */
+    public function textScale(): float
+    {
+        return $this->fontSize > 0 ? $this->fontSize / 13.0 : 1.0;
+    }
+
     /** The theme following the desktop's settings (mygo's Theme.follow): its accent, more contrast, larger text. */
     public function follow(Preferences $p): self
     {
