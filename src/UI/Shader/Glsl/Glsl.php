@@ -499,6 +499,7 @@ final class Glsl
             $walk($u, $size);
             $size += $s;
         }
+        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
         return [$lanes, self::roundUp($size, 16)];
     }
 

@@ -392,6 +392,7 @@ final class App
     {
         self::$ready = true;
         Locales::start(); // the language the app shows and the user's formats, before the menus and windows show them
+        MemoryWatch::start(); // in development: what the process holds, logged every 10 s, and a warning as it nears memory_limit or keeps growing
         self::installMenu(self::$menu ?? Menu::default());
         if (Dock::menu() !== null) {
             Dock::setMenu(Dock::menu());
@@ -600,6 +601,16 @@ final class App
         self::backend()->setApplicationMenu($menu?->snapshot());
         self::$installed = $menu;
         Native\Docs\Registry::refreshMenus();
+    }
+
+    /**
+     * Waits $seconds, letting the app run meanwhile: in a fiber (App::go, a
+     * view's task or refreshable) the fiber waits; outside one the event
+     * loop turns until then. As SwiftUI's `try await Task.sleep`.
+     */
+    public static function sleep(float $seconds): void
+    {
+        Native\Fibers::sleep($seconds);
     }
 
     /**

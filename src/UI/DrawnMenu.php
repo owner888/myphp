@@ -222,7 +222,7 @@ final class DrawnMenu
               $mark->color = null;
               if ($it->checked) {
                   $radio = $it->type === NativeItem::RADIO;
-                  $mark->draw(function (Painter $p, array $r) use ($radio, $color): void {
+                  $mark->draw(static function (Painter $p, array $r) use ($radio, $color): void {
                       [$x, $y, $w, $h] = $r;
                       if ($radio) {
                           $d = $w / 4;
@@ -238,7 +238,7 @@ final class DrawnMenu
           if ($sub) {
               $arrow = $c->box($t->space(4), $t->space(4), 0)->shrink(0);
               $arrow->color = null;
-              $arrow->draw(function (Painter $p, array $r) use ($rtl, $muted): void { // a chevron pointing along the menus, the other way right to left
+              $arrow->draw(static function (Painter $p, array $r) use ($rtl, $muted): void { // a chevron pointing along the menus, the other way right to left
                   [$x, $y, $w, $h] = $r;
                   [$x0, $x1] = $rtl ? [0.625, 0.375] : [0.375, 0.625];
                   $p->strokePath((new Path)->moveTo($x + $w * $x0, $y + $h * 0.25)->lineTo($x + $w * $x1, $y + $h * 0.5)->lineTo($x + $w * $x0, $y + $h * 0.75), 1.5, $muted);

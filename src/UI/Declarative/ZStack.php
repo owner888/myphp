@@ -1,0 +1,45 @@
+<?php
+declare(strict_types=1);
+
+namespace MyPHP\UI\Declarative;
+
+use MyPHP\UI\{Context, Node, Track};
+
+/** ZStack, as SwiftUI's: the views given one over the other, the first at the back, placed in the stack by $alignment. */
+final class ZStack extends View
+{
+    /** @var list<mixed> */
+    private array $content = [];
+
+    public function __construct(public readonly \Alignment $alignment) {}
+
+    public function __invoke(View|array|null ...$content): static
+    {
+        $this->content = $content;
+        return $this;
+    }
+
+    protected function build(Context $c, Env $env): ?Node
+    {
+        $n = $c->grid([Track::fr()]);
+        foreach (self::flat($this->content) as $v) {
+            $kid = $v->render($c, $env);
+            if ($kid !== null) {
+                $kid->columnStart(1)->rowStart(1);
+                $this->alignment->place($kid, true);
+            }
+        }
+        $c->end();
+        return $n;
+    }
+
+    /** @param array<mixed> $content @return list<View> */
+    private static function flat(array $content): array
+    {
+        $out = [];
+        foreach ($content as $v) {
+            if ($v instanceof View) { $out[] = $v; } elseif (is_array($v)) { array_push($out, ...self::flat($v)); }
+        }
+        return $out;
+    }
+}

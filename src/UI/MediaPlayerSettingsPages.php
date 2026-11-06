@@ -756,7 +756,7 @@ final class MediaPlayerSettingsPages
             $t = $c->theme;
             $v = (float)max(1, min(4, $this->set->get($key)));
             $slider = $c->sliderBase($v, 1, 4, 1)->size(100, 20);
-            $slider->draw(static function (Painter $p, array $r) use ($slider, $t): void {
+            $slider->draw(static function (Painter $p, array $r, Node $slider) use ($t): void {
                 $x0 = $r[0] + 6; $w = $r[2] - 12; $cy = $r[1] + 8;
                 $p->fill([$x0, $cy - 2, $w, 4], $t->dark ? 0xffffff : 0x000000, 2, 0.15);
                 $p->fill([$x0, $cy - 2, $w * $slider->fraction, 4], $t->accent, 2);

@@ -132,7 +132,7 @@ final class View implements TextInputClient
         if (!$v->opts->readOnly) { $e->handleTextInput($v); }
         $e->handleInput($v->input(...));
         $e->cursor($v->cursor);
-        $e->draw(function (Painter $p, array $r) use ($v): void { $v->paint($p->displayList(), $p->textPainter(), $r, $p->theme()); });
+        $e->draw(static function (Painter $p, array $r) use ($v): void { $v->paint($p->displayList(), $p->textPainter(), $r, $p->theme()); });
         $e->contextMenu($v->menu(...));
         if ($styled) { $e->ownRing = true; } // FocusRing(false): the border shows it has the keyboard
         if (($r = $rt?->rectOf($e->id)) !== null) {

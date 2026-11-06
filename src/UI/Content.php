@@ -32,7 +32,29 @@ final class Content
         $file = ViewFile::of($path, $state);
         return new self(static function (Context $c) use ($file, $state): void {
             $c->state = $state;
-            ($file->view())($c);
+            self::render($file->view(), $c);
         });
+    }
+
+    /** Builds a window's view $view, which returns the root View, into $c: in the middle of the window, as SwiftUI's. @internal Content's and the tests' */
+    public static function render(Closure $view, Context $c): void
+    {
+        if (self::takesContext($view)) { // the engine's own builder, the framework's @internal
+            $view($c);
+            return;
+        }
+        require_once __DIR__ . '/Declarative/functions.php';
+        $c->root->alignItems(Node::CENTER)->justify(Node::CENTER);
+        Declarative\View::renderAll($c, Declarative\Env::root($c), $view());
+    }
+
+    /** @var \WeakMap<Closure, bool>|null */
+    private static ?\WeakMap $takes = null;
+
+    /** Whether view $fn builds with a Context (the engine's builder) rather than returning a View. */
+    private static function takesContext(Closure $fn): bool
+    {
+        self::$takes ??= new \WeakMap();
+        return self::$takes[$fn] ??= (($p = (new \ReflectionFunction($fn))->getParameters()[0] ?? null) !== null && ($t = $p->getType()) instanceof \ReflectionNamedType && $t->getName() === Context::class);
     }
 }

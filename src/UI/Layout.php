@@ -101,6 +101,7 @@ final class Layout
             foreach ($n->kids as $k) { $walk($k, $chain); }
         };
         $walk($root, []);
+        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
         foreach ($ids as $id) {
             if (isset($found[$id])) {
                 self::reveal($found[$id]);

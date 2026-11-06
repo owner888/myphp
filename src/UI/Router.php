@@ -67,6 +67,24 @@ final class Router
     }
 
     /** The entry shown. */
+    /** The entry of the page shown. @internal the declarative NavigationStack's */
+    public function entry(): RouteEntry
+    {
+        return $this->current();
+    }
+
+    /** SwiftUI's NavigationPath.append: goes to $path, as push(). */
+    public function append(string $path): void { $this->push($path); }
+
+    /** SwiftUI's NavigationPath.removeLast: back $k pages, at most to the first. */
+    public function removeLast(int $k = 1): void { $this->go(-min($k, $this->at)); }
+
+    /** SwiftUI's NavigationPath.count: the pages over the first. */
+    public function count(): int { return $this->at; }
+
+    /** SwiftUI's NavigationPath.isEmpty: whether the first page shows. */
+    public function isEmpty(): bool { return $this->at === 0; }
+
     private function current(): RouteEntry
     {
         if ($this->entries === []) {
@@ -419,7 +437,7 @@ final class Router
             }
             $upper->at($bw * (1 - $shown), 0)->size($bw, $bh)->shadow(0, 0, 16, 0, 0x000000, 0.15);
             $upper->color = $bg;
-            $lower->at(-0.3 * $shown * $bw, 0)->size($bw, $bh)->drawOver(function (Painter $p, array $r) use ($shown) {
+            $lower->at(-0.3 * $shown * $bw, 0)->size($bw, $bh)->drawOver(static function (Painter $p, array $r) use ($shown) {
                 $p->fill($r, 0x000000, 0, 0.06 * $shown);
             });
             $lower->color = $bg;
@@ -458,7 +476,7 @@ final class Router
             $box->clip();
             $bg = $c->background();
             $old = $this->page($c, $box, null, $this->entries[$this->at - 1], $fn, true);
-            $old->at(($rtl ? 0.3 : -0.3) * (1 - $shown) * $bw, 0)->size($bw, $bh)->drawOver(function (Painter $p, array $r) use ($shown) {
+            $old->at(($rtl ? 0.3 : -0.3) * (1 - $shown) * $bw, 0)->size($bw, $bh)->drawOver(static function (Painter $p, array $r) use ($shown) {
                 $p->fill($r, 0x000000, 0, 0.06 * (1 - $shown));
             });
             $old->color = $bg;

@@ -18,7 +18,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Canvas, Content, InputEvent, Painter};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
-spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
+require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 /** A point or a direction of the scene, y up, in radii of the hole. */
 final class Vec3

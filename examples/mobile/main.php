@@ -8,18 +8,18 @@
 // Run: myphp run -d android examples/mobile   (ios, macos)
 declare(strict_types=1);
 
-use MyPHP\{App, Dialog, FileFilter, Http, OpenDialogOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Image, ListState, Router, ScrollState, SVG, TextState};
+use MyPHP\{App, Dialog, FileFilter, Haptics, Http, OpenDialogOptions, Window, WindowOptions};
+use MyPHP\UI\{Content, Image, SVG};
 
-spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
+require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 final class Mobile
 {
     public const ROWS = 200_000;
+    /** The tab shown, and each tab's pages. */
     public int $tab = 0;
-    public Router $router;
-    public ListState $rows;
-    public TextState $name;
+    public NavigationPath $homePath, $formPath, $mePath;
+    public string $name = '';
     public ?Image $photo = null;
     public string $photoPath = '';
     /** @var list<string> */
@@ -27,20 +27,29 @@ final class Mobile
     public string $http = '';
     public bool $sheet = false, $actions = false, $alert = false;
     public string $lastAction = '';
-    public ScrollState $meScroll;
-    public bool $refreshing = false;
-    public int $refreshedAt = 0, $refreshes = 0;
+    public int $refreshes = 0;
     public SVG $homeIcon, $formIcon, $meIcon;
 
     public function __construct()
     {
-        $this->router = new Router('/home');
-        $this->rows = new ListState;
-        $this->name = new TextState;
-        $this->meScroll = new ScrollState;
+        [$this->homePath, $this->formPath, $this->mePath] = [new NavigationPath(), new NavigationPath(), new NavigationPath()];
         $this->homeIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10h-6v-6H9v6H3z"/></svg>');
         $this->formIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h10v4H4z"/></svg>');
         $this->meIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0z"/></svg>');
+    }
+
+    /** What a row's swipe action did, as a mail app would note it. */
+    public function swiped(int $row, string $action): void
+    {
+        $this->lastAction = "swipeActions: 第 " . ($row + 1) . " 行 $action";
+        Haptics::impact('light');
+    }
+
+    /** A pull to refresh: the work it does, here a second and a half, in the fiber refreshable runs it in. */
+    public function refresh(): void
+    {
+        App::sleep(1.5);
+        $this->refreshes++;
     }
 
     /**

@@ -23,7 +23,7 @@ trait ContextTransfer
      */
     public function dragData(Node $n, Data $data, DragOptions $o = new DragOptions()): Node
     {
-        return $this->dragDataFrom($n, fn() => $data, $o);
+        return $this->dragDataFrom($n, static fn() => $data, $o); // static: the node keeps it, and $this would hold the tree
     }
 
     /**

@@ -508,7 +508,7 @@ final class InspectorPanel
             $stat('Elements', (string)$in->elements);
           $c->end();
           $c->column()->size(0, 150)->shrink(0)->radius(4)->borderWidth(1)->borderColor($pal['border'])
-              ->draw(fn(Painter $p, array $r) => self::paintFrames($p, $in, $r));
+              ->draw(static fn(Painter $p, array $r) => self::paintFrames($p, $in, $r));
           $c->end();
           $c->row(0, 14)->wrap($width - 25);
             foreach ([['Build', self::BUILD, 0], ['Layout', self::LAYOUT, 1], ['Paint', self::PAINT, 2]] as [$name, $color, $k]) {

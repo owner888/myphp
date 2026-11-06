@@ -60,7 +60,7 @@ final class DiffSeparator
               $chevron = function (int $dir, string $label, \Closure $fn) use ($c, $t, $ct, $s) {
                   $b = $c->key($label)->row()->size(20, 20)->radius(4)->label($label)->tooltip($label)->cursor(\MyPHP\UI\Cursor::Pointer)->focusable();
                   if ($c->hovered($b)) { $b->color = $ct->c['text'][0]; $b->alpha = $ct->c['text'][1] * 0.08; }
-                  $b->drawOver(function (Painter $p, array $r) use ($dir) {
+                  $b->drawOver(static function (Painter $p, array $r) use ($dir) {
                       $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = 3.5;
                       $path = match ($dir) {
                           1 => (new Path)->moveTo($cx - $d, $cy - $d / 2)->lineTo($cx, $cy + $d / 2)->lineTo($cx + $d, $cy - $d / 2),

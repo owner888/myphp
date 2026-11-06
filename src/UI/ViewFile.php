@@ -81,6 +81,7 @@ final class ViewFile
     /** The file's view, run in $state's scope. */
     private function load(): Closure
     {
+        require_once __DIR__ . '/Declarative/functions.php'; // VStack, Text, Button…: global, as SwiftUI's need no import
         $path = $this->path;
         $require = static fn(): mixed => require $path;
         if ($this->state !== null) {

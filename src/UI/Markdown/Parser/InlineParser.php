@@ -1095,6 +1095,7 @@ final class InlineParser
             }
         };
         $walk(0);
+        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
         return $out;
     }
 

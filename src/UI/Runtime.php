@@ -194,6 +194,8 @@ final class Runtime
     private array $memberOf = [], $groups = [], $groupLast = [];
     /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state: it goes with its node, unless a router keeps the page it is in. */
     private array $locals = [];
+    /** @var array<int, Declarative\Lifecycle> the onAppear, onDisappear and task of the views shown, by node @internal */
+    public array $lifecycles = [];
     /** @internal Painter::paintBlurred: the canvas each blurred node (Node::blur) draws into, by its id, while it is built @var array<int, Canvas> */
     public array $blurLayers = [];
     /**
@@ -886,6 +888,9 @@ final class Runtime
         $this->syncTextSelection();
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
+        }
+        foreach ($this->lifecycles as $id => $_) { // a view gone: its onDisappear (Declarative\Lifecycle's destructor)
+            if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->lifecycles[$id]); }
         }
         foreach ($this->blurLayers as $id => $_) {
             if (!isset($this->rects[$id])) { unset($this->blurLayers[$id]); }

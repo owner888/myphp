@@ -200,6 +200,7 @@ final class Headless
                 return $c->root;
             });
             $this->rt->builtAt([$this->w, $this->h, 1.0]);
+            $this->metrics->textSystem()->endFrame(); // as a window's frame ages its text layouts (Text::beginFrame), or the cache only grows
             if ($this->paints || ($in !== null && $in->open)) { $this->paint(); } // as a window paints it: the inspector's highlight, and its times
         }
         return $this->root;
@@ -557,7 +558,7 @@ final class Headless
     public static function view(string $name, object $state, string $file = 'view.php'): Closure
     {
         $view = Closure::bind(function () use ($name, $file) { return eval('?>' . Headless::viewSource($name, $file)); }, $state, (new \ReflectionClass($state))->isInternal() ? null : $state::class)();
-        return static function (Context $c, mixed ...$args) use ($view, $state): void { $c->state = $state; $view($c, ...$args); }; // as Content::file: the pages of a Router's table bound to it too
+        return static function (Context $c) use ($view, $state): void { $c->state = $state; \MyPHP\UI\Content::render($view, $c); }; // as Content::file: the pages of a Router's table bound to it too
     }
 
     /**
@@ -577,7 +578,19 @@ final class Headless
         $path = __DIR__ . "/../examples/$name/$file";
         $src = file_get_contents($path);
         if ($src === false) { throw new \RuntimeException($path); }
-        return str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;', var_export(dirname($path), true)], $src);
+        require_once __DIR__ . '/../src/UI/Declarative/functions.php';
+        return str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;' . self::declarativeUses($src), var_export(dirname($path), true)], $src);
+    }
+
+    /** The global enums of the declarative views, which a view file in an example's namespace names as the app's global ones. */
+    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'Axis', 'TitleDisplayMode', 'NavigationPath'];
+
+    /** The use line naming the declarative globals $src does not name of its own, for $src in an example's namespace. */
+    private static function declarativeUses(string $src): string
+    {
+        preg_match_all('/^use [^;]+;/m', $src, $m);
+        $global = array_filter(self::DECLARATIVE, fn(string $n) => !preg_match('/\\b' . $n . '\\b/', implode(' ', $m[0])));
+        return $global === [] ? '' : ' use ' . implode(', ', $global) . ';';
     }
 
     /** The namespace of example $name: "counter-native" is CounterNative. */
@@ -601,11 +614,13 @@ final class Headless
         if ($at === false) { throw new \RuntimeException($stop); }
         $src = substr($src, 0, $at);
         // In a namespace of its own, the global classes the examples use (functions and constants fall back on their own) must be named.
-        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;', var_export(dirname($path), true)], $src);
+        require_once __DIR__ . '/../src/UI/Declarative/functions.php';
+        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;' . self::declarativeUses($src), var_export(dirname($path), true)], $src);
         // Its constants in its namespace too, as two examples name theirs alike (WINDOW_W); a line declaring several stays a const of the namespace.
         $src = preg_replace('/^const (\w+) = ((?:(?!, [A-Z_0-9]+ = ).)*);$/m', 'defined(__NAMESPACE__ . \'\\\\$1\') || define(__NAMESPACE__ . \'\\\\$1\', $2);', $src);
         $argv = [$path, ...$args];
-        (static function () use ($src, $argv, &$state) { eval('?>' . $src); $state = $s ?? $files ?? null; })();
+        $var = preg_match('~Content::file\(__DIR__ \. \'/view\.php\', \$(\w+)~', (string)file_get_contents($path), $m) ? $m[1] : 's'; // the state its view is bound to
+        (static function () use ($src, $argv, &$state, $var) { eval('?>' . $src); $state = $s ?? $$var ?? $files ?? null; })();
     }
 }
 
