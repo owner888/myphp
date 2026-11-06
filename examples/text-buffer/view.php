@@ -2,12 +2,8 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Font};
-
-return function (Context $c): void {
-    $c->column(20, 10, 1);
-      $c->text('Indexed text input', 22, style: Font::BOLD);
-      $c->text(sprintf('%d lines · %d runes · version %d', $this->lineCount(), $this->len(), $this->version()));
-      $c->textAreaBuffer($this, width: 0, height: 0)->label('Document')->font('monospace')->autoFocus();
-    $c->end();
-};
+return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+    Text('Indexed text input')->font(Font::system(size: 22, weight: Weight::bold)),
+    Text(verbatim: sprintf('%d lines · %d runes · version %d', $this->lineCount(), $this->len(), $this->version())),
+    TextEditor(buffer: $this)->monospaced()->accessibilityLabel('Document')->defaultFocus(),
+)->padding(20);

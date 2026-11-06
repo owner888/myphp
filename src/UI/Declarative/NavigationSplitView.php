@@ -27,7 +27,7 @@ final class NavigationSplitView extends View
           $c->end();
         $c->end();
         if ($chosen !== ($selection ?? '')) { $selection = $chosen; }
-        View::fill($n, $env->axis, View::FLEX_X | View::FLEX_Y);
+        View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
         return $n;
     }
 

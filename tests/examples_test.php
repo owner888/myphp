@@ -114,9 +114,9 @@ same(['System/Utilities', '~/Applications'], [\MyPHP\Examples\Launcher\where($s-
 $t = new Headless($view, 380, 340);
 $t->frame();
 check($t->byText('Kept here until you quit.') !== null, 'the status at first');
-$s->text->text = 'milk'; $t->frame();
-$t->clickText('Clear'); $t->frame();
-same('', $s->text->text, 'Clear empties the note');
+$s->text = 'milk'; $t->frame();
+$t->clickText('Clear'); $t->frame(2);
+check($s->text === '' && $s->editing, 'Clear empties the note and gives its editor the keyboard');
 
 // menubar-flyout: the panel's switches.
 [$view, $s] = Headless::load('menubar-flyout');
@@ -922,3 +922,27 @@ check($t->byText('Perfil') !== null && $t->byText('nombre: 3 bytes') !== null, '
 $s->lang = 'en'; $t->frame(2);
 check($t->byText('Profile') !== null, 'form: in English again');
 \MyPHP\Catalog::resetRegistry(); // its catalogs, which requiring locales/Locales.php registered, are not the next tests'
+
+// desktop (the declarative views): the log's context menu, as SwiftUI's contextMenu, clears it.
+[$view, $s] = Headless::load('desktop');
+$t = new Headless($view, 700, 500);
+$t->frame(2);
+[$x, $y] = $t->rect($t->byText('Use the menu, the buttons, or right-click.'));
+$t->rightClick($x + 5, $y + 5); $t->frame();
+same(['Open…', 'Save As…', '-', 'Clear log'], $t->menuLabels(), "desktop: the log's context menu");
+$t->closeMenu();
+$s->log[] = 'move (980×720)'; $s->log[] = 'move (980×720)'; $t->frame(2); // lines that repeat, told apart by their place: no key twice
+check(count(array_filter($t->texts(), fn(string $x) => $x === 'move (980×720)')) === 2, 'desktop: a line that repeats shows twice');
+[$x, $y] = $t->rect($t->byText('Use the menu, the buttons, or right-click.'));
+$t->rightClick($x + 5, $y + 5); $t->frame();
+$t->chooseMenuItem('Clear log'); $t->frame(2);
+same([], $s->log, 'desktop: Clear log empties it');
+
+// titlebar (the declarative views): the bar clear of the window's controls, a handle moving the window; its field and
+// its button keep their presses.
+[$view, $s] = Headless::load('titlebar', 'App::whenReady');
+$t = new Headless($view, 700, 400);
+$t->frame(2);
+$t->clickText('Count'); $t->frame(2);
+same(1, $s->count, 'titlebar: Count counts');
+check($t->byText('Counted 1; searching “”.') !== null, 'titlebar: the text follows');

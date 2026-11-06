@@ -21,6 +21,8 @@ final class Lifecycle
     /** @var array<int, mixed> the values onChange() saw last, by its place among the view's */
     private array $seen = [];
     private bool $hovered = false;
+    /** What focused() bound last frame, null before. */
+    private ?bool $focusWas = null;
 
     /** The lifecycle of $node, made the first frame it is built; null without a runtime (a test's single build). @internal */
     public static function of(Context $c, Node $node): ?self
@@ -59,6 +61,19 @@ final class Lifecycle
         $was = $this->hovered;
         $this->hovered = $now;
         return $was !== $now;
+    }
+
+    /** Whether the view has the keyboard focus, $wanted the binding: the app's change of it moves the focus, the user's writes it back. @internal */
+    public function focus(bool $wanted, bool $has, ?\Closure $take): bool
+    {
+        if ($wanted !== $this->focusWas) { // the app set it (or the first frame): the focus follows
+            if ($wanted && !$has && $take !== null) { $take(); }
+            $now = $wanted;
+        } else {
+            $now = $has; // the user moved it
+        }
+        $this->focusWas = $now;
+        return $now;
     }
 
     public function __destruct()

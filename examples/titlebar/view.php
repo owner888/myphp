@@ -2,26 +2,20 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Font, Node};
-
-return function (Context $c): void {
-    $t = $c->theme;
-    $bar = $c->titleBar();
-    $c->column(0, 0, 1);
-      // The title bar: as high as the controls' room (or 32), padded past them, a handle moving the window; the field and the button in it keep their presses.
-      $c->row(0, $t->space(2), 0, $t->surface)->size(0, max($bar['height'], 32))->alignItems(Node::CENTER)->dragWindow();
-        $c->column(0, 0)->size($bar['left'], 0); $c->end();
-        $c->text("Title bar: {$this->style}", $t->fontSize, $t->text, Font::BOLD);
-        $c->muted(sprintf('controls take %d × %d', $bar['left'], $bar['height']));
-        $c->row(0, 0, 1); $c->end();
-        $c->searchField($this->query, 180);
-        if ($c->clicked($c->button('Count'))) { $this->count++; }
-        $c->column(0, 0)->size($bar['right'] + $t->space(3), 0); $c->end();
-      $c->end();
-      $c->divider();
-      $c->column($t->space(5), $t->space(3), 1);
-        $c->text('Drag the bar above to move the window; double-click it to zoom.');
-        $c->muted("Counted {$this->count}; searching “{$this->query->text}”.");
-      $c->end();
-    $c->end();
-};
+// The title bar is the view's own: as high as the window's controls (or 32), clear of them, and a handle that moves the
+// window, as SwiftUI's WindowDragGesture; the field and the button in it keep their presses.
+return fn() => GeometryReader(fn(GeometryProxy $g) => VStack(spacing: 0)(
+    HStack(spacing: 8)(
+        Text(verbatim: "Title bar: {$this->style}")->bold(),
+        Text(verbatim: sprintf('controls take %d × %d', $g->titleBar['left'], $g->titleBar['height']))->foregroundStyle(Color::secondary),
+        Spacer(),
+        TextField('Search', text: $this->query)->frame(width: 180),
+        Button('Count', action: fn() => $this->count++),
+    )->padding(Edge::leading, $g->titleBar['left'] + 8)->padding(Edge::trailing, $g->titleBar['right'] + 12)
+        ->frame(height: max($g->titleBar['height'], 32))->background(Color::gray->opacity(0.12))->gesture(WindowDragGesture()),
+    Divider(),
+    VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+        Text('Drag the bar above to move the window; double-click it to zoom.'),
+        Text(verbatim: "Counted {$this->count}; searching “{$this->query}”.")->foregroundStyle(Color::secondary),
+    )->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading),
+));

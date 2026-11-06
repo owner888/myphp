@@ -15,7 +15,7 @@ use MyPHP\UI\Content;
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 /** The window's state: its log, the line wrapping, the window, and what its buttons and context menu do (set below). */
-$s = (object)['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null, 'closing' => false, 'actions' => [], 'context' => null];
+$s = (object)['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null, 'closing' => false, 'actions' => [], 'open' => null, 'save' => null];
 $log = function (string $line) use ($s) { $s->log[] = $line; $s->window?->invalidate(); };
 
 $open = function () use ($log) {
@@ -51,7 +51,6 @@ App::setMenu(new Menu([
     ]),
     new MenuItem(role: 'windowMenu'),
 ]));
-$context = new Menu([new MenuItem('Open…', $open), new MenuItem('Save As…', $save), MenuItem::separator(), new MenuItem('Clear log', function () use ($s) { $s->log = []; })]);
 
 $notify = function () use ($log) {
     if (!Notification::supported()) { $log('notifications need a built .app (myphp build); run from the bundle to try'); return; }
@@ -60,7 +59,7 @@ $notify = function () use ($log) {
 };
 App::onNotificationClick(fn(string $id) => $log("notification $id clicked"));
 $s->actions = ['Open…' => $open, 'Save As…' => $save, 'Ask…' => $ask, 'Notify' => $notify];
-$s->context = $context;
+[$s->open, $s->save] = [$open, $save]; // the context menu's, which view.php makes
 
 /** A 16×16 PNG: a black ring, drawn as a template so the menu bar tints it. */
 function ringPng(): string

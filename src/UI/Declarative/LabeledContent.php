@@ -34,7 +34,7 @@ final class LabeledContent extends View
     {
         if ($title === '' || $env->labelsHidden) {
             $n = $control();
-            if ($wide) { View::fill($n, $env->axis, View::FLEX_X); }
+            if ($wide) { View::takeRoom($n, $env->axis, View::FLEX_X); }
             return $n;
         }
         $row = $c->row(0, 8)->alignItems(Node::CENTER);
@@ -43,7 +43,7 @@ final class LabeledContent extends View
           $n = $control();
           if ($wide) { $n->grow = max($n->grow, 1); }
         $c->end();
-        if ($env->formRow || $wide) { View::fill($row, $env->axis, View::FLEX_X); }
+        if ($env->formRow || $wide) { View::takeRoom($row, $env->axis, View::FLEX_X); }
         return $row;
     }
 }

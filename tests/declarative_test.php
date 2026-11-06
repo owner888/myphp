@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Content, Context, Node};
-use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis;
+use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem;
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 
@@ -209,3 +209,67 @@ $h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(
 )->environment(locale: 'en'), $c), 400, 200);
 $h->frame(2);
 check($h->byText('Hello, Ada!') !== null && $h->byText('3 files') !== null && $h->byText('{n} **stays**') !== null, 'Text fills its placeholders, a plural too; verbatim shows as it is: ' . json_encode($h->texts()));
+
+// focused($isFocused), as SwiftUI's FocusState: true moves the focus to the view, a click elsewhere makes it false;
+// defaultFocus() focuses a view as it first shows.
+$f = new class { public bool $a = false; public string $x = '', $y = ''; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(
+    TextField('First', text: $f->x)->defaultFocus(),
+    TextField('Second', text: $f->y)->focused($f->a),
+), $c), 400, 200);
+$h->frame(2);
+$fields = [];
+$walk = function (Node $n) use (&$walk, &$fields) { if ($n->kind === Node::INPUT) { $fields[] = $n; } foreach ($n->kids as $k) { $walk($k); } };
+$walk($h->root); $walk = null;
+check($h->rt->focus === $fields[0]->id && !$f->a, 'defaultFocus focuses the first field as it shows');
+$f->a = true; $h->frame(2);
+same($fields[1]->id, $h->rt->focus, 'focused(true) moves the focus to the second');
+$h->clickOn($fields[0]); $h->frame(2);
+check(!$f->a, 'a click on the first makes the binding false');
+
+// ZStack: a view that takes the room (a Representable that fills, a Color) takes the stack's, and the stack the
+// window's; the others are placed by its alignment.
+$h = new Headless(fn(Context $c) => Content::render(fn() => ZStack(alignment: Alignment::bottomLeading)(
+    Representable(fn(Context $c) => $c->box(0, 0, 0x000000)->label('canvas'), fills: true),
+    Text('Caption'),
+), $c), 500, 300);
+$h->frame(2);
+same([0.0, 0.0, 500.0, 300.0], $h->rect($h->byLabel('canvas')), 'a filling view in a ZStack takes the window');
+$cap = $h->rect($h->byText('Caption'));
+check($cap[0] === 0.0 && $cap[1] + $cap[3] === 300.0, 'and the other sits at the bottom leading corner: ' . json_encode($cap));
+
+// Toggle's styles, as SwiftUI's: automatic a checkbox on a Mac and a switch on a phone; switch, checkbox, button.
+$tg = new class { public bool $a = false, $b = false, $c = false; };
+$kinds = function (bool $touch) use ($tg): array {
+    $h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(
+        Toggle('Auto', isOn: $tg->a),
+        Toggle('Switch', isOn: $tg->b)->toggleStyle(ToggleStyle::switch),
+        Toggle('Button', isOn: $tg->c)->toggleStyle(ToggleStyle::button),
+    ), $c), 300, 200);
+    $h->rt->touch = $touch;
+    $h->frame(2);
+    $out = [];
+    $walk = function (Node $n) use (&$walk, &$out) { if (in_array($n->kind, [Node::CHECKBOX, Node::SWITCH, Node::BUTTON], true)) { $out[] = $n->kind; } foreach ($n->kids as $k) { $walk($k); } };
+    $walk($h->root);
+    return $out;
+};
+same([Node::CHECKBOX, Node::SWITCH, Node::BUTTON], $kinds(false), 'on a Mac: automatic a checkbox, then a switch and a button');
+same(Node::SWITCH, $kinds(true)[0], 'on a phone: automatic a switch');
+
+// A TextField takes the width it is given, as SwiftUI's, unless a frame fixes it; a field of lines too.
+$tf = new class { public string $a = '', $b = '', $c = ''; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack(alignment: HorizontalAlignment::leading)(
+    TextField('Wide', text: $tf->a),
+    TextField('Fixed', text: $tf->b)->frame(width: 120),
+    TextField('Lines', text: $tf->c, axis: Axis::vertical),
+)->padding(10), $c), 400, 300);
+$h->frame(2);
+same([380.0, 120.0, 380.0], [$h->rect($h->byLabel('Wide'))[2], $h->rect($h->byLabel('Fixed'))[2], $h->rect($h->byLabel('Lines'))[2]], 'fields take the width, but a fixed one');
+
+// LazyVGrid with an adaptive column: as many columns as fit cells 100 wide in 430 (4, 10 apart), sharing what is left.
+$h = new Headless(fn(Context $c) => Content::render(fn() => LazyVGrid(columns: [GridItem::adaptive(minimum: 100)], spacing: 10)(
+    Each(range(1, 6))(fn(int $i) => Text("Cell $i")->frame(maxWidth: INF)->border(Color::separator)),
+)->padding(0), $c), 430, 300);
+$h->frame(3);
+$xs = array_map(fn(int $i) => $h->rect($h->byText("Cell $i"))[1], [1, 4, 5]);
+check($xs[0] === $xs[1] && $xs[2] > $xs[0], 'four cells to a row, the fifth on the next: ' . json_encode($xs));

@@ -43,7 +43,7 @@ final class Each extends View
             $v = $content($item, $key);
             if ($v === null) { continue; }
             $id = match (true) {
-                $this->id instanceof Closure => ($this->id)($item),
+                $this->id instanceof Closure => ($this->id)($item, $key), // fn($item, $key): its key too, as SwiftUI's id: \.offset
                 is_string($this->id) => is_array($item) ? $item[$this->id] : $item->{$this->id},
                 is_int($item) || is_string($item) => $item,
                 default => $key,

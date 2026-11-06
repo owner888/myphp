@@ -2,33 +2,23 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Node};
-
-return function (Context $c): void {
-    $t = $c->theme;
-    $c->column(20, 12, 1)->fill();
-      $c->text("Count: {$this->count}");
-      if ($c->clicked($c->key('add')->button('Add'))) { $this->count++; }
-      $c->key('name')->input($this->name, 'Name', 240)->label('Name');
-      $c->text("Hello, {$this->name->text}");
-      // Its Delete button shows while the row hovers; at rest it ignores input, a press there the row's, but assistive technology presses it.
-      $row = $c->key('row')->row(8, 8, 0, $t->surface)->size(320, 44)->radius(8)->label('Row')->alignItems(Node::CENTER);
-      $hovered = $c->hovered($row);
-        $c->text('A row')->grow = 1;
-        $del = $c->key('delete')->button('Delete')->ignoreInput(!$hovered);
-        if (!$hovered) { $del->opacity(0); }
-        if ($c->clicked($del)) { $this->deletes++; }
-      $c->end();
-      if ($c->clicked($row)) { $this->rowClicks++; }
-      $c->text("Row clicks: {$this->rowClicks}, deletes: {$this->deletes}");
-      // Shapes drawn in bands of rows around their round corners (v1.115): their edges should look as ever.
-      $c->row(0, 16)->alignItems(Node::CENTER);
-        $c->column(0, 0)->size(64, 64)->radius(32)->border(2, $t->accent);
-        $c->end();
-        $c->column(0, 0)->size(120, 64)->radius(12)->border(1, $t->border);
-        $c->end();
-        $c->column(0, 0, 0, $t->background)->size(120, 64)->radius(16)->shadow(0, 6, 18, 0, 0x000000, 0.35);
-        $c->end();
-      $c->end();
-    $c->end();
-};
+// What scripts/smoke-automation.php drives through the automation plugin, by the keys (id) it finds them by.
+return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+    Text(verbatim: "Count: {$this->count}"),
+    Button('Add', action: fn() => $this->count++)->id('add'),
+    TextField('Name', text: $this->name)->frame(width: 240)->id('name'),
+    Text(verbatim: "Hello, {$this->name}"),
+    // Its Delete button shows while the row hovers; at rest it lets presses through to the row, but assistive technology presses it.
+    HStack(spacing: 8)(
+        Text('A row')->frame(maxWidth: INF, alignment: Alignment::leading),
+        Button('Delete', action: fn() => $this->deletes++)->opacity($this->rowHovered ? 1 : 0)->allowsHitTesting($this->rowHovered)->id('delete'),
+    )->padding(8)->frame(width: 320, height: 44)->background(Color::gray->opacity(0.12))->cornerRadius(8)->accessibilityLabel('Row')
+        ->onHover(fn(bool $over) => $this->rowHovered = $over)->onTapGesture(fn() => $this->rowClicks++)->id('row'),
+    Text(verbatim: "Row clicks: {$this->rowClicks}, deletes: {$this->deletes}"),
+    // Shapes drawn in bands of rows around their round corners (v1.115): their edges should look as ever.
+    HStack(spacing: 16)(
+        Circle()->stroke(Color::accentColor, lineWidth: 2)->frame(width: 64, height: 64),
+        RoundedRectangle(cornerRadius: 12)->stroke(Color::separator)->frame(width: 120, height: 64),
+        RoundedRectangle(cornerRadius: 16)->fill(Color::background)->frame(width: 120, height: 64)->shadow(Color::black->opacity(0.35), radius: 9, y: 6),
+    ),
+)->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading);

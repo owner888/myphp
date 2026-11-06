@@ -32,7 +32,7 @@ final class Stack extends View
         $n->alignItems($this->align);
         View::renderAll($c, $env->along($this->axis), $this->content);
         $c->end();
-        View::fill($n, $env->axis, View::flexOfKids($n)); // as SwiftUI's: a Spacer, a list or a stack inside that takes the room makes the stack take it
+        View::takeRoom($n, $env->axis, View::flexOfKids($n)); // as SwiftUI's: a Spacer, a list or a stack inside that takes the room makes the stack take it
         return $n;
     }
 }

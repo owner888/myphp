@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use MyPHP\UI\{Context, Painter};
 
-return function (Context $c): void {
+// The card is the example's own drawing, and its slider the example's own handling of the pointer, as an NSView in a
+// representable; it takes the window.
+return fn() => Representable(function (Context $c) {
     $this->prepare($c);
     [$w, $h] = $c->size();
     // Centered across, on whole points so that the card's edges are crisp.
     $ox = round(($w - CARD_W) / 2); $oy = round(CARD_Y + ($h - WINDOW_H) / 2);
-    $c->column(0, 0, 1, PAGE_COLOR)->fill()->draw(function (Painter $p, array $r) use ($ox, $oy): void {
+    $card = $c->column(0, 0, 1, PAGE_COLOR)->fill()->draw(function (Painter $p, array $r) use ($ox, $oy): void {
         if ($this->drawCard($p, $ox, $oy, $p->now())) { $p->animationFrame(); }
     });
       // The title bar, under the traffic lights, drags the window.
@@ -30,4 +32,5 @@ return function (Context $c): void {
           $this->release($t);
       }
     $c->end();
-};
+    return $card;
+}, fills: true);

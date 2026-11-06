@@ -2,19 +2,23 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Cursor, Node, Painter};
+use MyPHP\UI\{Context, Cursor, Painter};
 
-return function (Context $c): void {
-    $reduce = $c->preferences()->reduceMotion;
-    $root = $c->row(0, 0, 0, 0x000000)->fill()->alignItems(Node::END)->padding(0, 28, 26, 30);
-    $root->cursor($this->down ? Cursor::Grabbing : Cursor::Grab);
-    $root->draw(fn(Painter $p, array $r) => $this->draw($p, $r, $reduce));
-    $root->handleInput($this->input(...));
-      $c->column(0, 4);
-        $c->text('Gargantua', 22)->fontWeight(600)->textColor(0xffffff, WHITE_ALPHA);
-        $c->text('A black hole, its light traced through gravity by shaders written in PHP', 12)->textColor(0xffffff, MUTED_ALPHA);
-      $c->end();
-      $c->spacer();
-      $c->text('Drag to orbit · Scroll to zoom', 12)->textColor(0xffffff, MUTED_ALPHA)->opacity($this->hint);
-    $c->end();
-};
+// The hole fills the window, drawn by the shaders and orbited by the pointer (its own input, as an NSView's in a
+// representable); the title and the hint over it, at its bottom.
+return fn() => ZStack(alignment: Alignment::bottomLeading)(
+    Representable(function (Context $c) {
+        $reduce = $c->preferences()->reduceMotion;
+        $n = $c->box(0, 0, 0x000000)->cursor($this->down ? Cursor::Grabbing : Cursor::Grab)->handleInput($this->input(...));
+        $n->draw(fn(Painter $p, array $r) => $this->draw($p, $r, $reduce));
+        return $n;
+    }, fills: true),
+    HStack(alignment: VerticalAlignment::bottom)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+            Text('Gargantua')->font(Font::system(size: 22, weight: Weight::semibold))->foregroundStyle(Color::white->opacity(WHITE_ALPHA)),
+            Text('A black hole, its light traced through gravity by shaders written in PHP')->font(Font::system(size: 12))->foregroundStyle(Color::white->opacity(MUTED_ALPHA)),
+        ),
+        Spacer(),
+        Text('Drag to orbit · Scroll to zoom')->font(Font::system(size: 12))->foregroundStyle(Color::white->opacity(MUTED_ALPHA))->opacity($this->hint),
+    )->padding(Edge::leading, 30)->padding(Edge::trailing, 28)->padding(Edge::bottom, 26),
+);

@@ -62,7 +62,7 @@ final class TextField extends View
             $this->vertical => $c->textarea($state, $placeholder, 0, 0, null, 1, 8),
             default => $c->input($state, $placeholder, 0),
         };
-        if ($this->editor) { View::fill($n, $env->axis, View::FLEX_X | View::FLEX_Y); } // TextEditor takes the room it is given
+        View::takeRoom($n, $env->axis, $this->editor ? View::FLEX_X | View::FLEX_Y : View::FLEX_X); // as SwiftUI's: a field takes the width it is given, a TextEditor the room
         if ($this->secure) { $n->password(); }
         $n->label(Localized::string($this->title, $env));
         $env->font?->apply($n);

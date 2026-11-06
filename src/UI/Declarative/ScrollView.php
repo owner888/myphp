@@ -33,7 +33,7 @@ final class ScrollView extends View
             $n = $c->row(0, 8)->alignItems(Node::CENTER)->scroll($state, horizontal: true, vertical: false);
               View::renderAll($c, $env->along(Node::ROW), $this->content);
             $c->end();
-            View::fill($n, $env->axis, View::FLEX_X);
+            View::takeRoom($n, $env->axis, View::FLEX_X);
             return $n;
         }
         return self::scroller($c, $env, function (Env $env) use ($c): void {

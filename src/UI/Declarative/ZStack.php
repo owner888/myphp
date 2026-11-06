@@ -22,14 +22,20 @@ final class ZStack extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $n = $c->grid([Track::fr()]);
+        $flex = 0;
         foreach (self::flat($this->content) as $v) {
             $kid = $v->render($c, $env);
             if ($kid !== null) {
                 $kid->columnStart(1)->rowStart(1);
+                $f = View::flexOf($kid, $env->axis); // as SwiftUI's: a view that takes the room takes the stack's, the others placed by the alignment
+                $flex |= $f;
                 $this->alignment->place($kid, true);
+                if ($f & View::FLEX_X) { $kid->justifySelf(Node::STRETCH); }
+                if ($f & View::FLEX_Y) { $kid->alignSelf(Node::STRETCH); }
             }
         }
         $c->end();
+        View::takeRoom($n, $env->axis, $flex); // and the stack takes the room when one of them does
         return $n;
     }
 
