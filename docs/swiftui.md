@@ -259,8 +259,8 @@ $view = function (Context $c) use ($app) {
 
 | SwiftUI | myphp |
 |---|---|
-| `NavigationStack(path: $path) { }` | `new Router('/')` held in your state; `$router->view($c, fn(Route $r) => …)` builds the page shown |
-| `.navigationDestination(for:)` | `if ($r->match('/note/{id}')) { … $r->param('id') … }` inside the view closure |
+| `NavigationStack(path: $path) { }` | `new Router('/')` held in your state; `$router->view($c, ['/notes' => …, '/notes/{id}' => …])` builds the page shown |
+| `.navigationDestination(for:) { NoteView(id: $0) }` | A row of that table: `'/notes/{id}' => __DIR__ . '/pages/note.php'`, the file returning `function (Context $c, Route $r, int $id): void`, as a `View` struct of its own; `{id}` comes by name, typed |
 | `NavigationLink(value:)` / `path.append()` | `$router->push('/note/42')` |
 | `dismiss()` / the back button | `$router->back()`; `$c->backButton()` draws one; `navigationBar()` on phones |
 | `.navigationTitle("Notes")` | `$r->title('Notes')` |
@@ -276,15 +276,16 @@ $app = new class {
     public function __construct() { $this->router = new Router('/notes'); }
 };
 $view = function (Context $c) use ($app) {
-    $app->router->view($c, function (Route $r) use ($c, $app) {
-        if ($r->match('/notes')) {
+    $app->router->view($c, [ // in an app each page a file of pages/, which hot reloads (ui/navigation.md)
+        '/notes' => function (Context $c, Route $r) use ($app) {
             $r->title('Notes');
             if ($c->clicked($c->button('Open note 42'))) { $app->router->push('/notes/42'); }
-        } elseif ($r->match('/notes/{id}')) {
-            $r->title('Note ' . $r->param('id'));
+        },
+        '/notes/{id}' => function (Context $c, Route $r, int $id) use ($app) {
+            $r->title("Note $id");
             if ($c->clicked($c->button('Back'))) { $app->router->back(); }
-        }
-    });
+        },
+    ]);
 };
 ```
 

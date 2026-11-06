@@ -115,11 +115,13 @@ fi
 cp "${ENTRY}" "${APP_DIR}/app.php"
 cp -R "${ROOT_DIR}/src" "${APP_DIR}/src"
 ENTRY_DIR="$(dirname "${ENTRY}")"
-for php_file in "${ENTRY_DIR}/"*.php; do
-    [ -f "$php_file" ] && [ "$php_file" != "${ENTRY}" ] && cp "$php_file" "${APP_DIR}/"
-done
-if [ -d "${ENTRY_DIR}/src" ] && [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
-    cp -R "${ENTRY_DIR}/src/"* "${APP_DIR}/src/"
+if [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
+    (cd "${ENTRY_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './.*') | while read -r rel; do
+        rel="${rel#./}"
+        [ "${ENTRY_DIR}/$rel" = "${ENTRY}" ] && continue
+        mkdir -p "$(dirname "${APP_DIR}/$rel")"
+        cp "${ENTRY_DIR}/$rel" "${APP_DIR}/$rel"
+    done
 fi
 
 # 5. The CA certificates HTTPS trusts (curl's copy of Mozilla's): OpenSSL in the app has no way to the system's

@@ -299,7 +299,7 @@ static void* php_worker_thread(void *arg) {
         char init_code[2048];
         snprintf(init_code, sizeof(init_code),
             "putenv('MYPHP_PLATFORM=android');"
-            "putenv('MYPHP_HOT_RELOAD=%s/.myphp-reload');" // where myphp run asks for a hot reload (Content::hotReloadFile): beside app.php
+            "putenv('MYPHP_HOT_RELOAD=%s/.myphp-reload');" // where myphp run asks for a hot reload (ViewFile::hotReloadFile): beside app.php
             "require '%s/src/autoload.php';" // the framework the APK carries: an app needs no autoloader of its own, as on the desktop with Composer's
             // why PHP ended, in the log: the error that ended it (a fatal is written before the bailout, but not always through ub_write), an uncaught exception's trace
             "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"

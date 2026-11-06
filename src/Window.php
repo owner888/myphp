@@ -1275,7 +1275,7 @@ final class Window
         }
         if ($this->backStage === 1 && $this->input !== null) { // the system's Back closed nothing: the page goes back
             $this->backStage = 2;
-            $this->input->push(['key', Key::BACK, '', 0, hrtime(true)]);
+            $this->input->push(['key', '', Key::BACK, 0, false]); // a key event: its text, its code, the modifiers, a repeat
             $this->invalidate();
         }
     }
@@ -1298,7 +1298,7 @@ final class Window
             return;
         }
         $this->backStage = 1;
-        $this->input->push(['key', Key::ESCAPE, '', 0, hrtime(true)]);
+        $this->input->push(['key', '', Key::ESCAPE, 0, false]); // a key event: its text, its code, the modifiers, a repeat
         $this->invalidate();
     }
 

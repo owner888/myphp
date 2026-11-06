@@ -192,7 +192,7 @@ final class Window implements Platform\Window
         if ($input->focus !== null) {
             $input->focus->deleteBack();
         } elseif ($input->client !== null) {
-            $input->push(['key', \MyPHP\UI\Key::BACKSPACE, '', 0, hrtime(true)]);
+            $input->push(['key', '', \MyPHP\UI\Key::BACKSPACE, 0, false]); // a key event: its text, its code, the modifiers, a repeat
         }
         $this->requestFrame();
     }

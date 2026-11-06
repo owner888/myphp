@@ -8,7 +8,7 @@
 // Run: myphp run -d android examples/mobile   (ios, macos)
 declare(strict_types=1);
 
-use MyPHP\{App, Window, WindowOptions};
+use MyPHP\{App, Dialog, FileFilter, Http, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Image, ListState, Router, ScrollState, SVG, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
@@ -42,11 +42,38 @@ final class Mobile
         $this->formIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h10v4H4z"/></svg>');
         $this->meIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0z"/></svg>');
     }
-    
-    
-    
-    
-    
+
+    /**
+     * Asks for a picture (decoded off the main thread, the app running meanwhile) or for documents, through the
+     * system's picker: the photo picker on a phone. @param list<string> $ext
+     */
+    public function pick(array $ext, bool $photo): void
+    {
+        $files = Dialog::open(new OpenDialogOptions(filters: [new FileFilter($photo ? '图片' : '文件', $ext)], multiple: !$photo));
+        if ($files === []) { return; }
+        if ($photo) {
+            $this->photoPath = $files[0];
+            $path = $files[0];
+            App::go(function () use ($path): void { $this->photo = Image::fromFile($path); }); // decoded off the main thread, the app running meanwhile
+        } else {
+            $this->files = $files;
+        }
+    }
+
+    /** An HTTPS request in a fiber, the app running meanwhile: its status, size and time, or why it failed. */
+    public function fetch(): void
+    {
+        $this->http = '请求中…';
+        App::go(function (): void {
+            $t = hrtime(true);
+            try {
+                $r = Http::get('https://example.com/');
+                $this->http = "HTTP {$r->status} · " . strlen($r->body) . " B · " . round((hrtime(true) - $t) / 1e6) . ' ms';
+            } catch (\RuntimeException $e) {
+                $this->http = '失败：' . $e->getMessage(); // shown, as an app would: the request's failure is not the app's
+            }
+        });
+    }
 }
 
 $app = new Mobile;

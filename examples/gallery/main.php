@@ -435,14 +435,6 @@ final class Gallery
         $this->chart = new GalleryCharts();
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
     public function text(Context $c): void
     {
         $t = $c->theme;
@@ -492,25 +484,7 @@ final class Gallery
           $c->end();
         $c->end();
     }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
 }
 
 $s = new Gallery();

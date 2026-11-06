@@ -632,7 +632,7 @@ final class Window implements Platform\Window
         if ($input->focus !== null) {
             $input->focus->deleteBack();
         } elseif ($input->client !== null) {
-            $input->push(['key', Key::BACKSPACE, '', 0, hrtime(true)]);
+            $input->push(['key', '', Key::BACKSPACE, 0, false]); // a key event: its text, its code, the modifiers, a repeat
         }
         $this->requestFrame();
     }
@@ -643,16 +643,15 @@ final class Window implements Platform\Window
         if ($input === null) {
             return;
         }
-        $time = hrtime(true);
         if ($unicodeChar === 10) { // Enter / newline
             if ($input->focus !== null) {
                 if ($input->focus->multiline) {
                     $input->focus->insert("\n");
                 } else {
-                    $input->push(['key', Key::ENTER, "\n", 0, $time]);
+                    $input->push(['key', "\n", Key::ENTER, 0, false]);
                 }
             } else {
-                $input->push(['key', Key::ENTER, "\n", 0, $time]);
+                $input->push(['key', "\n", Key::ENTER, 0, false]);
             }
             $this->requestFrame();
         }

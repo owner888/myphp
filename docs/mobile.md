@@ -82,7 +82,12 @@ A `Router` (docs/ui/navigation.md) is the page stack: `push()` a page,
 $tabs = $c->tabView([[$home, '首页'], [$search, '搜索'], [$me, '我的']], $this->tab, function (int $tab, string $where) use ($c) {
     $c->navigationBar($this->router->title(), $this->router);   // "‹ Home  Note", the way back
     $c->safeArea(function () use ($c) {
-        $this->router->view($c, fn(Route $r) => $this->page($c, $r));
+        $this->router->view($c, [                                // a page a file of pages/
+            '/home'      => __DIR__ . '/pages/home.php',
+            '/item/{id}' => __DIR__ . '/pages/item.php',          // function (Context $c, Route $r, int $id)
+            '/search'    => __DIR__ . '/pages/search.php',
+            '/me'        => __DIR__ . '/pages/me.php',
+        ]);
     });
 });
 if ($c->changed($tabs)) { $this->router->replace(['/home', '/search', '/me'][$this->tab]); }

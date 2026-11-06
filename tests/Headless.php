@@ -556,7 +556,8 @@ final class Headless
      */
     public static function view(string $name, object $state, string $file = 'view.php'): Closure
     {
-        return Closure::bind(function () use ($name, $file) { return eval('?>' . Headless::viewSource($name, $file)); }, $state, (new \ReflectionClass($state))->isInternal() ? null : $state::class)();
+        $view = Closure::bind(function () use ($name, $file) { return eval('?>' . Headless::viewSource($name, $file)); }, $state, (new \ReflectionClass($state))->isInternal() ? null : $state::class)();
+        return static function (Context $c, mixed ...$args) use ($view, $state): void { $c->state = $state; $view($c, ...$args); }; // as Content::file: the pages of a Router's table bound to it too
     }
 
     /**

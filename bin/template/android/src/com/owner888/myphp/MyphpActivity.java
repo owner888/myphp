@@ -22,7 +22,6 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -167,11 +166,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             }
         }, new IntentFilter("com.owner888.myphp.IME_COMMIT"), Context.RECEIVER_EXPORTED);
 
-        // myphp run's hot restart copied the changed PHP files over the assets' copies: a debuggable build started with myphp.keepFiles keeps them
-        boolean keep = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0 && getIntent().getBooleanExtra("myphp.keepFiles", false);
-        if (!keep) {
-            copyAssetsToFilesDir();
-        }
+        copyAssetsToFilesDir();
         writeCaCertificates(new File(getFilesDir(), "cacerts.pem"));
 
         DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -290,9 +285,34 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         }
     }
 
+    /**
+     * The APK's PHP into the app's files, once an install: the files keep what myphp run's hot reload copied over
+     * them, however the app is started again (myphp run's R, the launcher, after a crash), until the next install.
+     */
     private void copyAssetsToFilesDir() {
         File targetDir = getFilesDir();
+        File mark = new File(targetDir, ".myphp-assets");
+        String installed;
+        try {
+            installed = Long.toString(getPackageManager().getPackageInfo(getPackageName(), 0).lastUpdateTime);
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new RuntimeException("the app's own package is not found: " + e, e);
+        }
+        if (mark.exists()) {
+            try (InputStream in = new java.io.FileInputStream(mark)) {
+                if (new String(in.readAllBytes(), "UTF-8").equals(installed)) {
+                    return;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("reading " + mark + " failed: " + e, e);
+            }
+        }
         copyAssetFolder("", targetDir);
+        try (FileOutputStream os = new FileOutputStream(mark)) {
+            os.write(installed.getBytes("UTF-8"));
+        } catch (IOException e) {
+            throw new RuntimeException("writing " + mark + " failed: " + e, e);
+        }
     }
 
     private void copyAssetFolder(String assetPath, File targetDir) {

@@ -46,6 +46,12 @@ final class Mem
         return self::$slotInt[0];
     }
 
+    /** The pointer at integer address $addr, as alloc() gives one: memory another library allocated with malloc, which free() frees. */
+    public static function pointer(int $addr): CData
+    {
+        return self::c()->cast('void*', $addr);
+    }
+
     /** Writes $s at integer address $addr. */
     public static function write(int $addr, string $s): void
     {

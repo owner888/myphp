@@ -353,3 +353,29 @@ try {
 } catch (\LogicException) {
     check(true, 'a layout needs a rest');
 }
+
+// A table of pages: the first pattern matching the page shown, the parts of the path its pattern names given to the
+// page by name as its types say, a Route by its type; '*' for any other path; a page a view file bound to the window's
+// state ($c->state); a path of no page shown so and said; a page taking a part its pattern does not name throws.
+$pages = new Router('/rows/7');
+$pages->transition = Router::NONE;
+$tableDir = sys_get_temp_dir() . '/myphp-pages-' . getmypid();
+@mkdir($tableDir);
+file_put_contents("$tableDir/about.php", "<?php\nuse MyPHP\\UI\\Context;\nreturn function (Context \$c): void { \$c->text('About ' . \$this->name); };\n");
+$owner = new class { public string $name = 'Ada'; };
+$table = [
+    '/rows/{i}' => function (Context $c, Route $r, int $i, string $tab = 'info') { $c->text("Row $i, " . gettype($i) . ", $tab, " . $r->path()); },
+    '/about' => "$tableDir/about.php",
+    '*' => fn(Context $c) => $c->text('Elsewhere'),
+];
+$h = new Headless(function (Context $c) use ($pages, $owner, &$table) { $c->state = $owner; $pages->view($c, $table); }, 400, 300);
+$h->frame();
+check($h->byText('Row 7, integer, info, /rows/7') !== null, 'a page given {i} as an int, the Route, a default: ' . json_encode($h->texts()));
+$pages->push('/about'); $h->frame();
+check($h->byText('About Ada') !== null, 'a page of a view file, bound to the state: ' . json_encode($h->texts()));
+$pages->push('/nowhere'); $h->frame();
+check($h->byText('Elsewhere') !== null, "'*' takes the others");
+unset($table['*']); $h->frame();
+check($h->byText('No page for /nowhere') !== null, 'without it, a path of no page says so');
+$table = ['/nowhere' => fn(Context $c, int $id) => null];
+try { $h->frame(); check(false, 'a page taking a part the pattern does not name throws'); } catch (\LogicException $e) { check(str_contains($e->getMessage(), '$id'), 'a page taking a part the pattern does not name throws: ' . $e->getMessage()); }

@@ -18,7 +18,8 @@ corners and its opacity.
 ## Bitmaps
 
 `Image::fromFile()` and `Image::fromBytes()` decode PNG, JPEG, HEIC, GIF
-(its first frame), WebP or whatever else the system reads, turning photos
+(its first frame), WebP or whatever else the system reads (Core Image on
+macOS and iOS, AImageDecoder on Android), turning photos
 upright as their camera's EXIF orientation says, at most 1024 pixels on a
 side unless the second argument says otherwise, off the main thread: in a
 fiber (`App::go()`) it waits while the app draws and takes events.

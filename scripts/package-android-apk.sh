@@ -78,17 +78,14 @@ cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
 mkdir -p "assets/src"
 cp -r "${ROOT_DIR}/src/"* "assets/src/"
 if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
-    for php_file in "${PROJECT_DIR}/"*.php; do
-        [ -f "$php_file" ] || continue
-        if [ "$(basename "$php_file")" = "main.php" ]; then
-            cp "$php_file" "assets/app.php"
-        else
-            cp "$php_file" "assets/"
-        fi
+    # The project's PHP, its folders too (view files, pages/): main.php as app.php, the rest where it is, src over the framework's
+    (cd "${PROJECT_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './.*') | while read -r rel; do
+        rel="${rel#./}"
+        dest="assets/$rel"
+        [ "$rel" = "main.php" ] && dest="assets/app.php"
+        mkdir -p "$(dirname "$dest")"
+        cp "${PROJECT_DIR}/$rel" "$dest"
     done
-    if [ -d "${PROJECT_DIR}/src" ]; then
-        cp -r "${PROJECT_DIR}/src/"* "assets/src/"
-    fi
 elif [ -d "${TEMPLATE_DIR}/assets" ]; then
     cp -r "${TEMPLATE_DIR}/assets/"* "assets/"
 fi
