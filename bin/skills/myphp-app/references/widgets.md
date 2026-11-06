@@ -64,6 +64,10 @@ place. When two fit, take the first: it is the simpler one.
 | Nested items that open and close | `$c->tree()` for a few; `$c->outline($state, …)` for many | tree.md, outline.md |
 | Fixed columns and rows (a dashboard) | `$c->grid($cols, $gap)` | grid.md |
 | Rows that animate in, out and when sorted | `$c->transition($row, $elementTransition)` | transitions.md |
+| Pull down to refresh | `$c->refreshable($scrollState, $app->refreshing, fn() => …)` | ../mobile.md |
+| A large page title that goes under the bar (Mail's, Settings') | `$c->largeTitle($title)` first in the scroll, the `ScrollState` to `navigationBar()` | ../mobile.md |
+| Rows swiped to flag or delete (Mail's) | `$c->swipeActions($action, fn() => …, 'Flag', '!Delete')` in a `list` row | ../mobile.md |
+| A settings page: grouped rows with a title, a value and a chevron | `$c->insetGroupedList(fn() => $c->section($header, fn() => $c->cell($title, $detail, $disclosure)))` | ../mobile.md |
 
 ## Organize the window
 
@@ -125,8 +129,9 @@ editing, saved between runs. Decide in this order:
 6. **Search**: a `searchField` above the sidebar filtering the titles,
    once there is more than a screen of notes.
 
-`examples/notes/main.php` is exactly this app, with the rich-text editor,
-its Format menu and JSON saving: copy its shape, then cut what the user
-did not ask for. Test it as `SKILL.md` says: a headless test that adds a
+`examples/notes` is exactly this app: `main.php` its state (the notes,
+JSON saving, the Format menu) and `view.php` its view, with the rich-text
+editor and the toolbar as a closure: copy its shape, then cut what the
+user did not ask for. Test it as `SKILL.md` says: a headless test that adds a
 note, types, and finds the title in the sidebar; then `myphp screenshot`
 in light and dark.

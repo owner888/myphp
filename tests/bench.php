@@ -34,7 +34,7 @@ $phases = function (string $name, Closure $view, float $w, float $h) use ($frame
 };
 
 $w = Headless::widgets(); $view = $w[0]; $s = &$w[1];
-foreach ([0 => 'General', 1 => 'Advanced', 2 => 'About'] as $tab => $name) { $s['tab'] = $tab; $s['more'] = true; $phases("widgets $name", $view, 900, 700); }
+foreach ([0 => 'General', 1 => 'Advanced', 2 => 'About'] as $tab => $name) { $s->tab = $tab; $s->more = true; $phases("widgets $name", $view, 900, 700); }
 
 $dir = sys_get_temp_dir() . '/myphp-bench-' . getmypid(); mkdir($dir);
 for ($i = 0; $i < 2000; $i++) { file_put_contents("$dir/file-$i.txt", ''); }

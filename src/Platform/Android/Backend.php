@@ -42,12 +42,12 @@ final class Backend implements Platform\Backend
 
     public function run(): void
     {
-        \MyPHP\Logger::debug('Android Backend::run starting loop', 'android');
+        \MyPHP\Logger::verbose('Android Backend::run starting loop', 'android');
         $this->running = true;
         while ($this->running) {
             $this->step();
         }
-        \MyPHP\Logger::debug('Android Backend::run loop ended', 'android');
+        \MyPHP\Logger::verbose('Android Backend::run loop ended', 'android');
     }
 
     public function quit(): void

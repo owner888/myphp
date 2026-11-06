@@ -10,8 +10,8 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\Transfer\{Data, Drop, DragOptions, DropOptions, Format, Item, Operation, Representation, Result};
-use MyPHP\UI\{Content, Context, Font};
+use MyPHP\Transfer\{Drop, Format, Operation, Result};
+use MyPHP\UI\Content;
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -74,51 +74,6 @@ final class Pane
     }
 }
 
-/** A window: its notes to drag out, a URL and a file, and a zone taking notes, files, URLs and text. */
-function view(Context $c, Pane $p): void
-{
-    $t = $c->theme;
-    $c->column(20, 12, 1);
-      $c->text($p->name, 24, style: Font::BOLD);
-      $c->text('Drag a card to the other window, a text editor, or Finder/Explorer. Drop files, text, and URLs here.', color: $t->textMuted);
-      foreach ($p->notes as $n) {
-          $card = $c->key($n->id)->column(14, 0, 0, $t->surface)->radius(8)->border(1, $t->border);
-            $c->text($n->title);
-          $c->end();
-          $frozen = clone $n; // the note as it is when the drag starts
-          $c->dragDataFrom($c->drag($card, $n), fn() => new Data(new Item(
-              Representation::bytes(Format::TEXT, $frozen->title),
-              Representation::lazy(NOTE_FORMAT, fn() => json_encode(['ID' => $frozen->id, 'Title' => $frozen->title], JSON_THROW_ON_ERROR)),
-          )), new DragOptions(Operation::COPY | Operation::MOVE, done: function (Result $r) use ($p, $n): void {
-              $p->completed($r);
-              if ($r->operation === Operation::MOVE && $r->error === null) {
-                  $p->notes = array_values(array_filter($p->notes, fn(Note $v) => $v !== $n));
-              }
-          }));
-          if ($c->dragging($card)) { $card->opacity(0.5); }
-      }
-      $url = $c->column(12, 0, 0)->border(1, $t->border)->radius(8);
-        $c->text('Drag the MyGo website URL');
-      $c->end();
-      $c->dragData($url, Data::url('https://mygo.egoist.dev'), new DragOptions(done: $p->completed(...)));
-      $file = $c->column(12, 0, 0)->border(1, $t->border)->radius(8);
-        $c->text('Drag a sample .txt file');
-      $c->end();
-      $c->dragData($file, Data::files($p->file), new DragOptions(done: $p->completed(...)));
-      $zone = $c->column(16, 0, 1)->minHeight(100)->radius(8)->border(2, $t->border);
-        $c->text('Drop here', style: Font::BOLD);
-      $c->end();
-      $opts = new DropOptions([NOTE_FORMAT, Format::TEXT, Format::FILE_LIST, Format::URI_LIST], Operation::COPY | Operation::MOVE);
-      if ($c->dataDragOver($zone, $opts)) {
-          $zone->border(2, $t->accent)->background($t->surface);
-      }
-      if ($c->dropData($zone, $opts, $drop)) {
-          $p->receive($drop);
-      }
-      $c->text($p->status, 12, $t->textMuted);
-    $c->end();
-}
-
 /** Logs a line to the standard error, as Go's log.Printf does. */
 function logf(string $format, mixed ...$args): void
 {
@@ -140,7 +95,7 @@ App::setName('MyPHP Drag Demo');
 App::whenReady(function () use ($s) {
     foreach ($s->panes as $i => $p) {
         new Window(new WindowOptions(title: "MyPHP Drag — {$p->name}", width: 440, height: 580, x: 60 + $i * 480, y: 80,
-            content: Content::view(fn(Context $c) => view($c, $p))));
+            content: Content::file(__DIR__ . '/view.php', $p)));
     }
 });
 App::run();

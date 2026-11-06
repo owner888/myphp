@@ -324,7 +324,9 @@ final class Router
                 $v->leaving = null;
             }
         }
-        if ($v->leaving === null) {
+        if ($v->leaving === null && $parent === null && ($rt?->touch ?? false) && $this->canGoBack()) {
+            $page = $this->popGesture($c, $box, $v, $cur, $fn);
+        } elseif ($v->leaving === null) {
             $page = $this->page($c, $box, $parent, $cur, $fn, false);
         } elseif ($v->dir === 0) {
             // Across, the page fades in in place of the other, which goes at once: the two would blur into each other.
@@ -361,6 +363,55 @@ final class Router
             $v->announcing = false;
             $c->announce($cur->title);
         }
+    }
+
+    /**
+     * The page with UIKit's interactive pop gesture, on a touch screen with a
+     * page to go back to (not mygo's, which has no phones): a finger on the
+     * 20 points at the page's start edge drags the page sideways, the page
+     * before it showing under it as the slide transition shows it, dimmed and
+     * moving a third; let go past a third of the width (or thrown) it goes
+     * on out and the router goes back, at once, the gesture having been the
+     * transition; else it comes back. Returns the page.
+     */
+    private function popGesture(Context $c, Node $box, RouteView $v, RouteEntry $cur, \Closure $fn): Node
+    {
+        $rt = $c->runtime;
+        $rtl = $c->direction() === Direction::RightToLeft;
+        [, , $bw, $bh] = $c->layoutBounds($box);
+        $bw = max($bw, 1.0);
+        $edgeId = $c->keyedId("$box->id:pop");
+        $rec = $rt->dragRecs[$edgeId] ?? null;
+        $x = $rec !== null && $rec->frame + 1 >= $rt->frameNumber ? abs($rec->shown()[0]) : 0.0; // how far the page is dragged, known before it is built
+        $shown = min($x / $bw, 1.0);
+        if ($shown > 0) { // the page before, under the one dragged, as the slide transition shows it
+            $box->clip();
+            $bg = $c->background();
+            $old = $this->page($c, $box, null, $this->entries[$this->at - 1], $fn, true);
+            $old->at(($rtl ? 0.3 : -0.3) * (1 - $shown) * $bw, 0)->size($bw, $bh)->drawOver(function (Painter $p, array $r) use ($shown) {
+                $p->fill($r, 0x000000, 0, 0.06 * (1 - $shown));
+            });
+            $old->color = $bg;
+        }
+        $page = $this->page($c, $box, null, $cur, $fn, false);
+        if ($shown > 0) {
+            $page->at(($rtl ? -1 : 1) * $x, 0)->size($bw, $bh)->shadow(0, 0, 16, 0, 0x000000, 0.15);
+            $page->color = $c->background();
+        }
+        $edge = $c->key("$box->id:pop")->column()->absolute()->top(0)->bottom(0)->start(0)->size(20, 0); // the finger's 20 points at the edge, over the page
+        $c->end();
+        $offset = $rec?->own ?? [0.0, 0.0]; // where the drag rests, kept with its record between frames
+        $c->draggable($edge, $offset, new DraggableOptions(Node::HORIZONTAL,
+            bounds: $rtl ? [-$bw, 0, $bw, 0] : [0, 0, $bw, 0], rigid: true,
+            snap: fn(array $p) => abs($p[0]) > $bw / 3 ? [($rtl ? -1 : 1) * $bw, 0.0] : [0.0, 0.0]));
+        $c->dragOffset($edge);
+        if (abs($offset[0]) >= $bw && !$c->dragging($edge)) { // let go to go: back, at once, the gesture having been the transition
+            $offset = [0.0, 0.0];
+            $c->disableAnimations();
+            $this->back();
+        }
+        $rt->dragRecs[$edgeId]->own = $offset;
+        return $page;
     }
 
     /** The id of page $page of $box. */

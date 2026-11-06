@@ -19,7 +19,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Decoder, Player, Sound};
 use MyPHP\Plugins\Game\{Camera, Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
-use MyPHP\UI\{Content, Context, Image, ImageOptions, Key, Painter, Span};
+use MyPHP\UI\{Content, Image, ImageOptions, Key, Painter, Span};
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
 
@@ -846,14 +846,9 @@ final class Farm extends Game
     }
 }
 
-function view(Context $c, Farm $g): void
-{
-    Game::view($c, $g)->fill()->background(0x4b9a2a)->label('Farm');
-}
-
 App::setName('Farm');
 $g = new Farm(new Sounds());
 App::whenReady(function () use ($g) {
-    new Window(new WindowOptions(title: 'Farm', width: 960, height: 640, content: Content::view(fn(Context $c) => view($c, $g))));
+    new Window(new WindowOptions(title: 'Farm', width: 960, height: 640, content: Content::file(__DIR__ . '/view.php', $g)));
 });
 App::run();

@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Terminal\{Options, Terminal};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -20,10 +20,7 @@ App::whenReady(function () {
         onExit: function (int $code) use (&$win) { $win?->close(); },
     ));
     $win = new Window(new WindowOptions(title: 'Terminal', width: 760, height: 480,
-        content: Content::view(function (Context $c) use ($term) {
-            $v = Terminal::view($c, $term)->autoFocus();
-            $v->grow = 1;
-        })));
+        content: Content::file(__DIR__ . '/view.php', $term)));
     $win->on('closed', fn() => $term->close());
 });
 App::run();

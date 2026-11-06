@@ -10,12 +10,13 @@
 declare(strict_types=1);
 
 use MyPHP\{App, CloseEvent, Dialog, FileDropEvent, FileFilter, GlobalShortcut, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, SaveDialogOptions, Tray, TrayOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
-$s = ['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null];
-$log = function (string $line) use (&$s) { $s['log'][] = $line; $s['window']?->invalidate(); };
+/** The window's state: its log, the line wrapping, the window, and what its buttons and context menu do (set below). */
+$s = (object)['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null, 'closing' => false, 'actions' => [], 'context' => null];
+$log = function (string $line) use ($s) { $s->log[] = $line; $s->window?->invalidate(); };
 
 $open = function () use ($log) {
     $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: 'Open notes', multiple: true,
@@ -33,7 +34,7 @@ $ask = function () use ($log) {
 };
 
 $wrapItem = new MenuItem('Wrap lines', type: MenuItem::CHECKBOX, checked: true, accelerator: 'Cmd+Alt+W',
-    click: function (MenuItem $it) use (&$s, $log) { $s['wrap'] = $it->checked; $log('wrap: ' . ($it->checked ? 'on' : 'off')); });
+    click: function (MenuItem $it) use (&$s, $log) { $s->wrap = $it->checked; $log('wrap: ' . ($it->checked ? 'on' : 'off')); });
 App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),
     new MenuItem('File', submenu: [
@@ -50,7 +51,7 @@ App::setMenu(new Menu([
     ]),
     new MenuItem(role: 'windowMenu'),
 ]));
-$context = new Menu([new MenuItem('Open…', $open), new MenuItem('Save As…', $save), MenuItem::separator(), new MenuItem('Clear log', function () use (&$s) { $s['log'] = []; })]);
+$context = new Menu([new MenuItem('Open…', $open), new MenuItem('Save As…', $save), MenuItem::separator(), new MenuItem('Clear log', function () use ($s) { $s->log = []; })]);
 
 $notify = function () use ($log) {
     if (!Notification::supported()) { $log('notifications need a built .app (myphp build); run from the bundle to try'); return; }
@@ -58,6 +59,8 @@ $notify = function () use ($log) {
     $log('notification shown');
 };
 App::onNotificationClick(fn(string $id) => $log("notification $id clicked"));
+$s->actions = ['Open…' => $open, 'Save As…' => $save, 'Ask…' => $ask, 'Notify' => $notify];
+$s->context = $context;
 
 /** A 16×16 PNG: a black ring, drawn as a template so the menu bar tints it. */
 function ringPng(): string
@@ -75,30 +78,15 @@ function ringPng(): string
 }
 
 App::setName('Desktop');
-App::whenReady(function () use (&$s, $open, $save, $ask, $context, $notify, $log) {
-    $s['window'] = $w = new Window(new WindowOptions(title: 'MyPHP desktop — menus and dialogs', width: 640, height: 420, stateKey: 'main',
-        content: Content::view(function (Context $c) use (&$s, $open, $save, $ask, $context, $notify, &$w) {
-            $c->column(16, 10, 1);
-              $c->row(0, 8);
-                if ($c->clicked($c->button('Open…'))) $open();
-                if ($c->clicked($c->button('Save As…'))) $save();
-                if ($c->clicked($c->button('Ask…'))) $ask();
-                if ($c->clicked($c->button('Notify'))) $notify();
-              $c->end();
-              $area = $c->column(12, 4, 1, $c->theme->surface);
-                foreach (array_slice($s['log'], -12) as $line) {
-                    $c->text($line);
-                }
-              $c->end();
-              if ($c->rightClicked($area)) $context->popup($w);
-            $c->end();
-        })));
+App::whenReady(function () use ($s, $notify, $log) {
+    $s->window = $w = new Window(new WindowOptions(title: 'MyPHP desktop — menus and dialogs', width: 640, height: 420, stateKey: 'main',
+        content: Content::file(__DIR__ . '/view.php', $s)));
     foreach (['focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'] as $event) {
         $w->on($event, function (Window $w) use ($event, $log) { [$width, $height] = $w->size(); $log("$event ({$width}×{$height})"); });
     }
     $w->on('fileDrop', fn(FileDropEvent $e) => $log('dropped ' . implode(', ', array_map('basename', $e->paths)) . " at {$e->x},{$e->y}"));
-    $w->on('close', function (CloseEvent $e) use (&$s, $log) {
-        if (!($s['closing'] ?? false)) { $s['closing'] = true; $e->cancel(); $log('close canceled once; close again to quit'); }
+    $w->on('close', function (CloseEvent $e) use ($s, $log) {
+        if (!$s->closing) { $s->closing = true; $e->cancel(); $log('close canceled once; close again to quit'); }
     });
     $tray = new Tray(new TrayOptions(icon: ringPng(), iconIsTemplate: true, toolTip: 'MyPHP desktop',
         menu: new Menu([new MenuItem('Show window', fn() => $w->show()), new MenuItem('Notify', $notify), MenuItem::separator(), new MenuItem(role: 'quit')])));

@@ -24,6 +24,12 @@ final class iOS
                 char text[256];
             } MyphpInputEvent;
 
+            typedef struct {
+                int64_t id;
+                float x, y, w, h, radius, alpha;
+                int32_t kind, dark;
+            } MyphpMaterialPlace;
+
             int myphp_ios_get_screen_width(void);
             int myphp_ios_get_screen_height(void);
             float myphp_ios_get_screen_scale(void);
@@ -41,6 +47,9 @@ final class iOS
             int myphp_ios_take_files_result(int callback_id, char *out, int max_len);
             float myphp_ios_get_keyboard_height(void);
             int myphp_ios_is_dark(void);
+            void* myphp_ios_get_over_view(void);
+            void myphp_ios_log(int level, const char *message);
+            void myphp_ios_place_materials(const MyphpMaterialPlace *places, int count);
             float myphp_ios_text_scale(void);
             int myphp_ios_reduce_motion(void);
             char *myphp_ios_clipboard_get_text(void);

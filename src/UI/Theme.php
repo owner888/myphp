@@ -51,6 +51,60 @@ final class Theme
         public ?int $inverseText = null,
     ) {}
 
+    /** The platform's text size the theme started from, which textScale() measures $fontSize against: 13 unless App::systemTheme set the platform's (defaultFontSize). Not mygo's. */
+    public float $baseFontSize = 13.0;
+    /** UIKit's sizes for a phone's controls, 0 for mygo's measured ones (the desktop): the least height of a button, a field and a select (44), a switch's track (51 × 31), a segmented control's height (32). Not mygo's; Theme::phone() sets them. */
+    public float $controlHeight = 0.0, $switchWidth = 0.0, $switchHeight = 0.0, $segmentedHeight = 0.0;
+    /** UIKit's grouped list colors, where they differ from $surface and $background: the page behind inset grouped sections (systemGroupedBackground) and the sections themselves (secondarySystemGroupedBackground); null for $surface and $background. Not mygo's. */
+    public ?int $groupBackground = null, $groupSurface = null;
+
+    /**
+     * The theme of a phone or tablet: UIKit's system colors (label,
+     * secondaryLabel, systemBackground, secondarySystemBackground, separator,
+     * systemBlue, systemRed, systemOrange, systemGreen, and the grouped
+     * backgrounds), 17-point text, corners rounded 12, and UIKit's control
+     * sizes; the one design on iOS and Android. App::systemTheme() starts
+     * from it on the phones. Not mygo's.
+     */
+    public static function phone(bool $dark): self
+    {
+        $t = $dark
+            ? new self(dark: true,
+                background: 0x000000, surface: 0x1c1c1e, surfaceHover: 0x2c2c2e, surfacePressed: 0x3a3a3c,
+                border: 0x38383a, text: 0xffffff, textMuted: 0x8e8e93,
+                accent: 0x0a84ff, accentHover: 0x409cff, accentPressed: 0x0a6fd6, accentText: 0xffffff,
+                danger: 0xff453a, warning: 0xff9f0a, success: 0x30d158,
+                selection: 0x0a84ff, selectionAlpha: 0.4, focus: 0x409cff, focusAlpha: 0.6,
+                scrollbar: 0xffffff, scrollbarAlpha: 0.35, scrollbarWidth: 3, radius: 12, fontSize: 17)
+            : new self(
+                background: 0xffffff, surface: 0xf2f2f7, surfaceHover: 0xe5e5ea, surfacePressed: 0xd1d1d6,
+                border: 0xc6c6c8, text: 0x000000, textMuted: 0x8e8e93,
+                accent: 0x007aff, accentHover: 0x0a84ff, accentPressed: 0x0060df, accentText: 0xffffff,
+                danger: 0xff3b30, warning: 0xff9500, success: 0x34c759,
+                selection: 0x007aff, selectionAlpha: 0.25, focus: 0x007aff, focusAlpha: 0.55,
+                scrollbar: 0x000000, scrollbarAlpha: 0.35, scrollbarWidth: 3, radius: 12, fontSize: 17);
+        $t->baseFontSize = 17.0;
+        $t->controlHeight = 44.0; $t->switchWidth = 51.0; $t->switchHeight = 31.0; $t->segmentedHeight = 32.0;
+        // the grouped page is the gray in the light, black in the dark; the sections white in the light, the dark gray in the dark: UIKit's inversion
+        [$t->groupBackground, $t->groupSurface] = $dark ? [0x000000, 0x1c1c1e] : [0xf2f2f7, 0xffffff];
+        return $t;
+    }
+
+    /**
+     * The size of text the platform's controls use, which the system theme
+     * starts from (mygo's defaultFontSize): 13 points on macOS, 14 on Linux
+     * (mygo's), and 17 on a phone or tablet (iOS's body, the one design on
+     * Android too). Theme::light() and dark() keep 13, so the headless tests
+     * measure the same on every platform; App::systemTheme() applies this.
+     */
+    public static function defaultFontSize(): float
+    {
+        if (\MyPHP\App::isIOS() || \MyPHP\App::isAndroid()) {
+            return 17.0;
+        }
+        return PHP_OS_FAMILY === 'Darwin' ? 13.0 : 14.0;
+    }
+
     /** The fill of tooltips and toasts and their text (mygo's inverse). @return array{0: int, 1: int} */
     public function inverse(): array
     {
@@ -87,10 +141,10 @@ final class Theme
         return $n * ($this->fontSize > 0 ? $this->fontSize : 13.0);
     }
 
-    /** How many times larger than the default (13 points) the theme's text is: 1 for a theme that follows no larger text; what Font::preferred() and the text styles scale by. */
+    /** How many times larger than the platform's default ($baseFontSize) the theme's text is: 1 for a theme that follows no larger text; what Font::preferred() and the text styles scale by. */
     public function textScale(): float
     {
-        return $this->fontSize > 0 ? $this->fontSize / 13.0 : 1.0;
+        return $this->fontSize > 0 && $this->baseFontSize > 0 ? $this->fontSize / $this->baseFontSize : 1.0;
     }
 
     /** The theme following the desktop's settings (mygo's Theme.follow): its accent, more contrast, larger text. */

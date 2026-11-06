@@ -50,6 +50,11 @@ $view = function (Context $c) use ($app) {
 Indent what is inside a container by two spaces more, as above: the
 indentation is the view hierarchy, since there are no braces.
 
+In an app the view is a file of its own, `view.php`, which returns that
+closure with `$this` for `$app` (`Content::file(__DIR__ . '/view.php',
+$app)`): saved, it hot reloads with the state kept, as SwiftUI's previews
+and Flutter's hot reload do ([view files](ui/views.md#view-files-and-hot-reload)).
+
 ## State and data flow
 
 | SwiftUI | myphp |
@@ -225,12 +230,12 @@ $view = function (Context $c) use ($app) {
 |---|---|
 | `List(items) { Row($0) }` | `$c->list($state, count($items), fn(int $i) => …)` builds only the rows in view, for millions of rows |
 | `ForEach(items, id: \.id) { }` in a `VStack` | `foreach ($items as $it) { $c->key($it['id'])->row(); … $c->end(); }` — the key keeps identity as rows reorder |
-| `.onDelete`, `.swipeActions` | Not yet: a button in the row, or a context menu. |
+| `.swipeActions { Button(role: .destructive) }`, `.onDelete` | `$c->swipeActions($action, fn() => …, 'Flag', '!Delete')` on the row; `$action` is the index tapped, a full swipe performs the first (see [mobile.md](mobile.md)) |
 | `List` selection | `ListState::$selected` and the state's selection methods (see [List](ui/list.md)) |
 | `Section("Today") { }` in a `List`/`Form` | `$c->section('Today', fn() => …, $footer)`: the inset grouped section of Settings, with `$c->cell($title, $detail, $disclosure)` rows (see [mobile.md](mobile.md)) |
 | `LabeledContent("Size", value: "2 KB")`, a `NavigationLink` row | `$c->cell('Size', '2 KB')`; `$c->cell('About', disclosure: true)` and `$c->clicked()` on it |
 | `LazyVGrid` of photos | `$c->gridView($gridState, $n, 140, 120, fn(int $i) => …)` |
-| `.refreshable { }` | Not yet. |
+| `.refreshable { await load() }` | `$c->refreshable($scrollState, $app->refreshing, fn() => …)`: pulled down past 60 points it sets `$refreshing`, the app clears it when its work is done (see [mobile.md](mobile.md)) |
 | `.searchable(text:)` | `$c->searchField($state)` above the list |
 | `Table(rows) { TableColumn("Name") }` | `$c->table()` (see [Table](ui/table.md)) |
 | `OutlineGroup` / `DisclosureGroup` | `$c->tree()`, `$c->outline()`, `$c->collapsible()` |
@@ -259,6 +264,8 @@ $view = function (Context $c) use ($app) {
 | `NavigationLink(value:)` / `path.append()` | `$router->push('/note/42')` |
 | `dismiss()` / the back button | `$router->back()`; `$c->backButton()` draws one; `navigationBar()` on phones |
 | `.navigationTitle("Notes")` | `$r->title('Notes')` |
+| `.navigationBarTitleDisplayMode(.large)` | `$c->largeTitle('Notes')` first in the page's scroll, and that scroll's `ScrollState` as `navigationBar()`'s fourth argument |
+| The edge swipe back | Built in: on a touch screen a `Router` with a page to go back to follows a finger from the start edge |
 | `NavigationSplitView { sidebar } detail: { }` | A row of `$c->sidebar($selected, fn() => $c->sidebarItem('/notes', 'Notes'))` and `$router->view()` (see [Navigation](ui/navigation.md)) |
 | `TabView { }` | `$c->tabs(['A', 'B'], $index)` on the desktop; `$c->tabView($items, $index, $content)` adapts as `TabView(.sidebarAdaptable)` does: bottom bar on a phone, top on an iPad upright, sidebar otherwise |
 | `.transition(.slide)` on pages | Built in: pages slide from the right and the one behind dims; `$router->transition`, `$router->animation` change it |
@@ -387,7 +394,6 @@ instead. Each is a candidate for the framework; until then:
 
 | SwiftUI | Instead |
 |---|---|
-| `.swipeActions`, `.onDelete`, `.refreshable` | A button in the row, a context menu; a Reload button |
 | `ZStack` | `->absolute()` children, `->draw()` |
 | `.interactiveDismissDisabled`, `.presentationDetents` | A `modal()`/`sheet()` has one size and dismisses on tap outside |
 | `Canvas` | `->draw(fn(Painter $p, array $rect) => …)` and `Canvas` (see [Drawing](ui/drawing.md)) |
@@ -398,9 +404,10 @@ instead. Each is a candidate for the framework; until then:
 
 ## Checklist for an agent writing a myphp view
 
-1. State is a class made once; the view is a function of `Context` that
-   reads it. Never make a `TextState`, `ListState` or `Router` inside the
-   view.
+1. State is a class made once; the view is `view.php`, a file of
+   closures returning `function (Context $c): void`, `$this` the state
+   (`Content::file()`). Never make a `TextState`, `ListState` or `Router`
+   inside the view, nor a named class or function in `view.php`.
 2. Open containers with `$c->column()` / `row()` / `scroll()`, close each
    with `$c->end()`, indent the inside by two spaces.
 3. Controls that edit take `&$ref`; ask `$c->clicked()`, `changed()`,

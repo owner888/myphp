@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Player, Sound};
-use MyPHP\UI\{Content, Context, InputEvent, Key, Node, Painter, Theme};
+use MyPHP\UI\{Content, InputEvent, Key, Painter, Theme};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -384,31 +384,11 @@ final class Piano
     }
 }
 
-function view(Context $c, Piano $p): void
-{
-    $t = $c->theme;
-    $c->column(20, 18, 1)->alignItems(Node::CENTER)->justify(Node::CENTER);
-      $c->row(0, 8);
-        foreach (SONGS as $i => [$name]) {
-            if ($c->clicked($c->key($name)->button($name))) { $p->play($i); }
-        }
-        $stop = $c->key('stop')->button('Stop');
-        $stop->disabled = $p->song === null;
-        if ($c->clicked($stop) && $p->song !== null) { $p->stop(); }
-      $c->end();
-      $kb = $c->box(keyboardWidth(), KEYBOARD_HEIGHT, 0)->focusable()->autoFocus()->label('Piano')
-          ->handleInput($p->input(...))->draw($p->draw(...));
-      $kb->color = null;
-      $c->text("Keys Z–M and Q–I play from C{$p->octave} · Space sustains · ← → change octaves", 12, $t->textMuted);
-      if (($err = Audio::err()) !== null) { $c->text($err->getMessage(), 12, $t->textMuted); }
-    $c->end();
-}
-
 $s = new Piano();
 App::setName('Piano');
 App::whenReady(function () use ($s) {
     $s->win = new Window(new WindowOptions(title: 'Piano', width: (int)keyboardWidth() + 48, height: 330,
-        content: Content::view(fn(Context $c) => view($c, $s))));
+        content: Content::file(__DIR__ . '/view.php', $s)));
     App::after(0.2, $s->synthesizeAhead(...)); // after the window shows
 });
 App::run();

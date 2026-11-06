@@ -55,14 +55,20 @@ its built frontend, and launches it. Without `devUrl`, the app serves
 identifier `<identifier>.dev`, in `.myphp/dev`: a real bundle, with the
 app's icon and resources, whose launcher runs the project's files.
 
-Changes to the PHP files, the configuration, the icon, the resources or
-the catalogs of messages rebuild the app, regenerate the TypeScript client
-and the accessors of the catalogs, and relaunch it. A build that fails
-keeps the previous one running; the next change tries again. Frontend
-changes are left to the dev server. Quitting the app ends `myphp dev`.
+A saved PHP file hot reloads the app, as Flutter's run: the app loads its
+views of files (`Content::file`) again with its state kept, and says in its
+log which other files changed, which `R` takes ([view
+files](ui/views.md#view-files-and-hot-reload)). Changes to the
+configuration, the icon, the resources or the catalogs of messages, and to
+PHP files when the app has a TypeScript client, rebuild the app,
+regenerate the TypeScript client and the accessors of the catalogs, and
+relaunch it. A build that fails keeps the previous one running; the next
+change tries again. Frontend changes are left to the dev server. Quitting
+the app ends `myphp dev`.
 
-On a terminal, type `r` and Enter to rebuild and restart the app, `c` to
-clear the console, `q` to quit, `h` for help.
+On a terminal, as in Flutter's `run`, press `r` (no Enter) to hot reload,
+`R` to rebuild and restart the app, `c` to clear the console, `q` to quit,
+`h` for help.
 
 | Flag | |
 |---|---|
@@ -180,20 +186,69 @@ the project's files in development (`App::isDev()`, not packaged).
 
 ## myphp run
 
-`myphp run [-d device] [dir]` builds the app and runs it: on an Android
-phone over adb (the APK packaged and signed, installed, started, its log
-followed: `adb logcat -s MyPHP`), in an iOS simulator (the .app installed
-and launched), or on the desktop. `-d` takes a device id or name from
+`myphp run [-d device] [-v] [dir]` builds the app and runs it: on an
+Android phone over adb (the APK packaged and signed, installed, started),
+in an iOS simulator (the .app installed and launched), or on the desktop,
+and follows the app's log. A phone's log is printed short, for the people
+and coding agents reading it — `11:00:21.767 W [cache] the cache is full`:
+the time, the level as a letter (E error, F fault, W warning, I info, D
+debug, V verbose), colored in a terminal, and the message — and only what
+tells something: the app's own lines (`Logger`'s, at the level it logs
+at), PHP's warnings and errors, and the system's warnings, errors and
+faults about the app. The build's output shows only when it fails. `-v`
+prints the build's output and every line of the log. `-d` takes a device id or name from
 `myphp devices`, or a platform (`android`, `ios`, `macos`, `linux`). The
 first run for a phone builds its PHP runtime (libffi, OpenSSL, libcurl,
 libphp; 10-20 minutes), built again when its build script changes; `myphp
 doctor` tells where it stands. As Flutter's `run`, it is the one way to a
 device: the scripts under `scripts/` are its internals (docs/mobile.md).
 
+On a phone it then reloads the app as Flutter's run does, without a build,
+the log going on. A PHP file saved (the app's or the framework's) is
+copied into the installed app: a hot reload, the app's views of files
+(`Content::file`) loaded again with the state kept, the log naming any
+other file changed, which a restart takes ([view
+files](ui/views.md#view-files-and-hot-reload)). On a terminal the keys are
+Flutter's, pressed without Enter: `r` hot reloads, `R` hot restarts (the
+app starts again with the files, its state lost), `c` clears the console,
+`q` quits, `h` lists them. A change to native code (the launcher, the
+Java, the runtime) needs `myphp run` again. On Android the APK `myphp run` builds is
+debuggable, as Flutter's debug builds, for `run-as` to copy the files in;
+`myphp build`'s is not.
+
 ## myphp devices
 
 Lists the phones connected over adb and the iOS simulators, with their ids
 and states, for `myphp run -d`.
+
+## myphp emulators
+
+As Flutter's `emulators`: lists the emulators — the Android SDK's virtual
+devices (AVDs) and the iOS Simulator — and starts or makes one. A started
+one is a device for `myphp run -d`.
+
+```sh
+myphp emulators                              # their ids and names
+myphp emulators --launch pixel_11_pro        # starts it, waits until it has booted
+myphp emulators --launch apple_ios_simulator # the Simulator app
+myphp emulators --create                     # an AVD of the newest system image and the newest Pixel, downloaded as needed
+myphp emulators --profiles                   # the device profiles, for --device
+myphp emulators --images                     # the system images for this machine, those installed marked *
+myphp emulators --delete pixel_11_pro        # deletes an emulator
+myphp emulators --uninstall "system-images;android-35;google_apis;arm64-v8a"   # an image no emulator uses
+myphp emulators --create --name p9 --device pixel_9_pro --image "system-images;android-36;google_apis_playstore;arm64-v8a"
+```
+
+`--create` does what the SDK's tools would be asked for one by one: it
+installs the emulator and the platform tools when they are missing, takes
+the newest system image for the machine's architecture (arm64-v8a on Apple
+Silicon, which runs natively and is the one myphp's runtime is built for;
+API 31 and over), Google Play's first — an installed one, else the newest
+the SDK offers, which it downloads (1-2 GB), accepting the SDK's licenses
+— and the newest Pixel profile, a Pro first, and names the AVD after the
+profile. It needs the SDK's command-line tools (Android Studio's SDK
+Manager installs them, or `brew install --cask android-commandlinetools`).
+`--cold` boots afresh rather than from the last snapshot.
 
 ## myphp micro
 

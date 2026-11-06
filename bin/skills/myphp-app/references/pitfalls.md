@@ -58,6 +58,16 @@ disagree, the docs of the checkout win: it may have grown since.
 - **Asserting sizes in headless tests.** `Headless` measures text as fixed
   7×16 cells, so font sizes and exact text widths cannot be asserted
   there; check them in a screenshot.
+- **A named class or function in `view.php`.** It loads once: saved,
+  the log says it waits for a restart (R) and the window keeps the old
+  view. Keep `view.php` closures only, the state's class in `src/`.
+- **A part of the view as a method.** A method of the state's class is
+  not hot reloaded; a part of the view is a closure in `view.php`
+  (`$sidebar = function (Context $c): void { … };`, handed on with
+  `use`), and `$this` in it is still the state.
+- **A closure in `view.php` calling one made after it.** `use ($page)`
+  copies what `$page` is when made (nothing yet); take it by reference,
+  `use (&$page)`.
 - **Select and switch.** `$c->select($labels, $index)` binds an int
   index into an array of labels; `$c->switch($label, $on)` takes its
   label first.

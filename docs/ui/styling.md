@@ -241,7 +241,10 @@ theme follows and a frame follows the changes of:
 - **`highContrast`.** macOS's Increase Contrast, the portal's higher
   contrast: borders and secondary text are darker (lighter in the dark),
   and the focus ring opaque.
-- **`textScale`.** GNOME's text size: `fontSize` is that many times
-  larger.
+- **`textScale`.** GNOME's text size, iOS's Text Size and Android's font
+  size: `fontSize` is that many times larger than the platform's default
+  (`Theme::defaultFontSize()`: 13 points on macOS, 14 on Linux, 17 on a
+  phone or tablet), which `Theme::textScale()` reports and the text styles
+  (`preferredFont()`) scale by.
 - **`reduceMotion`.** macOS's Reduce Motion and GNOME's animations turned
   off: `$c->animate()` goes to its target at once.

@@ -13,7 +13,7 @@ $h = new Headless($view, 900, 700);
 
 // Tab goes round every control once; groups (toolbar, segmented, tabs) are one stop, an accordion's headers each one, as mygo's; every stop shows its focus.
 foreach ([0 => 25, 1 => 22, 2 => 21] as $tab => $count) {
-    $s['tab'] = $tab; $s['more'] = true; $h->rt->focus = null; $h->frame();
+    $s->tab = $tab; $s->more = true; $h->rt->focus = null; $h->frame();
     $stops = $h->tabStops();
     same($count, count($stops), "tab $tab: stops (" . implode(' → ', $stops) . ')');
     same('I(Search)', $stops[0], "tab $tab: the first stop");
@@ -22,13 +22,13 @@ foreach ([0 => 25, 1 => 22, 2 => 21] as $tab => $count) {
     $h->tab(true);
     same('B(Options)', Headless::label($h->focused()), "tab $tab: Shift+Tab from the first stop goes to the last");
 }
-$s['tab'] = 2; $h->rt->focus = null; $h->frame(); $stops = $h->tabStops();
+$s->tab = 2; $h->rt->focus = null; $h->frame(); $stops = $h->tabStops();
 same(2, count(array_filter($stops, fn($l) => $l === 'X')), 'both knobs of the range slider are stops');
 
 // Escape: a button keeps the focus, as AppKit's and mygo's, and the window gets the key; a field keeps it and takes it.
 $probe = ['esc' => false];
 $h2 = new Headless(function ($c) use ($view, &$probe) { $view($c); $probe['esc'] = $probe['esc'] || $c->shortcut(Key::ESCAPE); }, 900, 700);
-$s['tab'] = 0; $h2->frame(); $h2->tab(); $h2->tab();
+$s->tab = 0; $h2->frame(); $h2->tab(); $h2->tab();
 same('B(Bold)', Headless::label($h2->focused()), 'Tab twice: the toolbar');
 $probe['esc'] = false; $h2->escape();
 same('B(Bold)', Headless::label($h2->focused()), 'Escape on a button keeps the focus');
@@ -37,19 +37,19 @@ $h2->tab(true);
 same('I(Search)', Headless::label($h2->focused()), 'Shift+Tab back to the search field');
 $h2->type('abc'); $probe['esc'] = false; $h2->escape();
 same('I(Search)', Headless::label($h2->focused()), 'a search field keeps the focus on Escape');
-same('', $s['query']->text, 'and clears');
+same('', $s->query->text, 'and clears');
 check(!$probe['esc'], 'which took the key');
 $probe['esc'] = false; $h2->escape();
 check($probe['esc'], 'an empty field leaves Escape to the window');
 
 // Keys at the controls of the General tab.
-$h->rt->focus = null; $s['tab'] = 0; $h->frame();
+$h->rt->focus = null; $s->tab = 0; $h->frame();
 $at = function (string $label) use ($h) { for ($i = 0; $i < 40; $i++) { $h->tab(); if (Headless::label($h->focused()) === $label) { return; } } throw new \RuntimeException("no stop $label"); };
-$at('SW(Wi-Fi)'); $was = $s['wifi']; $h->space(); same(!$was, $s['wifi'], 'Space toggles the switch'); $h->enter(); same($was, $s['wifi'], 'Enter toggles it back');
-$at('C(List)'); $h->right(); same(1, $s['view'], 'Right in the segmented control chooses the next'); $h->left(); same(0, $s['view'], 'Left the previous');
+$at('SW(Wi-Fi)'); $was = $s->wifi; $h->space(); same(!$was, $s->wifi, 'Space toggles the switch'); $h->enter(); same($was, $s->wifi, 'Enter toggles it back');
+$at('C(List)'); $h->right(); same(1, $s->view, 'Right in the segmented control chooses the next'); $h->left(); same(0, $s->view, 'Left the previous');
 $h->tab(); $h->tab(); // the tabs, then the stepper
-$count = $s['count']; $h->up(); same($count + 1, $s['count'], 'Up steps the stepper'); $h->down(); same($count, $s['count'], 'Down steps it back');
-$h->tab(); $scale = $s['scale']; $h->up(); same($scale + 0.25, $s['scale'], 'Up steps the number input'); $h->down(); same($scale, $s['scale'], 'Down back');
+$count = $s->count; $h->up(); same($count + 1, $s->count, 'Up steps the stepper'); $h->down(); same($count, $s->count, 'Down steps it back');
+$h->tab(); $scale = $s->scale; $h->up(); same($scale + 0.25, $s->scale, 'Up steps the number input'); $h->down(); same($scale, $s->scale, 'Down back');
 $h->tab(); $h->tab(); $h->tab(); // −, +, the combobox
 same('I', Headless::label($h->focused()), 'the combobox input');
 $h->down(); same(2, count($h->root->kids), 'Down opens its options at the root');
@@ -60,22 +60,22 @@ same($today, Headless::label($h->focused()), 'the date input'); $h->enter();
 same(2, count($h->root->kids), 'Enter opens the calendar'); same('C', Headless::label($h->focused()), 'which takes the focus');
 $h->escape(); same(1, count($h->root->kids), 'Escape closes it'); same($today, Headless::label($h->focused()), 'and the focus comes back to the date input');
 $h->tab(); same('C(9)', Headless::label($h->focused()), 'the hours'); $h->right(); same('C(30)', Headless::label($h->focused()), 'Right moves to the minutes');
-$m = $s['when']->format('i'); $h->up(); same(sprintf('%02d', ((int)$m + 1) % 60), $s['when']->format('i'), 'Up steps the minutes');
+$m = $s->when->format('i'); $h->up(); same(sprintf('%02d', ((int)$m + 1) % 60), $s->when->format('i'), 'Up steps the minutes');
 
 // The alert: Enter and Space on Reset… open it with the default button focused; Escape dismisses, and opening again focuses it again.
 $at('B(Reset…)');
 foreach (['enter', 'space'] as $how) {
     $h->$how();
-    check($s['resetting'], "$how opens the alert"); same('B(Reset)', Headless::label($h->focused()), "the default button has the focus ($how)");
-    $h->escape(); check(!$s['resetting'], 'Escape dismisses it'); same('reset dismissed', $s['last'], 'which the app sees');
+    check($s->resetting, "$how opens the alert"); same('B(Reset)', Headless::label($h->focused()), "the default button has the focus ($how)");
+    $h->escape(); check(!$s->resetting, 'Escape dismisses it'); same('reset dismissed', $s->last, 'which the app sees');
     $at('B(Reset…)');
 }
-$h->enter(); $s['resetting'] = false; $h->frame(); // closed by the app
+$h->enter(); $s->resetting = false; $h->frame(); // closed by the app
 $at('B(Reset…)'); $h->space(); same('B(Reset)', Headless::label($h->focused()), 'closed by the app, it focuses its default again');
 $h->escape();
 
 // The cursor: an I-beam over the fields and the fields holding an input, an arrow elsewhere.
-$s['tab'] = 0; $h->frame();
+$s->tab = 0; $h->frame();
 $walk = function (Node $n, array &$out) use (&$walk) { $out[] = $n; foreach ($n->kids as $k) { $walk($k, $out); } };
 $nodes = []; $walk($h->root, $nodes); $ibeam = 0; $other = [];
 foreach ($nodes as $n) {
@@ -91,7 +91,7 @@ $t->frame();
 $t->input->push(['accessOn']); $t->frame();
 $roles = [];
 foreach ([0, 1, 2] as $tab) {
-    $s['tab'] = $tab; $s['more'] = true; $t->frame();
+    $s->tab = $tab; $s->more = true; $t->frame();
     foreach ($t->rt->accessTree->nodes as $n) { $roles[$n->role] = true; }
 }
 foreach (['TOOLBAR' => Role::TOOLBAR, 'TAB_LIST' => Role::TAB_LIST, 'TAB' => Role::TAB, 'RADIO_GROUP' => Role::RADIO_GROUP, 'SLIDER' => Role::SLIDER,

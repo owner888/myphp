@@ -7,6 +7,15 @@ namespace MyPHP\UI;
 final class ScrollState implements Scrollable
 {
     public float $y = 0;
+    /**
+     * How far a finger pulled the content down past its top, in points of
+     * the finger's travel, while $overscrolls (Context::refreshable sets it):
+     * a touch screen's drag at the top adds to it rather than scrolling, the
+     * view shows it rubber-banded; $released says the finger let go of it.
+     * Not mygo's.
+     */
+    public float $pull = 0.0;
+    public bool $overscrolls = false, $released = false;
     public float $x = 0;
     /** Set by layout each frame: content minus viewport on each axis, and the viewport. */
     public float $maxY = 0;

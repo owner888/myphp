@@ -130,10 +130,10 @@ check($s->focus, 'the switch turns focus mode on');
 // flyout: the window's buttons, and the list of colors chosen from the keys and the mouse.
 Headless::load('flyout', '$a = new Flyouts');
 $a = new \MyPHP\Examples\Flyout\Flyouts();
-$t = new Headless($a->view(...), 300, 240);
+$t = new Headless(Headless::view('flyout', $a), 300, 240);
 $t->frame();
 check($t->byText('Red ▾') !== null && $t->byText('No note') !== null, 'the color and the note at first');
-$t = new Headless($a->listView(...), 180, 180);
+$t = new Headless(Headless::view('flyout', $a, 'list.php'), 180, 180);
 $t->frame();
 $t->down(); $t->down();
 same(2, $a->hover, 'Down moves along the list');
@@ -190,7 +190,7 @@ same(150, $s->inAir(), 'the stage throws its burst');
 check(abs($s->bursts[0]->x - $x) <= 1 && abs($s->bursts[0]->y - $y - 100) <= 1, 'from the pointer');
 // Pressing a demo again and again lets the oldest pieces go first: Realistic Look throws 50, 40, 70, 20 and 20 pieces.
 $s = new \MyPHP\Examples\Confetti\Confetti();
-$t = new Headless(fn(\MyPHP\UI\Context $c) => \MyPHP\Examples\Confetti\view($c, $s), 980, 700);
+$t = new Headless(Headless::view('confetti', $s), 980, 700);
 $t->rt->clock = function () use (&$clock) { return $clock; }; // still: on the wall's clock, a slow run let the first bursts fade before the last were thrown
 $t->frame();
 for ($i = 0; $i < 8; $i++) { $t->clickText('Realistic Look'); $t->frame(); }
@@ -259,7 +259,7 @@ for ($i = 0; $i < 30; $i++) { $w->step(1 / 60); }
 $d = $x0 - $w->x;
 check($w->facing === 2 && $w->y > $y0 && $d > 0.5 * 4.5 * 0.5 * 0.9 && $d < 0.5 * 4.5 * 0.5 * 1.1, "the stick walked $d left");
 $g = new \MyPHP\Examples\Farm\Farm();
-$t = new Headless(fn(\MyPHP\UI\Context $c) => \MyPHP\Examples\Farm\view($c, $g), 960, 640);
+$t = new Headless(Headless::view('farm', $g), 960, 640);
 $t->paints = true;
 $clock = 1_000_000_000_000;
 $t->rt->clock = function () use (&$clock) { return $clock; };
@@ -340,7 +340,7 @@ $apart = true;
 foreach ($w->enemies as $i => $a) { foreach (array_slice($w->enemies, $i + 1) as $b) { if ($a->pos->sub($b->pos)->len() < 2) { $apart = false; } } }
 check($apart, 'the enemies stay apart');
 $g = new \MyPHP\Examples\Mayoi\Mayoi();
-$t = new Headless(fn(\MyPHP\UI\Context $c) => \MyPHP\Examples\Mayoi\view($c, $g), 960, 640);
+$t = new Headless(Headless::view('mayoi', $g), 960, 640);
 $t->paints = true;
 $clock = 1_000_000_000_000;
 $t->rt->clock = function () use (&$clock) { return $clock; };
@@ -368,13 +368,15 @@ check($g->w->time == $before && $g->frozen && !$g->sounding, 'without the keyboa
 // gallery: the sidebar and the toolbar navigate the router, and the sidebar's choice follows the history; a row's star and the breadcrumb; the list's choice derived from the filter; the counter; the Languages page in English and in Chinese.
 Headless::load('gallery');
 $G = fn(string $path = '/overview') => new \MyPHP\Examples\Gallery\Gallery($path);
+$H = fn(object $g) => Headless::helpers('gallery', $g); // the view's parts, bound to that state
 $g = $G();
 $g->router->transition = \MyPHP\UI\Router::NONE;
-$t = new Headless(function (\MyPHP\UI\Context $c) use ($g) {
+$h = $H($g);
+$t = new Headless(function (\MyPHP\UI\Context $c) use ($g, $h) {
     $c->row(0, 0, 1)->fill()->alignItems(\MyPHP\UI\Node::STRETCH);
-      $g->sidebar($c);
+      $h['sidebar']($c);
       $c->column(0, 0, 1);
-        $g->toolbar($c);
+        $h['toolbar']($c);
         $g->router->view($c, function (\MyPHP\UI\Route $r) use ($c) {
             $r->title(\MyPHP\Examples\Gallery\pageOf($r->path()));
             $c->text('Page: ' . $r->path());
@@ -408,10 +410,11 @@ check($at('/charts'), 'a row of the list is the List page\'s, in the sidebar');
 
 $g = $G('/list/42');
 $g->router->transition = \MyPHP\UI\Router::NONE;
-$t = new Headless(function (\MyPHP\UI\Context $c) use ($g) {
+$h = $H($g);
+$t = new Headless(function (\MyPHP\UI\Context $c) use ($h, $g) {
     $c->column(0, 0, 1)->fill();
-      $g->toolbar($c);
-      $g->router->view($c, function (\MyPHP\UI\Route $r) use ($c, $g) { if ($r->match('/list/{row}')) { $g->listRow($c, $r); } });
+      $h['toolbar']($c);
+      $g->router->view($c, function (\MyPHP\UI\Route $r) use ($c, $h) { if ($r->match('/list/{row}')) { $h['listRow']($c, $r); } });
     $c->end();
 }, 600, 400);
 $t->frame();
@@ -423,7 +426,8 @@ $t->clickText('List'); $t->frame();
 same('/list', $g->router->path(), 'the breadcrumb goes back to the list');
 
 $g = $G('/list');
-$t = new Headless(function (\MyPHP\UI\Context $c) use ($g) { $c->scroll(0, 0, 1)->fill(); $g->list($c); $c->end(); }, 980, 720);
+$list = $H($g)['list'];
+$t = new Headless(function (\MyPHP\UI\Context $c) use ($list) { $c->scroll(0, 0, 1)->fill(); $list($c); $c->end(); }, 980, 720);
 $t->frame(2);
 $t->clickText('Row 2'); $t->frame();
 same(2, $g->picked, 'a click picks a row');
@@ -436,7 +440,7 @@ $t->enter(); $t->frame();
 same('/list/99', $g->router->path(), 'Enter opens it');
 
 $g = $G();
-$t = new Headless(fn(\MyPHP\UI\Context $c) => $g->overview($c), 980, 720);
+$t = new Headless($H($g)['overview'], 980, 720);
 $t->frame();
 $ok = true;
 foreach ([['Increment', '1'], ['Increment', '2'], ['−', '1']] as [$click, $want]) { $t->clickText($click); $t->frame(); $ok = $ok && $t->byText($want) !== null; }
@@ -447,7 +451,7 @@ $g->now = new \DateTimeImmutable('2026-01-05 13:07:00', new \DateTimeZone('UTC')
 $g->meeting = new \DateTimeImmutable('2026-01-05 09:30:00', new \DateTimeZone('UTC'));
 $saved = \MyPHP\App::locale(); // without an app, the zero region: the formats are the language's, and Chinese's 24 hours show no AM/PM segment
 \MyPHP\App::setLanguages(...\MyPHP\Examples\Gallery\GALLERY_LANGUAGES); // as the gallery declares them
-$t = new Headless(fn(\MyPHP\UI\Context $c) => $g->languages($c), 980, 1400);
+$t = new Headless($H($g)['languages'], 980, 1400);
 $t->frame();
 $missing = array_filter(['1,234,567.891', 'Monday, January 5, 2026', '1:07 PM', 'January 2026', '简体中文 (zh-Hans)', 'Pseudo right to left (ar-XB)', '12,34,567.891'], fn($s) => $t->byText($s) === null);
 same([], array_values($missing), 'the Languages page in English');
@@ -478,7 +482,7 @@ check($t->byText('Shopping') !== null, 'the sidebar shows it: ' . json_encode($t
 // drag-drop: a note dropped on the other window's zone joins its notes; a URL is reported.
 [, $s] = Headless::load('drag-drop');
 $right = $s->panes[1];
-$t = new Headless(fn(\MyPHP\UI\Context $c) => \MyPHP\Examples\DragDrop\view($c, $right), 440, 580);
+$t = new Headless(Headless::view('drag-drop', $right), 440, 580);
 $t->frame();
 check($t->byText('A note from Right') !== null && $t->byText('Drop here') !== null, 'the pane, its note and its zone');
 [$x, $y] = $t->middle($t->byText('Drop here'));
@@ -502,7 +506,7 @@ same('Received URLs: https://example.com/', $right->status, 'a URL dropped is re
 // video: a player's window; a file the system cannot read says why (playing is tests/player_test.php's, on macOS).
 Headless::load('video');
 $s = new \MyPHP\UI\MediaPlayerState();
-$t = new Headless(function (Context $c) use ($s) { \MyPHP\Examples\Video\view($c, $s); }, 900, 600);
+$t = new Headless(Headless::view('video', $s), 900, 600);
 $t->frame();
 $s->open(__DIR__ . '/testdata/upright.jpg');
 $t->frame();
@@ -581,7 +585,7 @@ check(count($lines) === 3 && min($lines) > 100 && max($lines) < 2 * 1000 + 3, 'c
 check($t->byLabel('Three live waveforms') !== null, 'chart-streaming: the plot named');
 foreach (['path', 'raw'] as $mode) {
     $w = new \MyPHP\Examples\ChartStreaming\Waveform($mode);
-    [$kinds] = $csKinds(fn(Context $c) => \MyPHP\Examples\ChartStreaming\view($c, $w));
+    [$kinds] = $csKinds(Headless::view('chart-streaming', $w));
     check(count($kinds) === 3 && array_filter($kinds, fn(array $k) => isset($k[9])) === [], "chart-streaming $mode: stroked paths, no capsules");
 }
 
@@ -700,7 +704,7 @@ for ($i = 0; $i < 2000; $i++) { $q->step(1.0 / 120, false); }
 same(1.0, $q->quality, 'blackhole: the whole quality after fast frames');
 // The three passes: the scene into its canvas at the quality's share of the window's pixels, its glow into a quarter of it, and both over the window.
 $q = new \MyPHP\Examples\Blackhole\BlackHole($a->sh);
-$t = new Headless(fn(Context $c) => \MyPHP\Examples\Blackhole\view($c, $q), 1200, 760);
+$t = new Headless(Headless::view('blackhole', $q), 1200, 760);
 $t->frame();
 $list = $t->paint();
 check(count($list->shaders) === 1 && $list->shaders[0][0] === $q->sh->post->code && $list->shaders[0][3][0] === $q->scene->bitmap() && $list->shaders[0][3][1] === $q->glow->bitmap(), 'blackhole: the post pass over the window');
@@ -733,7 +737,7 @@ $t->frame();
 check($t->byText($reply->text) !== null, 'chat-glow: the reply shows');
 // TestTypeAndStop: Return sends what was typed; Escape stops the assistant while it thinks.
 $a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
-$t = new Headless(fn(Context $c) => \MyPHP\Examples\ChatGlow\view($c, $a), 860, 700);
+$t = new Headless(Headless::view('chat-glow', $a), 860, 700);
 $t->frame();
 $t->type('Hello there'); $t->enter();
 check(count($a->messages) === 2 && $a->messages[0]->text === 'Hello there' && $a->input->text === '', 'chat-glow: Return sends the question');
@@ -746,7 +750,7 @@ foreach (['one', 'one two', "a  b\n\nc ", "Day 1: x.\n\nDay 2"] as $text) {
 same(4, count(\MyPHP\Examples\ChatGlow\splitWords("a b  c\n\nd")), 'chat-glow: four words');
 // TestScrollsToEnd: once the conversation is longer than the window, it shows its end, the whole of the last reply above the composer, not under it.
 $a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
-$t = poseTester(fn(Context $c) => \MyPHP\Examples\ChatGlow\view($c, $a), $now, 860, 500);
+$t = poseTester(Headless::view('chat-glow', $a), $now, 860, 500);
 for ($i = 0; $i < 3; $i++) {
     if ($i === 0) {
         $t->clickText('Summarize my week');
@@ -798,7 +802,7 @@ $a->step(60);
 check(!$a->busy && $a->messages[1]->shown === count($a->messages[1]->words), 'chat-glow: a minute later, the whole reply');
 // TestJumpsOnCatchUp: a reply that comes all at once shows its end at once rather than gliding up from below.
 $a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
-$t = poseTester(fn(Context $c) => \MyPHP\Examples\ChatGlow\view($c, $a), $now, 860, 500);
+$t = poseTester(Headless::view('chat-glow', $a), $now, 860, 500);
 $t->clickText('Summarize my week');
 $a->step(60);
 $t->frame();

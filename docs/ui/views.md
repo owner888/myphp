@@ -53,6 +53,50 @@ App::run();
 `Content::view($view)` is the window's content (`WindowOptions::$content`);
 a `Content` can serve several windows, each with its own node state.
 
+## View files and hot reload
+
+An app keeps its view in a file of its own, which returns it:
+`Content::file(__DIR__ . '/view.php', $app)` loads `view.php` bound to
+`$app`, as a method of its class: `$this` in the file, and in every closure
+it makes, is `$app`, its private members and `self::` included.
+
+<!-- no-test -->
+```php
+<?php // view.php
+declare(strict_types=1);
+
+use MyPHP\UI\Context;
+
+/** A part of the view: a closure, made once as the file loads. */
+$row = function (Context $c, int $i): void {
+    $c->key($i)->checkbox($this->todos[$i]['title'], $this->todos[$i]['done']);
+};
+
+return function (Context $c) use ($row): void {
+    $c->column(16, 8)->fill();
+      foreach (array_keys($this->todos) as $i) { $row($c, $i); }
+    $c->end();
+};
+```
+
+In development (`App::isDev()`), `myphp dev` and `myphp run` hot reload it,
+as Flutter's run does: saved (or `r` pressed), the file loads again and the
+next frame shows the new code with the state as it was, the scroll
+positions, focus and text fields too, which the window keeps. They ask the
+app through a file that lists what changed: `MYPHP_HOT_RELOAD` under
+`myphp dev`, `.myphp-reload` beside the app's entry on a phone.
+
+- PHP declares a named class, function, interface, trait or enum once:
+  a view file holding one is not loaded again; the log says so, and `R`
+  (a restart) takes the change. Keep the state's class, and the methods
+  that change it, in `src/`; the view and its parts as closures here.
+- A closure calling one made after it takes it by reference,
+  `use (&$page)`.
+- A file that fails to load (a syntax error) keeps the view it had, the
+  error in the log; the next save tries again.
+- Other files saved (the state's class, `app.php`) are named in the log:
+  `R` restarts the app with them.
+
 The examples in these guides are parts of such a view: `$c` is the view's
 `Context`, and `$app` an object of your own that holds the state, as the
 to-do list here. A property such as `$app->volume` or a method such as

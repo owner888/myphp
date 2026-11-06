@@ -136,9 +136,9 @@ final class DevTool
         };
     }
 
-    /** The log level's color of IINA's (error red, debug and verbose gray, warning orange), else none. */
+    /** The log level's color of IINA's (error and fault red, debug and verbose gray, warning orange), else none (info). */
     public static function levelColor(int $level): ?int
     {
-        return match ($level) { Logger::ERROR => 0xff3b30, Logger::WARNING => 0xff9500, Logger::DEBUG, Logger::VERBOSE => 0x8e8e93, default => null };
+        return match ($level) { Logger::ERROR, Logger::FAULT => 0xff3b30, Logger::WARNING => 0xff9500, Logger::DEBUG, Logger::VERBOSE => 0x8e8e93, default => null };
     }
 }

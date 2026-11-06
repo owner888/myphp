@@ -251,7 +251,7 @@ final class Headless
         $this->list ??= new DisplayList($ffi->new('float[' . ($capacity * DisplayList::FLOATS_PER_RECT) . ']'), $capacity, $ffi->new('float[' . (4096 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 4096);
         $this->list->pathQuad ??= fn(Path $p, float $w, ?Closure $visible = null) => ($b = $p->bounds()) === null ? [] : [[$b[0], $b[1], $b[2] - $b[0], $b[3] - $b[1], 0, 0]]; // a path's quad is its bounds; no mask
         $this->list->reset(); $this->list->zoom = $this->rt->frameZoom;
-        $this->rt->webPlaces = []; $this->rt->videoPlaces = []; $this->rt->materialPlaces = []; $this->rt->underPaints = []; // as the window's paint
+        $this->rt->webPlaces = []; $this->rt->videoPlaces = []; $this->rt->materialPlaces = []; $this->rt->underPaints = []; $this->rt->overPaints = []; // as the window's paint
         $this->list->pushClip(0, 0, $this->w / $this->rt->frameZoom, $this->h / $this->rt->frameZoom);
         $root = $this->root ?? $this->frame();
         $this->list->cull = !$this->noCull; // as the window's paint, which skips what shows nowhere
@@ -515,7 +515,8 @@ final class Headless
     {
         $s = null;
         self::example('widgets', 'App::whenReady', [], $s);
-        return [static function (Context $c) use (&$s) { \MyPHP\Examples\Widgets\view($c, $s); }, &$s];
+        $view = self::view('widgets', $s);
+        return [static function (Context $c) use ($view) { $view($c); }, &$s];
     }
 
     /**
@@ -526,7 +527,7 @@ final class Headless
     {
         $files = null;
         self::example('files', 'App::setMenu', [$folder], $files);
-        return [static function (Context $c) use ($files) { \MyPHP\Examples\Files\view($c, $files); }, $files];
+        return [self::view('files', $files), $files];
     }
 
     /** The piano example's view and its Piano, loaded without its window: [$view (Closure(Context)), $piano]. */
@@ -534,20 +535,48 @@ final class Headless
     {
         $p = null;
         self::example('piano', 'App::setName', [], $p);
-        return [static function (Context $c) use ($p) { \MyPHP\Examples\Piano\view($c, $p); }, $p];
+        return [self::view('piano', $p), $p];
     }
 
     /**
      * Example $name loaded without its window: its file up to $stop, its
-     * view, which each example declares as view(Context, $s), and its state
-     * $s: [$view (Closure(Context)), $s].
+     * view, which each example's view.php returns, and its state $s:
+     * [$view (Closure(Context), null without a state), $s].
      */
     public static function load(string $name, string $stop = 'App::setName', array $args = []): array
     {
         $s = null;
         self::example($name, $stop, $args, $s);
-        $fn = '\\MyPHP\\Examples\\' . self::namespaceOf($name) . '\\view';
-        return [static function (Context $c) use ($fn, $s) { $fn($c, $s); }, $s];
+        return [is_object($s) ? self::view($name, $s) : null, $s]; // read up to $stop for its classes alone (flyout, todo), no state
+    }
+
+    /**
+     * The view example $name's view.php (or $file) returns, run bound to $state as
+     * Content::file runs it, in the example's namespace (self::example). @return Closure(Context): void
+     */
+    public static function view(string $name, object $state, string $file = 'view.php'): Closure
+    {
+        return Closure::bind(function () use ($name, $file) { return eval('?>' . Headless::viewSource($name, $file)); }, $state, (new \ReflectionClass($state))->isInternal() ? null : $state::class)();
+    }
+
+    /**
+     * The helpers example $name's view.php makes before it returns its view
+     * (its pages, its sidebar…), bound to $state, by name, the view as
+     * 'view': for a test of one part. @return array<string, Closure>
+     */
+    public static function helpers(string $name, object $state): array
+    {
+        $src = preg_replace('/\nreturn (function|fn|static function)/', "\n\$view = $1", self::viewSource($name)) . "\nreturn array_filter(get_defined_vars(), fn(\$v) => \$v instanceof \\Closure);\n";
+        return Closure::bind(function () use ($src) { return eval('?>' . $src); }, $state, (new \ReflectionClass($state))->isInternal() ? null : $state::class)();
+    }
+
+    /** Example $name's view.php in its namespace (self::example), its folder for __DIR__. @internal */
+    public static function viewSource(string $name, string $file = 'view.php'): string
+    {
+        $path = __DIR__ . "/../examples/$name/$file";
+        $src = file_get_contents($path);
+        if ($src === false) { throw new \RuntimeException($path); }
+        return str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;', var_export(dirname($path), true)], $src);
     }
 
     /** The namespace of example $name: "counter-native" is CounterNative. */

@@ -927,6 +927,18 @@ final class Metal
     }
 
     /** Lets go of the drawables view $key's frames tracked, and of its last frame: the next is drawn whole. */
+    /** A render pass into $drawable's texture as MTKView's currentRenderPassDescriptor is: cleared to $clear, stored. */
+    private static function passFor($drawable, $clear)
+    {
+        $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
+        $att = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+        ObjC::msg('v:p', $att, 'setTexture:', ObjC::msg('p:', $drawable, 'texture'));
+        ObjC::msg('v:L', $att, 'setLoadAction:', 2); // MTLLoadActionClear
+        ObjC::msg('v:L', $att, 'setStoreAction:', 1); // MTLStoreActionStore
+        ObjC::msg('v:k', $att, 'setClearColor:', $clear);
+        return $pass;
+    }
+
     private static function letGo(int $key): void
     {
         foreach (self::$held[$key] ?? [] as $t) { ObjC::msg('v:', $t, 'release'); }
@@ -1084,8 +1096,15 @@ final class Metal
             return; // the same frame: the drawable shows it
         }
         $list->cull(); // what later opaque fills hide whole is left out, the damage taken first: the pixels are the same
-        $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
-        $drawable = ObjC::msg('p:', $view, 'currentDrawable');
+        if (isset($this->adopted[$key])) {
+            // A view drawn from PHP's thread outside its draw cycle (iOS's): MTKView hands out its current drawable again
+            // until its draw cycle lets it go, and a drawable presents once, so each frame takes the layer's next one.
+            $drawable = ObjC::msg('p:', ObjC::msg('p:', $view, 'layer'), 'nextDrawable');
+            $pass = $drawable === null ? null : self::passFor($drawable, $cc);
+        } else {
+            $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
+            $drawable = ObjC::msg('p:', $view, 'currentDrawable');
+        }
         if ($pass === null || $drawable === null) {
             self::letGo($key);
             return;

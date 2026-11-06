@@ -7,8 +7,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Process, Window, WindowOptions};
-use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, Context, Font, Key, ListState, Node, Span, TableColumn, TextState, Theme};
+use MyPHP\UI\{Content, ListState, Node, TableColumn, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -92,84 +91,6 @@ final class Http
     }
 }
 
-function view(Context $c, Http $h): void
-{
-    $t = $c->theme;
-    if ($c->shortcut(Key::RETURN, Key::COMMAND) || $h->url->submitted) { $h->url->submitted = false; $h->send(); }
-    $c->row(0, 1, 1, $t->border)->alignItems(Node::STRETCH);
-      // History
-      $c->column(0, 0, 0, $t->surface)->size(320);
-        $c->row(10, 8); $c->text('Requests', 15, style: Font::BOLD); $c->spacer(); $c->muted(count($h->history) . ''); $c->end();
-        // A table of the requests: the headers sort them, their edges resize the columns.
-        if ($h->list->sortChanged()) { $h->sort(); }
-        $c->table($h->list, $h->columns, count($h->history), function (int $i, int $j) use ($c, $t, $h) {
-            $r = $h->history[$i];
-            switch ($j) {
-                case 0: $c->text($r['method'], 12, $t->textMuted, Font::BOLD | Font::MONO); break;
-                case 1:
-                    $color = $r['error'] !== '' ? $t->danger : ($r['status'] === null ? $t->textMuted : ($r['status'] < 400 ? $t->success : $t->danger));
-                    $c->text($r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'], 12, $color, Font::BOLD | Font::MONO);
-                    break;
-                case 2: $c->muted($r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : '', 11); break;
-                default: $c->text(preg_replace('#^https?://#', '', $r['url']), 12)->singleLine()->tooltip($r['url']);
-            }
-        });
-      $c->end();
-      // Request and response
-      $c->column(16, 10, 1, $t->background);
-        $c->row(0, 8);
-          $c->select(Http::METHODS, $h->method, 90);
-          $c->input($h->url, 'https://…', 0); // 0: the rest of the row
-          $send = $c->primaryButton($h->inFlight === null ? 'Send' : 'Sending…')->tooltip('Cmd+Enter');
-          if ($c->clicked($send)) { $h->send(); }
-        $c->end();
-        $c->row(0, 10)->alignItems(Node::STRETCH);
-          $c->column(0, 4, 1); $c->muted('Headers, one a line', 11); $c->textarea($h->headers, 'Name: value', 0, 72, 12); $c->end();
-          $c->column(0, 4, 1); $c->muted('Body', 11); $c->textarea($h->body, 'sent with POST, PUT, PATCH', 0, 72, 12); $c->end();
-        $c->end();
-        $c->divider();
-        response($c, $h);
-      $c->end();
-    $c->end();
-}
-
-function response(Context $c, Http $h): void
-{
-    $t = $c->theme;
-    $i = $h->list->selected;
-    if ($i === null || !isset($h->history[$i])) {
-        $c->column(0, 0, 1)->center(); $c->muted('Send a request (Cmd+Enter); responses show here.'); $c->end();
-        return;
-    }
-    if ($h->list->changed()) { $h->lines->scrollTo(0, false); }
-    $r = $h->history[$i];
-    if ($r['status'] === null && $r['error'] === '') {
-        $c->row(0, 8); $c->spinner(); $c->muted('waiting for ' . $r['url']); $c->end();
-        return;
-    }
-    $width = $c->width - 320 - 1 - 32;
-    // The response is listed line by line, so a body of any size scrolls at frame rate: only the lines in view are shaped.
-    $c->list($h->lines, count($r['lines']), function (int $n) use ($c, $t, $h, $r, $width) {
-        [$kind, $text] = $r['lines'][$n];
-        switch ($kind) {
-            case 'status':
-                $c->row(0, 10);
-                  $c->text((string)$r['status'], 15, $r['status'] < 400 ? $t->success : $t->danger, Font::BOLD);
-                  $c->muted(sprintf('%.0f ms · %s', $r['time'] * 1000, size(strlen($r['body']))));
-                  $c->spacer();
-                  if ($c->clicked($c->button('Copy body'))) { Pasteboard::setText($r['body']); }
-                $c->end();
-                break;
-            case 'error': $c->richText([new Span($text, color: $t->danger, style: Font::MONO)], 12, width: $width, wrap: true); break;
-            case 'header': $c->richText([new Span($text, color: $t->textMuted, style: Font::MONO)], 11, width: $width, wrap: true); break;
-            case 'divider': $c->column(0, 4); $c->divider(); $c->end(); break;
-            case 'json': $c->richText(jsonSpans($text, $t), 12, width: $width, wrap: true); break;
-            case 'note': $c->muted($text, 11); break;
-            default: $c->richText([new Span($text === '' ? ' ' : $text, color: $t->text, style: Font::MONO)], 12, width: $width, wrap: true);
-        }
-    });
-}
-
 /** What the response pane lists for $r: the status row, the headers, a divider, the body line by line (JSON pretty-printed), cut at Http::SHOW. */
 function lines(array $r): array
 {
@@ -199,28 +120,6 @@ function lines(array $r): array
     return $lines;
 }
 
-/** A line of pretty-printed JSON as spans colored by token: keys, strings, numbers and literals, punctuation. */
-function jsonSpans(string $line, Theme $t): array
-{
-    if ($line === '') {
-        return [new Span(' ')];
-    }
-    preg_match_all('/"(?:\\\\.|[^"\\\\])*"(\s*:)?|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null|[^"\d\-tfn]+|./', $line, $m, PREG_SET_ORDER);
-    $spans = [];
-    foreach ($m as $tok) {
-        $s = $tok[0];
-        $color = match (true) {
-            isset($tok[1]) && $tok[1] !== '' => $t->accent,          // a key
-            $s[0] === '"' => $t->success,                              // a string
-            $s === 'true', $s === 'false', $s === 'null' => $t->warning,
-            is_numeric($s) => $t->warning,
-            default => $t->textMuted,
-        };
-        $spans[] = new Span($s, color: $color, style: Font::MONO);
-    }
-    return $spans;
-}
-
 function size(int $b): string
 {
     return $b >= 1 << 20 ? sprintf('%.1f MB', $b / (1 << 20)) : ($b >= 1024 ? sprintf('%.1f KB', $b / 1024) : "$b B");
@@ -236,6 +135,6 @@ App::setMenu(new Menu([
 App::setName('HTTP');
 App::whenReady(function () use ($h) {
     $h->window = new Window(new WindowOptions(title: 'HTTP', width: 1000, height: 680, stateKey: 'http',
-        content: Content::view(fn(Context $c) => view($c, $h))));
+        content: Content::file(__DIR__ . '/view.php', $h)));
 });
 App::run();

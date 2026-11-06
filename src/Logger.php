@@ -23,9 +23,15 @@ use RuntimeException;
  */
 final class Logger
 {
-    public const VERBOSE = 0, DEBUG = 1, WARNING = 2, ERROR = 3;
-    /** The levels' names and short forms, as IINA's. */
-    public const NAMES = ['verbose', 'debug', 'warning', 'error'], SHORT = ['v', 'd', 'w', 'e'];
+    /**
+     * The levels, lowest first: IINA's four, with an info between debug and warning, and a fault over error, as the
+     * system logs have them (os_log's info and fault, Android's info and fatal).
+     */
+    public const VERBOSE = 0, DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FAULT = 5;
+    /** The levels' names, and their letters in a line and in `myphp run`'s output (Android's). */
+    public const NAMES = ['verbose', 'debug', 'info', 'warning', 'error', 'fault'], SHORT = ['V', 'D', 'I', 'W', 'E', 'F'];
+    /** IINA's log levels (its settings' logLevel: verbose, debug, warning, error) as these. */
+    public const IINA = [self::VERBOSE, self::DEBUG, self::WARNING, self::ERROR];
     /** The subsystem of the messages that name none. */
     public const APP = 'app';
     /** How many it keeps, the oldest going first. */
@@ -48,14 +54,18 @@ final class Logger
 
     public static function debug(string $message, string $subsystem = self::APP): void { self::log(self::DEBUG, $message, $subsystem); }
 
+    public static function info(string $message, string $subsystem = self::APP): void { self::log(self::INFO, $message, $subsystem); }
+
     public static function warn(string $message, string $subsystem = self::APP): void { self::log(self::WARNING, $message, $subsystem); }
 
     public static function error(string $message, string $subsystem = self::APP): void { self::log(self::ERROR, $message, $subsystem); }
 
-    /** Logs $message at $level (VERBOSE to ERROR) of $subsystem, unless it is under the level set. */
+    public static function fault(string $message, string $subsystem = self::APP): void { self::log(self::FAULT, $message, $subsystem); }
+
+    /** Logs $message at $level (VERBOSE to FAULT) of $subsystem, unless it is under the level set. */
     public static function log(int $level, string $message, string $subsystem = self::APP): void
     {
-        if ($level < self::VERBOSE || $level > self::ERROR) {
+        if ($level < self::VERBOSE || $level > self::FAULT) {
             throw new \InvalidArgumentException("Logger: no level $level");
         }
         if ($level < self::level()) {
@@ -73,7 +83,11 @@ final class Logger
         if (count(self::$entries) > self::KEEP) { array_shift(self::$entries); }
         self::$count++;
         $line = self::line($e);
-        if (self::$console ??= App::isDev()) { fwrite(defined('STDERR') ? STDERR : (defined('STDOUT') ? STDOUT : fopen('php://stderr', 'w')), $line); }
+        if (App::isIOS()) { // a phone's standard error goes nowhere: the system log, where `myphp run` shows it
+            Native\iOS::ffi()->myphp_ios_log($level, rtrim($line));
+        } elseif (App::isAndroid()) {
+            Native\Android::ffi()->myphp_android_log($level, rtrim($line));
+        } elseif (self::$console ??= App::isDev()) { fwrite(defined('STDERR') ? STDERR : (defined('STDOUT') ? STDOUT : fopen('php://stderr', 'w')), $line); }
         if (self::$toFile) {
             self::$file ??= fopen($path = self::directory() . '/' . App::name() . '.log', 'a') ?: throw new RuntimeException("Logger: cannot write $path");
             fwrite(self::$file, $line);
@@ -83,7 +97,7 @@ final class Logger
     /** The level under which messages are dropped (IINA's log level): defaultLevel() until set. */
     public static function setLevel(int $level): void
     {
-        if ($level < self::VERBOSE || $level > self::ERROR) {
+        if ($level < self::VERBOSE || $level > self::FAULT) {
             throw new \InvalidArgumentException("Logger: no level $level");
         }
         self::$level = $level;

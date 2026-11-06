@@ -26,3 +26,18 @@ $theme = Theme::light()->follow(new Preferences($p->accent, $p->reduceMotion, $p
 closeFloat(16.9, $theme->fontSize, 'the theme\'s text: 13 × 1.3');
 closeFloat(1.3, $theme->textScale(), 'the scale the text styles use');
 closeFloat(22.1, Font::preferred(Font::BODY, true, $theme->textScale())[0], 'body on the phone at that size: 17 × 1.3');
+
+// The platform's text size the system theme starts from (Theme::defaultFontSize): 17 on a phone, the desktop's otherwise; textScale measures against it, so a phone's body is 17 at scale 1.
+$was = getenv('MYPHP_PLATFORM');
+putenv('MYPHP_PLATFORM=ios');
+same(17.0, Theme::defaultFontSize(), 'iOS starts from 17 points');
+putenv('MYPHP_PLATFORM=android');
+same(17.0, Theme::defaultFontSize(), 'Android too, the one design');
+putenv($was === false ? 'MYPHP_PLATFORM' : "MYPHP_PLATFORM=$was");
+same(PHP_OS_FAMILY === 'Darwin' ? 13.0 : 14.0, Theme::defaultFontSize(), 'the desktop: 13 on macOS, 14 elsewhere, as mygo');
+$phone = Theme::light(); $phone->fontSize = $phone->baseFontSize = 17.0;
+same(1.0, $phone->textScale(), 'a phone theme at the platform\'s size scales text by 1');
+closeFloat(17.0, Font::preferred(Font::BODY, true, $phone->textScale())[0], 'so body is 17 on it');
+$larger = $phone->follow(new Preferences(textScale: 1.3));
+closeFloat(22.1, $larger->fontSize, 'larger text: 17 × 1.3');
+closeFloat(1.3, $larger->textScale(), 'measured against the phone\'s 17, not 13');

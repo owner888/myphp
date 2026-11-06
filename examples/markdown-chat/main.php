@@ -7,8 +7,8 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Animation, Content, Context, ListState, Node, TextState};
-use MyPHP\UI\Markdown\{Markdown, Options, Reveal, RevealUnit};
+use MyPHP\UI\{Content, ListState, TextState};
+use MyPHP\UI\Markdown\{Markdown, Options};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -79,52 +79,9 @@ final class Chat
     }
 }
 
-function view(Context $c, Chat $app): void
-{
-    $t = $c->theme;
-    $app->list->key = fn(int $i) => $app->messages[$i]->id;
-    $app->list->followEnd = true;
-    $app->list->followAnimation = Animation::smooth(); // glide up as the reply grows
-    $app->md->reveal = new Reveal([RevealUnit::ByWord, RevealUnit::BySentence, RevealUnit::ByLine, RevealUnit::ByParagraph, RevealUnit::AtOnce][$app->reveal]);
-    $c->column(0, 0, 1);
-      $c->row(0, 8)->alignItems(Node::CENTER)->padding(8, 20)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
-        $c->muted('Stream by');
-        $c->segmented(REVEAL_NAMES, $app->reveal)->label('Stream by');
-      $c->end();
-      $c->list($app->list, count($app->messages), fn(int $i) => message($c, $app, $app->messages[$i]),
-          fn() => $c->muted('Ask anything: the replies are canned, streamed as a model streams them.')->margin(Node::AUTO))->grow(1)->padding(16, 20)->gap(16)->justify(Node::END);
-      $c->row(0, 8)->padding(12, 20)->borderWidth(1, 0, 0, 0)->borderColor($t->border);
-        $in = $c->input($app->input, 'Message', 0)->autoFocus();
-        $last = $app->messages === [] ? null : $app->messages[count($app->messages) - 1];
-        if ($last !== null && !$last->done) {
-            if ($c->clicked($c->button('Stop'))) { $last->done = true; }
-        } else {
-            $send = $c->primaryButton('Send')->disabled(trim($app->input->text) === '');
-            if (($c->clicked($send) || $c->submitted($in)) && trim($app->input->text) !== '') { $app->send(); }
-        }
-      $c->end();
-    $c->end();
-}
-
-/** A message: the user's in a bubble on the right, the model's as Markdown. */
-function message(Context $c, Chat $app, Message $m): void
-{
-    $t = $c->theme;
-    if ($m->mine) {
-        $c->row();
-          $c->spacer();
-          $c->text($m->text)->selectable()->padding(8, 12)->radius(14)->background($t->surface)->maxWidth(520);
-        $c->end();
-        return;
-    }
-    $c->column()->maxWidth(760);
-      $m->done ? Markdown::view($c, $m->text, $app->md) : Markdown::stream($c, $m->text, $app->md);
-    $c->end();
-}
-
 $s = new Chat();
 App::setName('Markdown chat');
 App::whenReady(function () use ($s) {
-    $s->win = new Window(new WindowOptions(title: 'Markdown chat', width: 820, height: 720, content: Content::view(fn(Context $c) => view($c, $s))));
+    $s->win = new Window(new WindowOptions(title: 'Markdown chat', width: 820, height: 720, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

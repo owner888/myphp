@@ -489,7 +489,12 @@ final class App
     private static function systemTheme(): Theme
     {
         $dark = self::backend()->theme()->isDark();
-        return ($dark ? Theme::dark() : Theme::light())->follow(self::preferences());
+        if (self::isIOS() || self::isAndroid()) {
+            return Theme::phone($dark)->follow(self::preferences()); // UIKit's colors, sizes and 17-point text, the one design on both
+        }
+        $t = $dark ? Theme::dark() : Theme::light();
+        $t->fontSize = $t->baseFontSize = Theme::defaultFontSize(); // the platform's text size (13 on macOS, 14 on Linux), which the settings scale
+        return $t->follow(self::preferences());
     }
 
     /** @internal the appearance or the desktop's settings changed (mygo's ThemeChanged): what was read of them is forgotten, the theme and the windows follow, then Theme's listeners hear it */

@@ -160,7 +160,7 @@ final class PlayerSettings
         // Advanced
         'enableAdvancedSettings' => false,
         'enableLogging' => false,
-        'logLevel' => 1, // 0 verbose, 1 debug, 2 warning, 3 error
+        'logLevel' => 1, // IINA's: 0 verbose, 1 debug, 2 warning, 3 error (Logger::IINA)
         // Network
         'enableCache' => true,
         'cachePauseInitial' => false,

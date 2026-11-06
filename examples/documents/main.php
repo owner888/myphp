@@ -7,33 +7,14 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Document, Documents, DocumentsOptions, DocumentType, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Node, TextState};
+use MyPHP\UI\{Content, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
-function note(Context $c, Document $doc, TextState $text): void
+/** A note's window: its document, and the text being edited, which view.php shows. */
+final class Note
 {
-    $t = $c->theme;
-    $state = $doc->state();
-    $c->column(0, 0, 1);
-      if ($state->conflict) {
-          $c->row(10, 8)->background($t->warning, 0.15)->alignItems(Node::CENTER);
-            $c->text('Another app changed this note. Save to keep yours, or revert to theirs.', 13);
-            $c->spacer();
-            if ($c->clicked($c->button('Revert'))) { App::later(fn() => $doc->revert()); }
-            if ($c->clicked($c->primaryButton('Save'))) { App::later(fn() => $doc->saveAnyway()); }
-          $c->end();
-      }
-      $c->key('text')->textarea($text, '', 0, 0)->font('monospace')->label('Note')->autoFocus(); // 0, 0: fills the window
-      if ($text->text !== $doc->content()) {
-          $doc->set($text->text);
-      }
-      $c->row(0, 12)->padding(6, 12)->alignItems(Node::CENTER); // mygo's Padding(6, 12).Gap(12)
-        $c->muted(sprintf('%d words', count(preg_split('/\s+/u', $text->text, -1, PREG_SPLIT_NO_EMPTY))), 12);
-        $c->spacer();
-        $c->muted(match (true) { $state->path === '' => 'Not saved', $state->readOnly => 'Read-only', $state->edited => 'Edited', default => 'Saved' }, 12);
-      $c->end();
-    $c->end();
+    public function __construct(public Document $doc, public TextState $text) {}
 }
 
 $notes = new Documents(new DocumentsOptions(
@@ -46,7 +27,7 @@ $notes = new Documents(new DocumentsOptions(
     window: function (Document $doc): Window {
         $text = new TextState($doc->content());
         $text->multiline = true;
-        $w = new Window(new WindowOptions(width: 640, height: 480, stateKey: 'note', content: Content::view(fn(Context $c) => note($c, $doc, $text))));
+        $w = new Window(new WindowOptions(width: 640, height: 480, stateKey: 'note', content: Content::file(__DIR__ . '/view.php', new Note($doc, $text))));
         // Reverted, or changed by another app: show the file's text.
         $doc->onReload(function () use ($doc, $text, $w): void { $text->text = $doc->content(); $text->setCursor(0); $w->invalidate(); });
         $doc->onStateChange(fn() => $w->invalidate());

@@ -107,14 +107,20 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
 </plist>
 PLIST
 
-# 4. Bundle app entry and src
+# 4. Bundle app entry and src: the entry as app.php, the PHP files beside it (its views of files, Content::file) and its project's src over the framework's, as on Android
 echo "==> Bundling app source..."
-if [[ "${ENTRY}" = /* ]]; then
-    cp "${ENTRY}" "${APP_DIR}/app.php"
-else
-    cp "${ROOT_DIR}/${ENTRY}" "${APP_DIR}/app.php"
+if [[ "${ENTRY}" != /* ]]; then
+    ENTRY="${ROOT_DIR}/${ENTRY}"
 fi
+cp "${ENTRY}" "${APP_DIR}/app.php"
 cp -R "${ROOT_DIR}/src" "${APP_DIR}/src"
+ENTRY_DIR="$(dirname "${ENTRY}")"
+for php_file in "${ENTRY_DIR}/"*.php; do
+    [ -f "$php_file" ] && [ "$php_file" != "${ENTRY}" ] && cp "$php_file" "${APP_DIR}/"
+done
+if [ -d "${ENTRY_DIR}/src" ] && [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
+    cp -R "${ENTRY_DIR}/src/"* "${APP_DIR}/src/"
+fi
 
 # 5. The CA certificates HTTPS trusts (curl's copy of Mozilla's): OpenSSL in the app has no way to the system's
 if [ ! -f "${BUILD_DIR}/cacert.pem" ]; then

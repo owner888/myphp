@@ -9,7 +9,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, ListState, Node, ScrollState, TextState};
+use MyPHP\UI\{Content, ListState, ScrollState, TextState};
 use MyPHP\UI\Markdown\{Markdown, Options};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
@@ -148,71 +148,6 @@ final class Notes
 App::setName('Notes'); // before App::path(), which is named after the app
 $notes = new Notes($argv[1] ?? App::path(PathName::UserData) . '/notes');
 
-function view(Context $c, Notes $notes): void
-{
-    $t = $c->theme;
-    $notes->tick();
-    $notes->filter();
-    // Three panes the dividers resize: notes | editor | preview (while previewing).
-    $c->split($notes->listW, function () use ($c, $t, $notes) {
-        $c->column(0, 0, 1, $t->surface);
-          $c->column(8, 6);
-            $c->searchField($notes->query, 0); // as wide as the pane
-            $c->toolbar(function () use ($c, $notes) {
-                if ($c->clicked($c->button('New'))) { $notes->create(); }
-                if ($c->clicked($c->button('Delete…')) && $notes->open !== null) { $notes->asking = true; }
-                $c->spacer();
-                $c->toggle($notes->previewing, 'Preview');
-            });
-          $c->end();
-          $c->divider();
-          $c->list($notes->list, count($notes->shown), function (int $row) use ($c, $t, $notes) {
-              $it = $notes->items[$notes->shown[$row]];
-              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0)->singleLine();
-                $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
-          });
-          if ($notes->shown === [] && $notes->query->text !== '') { $c->column(10, 0); $c->muted('No note matches.', 12); $c->end(); }
-          if ($notes->list->changed() && $notes->list->selected >= 0 && $notes->items[$notes->shown[$notes->list->selected]]['path'] !== $notes->open) {
-              $notes->choose($notes->items[$notes->shown[$notes->list->selected]]['path']);
-          }
-        $c->end();
-    }, function () use ($c, $t, $notes) {
-        $editor = function () use ($c, $t, $notes) {
-            $c->column(0, 0, 1);
-              if ($notes->open === null) {
-                  $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
-              } else {
-                  $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
-                  $c->row(8, 8)->alignItems(Node::CENTER);
-                    $c->muted(sprintf('%d words · edited %s', $notes->words(), date('M j, H:i', $notes->edited())), 12); $c->spacer();
-                    $c->badge($notes->editor->text === $notes->savedText() ? 'saved' : 'editing');
-                  $c->end();
-              }
-            $c->end();
-        };
-        if (!$notes->previewing) { $editor(); return; }
-        $c->split($notes->editorW, $editor, function () use ($c, $t, $notes) {
-            // The preview follows the editor: scrolled the same share of the way through.
-            if ($notes->editor->scrollFraction !== $notes->followed) {
-                $notes->followed = $notes->editor->scrollFraction;
-                $notes->preview->scrollTo($notes->followed * $notes->preview->maxY, false);
-            }
-            $c->column(16, 10, 1, $t->background)->scroll($notes->preview);
-              Markdown::view($c, $notes->editor->text, $notes->md);
-            $c->end();
-        });
-    });
-    // Deleting asks first.
-    $c->modal($notes->asking, function () use ($c, $notes) {
-        $c->text('Delete this note?', 15, style: Font::BOLD);
-        $c->muted(basename((string)$notes->open) . " goes to nowhere: there is no undo.");
-        $c->row(0, 8)->justify(Node::END);
-          if ($c->clicked($c->button('Cancel'))) { $notes->asking = false; }
-          if ($c->clicked($c->primaryButton('Delete'))) { $notes->asking = false; $notes->delete(); $c->toast('Note deleted'); }
-        $c->end();
-    });
-}
-
 $confirmDelete = function () use ($notes) { // the same modal the toolbar's Delete… opens
     if ($notes->open !== null) { $notes->asking = true; $notes->window?->invalidate(); }
 };
@@ -230,7 +165,7 @@ App::setMenu(new Menu([
 
 App::whenReady(function () use ($notes) {
     $notes->window = new Window(new WindowOptions(title: 'Notes', width: 1100, height: 680, stateKey: 'markdown-notes',
-        content: Content::view(fn(Context $c) => view($c, $notes))));
+        content: Content::file(__DIR__ . '/view.php', $notes)));
     if ($notes->items !== []) {
         $notes->choose($notes->items[0]['path']);
     }

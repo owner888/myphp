@@ -7,89 +7,17 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Key, ScrollState, Span, TextState, Theme};
+use MyPHP\UI\{Content, ScrollState, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
-$s = ['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'draft' => new TextState, 'log' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState,
+$s = (object)['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'draft' => new TextState, 'log' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState,
       'subscribe' => false, 'mode' => 'system', 'applied' => 'system', 'volume' => 40.0, 'lang' => 0];
-$s['log']->readOnly = true;
-
-function form(Context $c, array &$s): void
-{
-    $c->column(24, 14, 1);
-      $c->text('Profile', 20);
-      foreach (['name' => 'Name', 'city' => 'City（试试中文输入法）'] as $key => $label) {
-          $c->row(0, 12);
-            $c->column(0, 0); $c->muted($label); $c->end();
-            $field = $c->input($s[$key], $label, 320);
-            if ($c->submitted($field)) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
-          $c->end();
-      }
-      $c->row(0, 12);
-        $c->column(0, 0); $c->muted('Note'); $c->end();
-        $c->textarea($s['note'], 'A few lines: Enter breaks, Up/Down move, Cmd+Z undoes', 320, 96); // wraps at the width
-      $c->end();
-      // A message field: one line that grows with what is typed, up to four, Enter sends it (the key taken before the field sees it), Shift+Enter breaks a line; the log below is read-only, selectable and copyable.
-      $c->row(0, 12);
-        $c->column(0, 0); $c->muted('Message'); $c->end();
-        $s['draft']->onTextKey = function (int $code, string $chars, int $mods, TextState $d) use (&$s): bool {
-            if ($code !== Key::RETURN || $mods & Key::SHIFT) { return false; }
-            if (trim($d->text) !== '') { $s['log']->text .= ($s['log']->text === '' ? '' : "\n") . trim($d->text); $s['log']->setCursor(strlen($s['log']->text)); }
-            $d->selectAll(); $d->insert('');
-            return true;
-        };
-        $c->textarea($s['draft'], 'Enter sends, Shift+Enter breaks a line', 320, 0, null, 1, 4);
-      $c->end();
-      $c->row(0, 12);
-        $c->column(0, 0); $c->muted('Sent'); $c->end();
-        $c->textarea($s['log'], 'Nothing sent yet', 320, 64);
-      $c->end();
-      // A strip wider than the window: scrolls sideways with the trackpad or its thumb.
-      $c->row(8, 8, 0, $t = $c->theme->surface)->scroll($s['strip'], horizontal: true, vertical: false);
-        for ($i = 0; $i < 30; $i++) {
-            $c->column(6, 2, 0, $c->theme->background); $c->text("Tag $i"); $c->muted(sprintf('#%06x', ($i * 2654435761) & 0xffffff), 11); $c->end();
-        }
-      $c->end();
-      // Controls: a checkbox, radios, a slider and a select, each writing straight into $s.
-      $c->row(0, 16);
-        $c->checkbox('Subscribe', $s['subscribe']);
-        // The theme: fixed light or dark, or following the system (with its accent).
-        $c->radio('Light', $s['mode'], 'light'); $c->radio('Dark', $s['mode'], 'dark'); $c->radio('System', $s['mode'], 'system');
-        if ($s['mode'] !== $s['applied']) { // a radio changed it: the theme follows on the next frame
-            $s['applied'] = $s['mode'];
-            App::setTheme(match ($s['mode']) { 'light' => Theme::light(), 'dark' => Theme::dark(), default => null });
-        }
-        $c->slider($s['volume'], 0, 100, 140);
-        $c->column(0, 0)->size(40); $c->muted(sprintf('%.0f%%', $s['volume'])); $c->end(); // a fixed width, so the number does not push the select about
-        $c->select(['English', '中文', 'Español'], $s['lang']);
-      $c->end();
-      // A focusable card: Tab reaches it, Enter or a click activates it, hover tints it; the text wraps at the card's width.
-      $card = $c->column(10, 4, 0, $c->theme->surface)->focusable();
-        if ($c->hovered($card)) { $card->color = $c->theme->surfaceHover; }
-        if ($c->clicked($card)) { $s['submits']++; $s['greeting'] = 'card activated'; }
-        $c->richText([new Span('A card. ', style: Font::BOLD), new Span('Tab to it and press Enter, or click it. This sentence wraps at the width the window gives the card, '
-            . 'so make the window narrower and watch it reflow — 中文也会在合适的地方换行。')]);
-      $c->end();
-      // A link, a determinate bar following the slider, an indeterminate one; the Submit button has a tip.
-      $c->row(0, 12);
-        $c->link('mygo on GitHub', 'https://github.com/egoist/mygo');
-        $c->progress($s['volume'] / 100, 140)->tooltip('follows the slider');
-        $c->progress(-1, 100)->tooltip('indeterminate: animates');
-      $c->end();
-      $c->row(0, 8);
-        if ($c->clicked($c->primaryButton('Submit')->tooltip('Sends the form; Enter in a field does too'))) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
-        if ($c->clicked($c->button('Clear'))) { foreach (['name', 'city', 'note'] as $k) { $s[$k]->text = ''; $s[$k]->setCursor(0); } $s['greeting'] = ''; }
-      $c->end();
-      $c->text($s['greeting'] === '' ? 'Submit, or press Enter in a field.' : $s['greeting'] . " (#{$s['submits']})", 15);
-      $n = $s['name'];
-      $c->muted(sprintf('name: %d bytes, cursor %d, anchor %d%s', strlen($n->text), $n->cursor, $n->anchor, $n->marked !== null ? ", composing \"{$n->marked}\"" : ''), 12);
-    $c->end();
-}
+$s->log->readOnly = true;
 
 App::setName('Form');
-App::whenReady(function () use (&$s) {
+App::whenReady(function () use ($s) {
     new Window(new WindowOptions(title: 'MyPHP native — text input', width: 600, height: 560,
-        content: Content::view(function (Context $c) use (&$s) { form($c, $s); })));
+        content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

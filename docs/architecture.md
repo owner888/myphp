@@ -8202,7 +8202,13 @@ shared libraries stored uncompressed per API 30+ requirements).
 Native UI renders directly onto an Activity's `SurfaceView` via EGL and
 OpenGL ES 3.2. The desktop GLSL 3.30 shader (`Native\GlShader`) is adapted
 on Android (`GlShader::adapt`) to `#version 320 es` with highp precision,
-reusing the single buffer texture quad pipeline and instanced draws.
+reusing the single buffer texture quad pipeline and instanced draws. A GPU
+of GLSL ES 3.10 with `GL_EXT_texture_buffer`/`GL_OES_texture_buffer` gets
+`#version 310 es` and the extension; one without texture buffers (GLSL ES
+3.00, as the Android emulator's on a Mac) gets `#version 300 es`, its quads
+and transforms in RGBA32F 2D textures of rows of `GlShader::TEXEL_ROW`
+texels, read by `texelRow()` in place of `texelFetch` on a `samplerBuffer`
+(`GlShader::esVersion`, `GlShader::texelRows`).
 `libmyphp.so` provides function pointer slots for the GL entry points,
 allowing `Native\Gl` to run unchanged between Linux and Android. The frame
 cadence is paced by `AChoreographer64` dispatched on the PHP worker thread's

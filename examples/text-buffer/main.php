@@ -5,7 +5,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, TextBuffer};
+use MyPHP\UI\{Content, TextBuffer};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -16,19 +16,10 @@ function document(int $lines): TextBuffer
     return new TextBuffer($source);
 }
 
-function view(Context $c, TextBuffer $buffer): void
-{
-    $c->column(20, 10, 1);
-      $c->text('Indexed text input', 22, style: Font::BOLD);
-      $c->text(sprintf('%d lines · %d runes · version %d', $buffer->lineCount(), $buffer->len(), $buffer->version()));
-      $c->textAreaBuffer($buffer, width: 0, height: 0)->label('Document')->font('monospace')->autoFocus();
-    $c->end();
-}
-
 $s = document((int)($argv[1] ?? 100000));
 App::setName('Text buffer');
 App::whenReady(function () use ($s) {
     App::setMenu(new Menu([new MenuItem(role: 'appMenu'), new MenuItem(role: 'editMenu')]));
-    new Window(new WindowOptions(title: 'Indexed text buffer', width: 900, height: 650, content: Content::view(fn(Context $c) => view($c, $s))));
+    new Window(new WindowOptions(title: 'Indexed text buffer', width: 900, height: 650, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

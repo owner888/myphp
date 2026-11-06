@@ -7,6 +7,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <pthread.h>
 #import <os/log.h>
+#import <objc/message.h>
 
 #include <main/php.h>
 #include <sapi/embed/php_embed.h>
@@ -190,6 +191,84 @@ float myphp_ios_get_keyboard_height(void) {
 
 void* myphp_ios_get_view(void) {
     return (__bridge void*)g_view;
+}
+
+// The view over the materials (Platform\iOS\Window::paintOver): what a material's node holds paints in it, over the
+// UIVisualEffectViews, which blur the page the Metal view shows under them. Clear, and it takes no touches: they go on to
+// the Metal view, which hit-tests the nodes. Made with the Metal view (loadView).
+static MTKView *g_over_view = NULL;
+
+void* myphp_ios_get_over_view(void) {
+    return (__bridge void*)g_over_view;
+}
+
+// A system material where a frame placed one (Node::systemMaterial), in points from the window's top left: kind 0 and 1
+// glass and clear glass, else a UIBlurEffectStyle; dark -1 the app's appearance, 0 light, 1 dark.
+typedef struct {
+    int64_t id;
+    float x, y, w, h, radius, alpha;
+    int32_t kind, dark;
+} MyphpMaterialPlace;
+
+static NSMutableDictionary<NSNumber *, UIVisualEffectView *> *g_materials = nil;
+
+// iOS 26's Liquid Glass (UIGlassEffect, looked up at run time so the launcher builds with an older SDK too), or before
+// it the blurs UIKit's bars had: the chrome material for glass, the ultra-thin one for clear glass.
+static UIVisualEffect *myphp_material_effect(int kind) {
+    if (kind == 0 || kind == 1) {
+        Class glass = NSClassFromString(@"UIGlassEffect");
+        if (glass != nil) {
+            return ((UIVisualEffect *(*)(id, SEL, NSInteger))objc_msgSend)(glass, sel_registerName("effectWithStyle:"), kind); // UIGlassEffectStyleRegular 0, Clear 1
+        }
+        return [UIBlurEffect effectWithStyle:kind == 0 ? UIBlurEffectStyleSystemChromeMaterial : UIBlurEffectStyleSystemUltraThinMaterial];
+    }
+    return [UIBlurEffect effectWithStyle:(UIBlurEffectStyle)kind];
+}
+
+// Shows the materials a frame placed, each a UIVisualEffectView over the Metal view and under the view over the
+// materials, and takes away those it no longer has. From PHP's thread; placed on the main thread.
+void myphp_ios_place_materials(const MyphpMaterialPlace *places, int count) {
+    NSData *data = [NSData dataWithBytes:places length:sizeof(MyphpMaterialPlace) * (size_t)(count > 0 ? count : 0)];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!g_materials) g_materials = [NSMutableDictionary dictionary];
+        const MyphpMaterialPlace *p = data.bytes;
+        NSMutableSet<NSNumber *> *shown = [NSMutableSet set];
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        for (int i = 0; i < count; i++) {
+            NSNumber *key = @(p[i].id);
+            UIVisualEffectView *v = g_materials[key];
+            if (v != nil && v.tag != p[i].kind) { // another material on the same node
+                [v removeFromSuperview];
+                v = nil;
+            }
+            if (v == nil) {
+                v = [[UIVisualEffectView alloc] initWithEffect:myphp_material_effect(p[i].kind)];
+                v.tag = p[i].kind;
+                v.userInteractionEnabled = NO; // the Metal view under it takes the touches
+                v.clipsToBounds = YES;
+                v.layer.cornerCurve = kCACornerCurveContinuous;
+                g_materials[key] = v;
+                if (g_over_view != nil) {
+                    [g_view insertSubview:v belowSubview:g_over_view];
+                } else {
+                    [g_view addSubview:v];
+                }
+            }
+            v.frame = CGRectMake(p[i].x, p[i].y, p[i].w, p[i].h);
+            v.layer.cornerRadius = p[i].radius;
+            v.alpha = p[i].alpha;
+            v.overrideUserInterfaceStyle = p[i].dark < 0 ? UIUserInterfaceStyleUnspecified : (p[i].dark ? UIUserInterfaceStyleDark : UIUserInterfaceStyleLight);
+            [shown addObject:key];
+        }
+        for (NSNumber *key in g_materials.allKeys) {
+            if (![shown containsObject:key]) {
+                [g_materials[key] removeFromSuperview];
+                [g_materials removeObjectForKey:key];
+            }
+        }
+        [CATransaction commit];
+    });
 }
 
 void myphp_ios_request_render(void) {
@@ -558,7 +637,7 @@ void myphp_ios_create_web_view(int page_id) {
 
         g_webviews[@(page_id)] = wv;
         if (g_window.rootViewController.view) {
-            [g_window.rootViewController.view addSubview:wv];
+            [g_window.rootViewController.view insertSubview:wv atIndex:0]; // under the materials and the view over them, as a page under a bar's glass
         }
     });
 }
@@ -768,6 +847,14 @@ static size_t myphp_ub_write(const char *str, size_t len) {
     return len;
 }
 
+// A line of the app's log (MyPHP\Logger) into the system log at its level: verbose and debug as debug, info as info,
+// warnings as default (the line says [W]), errors as errors, faults as faults, where `myphp run` reads and colors them.
+void myphp_ios_log(int level, const char *message) {
+    static const os_log_type_t types[] = {OS_LOG_TYPE_DEBUG, OS_LOG_TYPE_DEBUG, OS_LOG_TYPE_INFO, OS_LOG_TYPE_DEFAULT, OS_LOG_TYPE_ERROR, OS_LOG_TYPE_FAULT};
+    os_log_type_t type = types[level < 0 ? 0 : (level > 5 ? 5 : level)];
+    os_log_with_type(OS_LOG_DEFAULT, type, "[myphp] %{public}s", message);
+}
+
 static void myphp_log_message(const char *message, int syslog_type_int) {
     os_log_error(OS_LOG_DEFAULT, "[myphp-ios] %{public}s", message);
 }
@@ -784,6 +871,7 @@ static void* php_worker_thread(void *arg) {
         setenv("TMPDIR", [tmpDir UTF8String], 1);
         setenv("MYPHP_BUNDLE", [bundlePath UTF8String], 1);
         setenv("MYPHP_PLATFORM", "ios", 1);
+        setenv("MYPHP_HOT_RELOAD", [[bundlePath stringByAppendingPathComponent:@".myphp-reload"] UTF8String], 1); // where myphp run asks for a hot reload (Content::hotReloadFile): beside app.php
         setenv("SSL_CERT_FILE", [[bundlePath stringByAppendingPathComponent:@"cacert.pem"] UTF8String], 1); // what curl's OpenSSL trusts (package-ios-app.sh)
 
         char *php_argv[] = {"myphp", NULL};
@@ -1018,6 +1106,18 @@ static void* php_worker_thread(void *arg) {
     g_needs_render = 1;
 }
 
+// Touches are the Metal view's, which PHP hit-tests against the nodes, wherever they land: the materials over it
+// (UIKit's glass) and the view over them take none, whatever UIKit's glass does with userInteractionEnabled; only a
+// web view's page takes its own.
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    if (![self pointInside:point withEvent:event]) return nil;
+    UIView *hit = [super hitTest:point withEvent:event];
+    for (UIView *v = hit; v != nil && v != self; v = v.superview) {
+        if ([v isKindOfClass:[WKWebView class]]) return hit;
+    }
+    return self;
+}
+
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     UITouch *t = [touches anyObject];
     if (t) {
@@ -1066,6 +1166,19 @@ static void* php_worker_thread(void *arg) {
     v.multipleTouchEnabled = NO;
     g_view = v;
     self.view = v;
+
+    // The view over the materials, as large as the Metal view, clear, taking no touches (myphp_ios_get_over_view).
+    MTKView *over = [[MTKView alloc] initWithFrame:v.bounds device:device];
+    over.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
+    over.clearColor = MTLClearColorMake(0, 0, 0, 0);
+    over.opaque = NO;
+    over.backgroundColor = [UIColor clearColor];
+    over.paused = YES;
+    over.enableSetNeedsDisplay = NO;
+    over.userInteractionEnabled = NO;
+    over.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [v addSubview:over];
+    g_over_view = over;
 }
 
 - (void)onDisplayLink:(CADisplayLink *)link {
