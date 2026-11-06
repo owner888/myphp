@@ -12,11 +12,15 @@ use MyPHP\UI\{Context, Image, Node, SVG};
  */
 final class ImageView extends View
 {
-    private bool $resizable = false;
+    private bool $resizable = false, $fit = false;
 
     public function __construct(public readonly Image|SVG|null $image, public readonly ?string $systemName = null) {}
 
+    /** The picture fills the room it is given (->frame()), as SwiftUI's resizable. */
     public function resizable(): static { $this->resizable = true; return $this; }
+
+    /** A resizable picture keeps its aspect ratio: as wide as its room, as high as that makes it, as SwiftUI's scaledToFit. */
+    public function scaledToFit(): static { $this->fit = true; return $this; }
 
     protected function build(Context $c, Env $env): ?Node
     {
@@ -26,7 +30,17 @@ final class ImageView extends View
             return $c->image($img, $size, $size);
         }
         $n = $c->image($this->image, 0, 0);
-        if ($this->resizable) { $n->alignSelf(Node::STRETCH); }
+        if ($this->resizable) {
+            [$w, $h] = [$n->fw, $n->fh];
+            $n->size(0, 0); // its own size let go: the room's
+            if ($this->fit && $w > 0 && $h > 0) {
+                $n->aspectRatio($w / $h)->fit(Node::CONTAIN);
+                View::takeRoom($n, $env->axis, View::FLEX_X);
+            } else {
+                $n->fit(Node::FILL_BOX);
+                View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
+            }
+        }
         return $n;
     }
 }

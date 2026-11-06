@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Content, Context, Node};
-use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem;
+use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem, GeometryProxy;
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 
@@ -80,7 +80,8 @@ $h = new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 0)(
 ), $c), 700, 400);
 $h->frame(2);
 check($h->root->kids[0]->w === 700.0 && $h->root->kids[0]->h === 400.0, 'an HStack around a NavigationStack takes the window: ' . $h->root->kids[0]->w . 'x' . $h->root->kids[0]->h);
-same(120.0, $h->byText('Side')->w, 'a fixed frame width keeps its width');
+$side = null; $up = function (Node $n) use (&$up, &$side, $h): void { foreach ($n->kids as $k) { if ($k === $h->byText('Side')) { $side = $n; } $up($k); } }; $up($h->root); $up = null;
+check($side->w === 120.0 && $h->byText('Side')->w < 120.0, "a frame's width is a box around the text, as SwiftUI's, the text its own width");
 $h->clickText('Ideas'); $h->frame(3);
 same('/notes/2', $nav->path->path(), 'a NavigationLink of Each in a section pushes its value');
 check($h->byText('Note 2 is an int: int') !== null, 'navigationDestination gets {id} as the int it asks for');
@@ -273,3 +274,23 @@ $h = new Headless(fn(Context $c) => Content::render(fn() => LazyVGrid(columns: [
 $h->frame(3);
 $xs = array_map(fn(int $i) => $h->rect($h->byText("Cell $i"))[1], [1, 4, 5]);
 check($xs[0] === $xs[1] && $xs[2] > $xs[0], 'four cells to a row, the fifth on the next: ' . json_encode($xs));
+
+// GeometryReader follows the window: built with the size of the frame before, it builds again once laid out to another.
+$gw = [];
+$h = new Headless(fn(Context $c) => Content::render(fn() => GeometryReader(function (GeometryProxy $g) use (&$gw) { $gw[] = $g->size[0]; return Text(verbatim: 'w ' . (int)$g->size[0]); }), $c), 500, 300);
+$h->paints = true;
+$h->frame(2);
+$h->w = 700; $h->frame(3);
+check($h->byText('w 700') !== null, 'GeometryReader builds again with the new width: ' . json_encode($h->texts()));
+
+// Image->resizable()->scaledToFit() in a frame: as wide as the frame, as high as its aspect ratio makes it.
+$pic = \MyPHP\UI\Image::fromPixels(40, 30, str_repeat("\x80\x80\x80\xff", 1200));
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(Image($pic)->resizable()->scaledToFit()->frame(width: 400)), $c), 600, 600);
+$h->frame(2);
+$img = null; $walk = function (Node $n) use (&$walk, &$img) { if ($n->kind === Node::IMAGE) { $img = $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->root); $walk = null;
+same([400.0, 300.0], array_slice($h->rect($img), 2), 'a resizable picture scaled to fit: the frame\'s width, its aspect\'s height');
+
+// A frame's fixed size is neither shrunk nor grown, as SwiftUI's: 48-point squares in a row narrower than they are.
+$h = new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 4)(Each(range(1, 10))(fn(int $i) => Rectangle()->fill(Color::red)->frame(width: 48, height: 48)->accessibilityLabel("sq $i"))), $c), 200, 100);
+$h->frame(2);
+same(48.0, $h->rect($h->byLabel('sq 1'))[2], 'a 48-point frame stays 48 in a row too narrow for ten');
