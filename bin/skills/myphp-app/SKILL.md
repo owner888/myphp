@@ -62,6 +62,7 @@ my-app/
   app.php           makes the state, opens the windows, runs the app
   src/Todos.php     the state and its actions (no view)
   view.php          return function (Context $c): void { … } — the view
+  pages/note.php    a page of a Router's table (several pages)
   tests/ui_test.php builds the view headless and drives it
   resources/icon.png
 ```
@@ -141,6 +142,12 @@ App::run();
   `use`; a closure that calls one made after it takes it by reference
   (`use (&$page)`). A named class or function there cannot be loaded
   twice: its change waits for a restart, as the log says.
+- Several pages: a `Router` in the state, and in the view a table of
+  patterns and page files, `$this->router->view($c, ['/notes' =>
+  __DIR__ . '/pages/notes.php', '/notes/{id}' => __DIR__ .
+  '/pages/note.php'])`; a page file returns `function (Context $c, Route
+  $r, int $id): void`, `{id}` given by name and type, `$this` the state
+  too. Not an `if ($r->match())` chain (`docs/ui/navigation.md`).
 - What the view does to the state goes through the class's methods
   (`$this->add()`); what only draws stays in `view.php`. A window of its
   own (a flyout, a second window) has a file of its own:

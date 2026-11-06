@@ -8,14 +8,16 @@ namespace MyPHP\UI;
  * keeps it for a tab (mygo's Router): the page shown, those before it that
  * back() returns to, and those after it that forward() goes to again. A
  * page is a path, as "/notes/42?tab=info", and view() builds the one shown.
- * Make a router once, in the app's state, and build its pages in the view:
+ * Make a router once, in the app's state, and build its pages in the view
+ * from a table of patterns and pages, a page a file of its own:
  *
  *     $router = new Router('/notes');
- *     $router->view($c, function (Route $r) use ($c) {
- *         if ($r->match('/notes')) { $r->title('Notes'); notes($c); }
- *         elseif ($r->match('/notes/{id}')) { $r->title('Note'); note($c, $r->param('id')); }
- *         else { $c->text('Not found'); }
- *     });
+ *     $router->view($c, [
+ *         '/notes'      => __DIR__ . '/pages/notes.php',
+ *         '/notes/{id}' => __DIR__ . '/pages/note.php', // function (Context $c, Route $r, int $id): void
+ *     ]);
+ *
+ * or with a function of the Route that tells the pages apart itself.
  *
  * push() goes to a page and back() comes back, as do Cmd+[ and Cmd+], the
  * back and forward buttons of a mouse, Context::backButton and
@@ -285,18 +287,86 @@ final class Router
     }
 
     /**
-     * Builds the page shown with $fn(Route), in a column taking the room it
-     * is given, and returns the column. As a page slides in, it builds the
-     * one going away too, which takes neither the pointer nor the keyboard.
+     * Builds the page shown, in a column taking the room it is given, and
+     * returns the column. As a page slides in, it builds the one going away
+     * too, which takes neither the pointer nor the keyboard. $pages is a
+     * table of patterns and their pages, the first pattern the path
+     * matches the page shown (Router::pages), or a function $fn(Route).
+     *
+     * @param \Closure(Route): void|array<string, string|\Closure> $pages
      */
-    public function view(Context $c, \Closure $fn): Node
+    public function view(Context $c, \Closure|array $pages): Node
     {
+        $fn = is_array($pages) ? self::pages($c, $pages) : $pages;
         $this->rt = $c->runtime;
         $box = $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
         $this->keys($c, $box);
         $this->build($c, $box, $this->view, null, $fn);
         $c->end();
         return $box;
+    }
+
+    /**
+     * A table of pages as a function of the Route: the page of the first
+     * pattern the path matches ('*' the one of no other, last), a view file
+     * (ViewFile, bound to $c->state, the window's view's state, and hot
+     * reloaded) or a closure. A page takes the Context first, then by their
+     * names the parts of the path its pattern names, as their types say
+     * (int, float, bool, string), and a Route by its type:
+     * `function (Context $c, Route $r, int $id): void`. A path no pattern
+     * matches, without '*', shows that it has no page, and says so in the
+     * log. Router's and Route's own.
+     *
+     * @param array<string, string|\Closure> $pages
+     * @return \Closure(Route): void
+     */
+    public static function pages(Context $c, array $pages): \Closure
+    {
+        return static function (Route $r) use ($c, $pages): void {
+            foreach ($pages as $pattern => $page) {
+                if ($pattern !== '*' && $r->match($pattern)) {
+                    self::buildPage($c, $r, $page, $pattern);
+                    return;
+                }
+            }
+            if (isset($pages['*'])) {
+                self::buildPage($c, $r, $pages['*'], '*');
+                return;
+            }
+            if (!isset(self::$noPage[$r->path()])) {
+                self::$noPage[$r->path()] = true;
+                \MyPHP\Logger::warn('no page for ' . $r->path() . ': none of ' . implode(', ', array_keys($pages)) . " matches it, and no '*'", 'ui');
+            }
+            $c->text('No page for ' . $r->path(), 13, $c->theme->textMuted);
+        };
+    }
+
+    /** @var array<string, true> the paths of no page said in the log */
+    private static array $noPage = [];
+    /** @var \WeakMap<\Closure, list<array{0: string, 1: string, 2: mixed, 3: bool}>>|null each page's parameters after the Context: name, type, default, whether it has one */
+    private static ?\WeakMap $params = null;
+
+    /** Builds $page, of $pattern, which route $r matched: its arguments as pages() says. */
+    private static function buildPage(Context $c, Route $r, string|\Closure $page, string $pattern): void
+    {
+        $fn = is_string($page) ? ViewFile::of($page, $c->state)->view() : $page;
+        self::$params ??= new \WeakMap();
+        $params = self::$params[$fn] ??= array_map(static function (\ReflectionParameter $p): array {
+            $type = $p->getType();
+            return [$p->getName(), $type instanceof \ReflectionNamedType ? $type->getName() : 'string', $p->isDefaultValueAvailable() ? $p->getDefaultValue() : null, $p->isDefaultValueAvailable()];
+        }, array_slice((new \ReflectionFunction($fn))->getParameters(), 1));
+        $named = $r->params();
+        $args = [$c];
+        foreach ($params as [$name, $type, $default, $hasDefault]) {
+            if ($type === Route::class) { $args[] = $r; continue; }
+            if (!array_key_exists($name, $named)) {
+                if ($hasDefault) { $args[] = $default; continue; }
+                throw new \LogicException("the page of $pattern takes \$$name, which the pattern does not name");
+            }
+            $v = $named[$name];
+            $args[] = match ($type) { 'int' => (int)$v, 'float' => (float)$v, 'bool' => $v !== '' && $v !== '0' && $v !== 'false', default => $v };
+        }
+        $fn(...$args);
     }
 
     /** Builds the pages of view $v in $box: the router's, or those inside the page of route $parent, a layout. Router's and Route's own. */

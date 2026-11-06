@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.176.1';
+const VERSION = '1.177.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -2721,7 +2721,7 @@ const ANDROID_PACKAGE = 'com.owner888.myphp';
 
 /**
  * The PHP files of an app on a phone, as the packaging scripts place them: its place in the app => the file it is
- * copied from. The framework's src, the project's PHP files (the entry as app.php: main.php on Android, $mainPhp on
+ * copied from; other files (package.json, a plugin's page) are left to myphp run again. The framework's src, the project's PHP files (the entry as app.php: main.php on Android, $mainPhp on
  * iOS) and its src.
  * @return array<string, string>
  */
@@ -2731,16 +2731,19 @@ function phoneFiles(string $dir, string $platform, string $mainPhp): array
     $tree = function (string $from, string $to) use (&$out): void {
         if (!is_dir($from)) { return; }
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($from, FilesystemIterator::SKIP_DOTS)) as $f) {
-            if ($f->isFile()) { $out[$to . substr($f->getPathname(), strlen($from))] = $f->getPathname(); }
+            if ($f->isFile() && $f->getExtension() === 'php') { $out[$to . substr($f->getPathname(), strlen($from))] = $f->getPathname(); } // the code: a page's package.json or a client's build changes nothing a reload takes
         }
     };
     $tree(FRAMEWORK . '/src', 'src');
-    if ($platform === 'android') {
-        foreach (glob("$dir/*.php") ?: [] as $f) { $out[basename($f) === 'main.php' ? 'app.php' : basename($f)] = $f; }
-    } else {
-        foreach (glob(dirname($mainPhp) . '/*.php') ?: [] as $f) { $out[$f === $mainPhp ? 'app.php' : basename($f)] = $f; }
+    $project = $platform === 'android' ? $dir : dirname($mainPhp);
+    $entry = $platform === 'android' ? "$dir/main.php" : $mainPhp;
+    if (realpath($project) !== realpath(FRAMEWORK)) { // its folders too (view files, pages/), as the packaging scripts copy them, src over the framework's
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($project, FilesystemIterator::SKIP_DOTS)) as $f) {
+            $rel = substr($f->getPathname(), strlen($project) + 1);
+            if ($f->getExtension() !== 'php' || preg_match('~^(dist|build|vendor|node_modules|\.)~', $rel)) { continue; }
+            $out[$f->getPathname() === $entry ? 'app.php' : $rel] = $f->getPathname();
+        }
     }
-    if (realpath($dir) !== realpath(FRAMEWORK)) { $tree("$dir/src", 'src'); }
     return $out;
 }
 
@@ -2800,9 +2803,10 @@ function phoneHot(TargetDevice $dev, string $app, string $name, Closure $files, 
 /**
  * Copies $files (their place in the app => the file) into $app installed on $dev, then, $restart, starts it again;
  * else writes their places in .myphp-reload beside the app's entry, which the app watches in development
- * (Content::hotReloadFile): a hot reload. On Android pushed to /data/local/tmp and copied into the app's files by
- * run-as (the APK myphp run builds is debuggable), the activity started again with myphp.keepFiles so that it does
- * not copy its assets over them; on the iOS simulator into the installed bundle. @param array<string, string> $files
+ * (ViewFile::hotReloadFile): a hot reload. On Android pushed to /data/local/tmp and copied into the app's files by
+ * run-as (the APK myphp run builds is debuggable), which keep them until the next install (the activity copies its
+ * assets once an install, MyphpActivity.copyAssetsToFilesDir); on the iOS simulator into the installed bundle.
+ * @param array<string, string> $files
  */
 function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, Closure $step): void
 {
@@ -2832,7 +2836,7 @@ function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, 
             $ok || fail("could not copy the changed files into $app (run-as: the app myphp run built is debuggable; run it again if it was built otherwise)");
         }
         if ($restart) {
-            $step(['adb', '-s', $dev->id, 'shell', 'am', 'start', '-S', '-n', "$app/.MyphpActivity", '--ez', 'myphp.keepFiles', 'true']) === 0 || fail('could not start the app again');
+            $step(['adb', '-s', $dev->id, 'shell', 'am', 'start', '-S', '-n', "$app/.MyphpActivity"]) === 0 || fail('could not start the app again');
         }
         return;
     }

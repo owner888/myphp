@@ -77,6 +77,14 @@ final class Route
         return true;
     }
 
+    /** The parts of the path the patterns named, the layouts' around first, by name: what param() reads. @return array<string, string> */
+    public function params(): array
+    {
+        $out = [];
+        foreach ([...$this->base, ...$this->params] as [$name, $value]) { $out[$name] = $value; }
+        return $out;
+    }
+
     /** What the wildcard $name of the pattern match() last matched took, unescaped, or of a layout's around; '' if none has it. */
     public function param(string $name): string
     {
@@ -116,8 +124,9 @@ final class Route
      * Their patterns match the rest of the path, and param() returns the
      * wildcards of the layout's pattern too.
      */
-    public function view(Context $c, \Closure $fn): Node
+    public function view(Context $c, \Closure|array $pages): Node
     {
+        $fn = is_array($pages) ? Router::pages($c, $pages) : $pages;
         if ($this->rest < 0) {
             throw new \LogicException('Route::view with no {name...} in the pattern matched');
         }

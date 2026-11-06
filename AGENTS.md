@@ -191,5 +191,5 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 ## Roadmap
 
 Done: everything mygo has on macOS (the README's table), Android and iOS (docs/mobile.md).
-Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; images decoded on Android; prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).
+Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).
 With each new platform (Windows, Linux's bridges), update the app-writing skill `bin/skills/myphp-app/` with it: its description and opening (which GPU API draws where), "Verify before you say it is done" (how to run, screenshot and read the log there; `myphp devices`/`emulators`/`doctor` as they grow), and `references/` where its behavior differs.

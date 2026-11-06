@@ -2946,15 +2946,31 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   file `MYPHP_HOT_RELOAD` names (or `.myphp-reload` beside the entry) lists
   it, checked three times a second — what `myphp dev` and `myphp run` write
   on a save or `r` — refusing a file that declares a named class or
-  function (`Content::declared`), keeping the view it had when the file
+  function (`ViewFile::declared`), keeping the view it had when the file
   fails, and telling the other files changed. mygo's Go has no such
   thing; its `dev` rebuilds. The examples keep their views in `view.php`.
+- **Images on Android** (v1.177): `Image::fromBytes()` decodes with
+  AImageDecoder (`Native\ImageDecoder`, the launcher's `image_decoder.c`
+  on a thread of its own: PNG, JPEG, WebP, HEIF, GIF's first frame,
+  upright by EXIF, scaled by the decoder to fit `$max`), as Core Image on
+  the Apple systems; a fiber waits for it.
+- **A Router's table of pages** (v1.177): `Router::view()` and
+  `Route::view()` take, besides mygo's function of the Route, an array of
+  patterns and pages (`Router::pages`): the first pattern matching shows
+  its page, `'*'` any other path, none a "No page for" text and a warning;
+  a page a closure or a view file (`ViewFile`, bound to `Context::$state`,
+  which `Content::file` sets, and hot reloaded), given the Context, the
+  pattern's parts by name and type and the Route by its type
+  (`Route::params()` is new). `ViewFile` is what `Content::file` loads
+  with.
 - **`myphp run`'s and `myphp dev`'s keys** (v1.176): Flutter's single keys
   without Enter (`r` hot reload, `R` restart, `c`, `q`, `h`), the terminal
   set back on exit and on Ctrl+C (pcntl). `myphp run` on a phone copies
   the changed PHP files into the installed app (Android: a debuggable APK
   and `run-as`; the iOS simulator: the installed bundle), with
-  `myphp.keepFiles` keeping the launcher's assets from copying over them.
+  the activity copying its assets once an install (a stamp of the APK's
+  lastUpdateTime) rather than at every start, so that what was copied in
+  stays until the next install.
 - **`navigationBar($title, ?$router, ?$trailing, ?$largeTitle)`**: 44
   points under the safe area's top, which it extends into; the title 17
   semibold centered; margins 16 (the rest under "iOS 26's bars" above).

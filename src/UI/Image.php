@@ -5,7 +5,7 @@ namespace MyPHP\UI;
 
 use Closure;
 use FFI\CData;
-use MyPHP\Native\CoreImage;
+use MyPHP\Native\{CoreImage, ImageDecoder};
 use MyPHP\Native\Mem;
 use RuntimeException;
 
@@ -54,15 +54,18 @@ final class Image
     }
 
     /**
-     * Decodes a PNG, JPEG, HEIC or whatever else ImageIO reads, upright as
-     * its orientation says, at most $max pixels on a side (mygo's
+     * Decodes a PNG, JPEG, HEIC or whatever else the system reads (Core
+     * Image on macOS and iOS, AImageDecoder on Android), upright as its
+     * orientation says, at most $max pixels on a side (mygo's
      * DecodeBitmap), off the main thread: in a fiber (App::go) it waits
      * while the app draws and takes events; outside one, it blocks until
      * the image is there.
      */
     public static function fromBytes(string $bytes, int $max = 1024): self
     {
-        return self::decoded(static fn(): array => CoreImage::decode($bytes, $max));
+        return self::decoded(\MyPHP\App::isAndroid()
+            ? static fn(): array => ImageDecoder::decode($bytes, $max)
+            : static fn(): array => CoreImage::decode($bytes, $max));
     }
 
     /**

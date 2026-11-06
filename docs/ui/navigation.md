@@ -6,8 +6,47 @@ one, as a browser does for a tab. A page is a path, as `/notes/42`, which
 `{name}` takes one part of the path and `{name...}` the rest.
 
 The router is part of your app's state: make it once, with the page to
-show first, and keep it in a property. The view, which runs for every
-frame, builds the page it shows:
+show first, and keep it in a property. The view gives `view()` a table of
+patterns and pages, the first pattern the path matches the page shown, as
+SwiftUI's `navigationDestination` and Flutter's `go_router` do. A page is
+a file of its own, which returns its view and runs bound to the window's
+state, as `view.php` does (`Content::file`), and hot reloads:
+
+<!-- no-test -->
+```php
+<?php // view.php — $this is the NotesApp app.php passes to Content::file
+return function (Context $c): void {
+    $c->row()->fill()->alignItems(Node::STRETCH);
+      $sidebar = $this->router->path();
+      $c->sidebar($sidebar, function () use ($c) { // stays as the pages change, see below
+          $c->sidebarItem('/notes', 'Notes');
+          $c->sidebarItem('/files', 'Files');
+      }, 220)->onChange(fn() => $this->router->push($sidebar));
+      $this->router->view($c, [
+          '/notes'           => __DIR__ . '/pages/notes.php',
+          '/notes/{id}'      => __DIR__ . '/pages/note.php',
+          '/files/{path...}' => __DIR__ . '/pages/files.php',
+          '*'                => __DIR__ . '/pages/not-found.php',
+      ]);
+    $c->end();
+};
+```
+
+<!-- no-test -->
+```php
+<?php // pages/note.php — {id} of /notes/{id}, an int as the page asks
+return function (Context $c, Route $r, int $id): void {
+    $r->title('Note');
+    $c->text("Note $id");
+};
+```
+
+A page takes the `Context` first, then by their names the parts of the
+path its pattern names (`{id}`, `{path...}`), as their types say (`int`,
+`float`, `bool`, `string`), a default for one its pattern lacks, and the
+`Route` by its type. `'*'` is the page of any other path; without it, a
+path of no page shows so and says so in the log. A page can be a closure
+in the table too, for a small one:
 
 ```php
 final class NotesApp
@@ -18,47 +57,28 @@ final class NotesApp
     {
         $this->router = new Router('/notes');
     }
-
-    public function view(Context $c): void
-    {
-        $c->row()->fill()->alignItems(Node::STRETCH);
-          $this->sidebar($c); // stays as the pages change, see below
-          $this->router->view($c, function (Route $r) use ($c) {
-              if ($r->match('/notes')) {
-                  $r->title('Notes');
-                  $c->text('All notes');
-              } elseif ($r->match('/notes/{id}')) {
-                  $r->title('Note');
-                  $c->text('Note ' . $r->param('id'));
-              } elseif ($r->match('/files/{path...}')) {
-                  $c->text('Files in /' . $r->param('path'));
-              } else {
-                  $c->text('Not found');
-              }
-          });
-        $c->end();
-    }
-
-    public function sidebar(Context $c): void
-    {
-        $page = $this->router->path();
-        $c->sidebar($page, function () use ($c) {
-            $c->sidebarItem('/notes', 'Notes');
-            $c->sidebarItem('/files', 'Files');
-        }, 220)->onChange(fn() => $this->router->push($page));
-    }
 }
 
 $app = new NotesApp();
-$view = fn(Context $c) => $app->view($c);
+$view = function (Context $c) use ($app) {
+    $app->router->view($c, [
+        '/notes' => function (Context $c, Route $r) { $r->title('Notes'); $c->text('All notes'); },
+        '/notes/{id}' => function (Context $c, Route $r, int $id) { $r->title('Note'); $c->text("Note $id"); },
+        '/files/{path...}' => fn(Context $c, string $path) => $c->text("Files in /$path"),
+        '*' => fn(Context $c) => $c->text('Not found'),
+    ]);
+};
 ```
+
+`view()` still takes a function of the `Route` instead, which tells the
+pages apart itself with `$r->match($pattern)` and `$r->param($name)`.
 
 And the window, as the app starts:
 
 <!-- no-test -->
 ```php
 App::whenReady(function () use ($app) {
-    new Window(new WindowOptions(title: 'Notes', content: Content::view(fn(Context $c) => $app->view($c))));
+    new Window(new WindowOptions(title: 'Notes', content: Content::file(__DIR__ . '/view.php', $app)));
 });
 App::run();
 ```
@@ -101,30 +121,25 @@ path, as a page of settings with a list of its sections beside the section
 shown: `view()` on its route builds them, matching what the pattern's
 `{name...}` took. The layout stays as they change, keeping its state, and
 they slide or fade in its place; `param()` reads the layout's wildcards
-too. A page of settings is another case of the chain in the view above:
+too. A page of settings, its sections a table of their own:
 
 ```php
 $router = new Router('/settings/general');
 $view = function (Context $c) use ($router) {
-    $router->view($c, function (Route $r) use ($c, $router) {
-        if ($r->match('/settings/{section...}')) {
+    $router->view($c, [
+        '/settings/{section...}' => function (Context $c, Route $r) {
             $c->row(grow: 1);
               $c->column(gap: 4); // pushes "/settings/general", "/settings/fonts"
                 $c->link('General', '/settings/general');
                 $c->link('Fonts', '/settings/fonts');
               $c->end();
-              $r->view($c, function (Route $r) use ($c) {
-                  if ($r->match('/general')) {
-                      $r->title('General');
-                      $c->text('General settings');
-                  } elseif ($r->match('/fonts')) {
-                      $r->title('Fonts');
-                      $c->text('Font settings');
-                  }
-              });
+              $r->view($c, [ // the rest of the path: "/general", "/fonts"
+                  '/general' => function (Context $c, Route $r) { $r->title('General'); $c->text('General settings'); },
+                  '/fonts' => function (Context $c, Route $r) { $r->title('Fonts'); $c->text('Font settings'); },
+              ]);
             $c->end();
-        }
-    });
+        },
+    ]);
 };
 ```
 

@@ -76,7 +76,7 @@ place. When two fit, take the first: it is the simpler one.
 | Content taller than the window | `$c->scroll(); … $c->end();` with a `ScrollState` to control it | scroll.md |
 | A source list on the left (Finder, Notes, Mail) | `$c->sidebar(&$selected, fn() => $c->sidebarItem($id, $label, $icon))` | sidebar.md |
 | Two panes the user resizes | `$c->split(&$size, $first, $second)` | split.md |
-| Pages with a history, Back | `new Router('/')` + `$router->view($c, fn(Route $r) => …)`, `->push()`, `->back()` | navigation.md |
+| Pages with a history, Back | `new Router('/')` + `$router->view($c, ['/notes' => __DIR__ . '/pages/notes.php', '/notes/{id}' => …])`, a page a file; `->push()`, `->back()` | navigation.md |
 | A few pages switched by tabs | `$c->tabs($labels, &$index)` on the desktop; `$c->tabView($items, &$index, $content)` adapts to phones and tablets | tabs.md, ../mobile.md |
 | Where am I | `$c->breadcrumbs($items, &$chosen)`; `$c->backButton()` | breadcrumbs.md, history-buttons.md |
 | Sections that fold | `$c->collapsible($label, &$open, $fn)`; `accordion` for several | collapsible.md, accordion.md |

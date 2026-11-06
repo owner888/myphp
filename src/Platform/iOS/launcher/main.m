@@ -871,7 +871,7 @@ static void* php_worker_thread(void *arg) {
         setenv("TMPDIR", [tmpDir UTF8String], 1);
         setenv("MYPHP_BUNDLE", [bundlePath UTF8String], 1);
         setenv("MYPHP_PLATFORM", "ios", 1);
-        setenv("MYPHP_HOT_RELOAD", [[bundlePath stringByAppendingPathComponent:@".myphp-reload"] UTF8String], 1); // where myphp run asks for a hot reload (Content::hotReloadFile): beside app.php
+        setenv("MYPHP_HOT_RELOAD", [[bundlePath stringByAppendingPathComponent:@".myphp-reload"] UTF8String], 1); // where myphp run asks for a hot reload (ViewFile::hotReloadFile): beside app.php
         setenv("SSL_CERT_FILE", [[bundlePath stringByAppendingPathComponent:@"cacert.pem"] UTF8String], 1); // what curl's OpenSSL trusts (package-ios-app.sh)
 
         char *php_argv[] = {"myphp", NULL};

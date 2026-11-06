@@ -64,6 +64,8 @@ final class Context
      *     if ($c->vibrancy()) { $c->root->color = null; }
      */
     public bool $vibrancy = false;
+    /** The state the window's view file runs bound to (Content::file), which the files of a Router's pages run bound to too; null for a view of a closure. */
+    public ?object $state = null;
 
     public function vibrancy(): bool
     {

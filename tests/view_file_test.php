@@ -9,7 +9,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\Logger;
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\{Content, Context, ViewFile};
 
 final class ViewFileState
 {
@@ -24,7 +24,7 @@ $view = "$dir/view.php";
 $trigger = "$dir/.reload";
 putenv("MYPHP_HOT_RELOAD=$trigger");
 $write = function (string $code) use ($view): void { file_put_contents($view, "<?php\nuse MyPHP\\UI\\Context;\n$code"); touch($view, time() + random_int(1, 1000)); };
-$ask = function (string ...$files) use ($trigger): void { file_put_contents($trigger, implode("\n", $files) . "\n# " . microtime(true)); Content::check(); };
+$ask = function (string ...$files) use ($trigger): void { file_put_contents($trigger, implode("\n", $files) . "\n# " . microtime(true)); ViewFile::check(); };
 $lastLog = fn() => Logger::line(Logger::entries()[count(Logger::entries()) - 1]);
 
 $write('$add = function (): void { $this->n++; };
@@ -63,5 +63,5 @@ check($h->byText('all 1') !== null, '* loads every view of a file again (r with 
 $ask("$dir/other.php");
 check(str_contains($lastLog(), 'other.php') && str_contains($lastLog(), 'restart'), 'another file: a restart takes it: ' . $lastLog());
 
-same(['class A', 'function f', 'enum E'], Content::declared('<?php class A { function m() {} } function f() {} enum E {} $x = new class {}; $y = function () {}; A::class;'), 'the named declarations at the top level, not anonymous ones');
+same(['class A', 'function f', 'enum E'], ViewFile::declared('<?php class A { function m() {} } function f() {} enum E {} $x = new class {}; $y = function () {}; A::class;'), 'the named declarations at the top level, not anonymous ones');
 putenv('MYPHP_HOT_RELOAD');

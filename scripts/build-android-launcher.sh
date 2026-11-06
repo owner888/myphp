@@ -35,8 +35,9 @@ $CC -shared -fPIC -O2 \
     -I"${SYSROOT}/include" \
     "${ROOT_DIR}/src/Platform/Android/launcher/myphp_launcher.c" \
     "${ROOT_DIR}/src/Platform/Android/launcher/gl_bridge.c" \
+    "${ROOT_DIR}/src/Platform/Android/launcher/image_decoder.c" \
     -L"${PHP_DIR}/libs" -lphp \
-    -llog -landroid -lEGL -lGLESv3 \
+    -llog -landroid -lEGL -lGLESv3 -ljnigraphics -lm \
     -Wl,-rpath,'$ORIGIN' \
     -Wl,-z,max-page-size=16384 \
     -o "${OUT_DIR}/libmyphp.so"
