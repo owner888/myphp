@@ -60,7 +60,7 @@ final class Painter
     /** Calls $fn, a draw callback of $n's, with a painter into $list and the node's box (mygo's Draw: func(p *Painter, r Rect)). */
     private static function draws(Node $n, \Closure $fn, DisplayList $list, Theme $t, TextPainter $text, ?Runtime $rt): void
     {
-        $fn(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h]);
+        $fn(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n); // the node a third argument: a callback that captured it would hold itself, a cycle with the frame's tree
     }
 
     /**

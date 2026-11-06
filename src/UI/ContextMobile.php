@@ -167,31 +167,36 @@ trait ContextMobile
      * the accent), in a capsule of glass 44 high. With $largeTitle, the
      * ScrollState of a page that begins with largeTitle(), the bar's title
      * shows only once that one scrolled under it, as iOS's large titles do.
-     * Build it first in a column that fills the window. Not mygo's.
+     * Where the screen is not touched (a Mac, a PC), the bar is a window's
+     * toolbar, as macOS 26's: 52 high, the title in 15 points, the back
+     * button and the trailing capsule 32 high. Build it first in a column
+     * that fills the window. Not mygo's.
      */
     public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null, ?ScrollState $largeTitle = null): Node
     {
         $t = $this->theme;
         $top = $this->safeArea[0];
         $this->safeArea[0] = 0.0; // the bar took the top: a safeArea() built below it starts at the bar's bottom
-        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 44 + $top)->padding($top, 16, 0, 16)->alignItems(Node::CENTER)->role(Role::TOOLBAR);
+        $touch = $this->runtime?->touch ?? false;
+        [$high, $button, $size, $side] = $touch ? [44.0, 44.0, 17.0, 16.0] : [52.0, 32.0, 15.0, 12.0];
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->size(0, $high + $top)->padding($top, $side, 0, $side)->alignItems(Node::CENTER)->role(Role::TOOLBAR);
           // the leading third, the title and the trailing third share the width, so the title centers in the bar
           $lead = $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::START);
             if ($router !== null && $router->canGoBack()) {
-                $back = $this->column(0, 0)->size(44, 44)->radius(22)->systemMaterial('glass')->center()->focusable()->role(Role::BUTTON)->label($this->texts()->get('back'));
+                $back = $this->column(0, 0)->size($button, $button)->radius($button / 2)->systemMaterial('glass')->center()->focusable()->role(Role::BUTTON)->label($this->texts()->get('back'));
                   $a = $this->box(12, 20, 0)->shrink(0); $a->color = null;
-                  $a->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), [$r[0] - 4, $r[1], 20, 20], 180, $p->theme()->accent));
+                  $a->draw(static fn(Painter $p, array $r) => self::disclosure($p->displayList(), [$r[0] - 4, $r[1], 20, 20], 180, $p->theme()->accent));
                 $this->end();
                 if ($this->clicked($back)) { $router->back(); }
             }
           $this->end();
-          $inline = $this->text($title, 17, $t->text)->fontWeight(600)->singleLine()->shrink(1);
+          $inline = $this->text($title, $size, $t->text)->fontWeight(600)->singleLine()->shrink(1);
           if ($largeTitle !== null) { // the large title in the page's scroll: the bar's title fades in over the last 10 points of its 52 going under the bar
               $inline->opacity(max(0.0, min(1.0, ($largeTitle->y - 42) / 10)));
           }
           $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::END);
             if ($trailing !== null) {
-                $this->row(0, 16)->minHeight(44)->padding(0, 16)->radius(22)->systemMaterial('glass')->alignItems(Node::CENTER);
+                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER);
                   $trailing();
                 $this->end();
             }
@@ -224,7 +229,7 @@ trait ContextMobile
               $h = $rt?->rectOf($panel->id)[3] ?? 0.0;
               $p = $this->animate($panel, 'rise', 1, 0.35);
               $panel->translate(0, (1 - $p) * $h); // rises from below the window
-              $panel->draw(fn(Painter $pt, array $r) => $pt->fill([$r[0], $r[1], $r[2], $r[3] + 10], $pt->theme()->background, 10)); // its bottom corners below the window
+              $panel->draw(static fn(Painter $pt, array $r) => $pt->fill([$r[0], $r[1], $r[2], $r[3] + 10], $pt->theme()->background, 10)); // its bottom corners below the window
                 $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                   $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
                 $this->end();
@@ -397,7 +402,7 @@ trait ContextMobile
           $group = $this->column(0, 0, 0, $t->groupSurface ?? $t->surface)->alignSelf(Node::STRETCH)->radius(10)->clip();
             $rows();
           $this->end();
-          $group->drawOver(static function (Painter $p, array $r) use ($group): void { // the separators: under each row but the last, from 16 in to the end
+          $group->drawOver(static function (Painter $p, array $r, Node $group): void { // the separators: under each row but the last, from 16 in to the end
               $rows = array_values(array_filter($group->kids, static fn(Node $k): bool => !$k->absolute));
               for ($i = 0, $last = count($rows) - 1; $i < $last; $i++) {
                   $k = $rows[$i];

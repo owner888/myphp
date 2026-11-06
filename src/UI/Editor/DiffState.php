@@ -716,7 +716,7 @@ final class DiffState
         $t = $c->theme;
         $btn->radius(4)->label($c->texts()->get('line', ['n' => $r->start + 1]));
         $btn->color = $t->accent;
-        $btn->drawOver(function (Painter $p, array $r) {
+        $btn->drawOver(static function (Painter $p, array $r) {
             $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $c = $p->theme()->accentText; $list = $p->displayList();
             $list->line($cx - 4, $cy, $cx + 4, $cy, $c, 1.0, 1.5);
             $list->line($cx, $cy - 4, $cx, $cy + 4, $c, 1.0, 1.5);

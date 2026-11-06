@@ -28,7 +28,7 @@ use MyPHP\UI\{Content, Image, ImageOptions, Key, Painter, Span, Transform};
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
 
-spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
+require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 // The world's fixed step, as Game::view runs it.
 const STEP_TIME = 1.0 / Game::RATE;

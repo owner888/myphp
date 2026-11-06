@@ -2,14 +2,7 @@
 // A note, {id} of /notes/{id}.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Font, Route};
-
-return function (Context $c, Route $r, int $id): void {
-    $title = $this->notes[$id] ?? 'No such note';
-    $r->title($title);
-    $c->column(20, 10, 1);
-      $c->text($title, 20, style: Font::BOLD);
-      $c->muted('Cmd+[, or the back button of a mouse, goes back to the list.');
-      $c->link('All notes', '/notes');
-    $c->end();
-};
+return fn(int $id) => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+    Text('Back, Cmd+[, or the back button of a mouse, goes back to the list.')->foregroundStyle(Color::secondary),
+    Spacer(),
+)->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading)->navigationTitle($this->notes[$id] ?? 'No such note');

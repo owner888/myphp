@@ -12,7 +12,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Glass\Glass;
 use MyPHP\UI\{Content, Image, ScrollState};
 
-spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
+require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 $pictures = array_values(array_filter(glob('/System/Library/Desktop Pictures/*.heic') ?: [], fn($p) => filesize($p) < 30_000_000));
 $pictures !== [] || throw new RuntimeException('no pictures under /System/Library/Desktop Pictures');

@@ -155,7 +155,7 @@ final class View implements TextInputClient
         }
         $e->handleInput($v->input(...));
         $e->handleTextInput($v);
-        $e->draw(function (Painter $p, array $r) use ($v): void { $v->paint($p->displayList(), $p->textPainter(), $r, $p->theme()); });
+        $e->draw(static function (Painter $p, array $r) use ($v): void { $v->paint($p->displayList(), $p->textPainter(), $r, $p->theme()); });
         $e->contextMenu($v->menu(...));
         return $e;
     }

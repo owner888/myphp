@@ -8420,6 +8420,34 @@ flag, a fiber yielding meanwhile as Core Image's wait does, then hands the
 pixels to `Image` through `Mem::pointer()`, so that `Mem::free` (libc's
 free) frees them as it frees `Mem::alloc`'s. No PHP runs on that thread.
 
+## `myphp dev` running out of memory (v1.178)
+
+Symptom: after a minute or two of `myphp dev`, "Allowed memory size of
+134217728 bytes exhausted" in `devInputs()`. Cause: its `$walk` closure is
+recursive (`use (&$walk, $add, …)`), a cycle, and through `$add` (`use
+(&$out)`) it held the stamps of every input it gathered; polled 4 times a
+second, each poll's ~245 KB stayed until the cycle collector ran, later
+than the 128 MB `bin/myphp` runs with. Rule: a recursive closure that
+reaches what it builds lets itself go when done (`$walk = null;`), or is a
+function. A loop of 2,000 polls now stays at 2 MB.
+
+The same probe on the frames (the collector off for 50 frames, then
+`gc_collect_cycles()`) found the apps' trees garbage of the same kind:
+examples/mobile left 1 MB of cycles a frame, gallery 410 KB, router 46 KB.
+A node's `draw`/`drawOver` callback that held the node (`$n->draw(fn(…) use
+($n))`, the grouped section's separators) or, not static, the Context
+(`$this`, which holds the root) tied the tree into a cycle that
+`Runtime::detach` does not cut. `Painter` passes the node to the callback
+as its third argument, every such callback in src is static, and
+`dateInput`'s page holds its button through a WeakReference. A Markdown
+view's state kept the Context of its last build and its footnotes'
+numbering bound to itself, a cycle of 200 objects when a list row
+scrolled out; it lets them go after each build. `Headless` ages the text
+layouts as a window's frame does (`System::endFrame`), or a test's memory
+only grows. `MemoryWatch` logs and warns in development
+(docs/ui/performance.md); `tests/memory_test.php` keeps the frames free of
+cycles.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

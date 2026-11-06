@@ -2,12 +2,7 @@
 // About.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Font, Route};
-
-return function (Context $c, Route $r): void {
-    $r->title('About');
-    $c->column(20, 10, 1);
-      $c->text('About', 20, style: Font::BOLD);
-      $c->link('mygo on GitHub', 'https://github.com/egoist/mygo');
-    $c->end();
-};
+return fn() => VStack(spacing: 10)(
+    Text('Router')->font(Font::title)->bold(),
+    Text('A NavigationStack of pages, each a file of pages/.')->foregroundStyle(Color::secondary),
+)->padding(20)->navigationTitle('About');

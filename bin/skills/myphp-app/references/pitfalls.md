@@ -55,6 +55,12 @@ disagree, the docs of the checkout win: it may have grown since.
 - **An app that sets its own appearance.** `Theme::setSource()` called by
   the app wins over `myphp screenshot -theme`: read the setting from your
   own state so the screenshot run can start in either.
+- **Memory that grows.** A dev run logs what the process holds every 10
+  s (`[memory]`, debug) and warns near `memory_limit`, when it grows a
+  whole minute, and when many cycles are collected: act on the warning
+  then. The usual cause is a closure kept by what it holds, such as a
+  node's `draw` callback with `use ($node)` or a non-static one (it holds
+  `$this`): make it `static` and take the node as its third argument.
 - **Asserting sizes in headless tests.** `Headless` measures text as fixed
   7×16 cells, so font sizes and exact text widths cannot be asserted
   there; check them in a screenshot.

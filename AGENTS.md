@@ -26,6 +26,8 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
     looks wrong, find why (what it samples, how it is placed), not a knob.
 12. **An arrow function copies what it reads as it is made**: a closure run later that must see a variable change
     (`CurlLoop::waitUntil`, `App::wait`, a stored `->key`) is `function () use (&$v)`; `$this` and objects are fine.
+    A closure something keeps that holds its keeper is a cycle (a node's `draw` holding the node or the Context, a
+    recursive `$walk`): `static`, the node its third argument, `$walk = null` when done; `tests/memory_test.php` checks.
 13. **What comes and goes is keyed** (`$c->key()`): a node's id is its parent's mixed with its place there (mygo's),
     so content shown or hidden renumbers the siblings after it, and a scroll, a field's focus or an animation among
     them takes another's state. Put it in a container of its own, or key what follows it.
@@ -191,5 +193,6 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 ## Roadmap
 
 Done: everything mygo has on macOS (the README's table), Android and iOS (docs/mobile.md).
+In progress: the declarative UI, as SwiftUI's, replacing the builder in every example, doc and the skill (docs/declarative.md: the design, and the work in order; read it before touching UI code).
 Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).
 With each new platform (Windows, Linux's bridges), update the app-writing skill `bin/skills/myphp-app/` with it: its description and opening (which GPU API draws where), "Verify before you say it is done" (how to run, screenshot and read the log there; `myphp devices`/`emulators`/`doctor` as they grow), and `references/` where its behavior differs.

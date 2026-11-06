@@ -63,6 +63,7 @@ $h = new Headless(function (Context $c) use (&$router, &$nav): void {
       });
     $c->end();
 }, 390, 844);
+$h->rt->touch = true;
 $h->frame();
 $r = $h->rect($nav);
 same([0.0, 0.0, 390.0, 94.0], $r, 'the navigation bar: 44 + 50 high at the top');
@@ -77,6 +78,10 @@ closeFloat(195.0, $rt[0] + $rt[2] / 2, 'the title centers in the bar');
 $h->clickOn($h->byLabel('Back'));
 $h->frame();
 check(!$router->canGoBack() && $h->byText('the note') === null, 'a tap on the way back goes back');
+$h->rt->touch = false; $router->push('/note'); $h->frame(2);
+same([32.0, 32.0], array_slice($h->rect($h->byLabel('Back')), 2), 'not touched (a Mac, a PC), the bar is a window\'s toolbar: the way back 32 high');
+same(52.0 + 50.0, $h->rect($nav)[3], 'and the bar 52 high under the safe area');
+$router->back(); $h->frame(2);
 
 // sheet: rises from the bottom, keeps out of the safe area's bottom; Escape and a tap outside close it, dismissed() reports.
 $open = false; $dismissed = 0; $panelText = null;

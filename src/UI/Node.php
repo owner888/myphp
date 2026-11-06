@@ -939,7 +939,12 @@ final class Node
         return $this;
     }
 
-    /** Paints this node with $fn(Painter $p, array $r) once laid out, before its children (mygo's Draw): $r is its box, [x, y, w, h], in the coordinates $p paints in, $p->theme() the theme it paints with. */
+    /**
+     * Paints this node with $fn(Painter $p, array $r, Node $n) once laid out, before its children (mygo's Draw): $r is its box,
+     * [x, y, w, h], in the coordinates $p paints in, $p->theme() the theme it paints with, $n this node. $fn is static and takes
+     * the node as $n, never by `use`: a callback holding the node, or the Context ($this), makes a cycle of the frame's tree,
+     * garbage the collector frees only later (docs/architecture.md).
+     */
     public function draw(\Closure $fn): static
     {
         $this->draw = $fn;
@@ -1720,7 +1725,7 @@ final class Node
         return $this;
     }
 
-    /** Paints over this node's children with $fn(Painter $p, array $r), as draw() does (mygo's DrawOver). */
+    /** Paints over this node's children with $fn(Painter $p, array $r, Node $n), as draw() does (mygo's DrawOver), static as it is. */
     public function drawOver(\Closure $fn): static
     {
         $this->drawOver = $fn;

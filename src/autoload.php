@@ -10,3 +10,6 @@ spl_autoload_register(static function (string $class): void {
         }
     }
 });
+
+// The declarative views, global as SwiftUI's: VStack, Text, Button, Color, Font, NavigationPath… (docs/declarative.md)
+require_once __DIR__ . '/UI/Declarative/functions.php';

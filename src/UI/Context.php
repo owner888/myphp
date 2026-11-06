@@ -213,6 +213,12 @@ final class Context
         return self::mix($base, $this->nextKey !== null ? self::keyHash($this->nextKey) : $index | $kind << 40);
     }
 
+    /** The id the next node built here of $kind (Node::INPUT…) gets, for the state a view keeps by it (Runtime::local). @internal the declarative views' */
+    public function upcomingId(int $kind = Node::CONTAINER): int
+    {
+        return $this->nextId($kind);
+    }
+
     /** The language the app shows (App::locale), a BCP 47 tag such as "en" or "zh-Hans", for what the view says in it. */
     public function locale(): string { return App::locale(); }
 
@@ -317,7 +323,7 @@ final class Context
         $b->label($label)->tooltip($label);
         $b->disabled = !$can;
         $color = $can ? $t->text : $t->textMuted;
-        $b->drawOver(function (Painter $p, array $r) use ($d, $color, $t) {
+        $b->drawOver(static function (Painter $p, array $r) use ($d, $color, $t) {
             $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $s = $t->space(4) * 0.22; $dx = $s * $d; // back points the way pages came from
             $p->strokePath((new Path)->moveTo($cx - $dx / 2, $cy - $s * 1.6)->lineTo($cx + $dx, $cy)->lineTo($cx - $dx / 2, $cy + $s * 1.6), 1.6, $color);
         });
@@ -1198,7 +1204,7 @@ final class Context
         }
         if (!$drag['far']) { return; }
         $first = $state->first;
-        $list->drawOver(function (Painter $p, array $r) use ($list, $to, $first) { // the line where they would go: at the top of row $to, or under the last
+        $list->drawOver(static function (Painter $p, array $r, Node $list) use ($to, $first) { // the line where they would go: at the top of row $to, or under the last
             $k = $to - $first; $t = $p->theme();
             if (isset($list->kids[$k])) { $y = $list->kids[$k]->y - max($list->gap, 0) / 2; }
             elseif (isset($list->kids[$k - 1])) { $y = $list->kids[$k - 1]->y + $list->kids[$k - 1]->h + max($list->gap, 0) / 2; }
@@ -1825,7 +1831,7 @@ final class Context
               $n->kids = array_slice($items, 0, $fits);
               $overflow = array_slice($items, $fits);
               $more = $this->key('more')->column(0, 0)->padding($t->space(1.5), $t->space(2.5))->radius($t->radius)->focusable()->center()->role(Role::MENU_BUTTON)->label($this->texts()->get('more'))
-                  ->draw(function (Painter $p, array $r) { // mygo's chevrons: »
+                  ->draw(static function (Painter $p, array $r) { // mygo's chevrons: »
                       $t = $p->theme(); $list = $p->displayList();
                       $d = $t->space(3); $x = $r[0] + ($r[2] - $d) / 2; $y = $r[1] + ($r[3] - $d) / 2;
                       foreach ([0.2, 0.5] as $k) {
@@ -1977,7 +1983,7 @@ final class Context
             $this->spacer();
             $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
             $deg = 90 + 180 * $p; // down, turning up as it opens
-            $a->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $deg, $p->theme()->textMuted));
+            $a->draw(static fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $deg, $p->theme()->textMuted));
           $this->end();
           $this->collapsiblePanel($open, $p, $fn, 0, $t->space(3), $t->space(3), $t->space(3), $t->space(2)); // Padding(0, Space(3), Space(3))
         $this->end();
@@ -2015,7 +2021,7 @@ final class Context
             $filled = $i < $value; $color = $t->warning; $alpha = 1.0;
             if ($hover >= 0) { $filled = $i <= $hover; $alpha = 0.6; }
             // mygo's star path: filled in the warning color, or outlined 1.2 wide in the muted color.
-            $star->draw(fn(Painter $p, array $r) => $filled ? $p->fillPath(self::starPath($r), $color, $alpha) : $p->strokePath(self::starPath($r), 1.2, $p->theme()->textMuted));
+            $star->draw(static fn(Painter $p, array $r) => $filled ? $p->fillPath(self::starPath($r), $color, $alpha) : $p->strokePath(self::starPath($r), 1.2, $p->theme()->textMuted));
         }
         $n->range(0, $max, $value, 1);
         return $n;
@@ -2096,7 +2102,7 @@ final class Context
         $held = $this->animate($n, 'held', $dragging !== null ? 1 : 0, 0.15);
         $focusLow = $rt !== null && $rt->focus === $knobs['low']->id && $rt->focusVisible($knobs['low']->id);
         $focusHigh = $rt !== null && $rt->focus === $knobs['high']->id && $rt->focusVisible($knobs['high']->id);
-        $n->draw(function (Painter $p, array $r) use ($n, $low, $high, $lo, $hi, $kw, $ticks, $dragging, $held, $focusLow, $focusHigh) {
+        $n->draw(static function (Painter $p, array $r, Node $n) use ($low, $high, $lo, $hi, $kw, $ticks, $dragging, $held, $focusLow, $focusHigh) {
             [$x, $y, $w] = $r; $t = $p->theme();
             $h = $t->space(1.5); $cy = $y + $t->space(2.5);
             for ($i = 0; $i < $ticks; $i++) { // the tick marks of the steps, under the track (mygo's paintTicks)
@@ -2357,7 +2363,7 @@ final class Context
                 $hovered = $this->hovered($head);
                 $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
                 $turn = $this->animate($a, 'open', $open ? 90 : 0, 0.15);
-                if ($hovered) { $a->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $turn, $p->theme()->textMuted)); }
+                if ($hovered) { $a->draw(static fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $turn, $p->theme()->textMuted)); }
             }
           $this->end();
           if ($open !== null) { $head->expandable = true; $head->expanded = $open; }
@@ -2568,7 +2574,7 @@ final class Context
                 $this->column(0, 0)->size($t->space(1), 0); $this->end(); // with the gap: PaddingStart(Space(2))
                 $this->text($tok, $t->fontSize)->singleLine();
                 $x = $this->box($t->space(3.5), $t->space(3.5), 0)->radius($t->space(1))->role(Role::BUTTON)->label($this->texts()->get('removeToken', ['token' => $tok])); $x->color = $this->hovered($x) ? $t->surfaceHover : null;
-                $x->draw(function (Painter $p, array $r) { [$x, $y, $w, $h] = $r; $k = $w * 0.3; $c = $p->theme()->textMuted; $list = $p->displayList(); $list->line($x + $k, $y + $k, $x + $w - $k, $y + $h - $k, $c, 1.0, 1.25); $list->line($x + $w - $k, $y + $k, $x + $k, $y + $h - $k, $c, 1.0, 1.25); });
+                $x->draw(static function (Painter $p, array $r) { [$x, $y, $w, $h] = $r; $k = $w * 0.3; $c = $p->theme()->textMuted; $list = $p->displayList(); $list->line($x + $k, $y + $k, $x + $w - $k, $y + $h - $k, $c, 1.0, 1.25); $list->line($x + $w - $k, $y + $k, $x + $k, $y + $h - $k, $c, 1.0, 1.25); });
                 $this->column(0, 0); $this->end(); // with the gap: PaddingEnd(Space(1))
               $this->end();
               if ($this->clicked($x)) { array_splice($tokens, $i, 1); $changed = true; }
@@ -2619,9 +2625,10 @@ final class Context
           $this->text(I18n::formatDate($locale, $date), $t->fontSize, $t->text)->singleLine()->fontFeatures('tnum');
           $this->row(0, 0, 1); $this->end();
           $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
-          $page->draw(function (Painter $p, array $r) use ($b) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
+          $face = \WeakReference::create($b); // the button around the page: held weakly, or the page's callback and the tree make a cycle
+          $page->draw(static function (Painter $p, array $r) use ($face) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
               [$x, $y, $w, $h] = $r; $muted = $p->theme()->textMuted;
-              $p->fill([$x + 1, $y + 2, $w - 2, $h - 3], $muted, 2.0); $p->fill([$x + 2.2, $y + 3.2, $w - 4.4, $h - 5.4], $b->color, 1.0);
+              $p->fill([$x + 1, $y + 2, $w - 2, $h - 3], $muted, 2.0); $p->fill([$x + 2.2, $y + 3.2, $w - 4.4, $h - 5.4], $face->get()->color, 1.0);
               $p->fill([$x + 1, $y + 5, $w - 2, 1.2], $muted);
           });
         $this->end();
@@ -2716,7 +2723,7 @@ final class Context
         $first = $region->firstWeekday;
         $grid = ($grid ?? $this->calendarBox())->label($title);
         $visible = $rt?->focusVisible($grid->id) ?? false;
-        $grid->draw(function (Painter $p, array $r) use ($visible) { if ($visible) { $p->focusRing($r, $p->theme()->radius); } });
+        $grid->draw(static function (Painter $p, array $r) use ($visible) { if ($visible) { $p->focusRing($r, $p->theme()->radius); } });
         $move = function (\DateTimeImmutable $d) use ($moveChooses, $choose, &$cursor) { if ($moveChooses) { $choose($d); } else { $cursor = $d; } }; // choosing moves the cursor where it is the date chosen
         if ($rt?->focus === $grid->id) {
             [$back, $forth] = $this->arrows($grid);
@@ -2775,7 +2782,7 @@ final class Context
           $e = $this->box($t->space(1.5), $t->space(2.5), 0)->shrink(0);
           $e->color = null;
           [$tip, $ends] = $back === $e->rtl ? [0.85, 0.15] : [0.15, 0.85]; // ‹, or ›
-          $e->draw(function (Painter $p, array $r) use ($tip, $ends): void {
+          $e->draw(static function (Painter $p, array $r) use ($tip, $ends): void {
               [$x, $y, $w, $h] = $r;
               $p->strokePath((new Path)->moveTo($x + $w * $ends, $y + $h * 0.1)->lineTo($x + $w * $tip, $y + $h * 0.5)->lineTo($x + $w * $ends, $y + $h * 0.9), 1.5, $p->theme()->text);
           });
@@ -2960,7 +2967,7 @@ final class Context
           $sq->range(0, 100, round($sat * 100), 1)->value($this->texts()->get('colorValue', ['saturation' => round($sat * 100) / 100, 'brightness' => round($v * 100) / 100]));
           $hue = self::fromHSV($h, 1, 1);
           $ring = $rt?->focusVisible($sq->id) ?? false;
-          $sq->draw(function (Painter $p, array $r) use ($hue, $sat, $v, $ring) {
+          $sq->draw(static function (Painter $p, array $r) use ($hue, $sat, $v, $ring) {
               [$x, $y, $w, $h] = $r; $t = $p->theme(); $list = $p->displayList();
               $list->gradient2($x, $y, $w, $h, 0xffffff, 1.0, $hue, 1.0, false, $t->radius);
               $list->gradient2($x, $y, $w, $h, 0x000000, 0.0, 0x000000, 1.0, true, $t->radius);
@@ -2987,7 +2994,7 @@ final class Context
           $this->row(0, $t->space(2))->alignItems(Node::CENTER);
             $now = $rgb; $nowA = $alpha;
             $well = $this->box($t->space(7), $t->space(7), 0)->radius($t->radius)->border()->role(Role::NONE); $well->color = $t->surface;
-            $well->draw(function (Painter $p, array $r) use ($now, $nowA) {
+            $well->draw(static function (Painter $p, array $r) use ($now, $nowA) {
                 $t = $p->theme(); $in = [$r[0] + 1, $r[1] + 1, $r[2] - 2, $r[3] - 2];
                 $p->clip($in, function () use ($p, $in, $t, $now, $nowA) {
                     self::checkers($p->displayList(), $in[0], $in[1], $in[2], $in[3], $t->space(1.5));
@@ -3025,7 +3032,7 @@ final class Context
         $s->grow = 1; $s->fh = $t->space(4);
         $s->held = $this->animate($s, 'held', ($this->runtime?->sliding($s->id) ?? false) ? 1 : 0, 0.15);
         $frac = $max > 0 ? $v / $max : 0.0; $held = $s->held; $ring = $this->runtime?->focusVisible($s->id) ?? false;
-        $s->draw(function (Painter $p, array $r) use ($track, $frac, $held, $ring) {
+        $s->draw(static function (Painter $p, array $r) use ($track, $frac, $held, $ring) {
             [$nx, $ny, $nw, $nh] = $r; $t = $p->theme(); $list = $p->displayList();
             $kw = $t->space(3);
             $bx = $nx; $by = $ny + $t->space(0.5); $bw = $nw; $bh = $nh - $t->space(1);
@@ -3065,7 +3072,7 @@ final class Context
         if ($this->hovered($b)) { $b->color = $rt->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
           $now = $rgb; $nowA = $alpha;
           $sw = $this->box($t->space(9), $t->space(5), 0)->radius($t->space(1))->role(Role::NONE); $sw->color = null;
-          $sw->draw(function (Painter $p, array $r) use ($now, $nowA) {
+          $sw->draw(static function (Painter $p, array $r) use ($now, $nowA) {
               $t = $p->theme();
               $p->clip($r, function () use ($p, $r, $t, $now, $nowA) {
                   self::checkers($p->displayList(), $r[0], $r[1], $r[2], $r[3], $t->space(1.25));
@@ -3178,7 +3185,7 @@ final class Context
           $n = count($items);
           foreach ($items as $i => $item) {
               if ($i > 0) { // a chevron pointing along the path, stroked 1.2 in the muted color
-                  $this->box($t->space(3), $t->space(3), 0)->draw(function (Painter $p, array $r) {
+                  $this->box($t->space(3), $t->space(3), 0)->draw(static function (Painter $p, array $r) {
                       $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = $r[2] / 6; $c = $p->theme()->textMuted; $list = $p->displayList();
                       $list->line($cx - $d, $cy - 2 * $d, $cx + $d, $cy, $c, 1.0, 1.2);
                       $list->line($cx + $d, $cy, $cx - $d, $cy + 2 * $d, $c, 1.0, 1.2);
@@ -3290,7 +3297,7 @@ final class Context
                       elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border(2.0, $t->border); }
                       elseif ($this->hovered($cell)) { $cell->color = $t->surfaceHover; }
                       if ($i === $s->selected && $s->selection !== null && !$chosen && $rt?->focusVisible($id)) { // where the keys moved without choosing
-                          $cell->draw(fn(Painter $p, array $r) => $p->focusRing([$r[0] + 3, $r[1] + 3, $r[2] - 6, $r[3] - 6], $cell->radius));
+                          $cell->draw(static fn(Painter $p, array $r, Node $cell) => $p->focusRing([$r[0] + 3, $r[1] + 3, $r[2] - 6, $r[3] - 6], $cell->radius));
                       }
                   }
                     $item($i);
@@ -3384,7 +3391,7 @@ final class Context
             return;
         }
         if (!$drag['far']) { return; }
-        $grid->drawOver(function (Painter $p, array $r) use ($grid, $cellK, $after, $gap) {
+        $grid->drawOver(static function (Painter $p, array $r, Node $grid) use ($cellK, $after, $gap) {
             $cell = $grid->kids[$cellK[0]]->kids[$cellK[1]] ?? null;
             if ($cell === null) { return; }
             $lx = $after ? $cell->x + $cell->w + $gap / 2 : $cell->x - $gap / 2;
@@ -3410,7 +3417,7 @@ final class Context
         $color ??= $in->color;
         $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
         $n->svg = $svg; // an image to assistive technology once labeled; else decoration
-        $n->draw(function (Painter $p, array $r) use ($n, $svg, $color): void {
+        $n->draw(static function (Painter $p, array $r, Node $n) use ($svg, $color): void {
             $rgb = $n->ts?->color ?? $color ?? $p->theme()->text;
             Painter::paintIcon($p->displayList(), $p->textPainter(), $svg, $r[0], $r[1], $r[2], $r[3], $n->gray ? Theme::luminance($rgb) : $rgb, $n->alpha, $n->rotation);
         });
@@ -3558,7 +3565,7 @@ final class Context
           $this->icon(self::magnifier(), $glass, $t->textMuted)->at($pad, ($n->fh - $glass) / 2);
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
               $x = $this->column(0, 0, 0, $t->textMuted)->radius($clear / 2)->size($clear, $clear)->absolute()->right($pad)->top(($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))->keepFocus()
-                  ->draw(function (Painter $p, array $r) {
+                  ->draw(static function (Painter $p, array $r) {
                       [$x, $y, $w, $h] = $r; $k = $w * 0.3; $c = $p->theme()->background; $list = $p->displayList();
                       $list->line($x + $k, $y + $k, $x + $w - $k, $y + $h - $k, $c, 1.0, 1.5);
                       $list->line($x + $w - $k, $y + $k, $x + $k, $y + $h - $k, $c, 1.0, 1.5);
@@ -3608,7 +3615,7 @@ final class Context
             $this->end();
             return null;
         }
-        $bar->draw(function (Painter $p, array $r) { $p->fill([$r[0], $r[1] + $r[3] - 1, $r[2], 1], $p->theme()->border); }); // BorderWidth(0, 0, 1, 0)
+        $bar->draw(static function (Painter $p, array $r) { $p->fill([$r[0], $r[1] + $r[3] - 1, $r[2], 1], $p->theme()->border); }); // BorderWidth(0, 0, 1, 0)
         $current = max(0, min($current, $matches - 1));
         $step = function (int $d) use (&$current, $matches, $bar) { if ($matches > 0) { $current = ($current + $d + $matches) % $matches; $bar->changed = true; } };
         if ($this->shortcut('g', Key::COMMAND)) { $step(1); } elseif ($this->shortcut('g', Key::SHIFT | Key::COMMAND)) { $step(-1); }
@@ -3634,7 +3641,7 @@ final class Context
           foreach ([-1, 1] as $d) { // previous and next: a chevron up or down, Space(3), stroked 1.5
               $btn = $this->key("step$d")->buttonFace($t->space(1.5), $t->space(2))->role(Role::BUTTON)->label($this->texts()->get($d < 0 ? 'previous' : 'next'));
               if ($matches === 0) { $btn->alpha = 0.5; $btn->focusable = false; }
-                $this->box($t->space(3), $t->space(3), 0)->draw(function (Painter $p, array $r) use ($d) {
+                $this->box($t->space(3), $t->space(3), 0)->draw(static function (Painter $p, array $r) use ($d) {
                     $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $k = $r[2] / 4; $s = $d < 0 ? 1 : -1; $c = $p->theme()->text; $list = $p->displayList();
                     $list->line($cx - $k, $cy + $s * $k / 2, $cx, $cy - $s * $k / 2, $c, 1.0, 1.5);
                     $list->line($cx, $cy - $s * $k / 2, $cx + $k, $cy + $s * $k / 2, $c, 1.0, 1.5);
@@ -3750,6 +3757,7 @@ final class Context
             }
         };
         $walk($e);
+        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
         return $chosen ?? $first;
     }
 
@@ -4334,7 +4342,7 @@ final class Context
         foreach ($labels as $i => $label) {
             $on = $i === $index;
             $tab = $this->column(0, 0)->padding($t->space(2), $t->space(3))->radius($t->radius)->focusable()
-                ->draw(function (Painter $p, array $r) use ($on) {
+                ->draw(static function (Painter $p, array $r) use ($on) {
                     if ($on) { // the underline, Space(0.5) high, Space(1.5) in from the ends
                         $t = $p->theme(); $in = $t->space(1.5); $h = $t->space(0.5);
                         $p->fill([$r[0] + $in, $r[1] + $r[3] - $h, $r[2] - 2 * $in, $h], $t->accent, $h / 2);
@@ -4372,7 +4380,7 @@ final class Context
           if ($this->hovered($head)) { $head->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
             $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
             $deg = 90 * $p;
-            $arrow->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $deg, $p->theme()->textMuted));
+            $arrow->draw(static fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $deg, $p->theme()->textMuted));
             $this->text($label, $t->fontSize, $t->text)->singleLine();
           $this->end();
           $this->collapsiblePanel($open, $p, $fn, $t->space(1), $t->space(5.5), 0, $t->space(1), $t->space(2)); // below the label
@@ -4456,7 +4464,7 @@ final class Context
             $can = $dir > 0 ? $v < $max : $v > $min;
             $a = $this->box(0, $t->space(3.5), 0)->role(Role::NONE); // Height(Space(3.5)), across the column
             $a->color = $holding === $dir ? $t->surfacePressed : ($this->hovered($a) ? $t->surfaceHover : null);
-            $a->draw(function (Painter $p, array $r) use ($dir, $can) { // a chevron, stroked 1.5 wide
+            $a->draw(static function (Painter $p, array $r) use ($dir, $can) { // a chevron, stroked 1.5 wide
                 $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = $r[3] * 0.22; $c = $can ? $t->text : $t->textMuted;
                 $list = $p->displayList(); $a = $can ? 1.0 : 0.5;
                 $list->line($cx - $d, $cy + $dir * $d / 2, $cx, $cy - $dir * $d / 2, $c, $a, 1.5);
@@ -4655,7 +4663,7 @@ final class Context
     {
         $a = $this->box($this->theme->space(2.5), $this->theme->space(2.5), 0)->shrink(0);
         $a->color = null;
-        $a->draw(fn(Painter $p, array $r) => Painter::chevron($p->displayList(), $r[0], $r[1], $r[2], $p->theme()->textMuted));
+        $a->draw(static fn(Painter $p, array $r) => Painter::chevron($p->displayList(), $r[0], $r[1], $r[2], $p->theme()->textMuted));
         return $a;
     }
 

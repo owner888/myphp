@@ -844,3 +844,42 @@ $t->paint(); $t->rt->pace(60.0);
 $first = $t->painted()->transforms;
 for ($i = 0; $i < 200; $i++) { $now += 16_000_000; $t->windowFrame(); }
 check($t->rt->partPaints === 200 && $t->painted()->transforms <= 2 * $first, "loading: 200 frames in parts, {$t->painted()->transforms} transforms (the first {$first})");
+
+// mobile (the declarative views, as SwiftUI's): a row of the list goes to its page and further, Back comes back, the
+// tabs keep their stacks, the alert's buttons run their actions, the field writes the name.
+[$view, $s] = Headless::load('mobile');
+$t = new Headless($view, 390, 844);
+$t->rt->touch = true;
+$t->frame(2);
+check($t->byText('200,000 行') !== null && $t->byText('第 3 行 · ' . md5('3')) !== null, 'mobile: the list and its title: ' . json_encode(array_slice($t->texts(), 0, 6)));
+$t->clickText('第 3 行 · ' . md5('3')); $t->frame(3);
+check($t->byText('这是第 3 行的详情页。') !== null && $t->byText('第 3 行') !== null, "mobile: a row's page, {i} given as an int, its navigationTitle");
+$t->clickText('再推一页'); $t->frame(3);
+same(2, $s->homePath->count(), 'mobile: append() goes deeper');
+$t->clickLabel('Back'); $t->frame(3);
+check($t->byText('这是第 3 行的详情页。') !== null, 'mobile: Back comes back a page');
+$s->tab = 2; $t->frame(3);
+check($t->byText('下拉刷新过 0 次') !== null, 'mobile: the third tab');
+$s->tab = 0; $t->frame(3);
+check($t->byText('这是第 3 行的详情页。') !== null, 'mobile: the first tab kept its stack');
+$s->alert = true; $t->frame(2);
+$t->clickText('删除'); $t->frame(2);
+same('alert: 删除', $s->lastAction, "mobile: an alert's button runs its action");
+$s->tab = 1; $t->frame(3);
+$t->clickLabel('姓名'); $t->type('Ada'); $t->frame();
+same('Ada', $s->name, 'mobile: the TextField writes the name');
+
+// router (the declarative views): a NavigationLink of the list beside the sidebar goes to the note, the sidebar to the
+// settings, a link of the settings deeper, the field writes the name, Back comes back.
+[$view, $s] = Headless::load('router');
+$t = new Headless($view, 760, 460);
+$t->frame(2);
+$t->clickText('Ideas'); $t->frame(3);
+same('/notes/2', $s->path->path(), 'router: a NavigationLink beside the sidebar goes to its note');
+$t->clickText('Settings'); $t->frame(3);
+$t->clickText('Account'); $t->frame(3);
+check($t->byText('ACCOUNT') !== null, 'router: a link of the settings goes deeper');
+$t->clickLabel('Your name'); $t->type('Ada'); $t->frame();
+same('Ada', $s->name, 'router: the TextField writes the name');
+$t->clickLabel('Back'); $t->frame(3);
+check($t->byText('GENERAL') !== null, 'router: Back comes back to General');

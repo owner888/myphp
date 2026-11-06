@@ -66,7 +66,7 @@ as a version read from package.json.
 | `version` | `0.1.0` | the version of the app, which `App::version()` returns and updates compare |
 | `copyright` | | the copyright notice of the app, in its `Info.plist` |
 | `icon` | `resources/icon.png` when it exists | a square PNG, ideally 1024×1024 |
-| `entry` | `app.php` | the PHP file the app runs |
+| `entry` | `app.php`, else `main.php` | the PHP file the app runs |
 | `framework` | | where MyPHP is, for a project outside a Composer install |
 
 ## Development and the frontend

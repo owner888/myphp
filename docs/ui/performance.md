@@ -20,6 +20,21 @@ A node costs about 4 µs to build, 0.5 µs to lay out and 0.7 µs to record;
 60 fps on an M-series Mac, and a million-row list costs about 1.3 ms and 8
 MB, as only the rows in view are built.
 
+## Memory
+
+A development run (`myphp dev`, `myphp run`) logs what the process holds
+every 10 seconds, once PHP's cycles are collected (`MemoryWatch`, the
+`memory` subsystem, at debug), and warns when it reaches 75% of
+`memory_limit`, when it grew in each of the last six samples by a
+megabyte or more (a leak's signature), and when one sample collects a
+thousand cycles or more (something builds a cycle over and over).
+`myphp dev` warns the same way about its own memory. `tests/memory_test.php`
+checks that frames of the examples leave no cycles behind and that every
+`draw`/`drawOver` callback is `static`, taking its node as the third
+argument: a callback that holds the node, or the Context, makes the
+frame's whole tree garbage only the collector frees, which took a
+megabyte a frame of examples/mobile.
+
 ## Keeping frames cheap
 
 - Build only what shows: a [list](list.md), a [table](table.md), an

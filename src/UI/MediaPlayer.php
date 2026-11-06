@@ -632,7 +632,7 @@ final class MediaPlayer
     {
         $level = $p->muted() ? 0.0 : $s->volume;
         $v = $c->sliderBase($level, 0, $s->maxVolume())->paddingX(7.5); // to the maximum volume, as IINA's
-        $v->draw(static function (Painter $p, array $r) use ($v): void {
+        $v->draw(static function (Painter $p, array $r, Node $v): void {
             $x0 = $r[0] + 7.5; $w = $r[2] - 15; $cy = $r[1] + $r[3] / 2; $k = $x0 + $w * $v->fraction;
             $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.25);
             $p->fill([$r[0], $cy - 2, $k - $r[0], 4], self::$ink, 2, 0.8);
@@ -720,7 +720,7 @@ final class MediaPlayer
         $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->paddingX(1.5);
         if (!$c->pressed($seek)) { $s->at = $p->time(); }
         $marks = $s->settings()->get('showChapterPos') && $p->duration() > 0 ? array_map(fn($ch) => $ch->start / $p->duration(), array_slice($p->chapters(), 1)) : [];
-        $seek->draw(static function (Painter $p, array $r) use ($seek, $marks): void {
+        $seek->draw(static function (Painter $p, array $r, Node $seek) use ($marks): void {
             $x0 = $r[0] + 1.5; $w = $r[2] - 3; $cy = $r[1] + $r[3] / 2; $k = $x0 + $w * $seek->fraction;
             $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.2);
             $p->fill([$r[0], $cy - 2, $k - $r[0], 4], self::$ink, 2, 0.45);
@@ -1790,7 +1790,7 @@ final class MediaPlayer
           $c->column()->grow(1)->height(48);
             $sl = $c->sliderBase($value, 0, 1)->absolute()->left(0)->right(0)->top(14)->height(20)->paddingX(5);
             $f = $sl->fraction;
-            $sl->draw(static function (Painter $p, array $r) use ($sl, $dots): void { // a track, dots under it, an upright white pill
+            $sl->draw(static function (Painter $p, array $r, Node $sl) use ($dots): void { // a track, dots under it, an upright white pill
                 $x0 = $r[0] + 5; $w = $r[2] - 10; $cy = $r[1] + $r[3] / 2;
                 $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.15);
                 for ($i = 0; $i < $dots; $i++) { $p->fill([$x0 + $w * $i / ($dots - 1) - 0.75, $cy + 6, 1.5, 1.5], self::$ink, 0.75, 0.3); }
@@ -1929,7 +1929,7 @@ final class MediaPlayer
               $c->text($label, 11, self::$ink)->opacity(0.9)->width(ceil($w))->noWrap();
               $v = (float)$s->videoEq[$option];
               $sl = $c->sliderBase($v, -100, 100, 1)->grow(1)->height(18)->label($label);
-              $sl->draw(static function (Painter $p, array $r) use ($sl): void { // a track, filled from its middle (0, the neutral value) to the knob, a white pill
+              $sl->draw(static function (Painter $p, array $r, Node $sl): void { // a track, filled from its middle (0, the neutral value) to the knob, a white pill
                   $x0 = $r[0] + 4; $w = $r[2] - 8; $cy = $r[1] + $r[3] / 2;
                   $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.15);
                   $mid = $x0 + $w / 2; $at = $x0 + $w * $sl->fraction;
@@ -2032,7 +2032,7 @@ final class MediaPlayer
               $c->column(0, 10)->width(26.8)->alignItems(Node::CENTER);
                 $g = $gains[$i];
                 $sl = $c->sliderBase($g, -12, 12, 0.0, true)->size(16, 120)->label("$band Hz");
-                $sl->draw(static function (Painter $p, array $r) use ($sl): void { // the track, dots at +12, +6, 0, -6 and -12, the knob where the gain is
+                $sl->draw(static function (Painter $p, array $r, Node $sl): void { // the track, dots at +12, +6, 0, -6 and -12, the knob where the gain is
                     $cx = $r[0] + $r[2] / 2;
                     $p->fill([$cx - 1.5, $r[1], 3, $r[3]], self::$ink, 1.5, 0.15);
                     foreach ([0.0, 0.25, 0.75, 1.0] as $f) { $p->fill([$cx + 5, $r[1] + $r[3] * $f - 0.75, 1.5, 1.5], self::$ink, 0.75, 0.3); }

@@ -38,7 +38,8 @@ final class ViewState
     public SpanBuilder $sb;
     /** @var ?Closure(int): float */
     public ?Closure $fade = null;
-    private Context $c;
+    /** The context of the build under way, null between builds: kept, it and the tree it built would hold this state (a cycle when the runtime lets the state go). */
+    private ?Context $c = null;
 
     public function __construct()
     {
@@ -99,6 +100,8 @@ final class ViewState
         $st->blocks(0, false, new SpanStyle());
         $st->footnotes();
         $c->end();
+        $st->c = null; // what the build reached is let go: the tree, and the footnotes' numbering bound to this state
+        $st->sb->notes = null;
         if ($revealing || $st->reveal->fading()) {
             $c->runtime?->animationFrame();
         }
@@ -313,7 +316,7 @@ final class ViewState
             });
         }
         if (($objects = $para->objects) !== []) { // its math drawn by the app (Options::$inlineMath): a list of this build's own, which the drawing keeps
-            $el->drawObjects(function (\MyPHP\UI\Painter $p, int $at, array $r) use ($objects): void {
+            $el->drawObjects(static function (\MyPHP\UI\Painter $p, int $at, array $r) use ($objects): void {
                 $k = self::objectAt($objects, $at);
                 if ($k !== null && $objects[$k][3] !== null) { ($objects[$k][3])($p, $r); }
             });
@@ -463,7 +466,7 @@ final class ViewState
             $checked = $item->task === Block::CHECKED;
             $cb = $c->column()->size($size, $size)->radius(max(3, $size / 5))->margin(max(0, ($lineH - $size) / 2 - 1), 0, 0, 0)->role(Role::CHECK_BOX)->checked($checked);
             if ($checked) {
-                $cb->background($th->checkbox[0], $th->checkbox[1])->draw(function (Painter $p, array $r) {
+                $cb->background($th->checkbox[0], $th->checkbox[1])->draw(static function (Painter $p, array $r) {
                     [$x, $y, $w, $h] = $r;
                     $path = (new Path())->moveTo($x + $w * 0.25, $y + $h * 0.52)->lineTo($x + $w * 0.43, $y + $h * 0.7)->lineTo($x + $w * 0.76, $y + $h * 0.32);
                     $p->strokePath($path, max(1.5, $w / 9), 0xffffff);

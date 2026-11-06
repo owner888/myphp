@@ -112,7 +112,7 @@ final class MediaPlayerMusic
               $c->end();
               $level = $p->muted() ? 0.0 : $s->volume;
               $slider = $c->sliderBase($level, 0, $s->maxVolume())->absolute()->left(83)->top(18)->size(100, 16);
-              $slider->draw(static function (Painter $p, array $r) use ($slider, $t): void {
+              $slider->draw(static function (Painter $p, array $r, Node $slider) use ($t): void {
                   $cy = $r[1] + $r[3] / 2; $k = $r[0] + 6 + ($r[2] - 12) * $slider->fraction;
                   $p->fill([$r[0], $cy - 2, $r[2], 4], $t->dark ? 0xffffff : 0x000000, 2, 0.2);
                   $p->fill([$r[0], $cy - 2, $k - $r[0], 4], $t->accent, 2);
@@ -153,7 +153,7 @@ final class MediaPlayerMusic
           $c->text(MediaPlayerState::clock($p->time()), 9, $t->textMuted)->fontFeatures('tnum')->width(32)->textAlign(Node::END);
           $bar = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->grow(1)->height(14);
           if (!$c->pressed($bar)) { $s->at = $p->time(); }
-          $bar->draw(static function (Painter $p, array $r) use ($bar, $t): void { // IINA's MiniPlaySlider: a thin track, the played part in the accent
+          $bar->draw(static function (Painter $p, array $r, Node $bar) use ($t): void { // IINA's MiniPlaySlider: a thin track, the played part in the accent
               $cy = $r[1] + $r[3] / 2; $k = $r[0] + $r[2] * $bar->fraction;
               $p->fill([$r[0], $cy - 1.5, $r[2], 3], $t->dark ? 0xffffff : 0x000000, 1.5, 0.2);
               $p->fill([$r[0], $cy - 1.5, $k - $r[0], 3], $t->accent, 1.5);

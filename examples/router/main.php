@@ -7,22 +7,28 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Router, TextState};
+use MyPHP\UI\Content;
 
-spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
+require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
-/** The app's state: the router, the notes it shows, the name the Account section edits. */
+/** The app's state: the pages over the notes, the notes they show, the name the Account section edits. */
 final class Pages
 {
-    public Router $router;
+    public NavigationPath $path;
     /** @var array<int, string> */
     public array $notes = [1 => 'Groceries', 2 => 'Ideas', 3 => 'Travel'];
-    public TextState $name;
+    public string $name = '';
 
     public function __construct()
     {
-        $this->router = new Router('/notes');
-        $this->name = new TextState('');
+        $this->path = new NavigationPath();
+    }
+
+    /** Shows $page alone over the notes, as choosing it in the sidebar does. */
+    public function show(string $page): void
+    {
+        $this->path->removeLast($this->path->count());
+        if ($page !== '/') { $this->path->append($page); }
     }
 }
 

@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.177.0';
+const VERSION = '1.178.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -326,7 +326,7 @@ function nodeTypeScriptFlags(string $node): ?array
  * optional. name (default: the directory's), identifier (com.myphp.<name>),
  * slug (lower-case letters, digits and hyphens: the name of the update
  * archives, default the name's, Native\Build\Slug), version (0.1.0), copyright, icon (a square PNG, default
- * resources/icon.png), entry (the PHP file the app runs, default app.php),
+ * resources/icon.png), entry (the PHP file the app runs, default app.php, else main.php, as on the phones),
  * out (default dist), resources, urlSchemes, fileAssociations, i18n,
  * updates, devUrl, devCommand, buildCommand, frontendDist, bindings,
  * framework, and macos: icon (an Assets.car, an Icon Composer .icon or an .icns),
@@ -363,7 +363,7 @@ function project(array $args): array
         $c['identifier'] = 'com.myphp.' . orElse(strtolower((string)preg_replace('/[^a-zA-Z0-9]+/', '', $c['name'])), 'app');
     }
     $c['version'] = orElse((string)($c['version'] ?? ''), '0.1.0');
-    $c['entry'] = orElse((string)($c['entry'] ?? ''), 'app.php');
+    $c['entry'] = orElse((string)($c['entry'] ?? ''), !is_file("$dir/app.php") && is_file("$dir/main.php") ? 'main.php' : 'app.php');
     $c['out'] = orElse((string)($c['out'] ?? ''), 'dist');
     if (($c['icon'] ?? '') === '' && is_file("$dir/resources/icon.png")) {
         $c['icon'] = 'resources/icon.png';
@@ -710,6 +710,7 @@ function devInputs(string $dir, array $c): array
     foreach (array_filter([CONFIG, CONFIG_TS, $c['icon'] ?? '', $c['macos']['entitlements'] ?? '', $c['macos']['provisioningProfile'], ...array_values($c['macos']['helperEntitlements'])]) as $f) {
         $add(path($dir, $f));
     }
+    $walk = null; // the closure held itself, and through $add the inputs: polled 4 times a second, each poll's stayed until the memory ran out
     ksort($out, SORT_STRING);
     return $out;
 }
@@ -915,8 +916,13 @@ function dev(array $args): void
     $build('Building', 'Built', []);
     echo "\n  → Watching for changes\n" . ($keys ? "  → press h to show help\n" : '') . "\n";
     $seen = devInputs($dir, project([$dir])['config']);
+    $limit = MyPHP\MemoryWatch::bytes((string)ini_get('memory_limit'));
+    $polls = 0;
     while (true) {
         usleep(250_000);
+        if (++$polls % 40 === 0 && $limit > 0 && memory_get_usage() >= MyPHP\MemoryWatch::NEAR * $limit) { // what the watch itself holds, every 10 s: a leak of its own shows before it ends it
+            warnf(sprintf('myphp dev holds %.1f MB of its %.0f MB (memory_limit): it leaks', memory_get_usage() / 1048576, $limit / 1048576));
+        }
         if ($server !== null && !$serverExited && !proc_get_status($server)['running']) {
             $serverExited = true; // from now on, news
             warnf('The dev server exited');
