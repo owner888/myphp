@@ -8448,6 +8448,23 @@ only grows. `MemoryWatch` logs and warns in development
 (docs/ui/performance.md); `tests/memory_test.php` keeps the frames free of
 cycles.
 
+A declarative `TextField(axis: .vertical)` and `TextEditor` lost what was
+typed: the field's state (`Runtime::local`) was keyed by
+`upcomingId(Node::INPUT)`, a one-line field's id, while they build a
+`TEXTAREA` node; the runtime lets go of a local whose id no node had, so
+the state was made anew every frame. It is keyed by the kind of node it
+builds (`tests/declarative_test.php`). `Headless::load` of an example a
+test loaded before evaluates it again without its declarations (classes,
+functions, constants), so two tests may load one example.
+
+A hot reload that brought a view calling a method the framework only has
+after a restart (`labelsHidden()`, added with it) ended the app: the error
+was thrown from Metal's draw callback, and PHP ends a process an FFI
+callback throws from. In development a view that throws shows
+`UI\ViewError`'s screen instead, logged once, the app and its state
+kept; and `myphp dev` restarts the app when the entry or a framework file
+changed, which no hot reload can take.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

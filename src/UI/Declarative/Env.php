@@ -19,6 +19,15 @@ final class Env
     public bool $italic = false, $mono = false, $disabled = false;
     public ?ColorValue $color = null, $tint = null;
     public ?\ButtonStyle $buttonStyle = null;
+    public ?\PickerStyle $pickerStyle = null;
+    /** A Form's row: a control's title at its start and the control at its end. */
+    public bool $formRow = false;
+    public bool $radioRow = false;
+    /** Controls show no title, which stays their accessibility label (labelsHidden). */
+    public bool $labelsHidden = false;
+    /** The language the views inside say their text in (environment(locale:)), null for the app's. */
+    public ?string $locale = null;
+    public ?\DatePickerStyle $datePickerStyle = null;
     public ?\TextAlignment $textAlign = null;
     public ?int $lineLimit = null;
     /** The axis of the stack the view is in: Node::COLUMN (a VStack, the window) or Node::ROW (an HStack). */

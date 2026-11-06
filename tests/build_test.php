@@ -529,30 +529,35 @@ foreach (['"a" = "b"' => 'line 1: want a ; after', "\n\"a\" = \"b" => 'line 2: w
     check(str_contains(bldThrows(fn() => \MyPHP\Native\Build\Strings::parse($data)), $err), 'a malformed file: ' . $err);
 }
 
-// myphp dev: the development app built, launched, relaunched as App::relaunch() asks, hot reloaded on a saved PHP file (the file MYPHP_HOT_RELOAD names lists it), built again on another change, until it quits.
+// myphp dev: the development app built, launched, relaunched as App::relaunch() asks, hot reloaded on a saved view file (the file MYPHP_HOT_RELOAD names lists it), restarted on a saved entry (its classes, which a hot reload cannot take), built again on another change, until it quits.
 $stub = bldDir();
 file_put_contents("$stub/cc", "#!/bin/sh\nwhile [ \$# -gt 0 ]; do if [ \"\$1\" = -o ]; then printf '#!/bin/sh\\nexec sh \"\$DEVAPP\" \"\$0\"\\n' > \"\$2\"; chmod +x \"\$2\"; fi; shift; done\n");
 file_put_contents("$stub/codesign", "#!/bin/sh\nexit 0\n");
 chmod("$stub/cc", 0755); chmod("$stub/codesign", 0755);
 // The app: asks to be relaunched, then runs until the change replaces it, then quits.
-file_put_contents("$stub/app.sh", "echo \"\$MYPHP_DEV \$MYPHP_ENV \$(pwd)\" >> \"\$DEVLOG\"\nn=\$(wc -l < \"\$DEVLOG\")\n[ \$n -eq 1 ] && exit 75\n[ \$n -eq 2 ] && { sleep 5; exit 3; }\nexit 0\n");
+file_put_contents("$stub/app.sh", "echo \"\$MYPHP_DEV \$MYPHP_ENV \$(pwd)\" >> \"\$DEVLOG\"\nn=\$(wc -l < \"\$DEVLOG\")\n[ \$n -eq 1 ] && exit 75\ncase \$n in 2|3) sleep 5; exit 3;; esac\nexit 0\n");
 $root = bldDir();
 $myphp('init', '-name', 'Demo', "$root/d");
 unlink("$root/d/resources/icon.png");
 file_put_contents("$root/d/resources/data.txt", 'data');
+file_put_contents("$root/d/view.php", "<?php\nreturn fn() => null;\n");
 $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'dev'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, "$root/d",
     ['DEVAPP' => "$stub/app.sh", 'DEVLOG' => "$stub/log", 'PATH' => "$stub:" . getenv('PATH')] + getenv());
 for ($i = 0; $i < 100 && substr_count((string)@file_get_contents("$stub/log"), "\n") < 2; $i++) { usleep(100_000); }
 usleep(300_000);
-file_put_contents("$root/d/app.php", "\n// changed\n", FILE_APPEND);
+file_put_contents("$root/d/view.php", "// changed\n", FILE_APPEND);
 for ($i = 0; $i < 30 && !is_file("$root/d/.myphp/hot-reload"); $i++) { usleep(100_000); }
-check(str_starts_with((string)@file_get_contents("$root/d/.myphp/hot-reload"), "$root/d/app.php\n# "), 'a saved PHP file: a hot reload, the file named, no build');
+check(str_starts_with((string)@file_get_contents("$root/d/.myphp/hot-reload"), "$root/d/view.php\n# "), 'a saved view file: a hot reload, the file named, no build');
+usleep(300_000);
+file_put_contents("$root/d/app.php", "\n// changed\n", FILE_APPEND);
+for ($i = 0; $i < 50 && substr_count((string)@file_get_contents("$stub/log"), "\n") < 3; $i++) { usleep(100_000); }
 usleep(300_000);
 file_put_contents("$root/d/resources/data.txt", 'data!');
 $out = stream_get_contents($pipes[1]);
 same(0, proc_close($p), 'myphp dev ends as the app quits: ' . $out);
-check(str_contains($out, 'Built Demo Dev') && str_contains($out, 'Relaunched Demo Dev') && str_contains($out, 'Reloaded Demo Dev (app.php changed)') && str_contains($out, 'Rebuilt Demo Dev (resources/data.txt changed)') && str_contains($out, 'Demo Dev quit'), 'built, relaunched, hot reloaded, rebuilt, quit');
-same(array_fill(0, 3, "1 development $root/d"), file("$stub/log", FILE_IGNORE_NEW_LINES), 'run in the project, told it is under myphp dev');
+check(str_contains($out, 'Built Demo Dev') && str_contains($out, 'Relaunched Demo Dev') && str_contains($out, 'Reloaded Demo Dev (view.php changed)') && str_contains($out, 'Restarting: app.php changed, which a hot reload cannot take') && str_contains($out, 'Restarted Demo Dev')
+    && str_contains($out, 'Rebuilt Demo Dev (resources/data.txt changed)') && str_contains($out, 'Demo Dev quit'), 'built, relaunched, hot reloaded, restarted for the entry, rebuilt, quit: ' . str_replace("\n", ' | ', $out));
+same(array_fill(0, 4, "1 development $root/d"), file("$stub/log", FILE_IGNORE_NEW_LINES), 'run in the project, told it is under myphp dev');
 $devApp = glob("$root/d/.myphp/dev/darwin-*/Demo Dev.app")[0] ?? '';
 same(['com.example.demo.dev', 'Demo Dev', 'data!'], [\MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleIdentifier'], \MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleName'], file_get_contents("$devApp/Contents/Resources/data.txt")], 'the development app: its own identifier and name, with the resources');
 

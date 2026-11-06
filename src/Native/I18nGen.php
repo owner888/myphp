@@ -236,6 +236,7 @@ final class I18nGen
             if ($this->override($key)) { continue; }
             $q = json_encode($key, JSON_UNESCAPED_UNICODE);
             if (!preg_match(self::KEY, $key)) {
+                if ($this->namespace === '') { continue; } // an app's text itself, as SwiftUI's String Catalog keys: what Text('Submit') shows translated, with no method of its own
                 $this->error($f['name'], $at, "$q is not a key: a letter, then letters, digits and _, as filesSelected");
                 continue;
             }

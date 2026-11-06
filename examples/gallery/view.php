@@ -299,7 +299,7 @@ $controls = function (Context $c): void {
                 if ($m->item("As $as")->chosen()) { $c->toast("Exported as $as"); }
             }
         });
-        $c->link('Open mygo.dev', 'https://github.com/egoist/mygo');
+        $c->link('Open myphp on GitHub', 'https://github.com/owner888/myphp');
       $c->end();
       $c->text('Tab moves the focus; Enter or Space presses the focused button.', color: $t->textMuted);
     $c->end();

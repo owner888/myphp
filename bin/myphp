@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.178.0';
+const VERSION = '1.179.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -960,6 +960,14 @@ function dev(array $args): void
         $changed = array_keys(array_diff_assoc($now, $seen) + array_diff_key($seen, $now));
         sort($changed);
         $seen = $now;
+        // The framework's PHP or the entry's (main.php: the state's classes) changed: what a hot reload cannot take, the
+        // view files alone being loaded again; the app restarts, as R does, rather than run new views on old classes.
+        $entry = path($dir, $c['entry']);
+        $code = array_filter($changed, fn(string $p) => str_ends_with($p, '.php') && (!str_starts_with($p, "$dir/") || $p === $entry));
+        if ($code !== [] && $s->app !== null && !$restart) {
+            logf('Restarting: ' . changeSummary($dir, array_values($code)) . ', which a hot reload cannot take');
+            $restart = true;
+        }
         // PHP files alone, the app running and no TypeScript client to write from them: a hot reload, as Flutter's
         $php = $changed !== [] && array_filter($changed, fn(string $p) => !str_ends_with($p, '.php') || !is_file($p)) === [];
         if (!$restart && $s->app !== null && ($c['bindings'] ?? '') === '' && ($hot || $php)) {

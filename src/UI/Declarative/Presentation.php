@@ -27,11 +27,11 @@ final class Presentation
                 $c->sheet($this->shown, function () use ($c, $env): void { View::renderAll($c, $env->along(\MyPHP\UI\Node::COLUMN), ($this->content)()); });
                 break;
             case 'alert':
-                $chosen = $c->alertDialog($this->shown, $this->title, $this->message, ...array_map(fn(Button $b) => $b->title, $this->actions));
+                $chosen = $c->alertDialog($this->shown, Localized::string($this->title, $env), Localized::string($this->message, $env), ...array_map(fn(Button $b) => Localized::string($b->title, $env), $this->actions));
                 if ($chosen >= 0) { $this->actions[$chosen]->run(); }
                 break;
             case 'confirm':
-                $chosen = $c->actionSheet($this->shown, $this->title, ...array_map(fn(Button $b) => ($b->role === \ButtonRole::destructive ? '!' : '') . $b->title, $this->actions));
+                $chosen = $c->actionSheet($this->shown, Localized::string($this->title, $env), ...array_map(fn(Button $b) => ($b->role === \ButtonRole::destructive ? '!' : '') . Localized::string($b->title, $env), $this->actions));
                 if ($chosen >= 0) { $this->actions[$chosen]->run(); }
                 break;
         }

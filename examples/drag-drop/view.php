@@ -28,9 +28,9 @@ return function (Context $c): void {
           if ($c->dragging($card)) { $card->opacity(0.5); }
       }
       $url = $c->column(12, 0, 0)->border(1, $t->border)->radius(8);
-        $c->text('Drag the MyGo website URL');
+        $c->text('Drag the myphp repository URL');
       $c->end();
-      $c->dragData($url, Data::url('https://mygo.egoist.dev'), new DragOptions(done: $this->completed(...)));
+      $c->dragData($url, Data::url('https://github.com/owner888/myphp'), new DragOptions(done: $this->completed(...)));
       $file = $c->column(12, 0, 0)->border(1, $t->border)->radius(8);
         $c->text('Drag a sample .txt file');
       $c->end();

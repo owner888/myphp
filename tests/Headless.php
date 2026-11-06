@@ -583,7 +583,7 @@ final class Headless
     }
 
     /** The global enums of the declarative views, which a view file in an example's namespace names as the app's global ones. */
-    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'Axis', 'TitleDisplayMode', 'NavigationPath'];
+    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'PickerStyle', 'DatePickerStyle', 'DatePickerComponents', 'TextSelectability', 'ColorScheme', 'KeyPressResult', 'KeyPress', 'Axis', 'TitleDisplayMode', 'NavigationPath'];
 
     /** The use line naming the declarative globals $src does not name of its own, for $src in an example's namespace. */
     private static function declarativeUses(string $src): string
@@ -605,6 +605,43 @@ final class Headless
      * MyPHP\Examples\<Name> (each example declares a view()); $state gets the
      * variable the file leaves ($s for widgets, $files for files).
      */
+    /** @var array<string, true> the examples loaded, whose classes are declared */
+    private static array $loaded = [];
+
+    /** $src without its classes, enums, interfaces, traits, functions and constants at the top level: the code that makes the state. */
+    private static function withoutDeclarations(string $src): string
+    {
+        $tk = \PhpToken::tokenize($src);
+        $out = '';
+        for ($i = 0, $n = count($tk), $depth = 0; $i < $n; $i++) {
+            $t = $tk[$i];
+            if ($depth === 0 && $t->is([T_CLASS, T_ENUM, T_INTERFACE, T_TRAIT, T_FUNCTION]) && !($t->is(T_FUNCTION) && self::anonymous($tk, $i))) {
+                $out = (string)preg_replace('/(?:final|abstract|readonly|\s|\/\*\*.*?\*\/)*$/s', '', $out); // its modifiers and doc comment go with it
+                for ($open = 0, $i++; $i < $n; $i++) { // to the end of its body
+                    if ($tk[$i]->text === '{' || $tk[$i]->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $open++; }
+                    elseif ($tk[$i]->text === '}' && --$open === 0) { break; }
+                }
+                continue;
+            }
+            if ($depth === 0 && $t->is(T_CONST)) { // a constant, defined already: to its semicolon
+                for ($nest = 0; $i < $n && !($tk[$i]->text === ';' && $nest === 0); $i++) {
+                    if (in_array($tk[$i]->text, ['(', '[', '{'], true)) { $nest++; } elseif (in_array($tk[$i]->text, [')', ']', '}'], true)) { $nest--; }
+                }
+                continue;
+            }
+            if ($t->text === '{' || $t->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $depth++; } elseif ($t->text === '}') { $depth--; }
+            $out .= $t->text;
+        }
+        return $out;
+    }
+
+    /** Whether the function keyword at $i makes a closure (function (…) or function &(…)), not a named function. @param list<\PhpToken> $tk */
+    private static function anonymous(array $tk, int $i): bool
+    {
+        for ($j = $i + 1; $tk[$j]->is(T_WHITESPACE) || $tk[$j]->text === '&'; $j++) {}
+        return $tk[$j]->text === '(';
+    }
+
     private static function example(string $name, string $stop, array $args, mixed &$state): void
     {
         $path = __DIR__ . "/../examples/$name/main.php";
@@ -618,6 +655,8 @@ final class Headless
         $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;' . self::declarativeUses($src), var_export(dirname($path), true)], $src);
         // Its constants in its namespace too, as two examples name theirs alike (WINDOW_W); a line declaring several stays a const of the namespace.
         $src = preg_replace('/^const (\w+) = ((?:(?!, [A-Z_0-9]+ = ).)*);$/m', 'defined(__NAMESPACE__ . \'\\\\$1\') || define(__NAMESPACE__ . \'\\\\$1\', $2);', $src);
+        if (isset(self::$loaded[$name])) { $src = self::withoutDeclarations($src); } // loaded before (another test): its classes are there, its state made anew
+        self::$loaded[$name] = true;
         $argv = [$path, ...$args];
         $var = preg_match('~Content::file\(__DIR__ \. \'/view\.php\', \$(\w+)~', (string)file_get_contents($path), $m) ? $m[1] : 's'; // the state its view is bound to
         (static function () use ($src, $argv, &$state, $var) { eval('?>' . $src); $state = $s ?? $$var ?? $files ?? null; })();

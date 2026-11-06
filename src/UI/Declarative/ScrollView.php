@@ -28,15 +28,17 @@ final class ScrollView extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
+        if ($this->axis === \Axis::horizontal) { // as SwiftUI's: across the room it is given, as high as what it shows
+            $state = $c->runtime?->local($c->upcomingId(), fn() => new ScrollState()) ?? new ScrollState();
+            $n = $c->row(0, 8)->alignItems(Node::CENTER)->scroll($state, horizontal: true, vertical: false);
+              View::renderAll($c, $env->along(Node::ROW), $this->content);
+            $c->end();
+            View::fill($n, $env->axis, View::FLEX_X);
+            return $n;
+        }
         return self::scroller($c, $env, function (Env $env) use ($c): void {
-            if ($this->axis === \Axis::horizontal) {
-                $c->row(0, 8)->alignItems(Node::CENTER);
-                  View::renderAll($c, $env->along(Node::ROW), $this->content);
-                $c->end();
-                return;
-            }
             View::renderAll($c, $env->along(Node::COLUMN), $this->content);
-        }, $this->axis === \Axis::horizontal, 8);
+        }, false, 8);
     }
 
     /**
@@ -50,7 +52,7 @@ final class ScrollView extends View
         $large = $env->stack?->largeTitle($c, $env);
         $inner = $env->with(['refresh' => null]); // what is inside does not refresh again
         $content = function () use ($c, $env, $inner, $fn, $large): void {
-            if ($large !== null) { $c->largeTitle($env->title ?? ''); }
+            if ($large !== null) { $c->largeTitle(Localized::string($env->title ?? '', $env)); }
             $fn($inner);
         };
         $rt = $c->runtime;

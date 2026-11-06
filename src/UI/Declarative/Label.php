@@ -17,7 +17,7 @@ final class Label extends View
           if ($this->image !== null) { $size = $env->theme->fontSize * 1.2; $c->icon($this->image, $size, $env->color?->rgb($env) ?? $env->theme->text); }
           (new Text($this->title))->render($c, $env->along(Node::ROW));
         $c->end();
-        $n->label($this->title);
+        $n->label(Localized::string($this->title, $env));
         return $n;
     }
 }

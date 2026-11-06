@@ -151,7 +151,38 @@ enum ButtonStyle { case automatic; case bordered; case borderedProminent; case b
 
 enum ButtonRole { case destructive; case cancel; }
 
+/** Whether the text inside can be selected and copied, as SwiftUI's textSelection(.enabled). */
+enum TextSelectability { case enabled; case disabled; }
+
+/** The appearance an app asks for with preferredColorScheme(); null follows the system. */
+enum ColorScheme { case light; case dark; }
+
+/** What an onKeyPress action did: took the key (handled), or left it to the view (ignored). */
+enum KeyPressResult { case handled; case ignored; }
+
+/** A key pressed, as onKeyPress gives it: its modifiers. */
+final class KeyPress
+{
+    /** @param list<EventModifiers> $modifiers */
+    public function __construct(public readonly array $modifiers) {}
+
+    /** The press of the modifier mask $mods. @internal */
+    public static function of(int $mods): self
+    {
+        return new self(array_values(array_filter(EventModifiers::cases(), fn(EventModifiers $m) => ($mods & EventModifiers::mask([$m])) !== 0)));
+    }
+}
+
 enum ToggleStyle { case automatic; case switch; case checkbox; }
+
+/** How a Picker draws: a pop-up menu (automatic, menu), a segmented control, radio buttons (radioGroup, inline). */
+enum PickerStyle { case automatic; case menu; case segmented; case radioGroup; case inline; }
+
+/** How a DatePicker draws: a field opening a calendar (automatic, compact, field) or the calendar (graphical). */
+enum DatePickerStyle { case automatic; case compact; case field; case graphical; }
+
+/** What a DatePicker edits: its date, its time, or both. */
+enum DatePickerComponents { case date; case hourAndMinute; }
 
 /** The type of every view, for a parameter or return type: fn(): View => …. */
 class_alias(D\View::class, 'View');
@@ -182,7 +213,13 @@ function Divider(): D\Divider { return new D\Divider(); }
 
 function Group(): D\Group { return new D\Group(); }
 
-function Text(string $text): D\Text { return new D\Text($text); }
+/**
+ * Text, as SwiftUI's: $text the key of its translation in the app's catalogs (locales/zh-Hans.json: {"Profile": "个人资料"}),
+ * shown as it is where none has it, $args its ICU placeholders (Text('Hello, {name}!', ['name' => $this->name])), its inline
+ * Markdown read (**bold**, *italic*, `code`, ~~struck~~); Text(verbatim: $note->title), for what the user wrote, neither.
+ * @param array<string, mixed> $args
+ */
+function Text(string $text = '', array $args = [], ?string $verbatim = null): D\Text { return $verbatim !== null ? new D\Text($verbatim, true) : new D\Text($text, false, $args); }
 
 /** A button: Button('Save', action: fn() => $this->save()), or with a label view: Button(action: …, label: Label('Add', systemImage: 'plus')). */
 function Button(string $title = '', ?Closure $action = null, ?ButtonRole $role = null, ?D\View $label = null): D\Button
@@ -244,7 +281,10 @@ function ScrollView(Axis $axes = Axis::vertical): D\ScrollView { return new D\Sc
  * SwiftUI's List (list is PHP's): of data, ListView($this->notes, id: 'id')(fn(Note $n) => Text($n->title)), only the
  * rows in view built; of views, ListView()( Section(header: 'A')( … ), … ), an inset grouped list. @param array<mixed>|null $items
  */
-function ListView(array|int|null $items = null, string|Closure|null $id = null): D\ListView { return new D\ListView($items, $id); }
+function ListView(array|int|null $items = null, string|Closure|null $id = null, ?string &$selection = null): D\ListView
+{
+    return new D\ListView($items, $id, $selection, func_num_args() >= 3); // selection given: a sidebar's, which binds it
+}
 
 /** SwiftUI's LabeledContent: a title and its value, a cell in a list. */
 function LabeledContent(string $title, string $value): D\LabeledContent { return new D\LabeledContent($title, $value); }
@@ -272,3 +312,51 @@ enum TitleDisplayMode { case automatic; case inline; case large; }
 
 /** SwiftUI's NavigationPath: a Router, of paths: append('/notes/42'), removeLast(), count, isEmpty. */
 class_alias(MyPHP\UI\Router::class, 'NavigationPath');
+
+// ---- controls --------------------------------------------------------------------------------------------------
+
+/** One of the tagged choices of its content, bound to $selection: Picker('Flavor', selection: $this->flavor)( Text('Vanilla')->tag('vanilla'), … ). */
+function Picker(string $title, mixed &$selection): D\Picker { return new D\Picker($title, $selection); }
+
+/** A slider bound to $value, between the ends of $in: Slider(value: $this->volume, in: [0, 100], step: 5). */
+function Slider(float|int &$value, array $in = [0.0, 1.0], ?float $step = null, string $title = ''): D\Slider { return new D\Slider($value, $in, $step, $title); }
+
+/** Buttons stepping $value by $step between the ends of $in: Stepper('Quantity', value: $this->qty, in: [1, 10]). */
+function Stepper(string $title, int|float &$value, array $in = [PHP_INT_MIN, PHP_INT_MAX], float $step = 1): D\Stepper { return new D\Stepper($title, $value, $in, $step); }
+
+/** A date, a time or both, bound to $selection: DatePicker('Due', selection: $this->due, displayedComponents: [DatePickerComponents::date]). */
+function DatePicker(string $title, DateTimeImmutable &$selection, array $displayedComponents = [DatePickerComponents::date, DatePickerComponents::hourAndMinute]): D\DatePicker
+{
+    return new D\DatePicker($title, $selection, $displayedComponents);
+}
+
+/** A color well bound to $selection, 0xRRGGBB: ColorPicker('Tint', selection: $this->tint); with supportsOpacity, its $opacity too. */
+function ColorPicker(string $title, int &$selection, bool $supportsOpacity = false, ?float &$opacity = null): D\ColorPicker
+{
+    return new D\ColorPicker($title, $selection, $supportsOpacity, $opacity);
+}
+
+/** A spinner, ProgressView(); a bar, ProgressView('Downloading', value: $done, total: $size). */
+function ProgressView(string $title = '', ?float $value = null, float $total = 1.0): D\ProgressView { return new D\ProgressView($title, $value, $total); }
+
+/** A level between the ends of $in: Gauge(value: $this->cpu, in: [0, 100], title: 'CPU'). */
+function Gauge(float $value, array $in = [0.0, 1.0], string $title = ''): D\Gauge { return new D\Gauge($value, $in, $title); }
+
+/** A button opening a menu of its content: Menu('Sort')( Button('Name', action: …), Divider(), Toggle('Reverse', isOn: …) ). */
+function Menu(string $title): D\Menu { return new D\Menu($title); }
+
+/** Text editing $text over lines, taking the room it is given, as SwiftUI's TextEditor. */
+function TextEditor(string &$text): D\TextField { return new D\TextField('', $text, null, false, false, true); }
+
+/** SwiftUI's Link, named WebLink (PHP has a link() of its own): WebLink('Docs', destination: 'https://…'). */
+function WebLink(string $title, string $destination): D\WebLink { return new D\WebLink($title, $destination); }
+
+/** Its content shown while expanded, bound to $isExpanded or kept by itself: DisclosureGroup('Advanced')( … ). */
+function DisclosureGroup(string $title, ?bool &$isExpanded = null): D\DisclosureGroup { return new D\DisclosureGroup($title, $isExpanded); }
+
+/**
+ * A sidebar beside the detail, as SwiftUI's NavigationSplitView: the sidebar a ListView(selection:) of tagged Labels
+ * and Sections, the detail the view of what it chose: NavigationSplitView(sidebar: ListView(selection: $this->page)(
+ * Label('Inbox', systemImage: 'tray')->tag('inbox'), … ), detail: Detail($this->page)).
+ */
+function NavigationSplitView(D\ListView $sidebar, D\View|array $detail): D\NavigationSplitView { return new D\NavigationSplitView($sidebar, $detail); }

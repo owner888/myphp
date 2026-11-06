@@ -312,6 +312,19 @@ final class Catalog
         Locales::catalogsChanged();
     }
 
+    /**
+     * $key said in $locale by the catalogs the app registered, $args in its
+     * placeholders, or null when none has it: the views' text, whose key is
+     * the text itself as SwiftUI's String Catalog has it (Text('Submit')).
+     */
+    public static function say(string $locale, string $key, array $args = []): ?string
+    {
+        foreach (self::$registered as $c) {
+            if ($c->message($locale, $key) !== null) { return $c->format($locale, $key, $args); }
+        }
+        return null;
+    }
+
     /** @internal the languages of the registered catalogs, the source language of the first first @return list<string> */
     public static function registeredLanguages(): array
     {

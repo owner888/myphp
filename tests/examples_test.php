@@ -883,3 +883,42 @@ $t->clickLabel('Your name'); $t->type('Ada'); $t->frame();
 same('Ada', $s->name, 'router: the TextField writes the name');
 $t->clickLabel('Back'); $t->frame(3);
 check($t->byText('GENERAL') !== null, 'router: Back comes back to General');
+
+// form (the declarative views): the fields write the Profile, Return in a field submits, Return in the message field
+// sends it and Shift+Return breaks its line, the controls write their values, the card and Clear act.
+[$view, $s] = Headless::load('form');
+$t = new Headless($view, 600, 900);
+$t->frame(2);
+$fields = []; // the fields in order: Name, City, Note, Message
+$walk = function (\MyPHP\UI\Node $n) use (&$walk, &$fields) { if (in_array($n->kind, [\MyPHP\UI\Node::INPUT, \MyPHP\UI\Node::TEXTAREA], true)) { $fields[] = $n; } foreach ($n->kids as $k) { $walk($k); } };
+$walk($t->root); $walk = null;
+same(4, count($fields), 'form: four fields');
+$t->clickOn($fields[0]); $t->key(\MyPHP\UI\Key::END, 'moveToEndOfLine:'); $t->type(' L'); $t->frame();
+same('Ada L', $s->name, 'form: the Name field writes the Profile');
+$t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:'); $t->frame(2);
+check($s->submits === 1 && $t->byText('Hello, Ada L from  (#1)') !== null, 'form: Return in a field submits, the greeting its placeholders filled: ' . json_encode(array_slice($t->texts(), -3)));
+$t->clickOn($fields[3]); $t->type('hi'); $t->frame();
+$t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:'); $t->frame(2);
+check($s->log === 'hi' && $s->draft === '', "form: Return sends the message to the log: log \"{$s->log}\", draft \"{$s->draft}\"");
+$t->type('a'); $t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:', \MyPHP\UI\Key::SHIFT); $t->type('b'); $t->frame();
+same("a\nb", $s->draft, 'form: Shift+Return breaks the line instead');
+$t->clickText('Subscribe'); $t->frame();
+check($s->subscribe, 'form: the checkbox writes subscribe');
+$t->clickText('Dark'); $t->frame(2);
+same('dark', $s->mode, 'form: a radio button writes the theme');
+$t->clickText('Submit'); $t->frame();
+same(2, $s->submits, 'form: Submit submits');
+$t->clickOn($t->byText('A card. Tab to it and press Space, or click it. This sentence wraps at the width the window gives the card, so make the window narrower and watch it reflow.')); $t->frame();
+check($s->greeting === 'card' && $t->byText('Card activated (#3)') !== null, 'form: the card, a button, activates');
+$t->clickText('Clear'); $t->frame(2);
+check($s->name === '' && $s->city === '' && $s->greeting === '', 'form: Clear empties the fields');
+// Its text in the language chosen, as SwiftUI's String Catalog: each text the key of its translation in locales/, a
+// placeholder's value, a plural, a field's prompt, a button's title; the language names in their own.
+$s->lang = 'zh-Hans'; $t->frame(2);
+check($t->byText('个人资料') !== null && $t->byText('提交') !== null && $t->byText('标签 3') !== null && $t->byText('姓名：0 字节') !== null, 'form: in Chinese: ' . json_encode(array_slice($t->texts(), 0, 8), JSON_UNESCAPED_UNICODE));
+check($t->byLabel('城市（试试中文输入法）') !== null && $t->byText('中文') !== null, "form: a field's prompt translated, the language names in their own");
+$s->lang = 'es'; $s->name = 'Ada'; $t->frame(2);
+check($t->byText('Perfil') !== null && $t->byText('nombre: 3 bytes') !== null, 'form: in Spanish, its plural');
+$s->lang = 'en'; $t->frame(2);
+check($t->byText('Profile') !== null, 'form: in English again');
+\MyPHP\Catalog::resetRegistry(); // its catalogs, which requiring locales/Locales.php registered, are not the next tests'

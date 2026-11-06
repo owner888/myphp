@@ -26,11 +26,19 @@ final class Button extends View
     {
         $style = $env->buttonStyle ?? \ButtonStyle::automatic;
         if ($this->label !== null) {
+            $t = $env->theme;
+            $prominent = $style === \ButtonStyle::borderedProminent;
             $n = $c->buttonBase()->alignItems(Node::CENTER);
-            $this->label->render($c, $env->along(Node::ROW));
+            if ($style !== \ButtonStyle::borderless && $style !== \ButtonStyle::plain) { // the face of a button() around the label: padded, its surface and border, or the accent
+                $n->padding($t->space(1.5), $t->space(3.5))->radius($t->radius);
+                $n->color = $prominent ? $t->accent : ($c->hovered($n) ? $t->surfaceHover : $t->surface);
+                $n->bordered = !$prominent;
+            }
+            $this->label->render($c, $prominent ? $env->along(Node::ROW)->with(['color' => new ColorValue(null, $t->accentText)]) : $env->along(Node::ROW));
             $c->end();
         } else {
-            $n = $style === \ButtonStyle::borderedProminent ? $c->primaryButton($this->title) : $c->button($this->title);
+            $title = Localized::string($this->title, $env);
+            $n = $style === \ButtonStyle::borderedProminent ? $c->primaryButton($title) : $c->button($title);
         }
         if ($style === \ButtonStyle::borderless || $style === \ButtonStyle::plain) {
             $n->bordered = false;
@@ -41,7 +49,7 @@ final class Button extends View
         }
         if ($this->role === \ButtonRole::destructive) { $n->fg = $style === \ButtonStyle::borderedProminent ? 0xffffff : $env->theme->danger; if ($style === \ButtonStyle::borderedProminent) { $n->color = $env->theme->danger; } }
         if ($env->disabled) { $n->disabled(); }
-        if ($this->label === null) { $n->label($this->title); }
+        if ($this->label === null) { $n->label(Localized::string($this->title, $env)); }
         if ($c->clicked($n) && $this->action !== null) { ($this->action)(); }
         return $n;
     }
