@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Declarative;
 
 use Closure;
-use MyPHP\UI\{Context, Node};
+use MyPHP\UI\{Context, Node, Painter};
 
 /**
  * GeometryReader, as SwiftUI's: takes the room it is given and builds the
@@ -21,9 +21,14 @@ final class GeometryReader extends View
     {
         $id = $c->upcomingId();
         $rect = $c->runtime?->rectOf($id);
+        $size = $rect === null ? $c->size() : [$rect[2], $rect[3]];
         $n = $c->column(0, 0);
-          View::renderAll($c, $env->along(Node::COLUMN), ($this->content)(new GeometryProxy($rect === null ? $c->size() : [$rect[2], $rect[3]], $c->titleBar())));
+          View::renderAll($c, $env->along(Node::COLUMN), ($this->content)(new GeometryProxy($size, $c->titleBar())));
         $c->end();
+        // Built with the size of the frame before: laid out to another (the window resized), it builds again with it.
+        $n->draw(static function (Painter $p, array $r) use ($size): void {
+            if (abs($r[2] - $size[0]) > 0.5 || abs($r[3] - $size[1]) > 0.5) { $p->animationFrame(); }
+        });
         View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
         return $n;
     }

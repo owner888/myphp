@@ -946,3 +946,15 @@ $t->frame(2);
 $t->clickText('Count'); $t->frame(2);
 same(1, $s->count, 'titlebar: Count counts');
 check($t->byText('Counted 1; searching “”.') !== null, 'titlebar: the text follows');
+
+// glass (the declarative views): the toolbar offset in the layout (a system material placed by it moves with it), its button counting a press, and the blur
+// is as wide as the window, its frame a box around its padded text, as SwiftUI's.
+$s = (object)['photo' => \MyPHP\UI\Image::fromPixels(4, 3, str_repeat("\x80\x80\x80\xff", 12)), 'x' => 40.0, 'clear' => false, 'tinted' => true, 'presses' => 0, 'hard' => true];
+$t = new Headless(Headless::view('glass', $s), 820, 620);
+$t->frame(3);
+$bar = null; $find = function (Node $n) use (&$find, &$bar, $t) { foreach ($n->kids as $k) { if ($k === $t->byText('Liquid Glass')) { $bar = $n; } $find($k); } }; $find($t->root); $find = null;
+same([16.0, 16.0], array_slice($t->rect($bar), 0, 2), 'glass: the toolbar offset 16, 16 in the layout, its glass with it');
+$t->clickText('Press me'); $t->frame(2);
+same(1, $s->presses, 'glass: the glass button counts a press');
+$box = null; $find = function (Node $n) use (&$find, &$box, $t) { foreach ($n->kids as $k) { if ($k === $t->byText('Blur, fading downward')) { $box = $n; } $find($k); } }; $find($t->root); $find = null;
+same([820.0, 90.0], [$box->w, $box->h], "glass: the blur's frame, the window's width");

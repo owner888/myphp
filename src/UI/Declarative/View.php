@@ -98,6 +98,15 @@ abstract class View
 
     public function opacity(float $opacity): static { $this->mods[] = ['opacity', [$opacity]]; return $this; }
 
+    /** Moves the view by $x and $y points from where it is laid out, the room it takes staying, as SwiftUI's offset. */
+    public function offset(float $x = 0, float $y = 0): static { $this->mods[] = ['offset', [$x, $y]]; return $this; }
+
+    /**
+     * A material behind the view, as SwiftUI's glassEffect: the Glass plugin's Glass (Liquid Glass), Blur or
+     * ScrollEdge, with $tint, a color of the theme, over a Glass.
+     */
+    public function glassEffect(\MyPHP\UI\Material $material, \Color|ColorValue|null $tint = null): static { $this->mods[] = ['glass', [$material, $tint]]; return $this; }
+
     public function hidden(bool $hidden = true): static { if ($hidden) { $this->mods[] = ['hidden', []]; } return $this; }
 
     // ---- identity, events, accessibility -----------------------------------
@@ -274,11 +283,13 @@ abstract class View
     /** The view and its boxing modifiers. */
     private function renderBox(Context $c, Env $env): ?Node
     {
-        // The boxing modifiers in layers: a padding or frame after one that paints the box goes on a box around it.
+        // The boxing modifiers in layers, as SwiftUI's wrap the view: a frame is a box around what is before it, the view
+        // keeping its own size in it, placed by the frame's alignment (one that takes the room filling it); a padding
+        // after one that paints the box goes on a box around it too.
         $layers = [[]];
         $painted = false;
         foreach ($this->mods as $m) {
-            if ($painted && ($m[0] === 'padding' || $m[0] === 'frame')) { $layers[] = []; $painted = false; }
+            if ($m[0] === 'frame' || ($painted && $m[0] === 'padding')) { $layers[] = []; $painted = false; }
             $layers[count($layers) - 1][] = $m;
             if (in_array($m[0], ['background', 'border', 'radius', 'clip', 'shadow', 'opacity'], true)) { $painted = true; }
         }
@@ -287,17 +298,21 @@ abstract class View
         for ($i = count($layers) - 1; $i > 0; $i--) { // the outer layers, boxes the view goes in, outermost first
             $outer[] = [$c->column(0, 0, 0)->alignItems($env->axis === Node::ROW ? Node::CENTER : Node::CENTER), $layers[$i]];
         }
-        $node = $this->build($c, $env);
+        $node = $this->build($c, $outer === [] ? $env : $env->along(Node::COLUMN)); // in a box, a column: what takes the room takes the box's
+        $whole = $outer === [] ? $node : $outer[0][0];
         if ($node !== null) {
             $this->apply($node, $layers[0], $env);
-            $this->events($c, $node, $env);
+            $this->events($c, $node, $whole ?? $node, $env);
         }
         foreach (array_reverse($outer) as [$box, $mods]) {
             $c->end();
             self::takeRoom($box, $env->axis, self::flexOfKids($box)); // a box around a view that takes the room takes it
             $this->apply($box, $mods, $env);
+            if (count($box->kids) === 1 && $box->kids[0]->aspect > 0 && $box->fh <= 0 && $box->aspect <= 0) {
+                $box->aspectRatio($box->kids[0]->aspect); // a picture scaled to fit: the box as high as its width makes it, as the picture
+            }
         }
-        return $outer === [] ? $node : $outer[0][0];
+        return $whole;
     }
 
     /** Applies the boxing modifiers $mods to $node. */
@@ -314,8 +329,9 @@ abstract class View
                     break;
                 case 'frame':
                     [$w, $h, $minW, $maxW, $minH, $maxH, $align] = $a;
-                    if ($w !== null) { $n->width($w); $env->axis === Node::ROW ? $n->grow = 0 : ($n->self === Node::STRETCH && $n->alignSelf(Node::AUTO)); }
-                    if ($h !== null) { $n->height($h); $env->axis === Node::COLUMN ? $n->grow = 0 : ($n->self === Node::STRETCH && $n->alignSelf(Node::AUTO)); }
+                    // A fixed size is the frame's, as SwiftUI's: neither grown nor shrunk along the stack it is in.
+                    if ($w !== null) { $n->width($w); $env->axis === Node::ROW ? $n->shrink(0)->grow = 0 : ($n->self === Node::STRETCH && $n->alignSelf(Node::AUTO)); }
+                    if ($h !== null) { $n->height($h); $env->axis === Node::COLUMN ? $n->shrink(0)->grow = 0 : ($n->self === Node::STRETCH && $n->alignSelf(Node::AUTO)); }
                     if ($minW !== null) { $n->minWidth($minW); }
                     if ($minH !== null) { $n->minHeight($minH); }
                     if ($maxW === INF) { $env->axis === Node::ROW ? $n->grow = max($n->grow, 1) : $n->alignSelf(Node::STRETCH); } elseif ($maxW !== null) { $n->maxWidth($maxW); }
@@ -328,6 +344,12 @@ abstract class View
                 case 'border': $n->border($a[1], $a[0]->rgb($env)); break;
                 case 'shadow': $n->shadow($a[2], $a[3], $a[1] * 2, 0, $a[0]?->rgb($env) ?? 0x000000, $a[0]?->alpha ?? 0.2); break;
                 case 'opacity': $n->opacity($a[0]); break;
+                case 'offset': $n->left($a[0])->top($a[1]); break; // moved in the layout (a relative inset), so that a system material behind it, placed by the layout, moves with it
+                case 'glass':
+                    [$m, $tint] = $a;
+                    if ($tint !== null && $m instanceof \MyPHP\Plugins\Glass\Glass) { $m = clone $m; $m->tint = ColorValue::of($tint)->rgb($env); }
+                    $n->material($m);
+                    break;
                 case 'hidden': $n->invisible(); break;
             }
         }
@@ -363,8 +385,8 @@ abstract class View
     /** @var list<?\ColorScheme> the appearance preferredColorScheme() set last, none before */
     private static array $scheme = [];
 
-    /** The events and accessibility of $node. */
-    private function events(Context $c, Node $node, Env $env): void
+    /** The events and accessibility of $node, the view's own; the gestures (a tap, the pointer over it, its menus, a tip) $whole's, the frame around it with what it holds, as SwiftUI's gestures after a frame. */
+    private function events(Context $c, Node $node, Node $whole, Env $env): void
     {
         $changes = 0;
         foreach ($this->events as [$kind, $a]) {
@@ -373,8 +395,8 @@ abstract class View
                     if (Lifecycle::of($c, $node)?->changed($changes++, $a[0], $old)) { ($a[1])($old, $a[0]); }
                     break;
                 case 'hover':
-                    $over = $c->hovered($node);
-                    if (Lifecycle::of($c, $node)?->hoverChanged($over)) { ($a)($over); }
+                    $over = $c->hovered($whole);
+                    if (Lifecycle::of($c, $whole)?->hoverChanged($over)) { ($a)($over); }
                     break;
                 case 'select':
                     $a === \TextSelectability::enabled ? $node->selectable() : $node->unselectable();
@@ -386,10 +408,10 @@ abstract class View
                     }
                     break;
                 case 'hit':
-                    $node->ignoreInput(!$a);
+                    $whole->ignoreInput(!$a);
                     break;
                 case 'windowDrag':
-                    $node->dragWindow();
+                    $whole->dragWindow();
                     break;
                 case 'defaultFocus':
                     $node->autoFocus();
@@ -405,17 +427,17 @@ abstract class View
                     break;
                 case 'menu':
                     $items = $a;
-                    $node->contextMenu(static fn(\MyPHP\UI\Menu $m) => Menu::items($m, $items, $env));
+                    $whole->contextMenu(static fn(\MyPHP\UI\Menu $m) => Menu::items($m, $items, $env));
                     break;
                 case 'popover':
                     $content = $a[1];
-                    $c->popover($node, $a[0], static function () use ($c, $env, $content): void { View::renderAll($c, $env->along(Node::COLUMN), $content()); }); // $a[0] the binding: an array's reference stays one in its copies
+                    $c->popover($whole, $a[0], static function () use ($c, $env, $content): void { View::renderAll($c, $env->along(Node::COLUMN), $content()); }); // $a[0] the binding: an array's reference stays one in its copies
                     break;
                 case 'tap':
-                    $node->focusable(false);
-                    if ($a[1] === 2 ? $c->doubleClicked($node) : $c->clicked($node)) { ($a[0])(); }
+                    $whole->focusable(false);
+                    if ($a[1] === 2 ? $c->doubleClicked($whole) : $c->clicked($whole)) { ($a[0])(); }
                     break;
-                case 'help': $node->tooltip(Localized::string($a, $env)); break;
+                case 'help': $whole->tooltip(Localized::string($a, $env)); break;
                 case 'label': $node->label(Localized::string($a, $env)); break;
                 case 'shortcut':
                     if ($c->shortcut($a[0], $a[1])) { $this->shortcut(); }

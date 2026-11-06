@@ -3,46 +3,40 @@
 declare(strict_types=1);
 
 use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style};
-use MyPHP\UI\{Context, Font, LinearGradient, Span};
+use MyPHP\UI\LinearGradient;
 
-return function (Context $c): void {
-    $t = $c->theme;
-    $c->column(0, 0, 1);
-      // What is under the glass: the photo filling the width, then a strip of colors, all scrolling.
-      $c->column(0, 12, 1)->scroll($this->scroll);
-        $c->image($this->photo, $c->width, 0);
-        $c->row(16, 10);
-          for ($i = 0; $i < 40; $i++) { $c->box(48, 48, ($i * 2654435761) & 0xffffff)->radius(18); }
-        $c->end();
-        $c->column(16, 8);
-          for ($i = 0; $i < 12; $i++) { $c->text("Line $i under the glass — 玻璃下面的文字", 16); }
-        $c->end();
-      $c->end();
-      // The toolbar: a glass row floating over the content.
-      $glass = function () use ($t) { return new Glass($this->clear ? Style::Clear : Style::Regular, $this->tinted ? $t->accent : null, 0.5); }; // made when drawn: the checkboxes below change the state in this frame
-      $c->row(10, 14)->at(16, 16)->radius(22)->material($glass());
-        $c->text('Liquid Glass', 15, style: Font::BOLD);
-        $c->checkbox('Clear', $this->clear);
-        $c->checkbox('Tinted', $this->tinted);
-        $c->slider($this->x, 0, $c->width - 260, 160)->tooltip('moves the pill');
-        $press = $c->row(6, 0)->radius(14)->material(new Glass(interactive: true))->focusable();
-          $c->text('Press me', 13);
-        $c->end();
-        if ($c->clicked($press)) { $this->presses++; }
-        $c->muted("pressed {$this->presses}", 12);
-      $c->end();
-      // A pill the slider moves across the photo: the lens bends what shows near its edge.
-      $c->row(14, 8)->at($this->x, 120)->radius(28)->material($glass());
-        $c->richText([new Span('glass ', style: Font::BOLD), new Span('over the photo')], 14);
-      $c->end();
-      // A blur fading from full at its top to nothing at its bottom (a progressive blur, in levels), across the window.
-      $c->column(12, 0)->at(0, 300)->size($c->width, 90)->material(new Blur(10, new LinearGradient(0x000000, 1, 0x000000, 0, 180)));
-        $c->text('Blur, fading downward', 13, style: Font::BOLD);
-      $c->end();
-      // The scroll edge at the bottom: a bar of controls stands out from what scrolls under it.
-      $c->row(16, 12)->at(0, $c->height - 64)->size($c->width, 64)->material(new ScrollEdge(hard: $this->hard, bottom: true));
-        $c->checkbox('Hard scroll edge', $this->hard);
-        $c->muted('scroll the content: it blurs and fades under this bar', 12);
-      $c->end();
-    $c->end();
-};
+// Liquid Glass over content that scrolls: a toolbar, a pill the slider moves, a blur fading downward, and the scroll
+// edge of a bar at the bottom, each placed in the window (offset in a ZStack) as the glass plugin shows them.
+return fn() => GeometryReader(function (GeometryProxy $g) {
+    [$w, $h] = $g->size;
+    $glass = new Glass($this->clear ? Style::Clear : Style::Regular, null, 0.5);
+    $tint = $this->tinted ? Color::accentColor : null;
+    return ZStack(alignment: Alignment::topLeading)(
+        // What is under the glass: the photo filling the width, then a strip of colors, then lines, all scrolling.
+        ScrollView()(VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+            Image($this->photo)->resizable()->scaledToFit()->frame(width: $w),
+            HStack(spacing: 10)(Each(range(0, 39))(fn(int $i) => RoundedRectangle(cornerRadius: 18)->fill(Color::rgb(($i * 2654435761) & 0xffffff))->frame(width: 48, height: 48)))->padding(16),
+            VStack(alignment: HorizontalAlignment::leading, spacing: 8)(Each(range(0, 11))(fn(int $i) => Text(verbatim: "Line $i under the glass — 玻璃下面的文字")->font(Font::system(size: 16))))->padding(16),
+        )),
+        // The toolbar: a glass row floating over the content.
+        HStack(spacing: 14)(
+            Text('Liquid Glass')->font(Font::system(size: 15, weight: Weight::bold)),
+            Toggle('Clear', isOn: $this->clear)->toggleStyle(ToggleStyle::checkbox),
+            Toggle('Tinted', isOn: $this->tinted)->toggleStyle(ToggleStyle::checkbox),
+            Slider(value: $this->x, in: [0, max(1, $w - 260)])->frame(width: 160)->help('moves the pill'),
+            Button(action: fn() => $this->presses++, label: Text('Press me')->font(Font::system(size: 13)))->buttonStyle(ButtonStyle::plain)
+                ->padding(6)->cornerRadius(14)->glassEffect(new Glass(interactive: true)),
+            Text(verbatim: "pressed {$this->presses}")->font(Font::caption)->foregroundStyle(Color::secondary),
+        )->padding(10)->cornerRadius(22)->glassEffect($glass, tint: $tint)->offset(x: 16, y: 16),
+        // A pill the slider moves across the photo: the lens bends what shows near its edge.
+        Text('**glass** over the photo')->font(Font::system(size: 14))->padding(14)->cornerRadius(28)->glassEffect($glass, tint: $tint)->offset(x: $this->x, y: 120),
+        // A blur fading from full at its top to nothing at its bottom (a progressive blur, in levels), across the window.
+        Text('Blur, fading downward')->font(Font::system(size: 13, weight: Weight::bold))->padding(12)
+            ->frame(width: $w, height: 90, alignment: Alignment::topLeading)->glassEffect(new Blur(10, new LinearGradient(0x000000, 1, 0x000000, 0, 180)))->offset(y: 300),
+        // The scroll edge at the bottom: a bar of controls stands out from what scrolls under it.
+        HStack(spacing: 12)(
+            Toggle('Hard scroll edge', isOn: $this->hard)->toggleStyle(ToggleStyle::checkbox),
+            Text('scroll the content: it blurs and fades under this bar')->font(Font::caption)->foregroundStyle(Color::secondary),
+        )->padding(16)->frame(width: $w, height: 64, alignment: Alignment::leading)->glassEffect(new ScrollEdge(hard: $this->hard, bottom: true))->offset(y: $h - 64),
+    );
+});
