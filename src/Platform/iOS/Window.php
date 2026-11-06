@@ -7,7 +7,7 @@ use Closure;
 use MyPHP\Native\{iOS, Metal, ObjC};
 use MyPHP\Platform;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
-use MyPHP\UI\{DisplayList, Image, TextInputRange, TextState};
+use MyPHP\UI\{DisplayList, Image, Node, TextInputRange, TextState};
 
 final class Window implements Platform\Window
 {
@@ -29,12 +29,33 @@ final class Window implements Platform\Window
     private int $touchStartTime = 0;
     private bool $touchIsScrolling = false;
     private bool $touchInField = false;
+    /** A finger on a node dragged along one axis moved along it: the drag's, not the scroll's, until it lifts. */
+    private bool $touchAxisTaken = false;
     private int $longPressId = 0;
     /** @var list<array{0: int, 1: float, 2: float}> */
     private array $touchHistory = [];
     private bool $keyboardVisible = false;
     private $view = null;
     private ?Metal $metal = null;
+    /** The launcher's view over the materials, in which what their nodes hold paints (Runtime::$overLayer), adopted as it is first needed; whether it shows anything; the materials as last given to the launcher. */
+    private $over = null;
+    private bool $overShown = false;
+    private string $placed = '';
+
+    /**
+     * Node::systemMaterial's names as the launcher's kinds: 0 and 1 glass
+     * and clear glass (UIGlassEffect's styles on iOS 26, the chrome and the
+     * ultra-thin blurs before), else a UIBlurEffectStyle: the system
+     * materials thin to thick as AppKit's materials rank them.
+     */
+    public const MATERIALS = [
+        'glass' => 0, 'clear-glass' => 1,
+        'tooltip' => 6, 'selection' => 6, 'under-page' => 6,
+        'menu' => 7, 'popover' => 7, 'hud' => 7, 'acrylic' => 7,
+        'sidebar' => 8, 'sheet' => 8, 'content' => 8, 'header' => 8, 'mica' => 8, 'tabbed' => 8,
+        'window' => 9, 'under-window' => 9, 'fullscreen-ui' => 9,
+        'titlebar' => 10,
+    ];
     private int $wakeId = 0;
 
     public function __construct(
@@ -77,6 +98,9 @@ final class Window implements Platform\Window
         $this->view = ObjC::import(iOS::ffi()->myphp_ios_get_view());
         $this->metal = Backend::metal();
         $this->metal->adopt($this->view);
+        // UIKit's materials go over the Metal view, blurring the page it shows, and what they hold paints over them: nodes belowMaterials() are under them as they are
+        $this->w->runtime->underLayer = false;
+        $this->w->runtime->overLayer = true;
         Metal::setClearColor($this->view, App::theme()->background);
         $this->requestFrame();
     }
@@ -199,6 +223,7 @@ final class Window implements Platform\Window
                 $this->touchLastY = $ptY;
                 $this->touchStartTime = $time;
                 $this->touchIsScrolling = false;
+                $this->touchAxisTaken = false;
                 $this->touchHistory = [[$time, $ptX, $ptY]];
 
                 // Check if touch starts inside focused text field
@@ -216,7 +241,6 @@ final class Window implements Platform\Window
                 $hitId = $rt?->pressTarget($ptX, $ptY);
                 if ($hitId !== null) {
                     $rt->flashTouch($hitId, 2.0);
-                    iOS::ffi()->myphp_ios_haptic_feedback(0);
                 }
                 $this->requestFrame();
 
@@ -239,10 +263,28 @@ final class Window implements Platform\Window
                 }
                 $rt = $this->w->runtime;
                 if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && $rt->isDraggingControl())) {
-                    $input->mouse($ptX, $ptY);
-                    $input->push(['drag', $ptX, $ptY, $time]);
-                    $this->requestFrame();
-                    break;
+                    // A node dragged along one axis alone (a row swiped sideways, a sheet pulled down) takes the finger
+                    // once it moved 8 points along that axis; moved across it first, the container scrolls instead, as
+                    // UIScrollView's directional lock; until either, nothing moves (the slop).
+                    $axes = $this->touchInField ? 0 : $rt->pressDragAxes();
+                    $undecided = ($axes === Node::HORIZONTAL || $axes === Node::VERTICAL) && !$this->touchAxisTaken;
+                    if ($undecided) {
+                        $along = abs($axes === Node::HORIZONTAL ? $ptX - $this->touchStartX : $ptY - $this->touchStartY);
+                        $across = abs($axes === Node::HORIZONTAL ? $ptY - $this->touchStartY : $ptX - $this->touchStartX);
+                        if ($along > 8.0) {
+                            $this->touchAxisTaken = true; $undecided = false;
+                        } elseif ($across > 8.0) {
+                            $rt->cancelTouchPress(); // the move is the scroll's: below, as any touch moving on a container
+                        } else {
+                            break;
+                        }
+                    }
+                    if (!$undecided) {
+                        $input->mouse($ptX, $ptY);
+                        $input->push(['drag', $ptX, $ptY, $time]);
+                        $this->requestFrame();
+                        break;
+                    }
                 }
 
                 $now = hrtime(true);
@@ -291,6 +333,7 @@ final class Window implements Platform\Window
                 if ($this->touchIsScrolling) {
                     $this->touchIsScrolling = false;
                     $rt?->cancelTouchPress();
+                    $input->push(['scrollEnd', $ptX, $ptY]); // what the finger pulled past a top is let go (Context::refreshable)
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];
@@ -321,6 +364,7 @@ final class Window implements Platform\Window
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
                 $this->touchInField = false;
+                $this->touchAxisTaken = false;
                 $this->w->runtime?->cancelTouchPress();
                 $this->requestFrame();
                 break;
@@ -340,6 +384,8 @@ final class Window implements Platform\Window
             $bounds = ObjC::msg('r:', $this->view, 'bounds');
             ($this->frame)($list, (float)$bounds->w, (float)$bounds->h);
         });
+        $this->paintOver();
+        $this->placeMaterials();
         if ($this->afterPresent !== null) {
             ($this->afterPresent)();
         }
@@ -422,7 +468,92 @@ final class Window implements Platform\Window
     public function setBackgroundColor(array $rgba): void {}
     public function themeChanged(): void {}
     public function hasVibrancy(): bool { return false; }
-    public function hasSystemMaterials(): bool { return false; }
+    /** UIKit's: UIGlassEffect on iOS 26, UIBlurEffect's materials before, over the Metal view (placeMaterials). */
+    public function hasSystemMaterials(): bool { return true; }
+
+    /**
+     * Paints the material nodes the frame met (Runtime::$overPaints) in the
+     * launcher's view over the materials, each where the frame met it, its
+     * clip, transform and opacity as they were there, recording where the
+     * materials go (Painter::nativeHole) as it does.
+     */
+    private function paintOver(): void
+    {
+        $rt = $this->w->runtime;
+        if ($rt === null || ($rt->overPaints === [] && !$this->overShown)) {
+            return;
+        }
+        if ($this->over === null) {
+            $this->over = ObjC::import(iOS::ffi()->myphp_ios_get_over_view());
+            $this->metal->adopt($this->over);
+            Metal::setClearColor($this->over, 0x000000, 0.0); // clear: the materials and the page show around what it paints
+        }
+        $text = App::text();
+        $this->metal->render($this->over, function (DisplayList $list) use ($rt, $text): void {
+            $bounds = ObjC::msg('r:', $this->over, 'bounds');
+            $list->pathQuad ??= $text->pathQuad(...);
+            $list->zoom = $rt->frameZoom; // as the window's content
+            $list->pixels = $this->scale;
+            $paint = function () use ($list, $text, $bounds, $rt): void {
+                $plain = $list->world();
+                $list->pushClip(0, 0, $bounds->w / $list->zoom, $bounds->h / $list->zoom);
+                $rt->paintingOver = true;
+                try {
+                    foreach ($rt->overPaints as $o) {
+                        $list->setWorld($plain); // the clip as the frame had it, in the window's coordinates
+                        $list->pushClip(...$o['clip']);
+                        $list->setWorld($o['world']);
+                        $list->setOpacity($o['opacity']);
+                        $list->setMask($o['mask']);
+                        \MyPHP\UI\Painter::paint($o['node'], $list, $text, App::theme(), $rt);
+                        $list->setMask(null);
+                        $list->popClip();
+                    }
+                } finally {
+                    $rt->paintingOver = false;
+                }
+                $list->setWorld($plain);
+                $list->setOpacity(1.0);
+                $list->popClip();
+            };
+            $places = count($rt->materialPlaces);
+            $paint();
+            if ($text->repaint) { // the atlas started over: what this painted points at slots that are gone
+                $text->repaint = false;
+                $list->reset();
+                array_splice($rt->materialPlaces, $places); // recorded again
+                $paint();
+            }
+        });
+        $this->overShown = $rt->overPaints !== [];
+    }
+
+    /** Gives the launcher the materials where the frame placed them (Runtime::$materialPlaces), when they changed: it places a UIVisualEffectView of each over the Metal view and under the view over the materials. */
+    private function placeMaterials(): void
+    {
+        $rt = $this->w->runtime;
+        if ($rt === null) {
+            return;
+        }
+        $places = [];
+        foreach ($rt->materialPlaces as $p) {
+            [$x, $y, $w, $h] = $rt->windowRect($p['clip']);
+            $places[] = [$p['id'], round($x, 2), round($y, 2), round($w, 2), round($h, 2), round($p['radius'] * $rt->frameZoom, 2), round($p['alpha'], 3), self::MATERIALS[$p['material']] ?? 8, $p['dark'] === null ? -1 : (int)$p['dark']];
+        }
+        $key = json_encode($places);
+        if ($key === $this->placed) {
+            return;
+        }
+        $this->placed = $key;
+        $f = iOS::ffi();
+        $n = count($places);
+        $arr = $f->new('MyphpMaterialPlace[' . max($n, 1) . ']');
+        foreach ($places as $i => [$id, $x, $y, $w, $h, $r, $a, $kind, $dark]) {
+            $arr[$i]->id = $id; $arr[$i]->x = $x; $arr[$i]->y = $y; $arr[$i]->w = $w; $arr[$i]->h = $h;
+            $arr[$i]->radius = $r; $arr[$i]->alpha = $a; $arr[$i]->kind = $kind; $arr[$i]->dark = $dark;
+        }
+        $f->myphp_ios_place_materials(\FFI::addr($arr[0]), $n);
+    }
 
     public function wake(float $seconds, bool $repaint): void
     {

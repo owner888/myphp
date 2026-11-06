@@ -1,6 +1,6 @@
 ---
 name: myphp-app
-description: Write new PHP desktop apps, windows and screens with MyPHP, native UI (MyPHP\UI) or a web frontend, from a blank project to a tested, packaged app. Use when creating a MyPHP app, adding a window, page, widget or service to one, or turning a design into MyPHP code.
+description: Write new PHP desktop and mobile (Android, iOS) apps, windows and screens with MyPHP, native UI (MyPHP\UI) or a web frontend, from a blank project to a tested, packaged app. Use when creating a MyPHP app, adding a window, page, widget or service to one, or turning a design into MyPHP code.
 ---
 
 # Writing MyPHP apps
@@ -49,15 +49,19 @@ chose and why in a line before you build.
 
 ## Shape of an app
 
-Keep the state and the view in a class of their own, apart from the file
-that opens the window, so that a test can build the view without one:
+Keep the state and its actions in a class, and the view in `view.php`, a
+file that returns a closure: `Content::file()` runs it bound to the
+state (`$this` is the state, private members and `self::` included) and,
+in development, loads it again when it is saved, the state kept (hot
+reload, as Flutter's). A test builds the same view without a window.
 
 ```
 my-app/
   myphp.json        name, identifier, entry "app.php", framework
   boot.php          loads MyPHP (from myphp init; keep it)
-  app.php           opens the windows and runs the app
-  src/Todos.php     the state, its actions, and view(Context $c)
+  app.php           makes the state, opens the windows, runs the app
+  src/Todos.php     the state and its actions (no view)
+  view.php          return function (Context $c): void { … } — the view
   tests/ui_test.php builds the view headless and drives it
   resources/icon.png
 ```
@@ -66,7 +70,7 @@ my-app/
 <?php // src/Todos.php
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, TextState};
+use MyPHP\UI\TextState;
 
 final class Todos
 {
@@ -84,24 +88,33 @@ final class Todos
         $this->items[] = ['id' => $this->next++, 'title' => $title, 'done' => false];
         $this->draft = new TextState();
     }
-
-    public function view(Context $c): void
-    {
-        $t = $c->theme;
-        $c->column(16, 8)->fill()->background($t->background);
-          $c->row(gap: 8);
-            $field = $c->key('draft')->input($this->draft, 'New to-do')->grow(1);
-            $add = $c->primaryButton('Add');
-            if ($c->submitted($field) || $c->clicked($add)) { $this->add(); }
-          $c->end();
-          foreach ($this->items as $i => $item) {
-              $c->key($item['id'])->checkbox($item['title'], $this->items[$i]['done']);
-          }
-          $left = count(array_filter($this->items, fn($i) => !$i['done']));
-          $c->text("$left left")->textColor($t->textMuted);
-        $c->end();
-    }
 }
+```
+
+```php
+<?php // view.php — $this is the Todos app.php passes to Content::file
+declare(strict_types=1);
+
+use MyPHP\UI\Context;
+
+/** A row of the list: a part of the view is a closure here, not a method. */
+$row = function (Context $c, int $i): void {
+    $c->key($this->items[$i]['id'])->checkbox($this->items[$i]['title'], $this->items[$i]['done']);
+};
+
+return function (Context $c) use ($row): void {
+    $t = $c->theme;
+    $c->column(16, 8)->fill()->background($t->background);
+      $c->row(gap: 8);
+        $field = $c->key('draft')->input($this->draft, 'New to-do')->grow(1);
+        $add = $c->primaryButton('Add');
+        if ($c->submitted($field) || $c->clicked($add)) { $this->add(); }
+      $c->end();
+      foreach (array_keys($this->items) as $i) { $row($c, $i); }
+      $left = count(array_filter($this->items, fn($i) => !$i['done']));
+      $c->text("$left left")->textColor($t->textMuted);
+    $c->end();
+};
 ```
 
 ```php
@@ -109,7 +122,7 @@ final class Todos
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/boot.php';
 require __DIR__ . '/src/Todos.php';
@@ -118,13 +131,26 @@ $app = new Todos();
 App::setName('Todos');
 App::whenReady(function () use ($app) {
     new Window(new WindowOptions(title: 'Todos', width: 420, height: 520,
-        content: Content::view(fn(Context $c) => $app->view($c))));
+        content: Content::file(__DIR__ . '/view.php', $app)));
 });
 App::run();
 ```
 
+- `view.php` holds closures only: its parts (`$row`, `$sidebar`, a page
+  of a router…) are closures made before the `return`, handed to it with
+  `use`; a closure that calls one made after it takes it by reference
+  (`use (&$page)`). A named class or function there cannot be loaded
+  twice: its change waits for a restart, as the log says.
+- What the view does to the state goes through the class's methods
+  (`$this->add()`); what only draws stays in `view.php`. A window of its
+  own (a flyout, a second window) has a file of its own:
+  `Content::file(__DIR__ . '/list.php', $this)`.
+- `myphp dev` and `myphp run` hot reload on a save (or `r`); `R`
+  restarts the app, its state lost. A change to the class, `app.php` or a
+  constant needs `R`.
+
 Start a project with `myphp init -template native <dir>` (from the
-framework's `bin/myphp`), then reshape it as above.
+framework's `bin/myphp`): it makes this shape, `app.php` and `view.php`.
 
 ## Rules of the view
 
@@ -181,11 +207,11 @@ framework's `bin/myphp`), then reshape it as above.
    require __DIR__ . '/../src/Todos.php';
 
    use MyPHP\Tests\Headless;
-   use MyPHP\UI\{Context, Key};
+   use MyPHP\UI\{Content, Key};
    use function MyPHP\Tests\{check, same};
 
    $app = new Todos();
-   $h = new Headless(fn(Context $c) => $app->view($c), 420, 520);
+   $h = new Headless(Content::file(__DIR__ . '/../view.php', $app)->view, 420, 520);
    $h->frame();
    $h->clickText('New to-do');
    $h->type('Milk');
@@ -215,6 +241,31 @@ framework's `bin/myphp`), then reshape it as above.
    not only that it runs. On Linux without a display it starts Xvfb.
 4. `myphp dev` runs it with live reload for the user; `myphp build`
    packages it (`docs/distribution.md`).
+5. On a phone (an Android or iOS app), run it on a device or an emulator,
+   always through `myphp` (never adb, xcrun or `scripts/`):
+
+   ```sh
+   myphp devices                          # what is connected or booted, with ids
+   myphp emulators                        # the emulators (AVDs, iOS Simulator)
+   myphp emulators --launch <id>          # starts one and waits until it has booted
+   myphp emulators --create               # no AVD yet: makes one, downloading the image
+   myphp run -d android .                 # or -d ios, or -d <id from devices>
+   ```
+
+   `myphp doctor` says what is missing (SDK, Xcode, the phone's PHP
+   runtime) when one of these fails. `myphp run` prints only what tells
+   something, one line each, `11:00:21.767 W [cache] the cache is full`:
+   the level is a letter, E error, F fault, W warning, I info, D debug,
+   V verbose. Read every E and F line, and any PHP error, before you say
+   it runs; `-v` adds the build's output and the whole system log, for
+   when the short log does not explain a failure. In the app, log with
+   `MyPHP\Logger::info('…')` (`verbose`, `debug`, `info`, `warn`,
+   `error`, `fault`), not `echo` or `error_log`, which a phone does not
+   show (`docs/app.md`, "The log"). Left running, `myphp run` hot reloads
+   the app on the phone each time you save a PHP file (`view.php` loaded
+   again, the state kept; other files want `R`, a restart, as the log
+   says): run it in the background and read the log after each change
+   rather than building again. `docs/cli.md` has every flag.
 
 Report what you could not check on this machine (another platform, a
 real display, hardware).

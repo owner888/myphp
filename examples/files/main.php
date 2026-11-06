@@ -10,7 +10,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Shell, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, GridState, Image, Key, ListState, Node, Selection, SVG, TableColumn, TextState};
+use MyPHP\UI\{Content, GridState, Image, ListState, Node, Selection, SVG, TableColumn, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -167,105 +167,6 @@ final class Files
     }
 }
 
-function view(Context $c, Files $f): void
-{
-    $t = $c->theme;
-    // Keys for the folder: Cmd+F finds, Backspace goes up, Enter opens the entry chosen, Space previews an image, Delete… asks.
-    if ($c->shortcut('f', Key::COMMAND)) { $f->finding = true; }
-    if ($c->shortcut(Key::DELETE, Key::COMMAND) && $f->chosenEntries() !== []) { $f->asking = true; }
-    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
-      // Places
-      $side = $c->sidebar($f->place, function () use ($c, $f) {
-          $open = null;
-          $c->sidebarSection('Places', $open, function () use ($c, $f) {
-              foreach (Files::places() as $id => $path) { $c->sidebarItem($id, $id === 'root' ? 'Macintosh HD' : ($id === 'home' ? basename($path) : ucfirst($id))); }
-          });
-      }, 180);
-      if ($c->changed($side) && isset(Files::places()[$f->place])) { $f->open(Files::places()[$f->place]); }
-      $c->column(0, 0, 1);
-        // The find bar, over the folder, filtering its entries as the query changes.
-        $hits = $f->finding && $f->find->text !== '' ? count($f->entries) : 0;
-        $bar = $c->findBar($f->finding, $f->find, $hits, $f->found);
-        if ($f->find->seen !== $f->find->text || $f->filtered !== $f->finding) { $f->filtered = $f->finding; $f->reload(); } // the query or the bar changed: the entries it leaves
-        $f->find->seen = $f->find->text;
-        if ($bar !== null && $c->changed($bar) && $f->entries !== []) { $f->grid->selected = $f->table->selected = $f->found; $f->chosen->clear(); $f->chosen->add($f->entries[$f->found]['path']); }
-        // The toolbar: the path, the view, Delete….
-        $c->toolbar(function () use ($c, $f) {
-            $crumbs = array_values(array_filter(explode('/', $f->path), fn($s) => $s !== '')); array_unshift($crumbs, 'Macintosh HD');
-            $at = count($crumbs) - 1;
-            if ($c->changed($c->breadcrumbs($crumbs, $at))) { $f->open('/' . implode('/', array_slice($crumbs, 1, $at))); }
-            $c->spacer();
-            if ($c->changed($c->segmented(['Icons', 'List'], $f->view))) { $f->chosen->clear(); }
-            if ($c->clicked($c->button('Delete…')) && $f->chosenEntries() !== []) { $f->asking = true; }
-        });
-        $c->divider();
-        if ($f->view === 0) { grid($c, $f); } else { table($c, $f); }
-        $c->divider();
-        $c->row(10, 10)->alignItems(Node::CENTER);
-          $n = count($f->chosenEntries());
-          $c->muted($f->status !== '' ? $f->status : ($n > 0 ? "$n of " . count($f->entries) . ' chosen' : count($f->entries) . ' items'), 12);
-        $c->end();
-      $c->end();
-    $c->end();
-    // Space previews the image chosen, Escape or Space closes the preview.
-    $one = $f->chosenEntries(); $one = count($one) === 1 ? $one[0] : null;
-    if (!$f->previewing && $one !== null && Files::isImage($one) && !$f->finding && $c->shortcut(Key::SPACE)) {
-        $f->previewing = true;
-        App::go(function () use ($f, $one) { // shown once decoded, if the preview is still open on it
-            $img = Image::fromFile($one['path'], 2048);
-            if ($f->previewing && $f->preview === null && ($f->chosenEntries()[0]['path'] ?? null) === $one['path']) { $f->preview = $img; $f->window?->invalidate(); }
-        });
-    }
-    $modal = $c->modal($f->previewing, function () use ($c, $f, $one) {
-        if ($f->preview === null) { return; }
-        $k = min(($c->width - 120) / $f->preview->w, ($c->height - 160) / $f->preview->h, 1 / $c->scale); // fits the window, never larger than its pixels
-        $c->image($f->preview, $f->preview->w * $k, $f->preview->h * $k, $c->theme->radius);
-        $c->text($one['name'] ?? '', 13);
-        if ($c->shortcut(Key::SPACE)) { $f->previewing = false; }
-    });
-    if (!$f->previewing) { $f->preview = null; }
-    // Delete…: an alert, Delete the default.
-    $names = array_map(fn($e) => $e['name'], $f->chosenEntries());
-    $what = count($names) === 1 ? "“{$names[0]}”" : count($names) . ' items';
-    if ($c->alertDialog($f->asking, "Move $what to the Trash?", 'You can put them back from the Trash.', 'Cancel', 'Delete') === 1) { $f->trash(); }
-}
-
-/** The entries as a grid of icons, 96 wide and 108 high: a thumbnail for an image, the folder or file icon otherwise, the name below. */
-function grid(Context $c, Files $f): void
-{
-    $t = $c->theme;
-    $g = $c->gridView($f->grid, count($f->entries), 96, 108, function (int $i) use ($c, $t, $f) {
-        $e = $f->entries[$i];
-        $c->column(0, 4, 1)->alignItems(Node::CENTER);
-          $c->column(0, 0)->size(64, 64)->center();
-            $img = Files::isImage($e) ? $f->thumb($e) : null;
-            if ($img !== null) { $k = min(64 / $img->w, 64 / $img->h); $c->image($img, $img->w * $k, $img->h * $k, $t->radius); } // the longer side fills the 64 square
-            else { $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 48, $e['dir'] ? $t->accent : $t->textMuted); }
-          $c->end();
-          $c->text($e['name'], 12)->singleLine();
-        $c->end();
-    });
-    if ($f->grid->rows->submitted() && $f->grid->selected >= 0) { $f->enter($f->grid->selected); }
-    if ($c->shortcut(Key::DELETE) && $f->path !== '/' && !$f->finding) { $f->open(dirname($f->path)); }
-}
-
-/** The entries as a table: name with its icon, size, modified; the headers sort. */
-function table(Context $c, Files $f): void
-{
-    $t = $c->theme;
-    if ($f->table->sortChanged()) { $f->reload(); }
-    $c->table($f->table, $f->columns, count($f->entries), function (int $i, int $j) use ($c, $t, $f) {
-        $e = $f->entries[$i];
-        switch ($j) {
-            case 0: $c->row(0, 6)->alignItems(Node::CENTER); $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 16, $e['dir'] ? $t->accent : $t->textMuted); $c->text($e['name'])->singleLine(); $c->end(); break;
-            case 1: $c->muted(Files::size($e['size'])); break;
-            case 2: $c->muted(date('Y-m-d H:i', $e['mtime'])); break;
-        }
-    });
-    if ($f->table->submitted() && $f->table->selected >= 0) { $f->enter($f->table->selected); }
-    if ($c->shortcut(Key::DELETE) && $f->path !== '/' && !$f->finding) { $f->open(dirname($f->path)); }
-}
-
 $files = new Files($argv[1] ?? (getenv('HOME') ?: '/'));
 App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),
@@ -278,6 +179,6 @@ App::setMenu(new Menu([
 ]));
 App::whenReady(function () use ($files) {
     $files->window = new Window(new WindowOptions(title: basename($files->path), width: 960, height: 640, stateKey: 'files',
-        content: Content::view(fn(Context $c) => view($c, $files))));
+        content: Content::file(__DIR__ . '/view.php', $files)));
 });
 App::run();

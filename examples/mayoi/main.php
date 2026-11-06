@@ -24,7 +24,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Decoder, Player, Sound};
 use MyPHP\Plugins\Game\{Camera, Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
-use MyPHP\UI\{Content, Context, Image, ImageOptions, Key, Painter, Span, Transform};
+use MyPHP\UI\{Content, Image, ImageOptions, Key, Painter, Span, Transform};
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
 
@@ -1755,14 +1755,9 @@ final class Mayoi extends Game
     }
 }
 
-function view(Context $c, Mayoi $g): void
-{
-    Game::view($c, $g)->fill()->background(0x272c3f)->label('Mayoi');
-}
-
 App::setName('Mayoi');
 $g = new Mayoi(new Sounds());
 App::whenReady(function () use ($g) {
-    new Window(new WindowOptions(title: 'Mayoi', width: 960, height: 640, content: Content::view(fn(Context $c) => view($c, $g))));
+    new Window(new WindowOptions(title: 'Mayoi', width: 960, height: 640, content: Content::file(__DIR__ . '/view.php', $g)));
 });
 App::run();

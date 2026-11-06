@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, Context, Font, Key, ListState, Node, Span, TableColumn, TextState};
+use MyPHP\UI\{Content, ListState, Node, TableColumn, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -134,54 +134,6 @@ final class Log
 
 $log = new Log();
 
-function view(Context $c, Log $log): void
-{
-    $t = $c->theme;
-    $log->refilter();
-    $c->column(0, 0, 1);
-      // The find bar: Cmd+F opens it; Enter, the arrows and Cmd+G step through the shown lines holding the query, choosing each.
-      if ($c->shortcut('f', Key::COMMAND)) { $log->finding = true; }
-      $hits = [];
-      if ($log->finding && $log->find->text !== '') {
-          foreach ($log->shown as $r => $i) { if (stripos($log->lines[$i], $log->find->text) !== false) { $hits[] = $r; } }
-      }
-      $bar = $c->findBar($log->finding, $log->find, count($hits), $log->found);
-      if ($bar !== null && $hits !== [] && ($c->changed($bar) || $log->find->seen !== $log->find->text)) {
-          $log->list->choose($hits[$log->found]); $log->list->scrollTo($hits[$log->found]);
-      }
-      $log->find->seen = $log->find->text;
-      $c->row(10, 10, 0, $t->surface);
-        $c->input($log->filter, 'Filter lines (type to search)', 320);
-        $c->richText($log->path === ''
-            ? [new Span('Open a log with ', color: $t->textMuted), new Span('File > Open…', style: Font::BOLD, color: $t->textMuted)]
-            : [new Span(number_format(count($log->lines)) . ' lines', color: $t->textMuted),
-               new Span($log->filter->text === '' ? '' : ', ' . number_format(count($log->shown)) . ' match', color: $t->textMuted),
-               new Span('  ERROR ' . $log->counts['ERROR'], color: $t->danger, style: Font::BOLD),
-               new Span('  WARN ' . $log->counts['WARN'], color: $t->warning, style: Font::BOLD)]);
-      $c->end();
-      $needle = $log->filter->text;
-      // A table: the number column and the line, which wraps at the column's width; the header's edge resizes it.
-      $c->table($log->list, $log->columns, count($log->shown), function (int $r, int $col) use ($c, $t, $log, $needle) {
-          $i = $log->shown[$r];
-          if ($col === 0) {
-              $c->text((string)($i + 1), 12, $t->textMuted, Font::MONO);
-              return;
-          }
-          $line = $log->lines[$i];
-          $color = str_contains($line, 'ERROR') ? $t->danger : (str_contains($line, 'WARN') ? $t->warning : $t->text);
-          $spans = []; // the matched part highlighted
-          if ($needle !== '' && ($at = stripos($line, $needle)) !== false) {
-              $spans[] = new Span(substr($line, 0, $at), style: Font::MONO, color: $color);
-              $spans[] = new Span(substr($line, $at, strlen($needle)), style: Font::MONO, color: 0x1d1d1f, background: $t->warning);
-              $spans[] = new Span(substr($line, $at + strlen($needle)), style: Font::MONO, color: $color);
-          } else {
-              $spans[] = new Span($line, style: Font::MONO, color: $color);
-          }
-          $c->richText($spans, 12); // wrapping at the width of the cell
-      });
-    $c->end();
-}
-
 $openDialog = function () use ($log) {
     $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: 'Open a log', defaultPath: '/var/log'));
     if ($paths) { $log->open($paths[0]); }
@@ -200,7 +152,7 @@ App::setMenu(new Menu([
 App::setName('Logs');
 App::whenReady(function () use ($log, $argv) {
     $log->window = new Window(new WindowOptions(title: 'Logs', width: 960, height: 600, stateKey: 'logs',
-        content: Content::view(fn(Context $c) => view($c, $log))));
+        content: Content::file(__DIR__ . '/view.php', $log)));
     $log->window->on('fileDrop', fn(FileDropEvent $e) => $log->open($e->paths[0])); // drop a file onto the window
     if (isset($argv[1])) {
         $log->open($argv[1]);

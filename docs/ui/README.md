@@ -9,11 +9,11 @@ GPU, with Metal on macOS and OpenGL on Linux, reaching the system through
 
 <!-- no-test -->
 ```php
-<?php
+<?php // app.php
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/vendor/autoload.php';
 
@@ -21,17 +21,6 @@ require __DIR__ . '/vendor/autoload.php';
 final class Counter
 {
     public int $n = 0;
-
-    /** Builds the window's interface from the state, for every frame. */
-    public function view(Context $c): void
-    {
-        $c->column(gap: 12)->fill()->center();
-          $c->text((string)$this->n)->fontSize(40)->bold();
-          if ($c->clicked($c->primaryButton('Increment'))) {
-              $this->n++;
-          }
-        $c->end();
-    }
 }
 
 $app = new Counter();
@@ -40,14 +29,35 @@ App::whenReady(function () use ($app) {
         title: 'Counter',
         width: 320,
         height: 240,
-        content: Content::view(fn(Context $c) => $app->view($c)),
+        content: Content::file(__DIR__ . '/view.php', $app), // view.php, run bound to $app
     ));
 });
 App::run();
 ```
 
+<!-- no-test -->
+```php
+<?php // view.php: the window's interface from the state, for every frame; $this is the Counter
+declare(strict_types=1);
+
+use MyPHP\UI\Context;
+
+return function (Context $c): void {
+    $c->column(gap: 12)->fill()->center();
+      $c->text((string)$this->n)->fontSize(40)->bold();
+      if ($c->clicked($c->primaryButton('Increment'))) {
+          $this->n++;
+      }
+    $c->end();
+};
+```
+
+Saved while `myphp dev` or `myphp run` runs the app, `view.php` hot
+reloads: the window shows the new code with the count as it was ([views:
+view files](views.md#view-files-and-hot-reload)).
+
 **Reading the examples.** The examples in these guides are parts of a view
-such as `Counter::view`: `$c` is the view's `Context`. Containers
+such as `view.php`'s: `$c` is the view's `Context`. Containers
 (`$c->column()`, `$c->row()`, `$c->scroll()`…) take what is built after
 them until `$c->end()`; every builder returns its `Node`, which calls
 after it style (`->padding(8)->radius(6)`), and `$c->clicked($node)`,

@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.175.0';
+const VERSION = '1.176.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -27,6 +27,7 @@ Commands:
 	build                build production apps (a .app and a .dmg, Linux packages)
 	run [flags] [dir]    run the app on an Android device, iOS simulator or desktop
 	devices              list connected devices and available simulators
+	emulators [flags]    list, launch and create emulators (Android AVDs, the iOS Simulator)
 	screenshot [dir]     run the app once and save a PNG of its window, and its elements
 	micro                build the static PHP that apps built with -launcher micro run on
 	keygen               create the key pair that signs updates
@@ -39,7 +40,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -53,6 +54,101 @@ function fail(string $msg): never
 function logf(string $msg): void
 {
     echo "myphp: $msg\n";
+}
+
+/**
+ * Runs $cmd, a device's log (adb logcat -v threadtime, or the simulator's log stream --style compact), and prints its
+ * lines as they come, short, for the people and the coding agents reading them: "11:00:21.767 W [ios] message", the
+ * time, the level as one letter — E error, F fault, W warning, I info, D debug, V verbose — and the message, colored by
+ * the level when the output is a terminal (NO_COLOR turns it off). Without $all only what tells something is printed:
+ * the app's own lines (MyPHP\Logger's, at the level it logs at), PHP's warnings and errors, and the system's warnings,
+ * errors and faults about the app, less the system's noise; with it every line. $tick, when given, is called about
+ * four times a second between the lines, and ends the log by returning false.
+ */
+function streamLog(string $cmd, string $platform, bool $all = false, ?Closure $tick = null): void
+{
+    $color = stream_isatty(STDOUT) && getenv('NO_COLOR') === false;
+    $proc = proc_open("exec $cmd 2>&1", [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w']], $pipes) ?: fail("cannot run $cmd"); // the tool's own complaints too, through the same filter
+    $p = $pipes[1];
+    stream_set_blocking($p, false);
+    $buf = '';
+    while (true) {
+        $r = [$p]; $w = $e = null;
+        if (@stream_select($r, $w, $e, 0, 250_000) > 0) {
+            $chunk = fread($p, 65536);
+            if ($chunk === '' && feof($p)) { break; }
+            $buf .= $chunk;
+        }
+        if ($tick !== null && $tick() === false) { break; }
+        while (($nl = strpos($buf, "\n")) !== false) {
+            printLogLine(substr($buf, 0, $nl + 1), $platform, $all, $color);
+            $buf = substr($buf, $nl + 1);
+        }
+    }
+    proc_terminate($proc); // q: the tool, which follows the log for ever, ends with it
+    fclose($p);
+    proc_close($proc);
+}
+
+/** Prints a line of a device's log as streamLog() does: short and colored, or not at all when it tells nothing. */
+function printLogLine(string $line, string $platform, bool $all, bool $color): void
+{
+    $e = logEntry(rtrim($line, "\n"), $platform);
+    if ($e === null) { // not a line of the log: its headers, the tool's noise, or the tool's own error (a device gone), which shows
+        if ($all || !preg_match('/^(Filtering the log data|Timestamp\s|-+ beginning of )|getpwuid_r did not find a match/', $line)) { echo $line; }
+        return;
+    }
+    if (!$all && !$e['ours'] && !in_array($e['level'], ['W', 'E', 'F'], true)) { return; } // the system's chatter about the app
+    if (!$all && !$e['ours'] && preg_match('/pointeruid|non-launching port|has not exited|getpwuid_r did not find a match/', $e['msg'])) { return; } // the system's errors that are none of the app's (the simulator's user database lacks the Mac's uid)
+    $text = "{$e['time']} {$e['level']} {$e['msg']}";
+    $code = ['E' => '31', 'F' => '1;31', 'W' => '33', 'I' => '32', 'D' => '90', 'V' => '2;90'][$e['level']];
+    echo $color ? "\033[{$code}m$text\033[0m\n" : "$text\n";
+}
+
+/**
+ * A line of a device's log: its time (HH:MM:SS.mmm), its level as one letter (E, F, W, I, D or V), its message (the
+ * process and thread left out, a tag other than the launcher's kept), and whether it is the app's own: a line of
+ * MyPHP\Logger's ("[myphp] 07:00:21.767 [ios][W] …" on iOS, "… W MyPHP : 07:00:21.767 [ios][W] …" on Android), which
+ * takes its own level and loses the logger's time, or PHP's warnings and errors. Null for a line of none (a header).
+ * @return ?array{time: string, level: string, msg: string, ours: bool}
+ */
+function logEntry(string $line, string $platform): ?array
+{
+    if ($platform === 'android') { // date time pid tid P tag: message (threadtime)
+        if (!preg_match('/^\S+ (\S+)\s+\d+\s+\d+ ([VDIWEFA]) (.*?)\s*: (.*)$/', $line, $m)) { return null; }
+        [, $time, $type, $tag, $msg] = $m;
+        $level = match ($type) { 'E' => 'E', 'F', 'A' => 'F', 'W' => 'W', 'I' => 'I', 'D' => 'D', default => 'V' };
+        if ($tag !== 'MyPHP') { $msg = "$tag: $msg"; }
+    } else { // date time TYPE process[pid:tid] message (compact)
+        if (!preg_match('/^\S+ (\S+) (\S+)\s+\S+ (.*)$/', $line, $m)) { return null; }
+        [, $time, $type, $msg] = $m;
+        $level = match ($type) { 'E' => 'E', 'F', 'Fa' => 'F', 'Df', 'I' => 'I', 'Db' => 'D', 'A' => 'V', default => '' };
+        if ($level === '') { return null; }
+        $msg = preg_replace('/^\[myphp(-ios)?\] /', '', $msg); // the launcher's mark
+    }
+    $ours = false;
+    if (preg_match('/^\d\d:\d\d:\d\d\.\d+ (\[[^\]]+\])\[([VDIWEF])\] (.*)$/', $msg, $l)) { // MyPHP\Logger's: its level, its subsystem kept
+        [$level, $msg, $ours] = [$l[2], "{$l[1]} {$l[3]}", true];
+    } elseif (preg_match('/PHP (Fatal error|Parse error|Recoverable fatal error)/', $msg)) {
+        [$level, $ours] = ['E', true];
+    } elseif (preg_match('/PHP (Warning|Deprecated|Notice)/', $msg)) {
+        [$level, $ours] = ['W', true];
+    }
+    return ['time' => $time, 'level' => $level, 'msg' => $msg, 'ours' => $ours];
+}
+
+/** Runs $cmd as sh() does, its output kept back: printed, its last 60 lines, only when it fails. */
+function quiet(array $cmd, ?string $cwd = null): int
+{
+    $out = tempnam(sys_get_temp_dir(), 'myphp-');
+    $p = proc_open($cmd, [0 => ['file', 'php://stdin', 'r'], 1 => ['file', $out, 'w'], 2 => ['file', $out, 'a']], $pipes, $cwd);
+    $code = proc_close($p);
+    if ($code !== 0) {
+        $lines = file($out, FILE_IGNORE_NEW_LINES) ?: [];
+        fwrite(STDERR, implode("\n", array_slice($lines, -60)) . "\n");
+    }
+    @unlink($out);
+    return $code;
 }
 
 /** Prints a warning, as mygo's warnf. */
@@ -454,14 +550,17 @@ the app serves frontendDist from disk. The development app is "<name> Dev"
 with the identifier "<identifier>.dev", in .myphp/dev: a real bundle, with
 the app's icon and resources, whose launcher runs the project's files.
 
-Changes to the PHP files, myphp.json, the icon, the resources or the
-catalogs of messages rebuild the app, regenerate the TypeScript client and
-the accessors of the catalogs, and relaunch it. A build that fails keeps the
+A saved PHP file hot reloads the app, as Flutter's run: the app loads its
+views of files (Content::file) again, its state kept, and says in its log
+which other files changed, which R takes. Changes to myphp.json, the icon,
+the resources or the catalogs of messages, and to PHP files when the app
+has a TypeScript client (bindings), rebuild the app, regenerate the
+TypeScript client and the accessors of the catalogs, and relaunch it. A build that fails keeps the
 previous one running; the next change tries again. Frontend changes are
 left to the dev server. Quitting the app ends myphp dev.
 
-On a terminal, type r and Enter to rebuild and restart the app, c to clear
-the console, q to quit, h for help.
+On a terminal, as in Flutter's run, press r (no Enter) to hot reload, R to
+rebuild and restart the app, c to clear the console, q to quit, h for help.
 
 With -lang, the app runs in that language, a BCP 47 tag such as de or
 zh-Hant, or a pseudo locale: en-XA (accented and longer text) or ar-XB
@@ -487,6 +586,38 @@ function devConfig(array $c): array
 }
 
 /** $paths that changed, for the line of a build (mygo's changeSummary). @param list<string> $paths */
+/**
+ * Turns the terminal to single keys, as Flutter's run does: a key is read as it is pressed (pressedKey()), not echoed, with
+ * no Enter after it; the terminal is set back as it was when myphp ends, by Ctrl+C too. False, and the terminal left
+ * as it is, when standard input is not a terminal (an agent's run), or, said so, without pcntl to set it back on Ctrl+C.
+ */
+function singleKeys(): bool
+{
+    if (!stream_isatty(STDIN)) {
+        return false;
+    }
+    if (!function_exists('pcntl_async_signals')) {
+        warnf('PHP has no pcntl: the shortcut keys are off (the terminal could not be set back on Ctrl+C)');
+        return false;
+    }
+    $saved = trim((string)shell_exec('stty -g < /dev/tty'));
+    shell_exec('stty -icanon -echo min 0 time 0 < /dev/tty');
+    register_shutdown_function(fn() => shell_exec('stty ' . escapeshellarg($saved) . ' < /dev/tty'));
+    pcntl_async_signals(true);
+    foreach ([SIGINT, SIGTERM, SIGHUP] as $sig) {
+        pcntl_signal($sig, fn() => exit(130)); // exit runs the shutdown function, which sets the terminal back
+    }
+    stream_set_blocking(STDIN, false);
+    return true;
+}
+
+/** The key pressed since the last call, or null (singleKeys). */
+function pressedKey(): ?string
+{
+    $c = fgetc(STDIN);
+    return $c === false ? null : $c;
+}
+
 function changeSummary(string $root, array $paths): string
 {
     $names = array_map(fn(string $p) => str_starts_with($p, "$root/") ? substr($p, strlen($root) + 1) : $p, array_slice($paths, 0, 3));
@@ -739,11 +870,10 @@ function dev(array $args): void
     if (($c['devUrl'] ?? '') === '' && ($c['frontendDist'] ?? '') !== '') {
         $env['MYPHP_FRONTEND_DIST'] = path($dir, $c['frontendDist']); // served from disk
     }
+    $reload = "$dir/.myphp/hot-reload"; // the app's views of files (Content::file) load again when it names them
+    $env['MYPHP_HOT_RELOAD'] = $reload;
     $s = new DevSession($dir, $sign, devConfig($c)['name'], $env);
-    $keys = stream_isatty(STDIN);
-    if ($keys) {
-        stream_set_blocking(STDIN, false);
-    }
+    $keys = singleKeys();
     $serverExited = false;
     $build = function (string $title, string $verb, array $changed) use ($s, $dir): bool {
         $why = $changed !== [] ? ' (' . changeSummary($dir, $changed) . ')' : '';
@@ -762,7 +892,7 @@ function dev(array $args): void
         }
     };
     $build('Building', 'Built', []);
-    echo "\n  → Watching for changes\n" . ($keys ? "  → press h + enter to show help\n" : '') . "\n";
+    echo "\n  → Watching for changes\n" . ($keys ? "  → press h to show help\n" : '') . "\n";
     $seen = devInputs($dir, project([$dir])['config']);
     while (true) {
         usleep(250_000);
@@ -781,13 +911,14 @@ function dev(array $args): void
             fwrite(STDERR, "myphp: ✗ {$s->name} exited (exit status $code)\n  Save a change to start it again.\n");
             $s->sum = '';
         }
-        $restart = false;
-        if ($keys && ($line = fgets(STDIN)) !== false) {
-            switch (strtolower(trim($line))) {
-                case 'r': $restart = true; break;
+        $restart = $hot = false;
+        while ($keys && ($k = pressedKey()) !== null) {
+            switch ($k) {
+                case 'r': $hot = true; break;
+                case 'R': $restart = true; break;
                 case 'c': echo "\033[H\033[2J"; break;
                 case 'q': $s->stop(); return;
-                case 'h': echo "\n  Shortcuts\n  press r + enter to rebuild and restart the app\n  press c + enter to clear the console\n  press q + enter to quit\n\n"; break;
+                case 'h': echo "\n  Shortcuts\n  r  hot reload: the app loads its views of files (Content::file) again, its state kept\n  R  rebuild and restart the app, its state lost\n  c  clear the console\n  q  quit\n  A saved PHP file hot reloads too; other changes rebuild.\n\n"; break;
             }
         }
         try {
@@ -796,12 +927,20 @@ function dev(array $args): void
             $now = $seen; // myphp.json does not read: its next change tries again
             fwrite(STDERR, "myphp: ✗ {$e->getMessage()}\n");
         }
-        if ($now === $seen && !$restart) {
+        if ($now === $seen && !$restart && !$hot) {
             continue;
         }
         $changed = array_keys(array_diff_assoc($now, $seen) + array_diff_key($seen, $now));
         sort($changed);
         $seen = $now;
+        // PHP files alone, the app running and no TypeScript client to write from them: a hot reload, as Flutter's
+        $php = $changed !== [] && array_filter($changed, fn(string $p) => !str_ends_with($p, '.php') || !is_file($p)) === [];
+        if (!$restart && $s->app !== null && ($c['bindings'] ?? '') === '' && ($hot || $php)) {
+            is_dir(dirname($reload)) || mkdir(dirname($reload), 0755, true);
+            file_put_contents($reload, implode("\n", $changed !== [] ? $changed : ['*']) . "\n# " . microtime(true) . "\n");
+            logf("Reloaded {$s->name}" . ($changed !== [] ? ' (' . changeSummary($dir, $changed) . ')' : ''));
+            continue;
+        }
         if ($restart) {
             $s->sum = '';
             $build('Restarting', 'Restarted', []);
@@ -2428,11 +2567,8 @@ function doctor(array $args): void
     // 3. Android Toolchain
     $adb = trim((string)@shell_exec('command -v adb 2>/dev/null'));
     $javac = trim((string)@shell_exec('command -v javac 2>/dev/null'));
-    $androidSdk = getenv('ANDROID_HOME') ?: (getenv('ANDROID_SDK_ROOT') ?: '/opt/homebrew/share/android-commandlinetools');
-    if (!is_dir($androidSdk) && is_dir(getenv('HOME') . '/Library/Android/sdk')) {
-        $androidSdk = getenv('HOME') . '/Library/Android/sdk';
-    }
-    $sdkOk = is_dir($androidSdk);
+    $androidSdk = Emulators::androidSdk();
+    $sdkOk = $androidSdk !== '';
     $aapt2 = trim((string)@shell_exec("find '$androidSdk' -name aapt2 -type f 2>/dev/null | head -n 1"));
     $ndk = getenv('ANDROID_NDK_HOME') ?: '';
     if ($ndk === '' && $sdkOk) { $ndks = glob("$androidSdk/ndk/*", GLOB_ONLYDIR) ?: []; natsort($ndks); $ndk = $ndks === [] ? '' : end($ndks); }
@@ -2490,11 +2626,216 @@ function devices(array $args): void
     echo "\n";
 }
 
+/** Lists, launches and creates emulators, as Flutter's `flutter emulators`. */
+function emulators(array $args): void
+{
+    help($args, "emulators [flags]\n\nLists the emulators: the Android SDK's virtual devices and the iOS Simulator. A launched one is a device for myphp run -d.\n\nFlags:\n  --launch id        start an emulator and wait until it has booted\n  --cold             with --launch: boot afresh rather than from the snapshot\n  --create           make an Android emulator of the newest system image and the newest Pixel, downloading\n                     the emulator and the image first when missing\n  --name name        with --create: its id (the device profile's when none)\n  --device profile   with --create: a device profile of --profiles, as pixel_9_pro\n  --image package    with --create: a system image, as system-images;android-36;google_apis_playstore;arm64-v8a\n  --profiles         the device profiles there are, for --device\n  --images           the system images for this machine, those installed marked, for --image\n  --delete id        delete an Android emulator\n  --uninstall image  uninstall a system image no emulator uses");
+    $launch = option($args, 'launch');
+    $cold = flag($args, 'cold');
+    $create = flag($args, 'create');
+    $name = option($args, 'name') ?? '';
+    $device = option($args, 'device') ?? '';
+    $image = option($args, 'image') ?? '';
+    $profiles = flag($args, 'profiles');
+    $images = flag($args, 'images');
+    $delete = option($args, 'delete');
+    $uninstall = option($args, 'uninstall');
+    try {
+        if ($delete !== null) {
+            Emulators::delete($delete);
+            logf("deleted $delete");
+            return;
+        }
+        if ($uninstall !== null) {
+            Emulators::uninstallImage($uninstall);
+            logf("uninstalled $uninstall");
+            return;
+        }
+        if ($profiles) {
+            $all = Emulators::profiles();
+            $all !== [] || fail('no avdmanager: install the Android SDK Command-line Tools');
+            usort($all, fn(string $a, string $b) => [!str_starts_with($a, 'pixel_'), $a] <=> [!str_starts_with($b, 'pixel_'), $b]); // the Pixels first
+            echo implode("\n", $all), "\n";
+            return;
+        }
+        if ($images) {
+            Emulators::tool('sdkmanager') !== '' || fail('no sdkmanager: install the Android SDK Command-line Tools');
+            $abi = Emulators::abi();
+            $installed = Emulators::installedImages();
+            $all = array_values(array_filter(array_unique([...$installed, ...Emulators::availableImages()]), fn(string $i) => str_ends_with($i, ";$abi")));
+            natsort($all);
+            foreach ($all as $i) { echo (in_array($i, $installed, true) ? '* ' : '  ') . "$i\n"; }
+            echo $all === [] ? "No $abi system images.\n" : "\n* installed\n";
+            return;
+        }
+        if ($create) {
+            $id = Emulators::create($name, $device, $image, fn(string $m) => logf($m));
+            logf("made $id; myphp emulators --launch $id starts it");
+            return;
+        }
+        if ($launch !== null) {
+            logf("starting $launch");
+            Emulators::launch($launch, $cold);
+            logf("$launch is up; myphp run -d " . ($launch === Emulators::IOS ? 'ios' : 'android') . ' runs the app on it');
+            return;
+        }
+    } catch (\RuntimeException $e) {
+        fail($e->getMessage());
+    }
+    $list = Emulators::list();
+    if ($list === []) {
+        echo "No emulators. myphp emulators --create makes an Android one (the Android SDK's emulator and a system image installed).\n";
+        return;
+    }
+    printf("  %-28s  %-32s  %s\n", 'Id', 'Name', 'Platform');
+    foreach ($list as $e) {
+        printf("  %-28s  %-32s  %s\n", $e->id, $e->name, $e->platform);
+    }
+    echo "\nmyphp emulators --launch <id> starts one; myphp emulators --create makes an Android one.\n";
+}
+
 /** Runs the app on an Android device, iOS simulator or desktop. */
+/** The Android app's package, which the template's manifest names. */
+const ANDROID_PACKAGE = 'com.owner888.myphp';
+
+/**
+ * The PHP files of an app on a phone, as the packaging scripts place them: its place in the app => the file it is
+ * copied from. The framework's src, the project's PHP files (the entry as app.php: main.php on Android, $mainPhp on
+ * iOS) and its src.
+ * @return array<string, string>
+ */
+function phoneFiles(string $dir, string $platform, string $mainPhp): array
+{
+    $out = [];
+    $tree = function (string $from, string $to) use (&$out): void {
+        if (!is_dir($from)) { return; }
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($from, FilesystemIterator::SKIP_DOTS)) as $f) {
+            if ($f->isFile()) { $out[$to . substr($f->getPathname(), strlen($from))] = $f->getPathname(); }
+        }
+    };
+    $tree(FRAMEWORK . '/src', 'src');
+    if ($platform === 'android') {
+        foreach (glob("$dir/*.php") ?: [] as $f) { $out[basename($f) === 'main.php' ? 'app.php' : basename($f)] = $f; }
+    } else {
+        foreach (glob(dirname($mainPhp) . '/*.php') ?: [] as $f) { $out[$f === $mainPhp ? 'app.php' : basename($f)] = $f; }
+    }
+    if (realpath($dir) !== realpath(FRAMEWORK)) { $tree("$dir/src", 'src'); }
+    return $out;
+}
+
+/** The time and size of each of $files, to tell which changed. @param array<string, string> $files @return array<string, string> */
+function fileStamps(array $files): array
+{
+    clearstatcache();
+    return array_map(fn(string $f) => @filemtime($f) . ':' . @filesize($f), $files);
+}
+
+/**
+ * The tick of myphp run's log on a phone (streamLog), with Flutter's keys (singleKeys): a PHP file saved, or r, is a
+ * hot reload: the changed files are copied into the installed app, which loads its views of files (Content::file)
+ * again, the state kept, and says what else changed; R is a hot restart: the app starts again with them, its state
+ * lost (phoneSync). c clears the console, q ends. $files lists the app's files as they are now, $seen their stamps
+ * as installed.
+ * @param Closure(): array<string, string> $files @param array<string, string> $seen
+ */
+function phoneHot(TargetDevice $dev, string $app, string $name, Closure $files, array $seen, Closure $step): Closure
+{
+    $keys = singleKeys();
+    if ($keys) {
+        echo "  → a saved PHP file hot reloads the app; press h for help\n";
+    }
+    $last = 0.0;
+    return function () use ($dev, $app, $name, $files, &$seen, $step, $keys, &$last): bool {
+        $key = null;
+        while ($keys && ($k = pressedKey()) !== null) {
+            switch ($k) {
+                case 'r': case 'R': $key = $k; break;
+                case 'c': echo "\033[H\033[2J"; break;
+                case 'q': return false;
+                case 'h': echo "\n  Shortcuts\n  r  hot reload: the app loads its views of files (Content::file) again, its state kept\n  R  hot restart: the app starts again, its state lost\n  c  clear the console\n  q  quit\n  A saved PHP file hot reloads too; a change to native code needs myphp run again.\n\n"; break;
+            }
+        }
+        if ($key === null && microtime(true) - $last < 0.5) { return true; } // the files looked at twice a second
+        $last = microtime(true);
+        $all = $files();
+        $now = fileStamps($all);
+        $changed = array_keys(array_diff_assoc($now, $seen));
+        if ($changed === [] && $key === null) { return true; }
+        $seen = $now;
+        $restart = $key === 'R';
+        $t = microtime(true);
+        $why = $changed !== [] ? ' (' . changeSummary('', $changed) . ')' : '';
+        logf(($restart ? 'restarting ' : 'reloading ') . $name . $why);
+        try {
+            phoneSync($dev, $app, array_intersect_key($all, array_flip($changed)), $restart, $step);
+            logf(sprintf('%s %s in %.1f s', $restart ? 'restarted' : 'reloaded', $name, microtime(true) - $t));
+        } catch (Failure $e) {
+            fwrite(STDERR, "myphp: ✗ {$e->getMessage()}\n  Save a fix to try again, or run myphp run again.\n");
+        }
+        return true;
+    };
+}
+
+/**
+ * Copies $files (their place in the app => the file) into $app installed on $dev, then, $restart, starts it again;
+ * else writes their places in .myphp-reload beside the app's entry, which the app watches in development
+ * (Content::hotReloadFile): a hot reload. On Android pushed to /data/local/tmp and copied into the app's files by
+ * run-as (the APK myphp run builds is debuggable), the activity started again with myphp.keepFiles so that it does
+ * not copy its assets over them; on the iOS simulator into the installed bundle. @param array<string, string> $files
+ */
+function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, Closure $step): void
+{
+    $request = $restart ? null : implode("\n", $files !== [] ? array_keys($files) : ['*']) . "\n# " . microtime(true) . "\n";
+    if ($dev->platform === 'android') {
+        if ($files !== [] || $request !== null) {
+            $tmp = sys_get_temp_dir() . '/myphp-sync-' . getmypid();
+            Cmd::output(['rm', '-rf', $tmp]);
+            mkdir($tmp, 0755, true);
+            mkdir("$tmp/files");
+            foreach ($files as $to => $from) {
+                is_dir(dirname("$tmp/files/$to")) || mkdir(dirname("$tmp/files/$to"), 0755, true);
+                copy($from, "$tmp/files/$to") || fail("cannot copy $from");
+            }
+            $remote = '/data/local/tmp/myphp-sync';
+            $copy = [];
+            if ($files !== []) { $copy[] = "run-as $app cp -R $remote/files/. files/"; } // an empty folder is not pushed
+            if ($request !== null) {
+                file_put_contents("$tmp/.myphp-reload", $request);
+                $copy[] = "run-as $app cp $remote/.myphp-reload files/"; // after the files it names
+            }
+            $copy = implode(' && ', $copy);
+            $ok = $step(['adb', '-s', $dev->id, 'shell', "rm -rf $remote"]) === 0
+                && $step(['adb', '-s', $dev->id, 'push', "$tmp/.", "$remote/"]) === 0
+                && $step(['adb', '-s', $dev->id, 'shell', "$copy && rm -rf $remote"]) === 0;
+            Cmd::output(['rm', '-rf', $tmp]);
+            $ok || fail("could not copy the changed files into $app (run-as: the app myphp run built is debuggable; run it again if it was built otherwise)");
+        }
+        if ($restart) {
+            $step(['adb', '-s', $dev->id, 'shell', 'am', 'start', '-S', '-n', "$app/.MyphpActivity", '--ez', 'myphp.keepFiles', 'true']) === 0 || fail('could not start the app again');
+        }
+        return;
+    }
+    [$code, $out] = Cmd::output(['xcrun', 'simctl', 'get_app_container', $dev->id, $app, 'app']);
+    $bundle = trim($out);
+    $code === 0 && is_dir($bundle) || fail("no installed $app on {$dev->name}: $out");
+    foreach ($files as $to => $from) {
+        is_dir(dirname("$bundle/$to")) || mkdir(dirname("$bundle/$to"), 0755, true);
+        copy($from, "$bundle/$to") || fail("cannot copy $from");
+    }
+    if ($request !== null) {
+        file_put_contents("$bundle/.myphp-reload", $request);
+    } else {
+        $step(['xcrun', 'simctl', 'launch', '--terminate-running-process', $dev->id, $app]) === 0 || fail('could not start the app again');
+    }
+}
+
 function runCommand(array $args): void
 {
-    help($args, "run [flags] [dir]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux)");
+    help($args, "run [flags] [dir]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop, and prints its log:\nthe app's own lines, PHP's warnings and errors, and the system's warnings and errors about it.\n\nOn a phone, as Flutter's run: a saved PHP file, or r, hot reloads the app: it loads its views of files\n(Content::file) again, its state kept; R hot restarts it, its state lost; c clears the console, q quits.\nNeither builds it again; a change to the native code (the launcher, the Java, the runtime) needs myphp run again.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux)\n  -v, --verbose              the build's output and every line of the log");
     $deviceId = option($args, 'd') ?: (option($args, 'device') ?: (option($args, '-device') ?: ''));
+    $all = flag($args, 'v') || flag($args, 'verbose');
+    $step = fn(array $cmd, ?string $cwd = null): int => $all ? sh($cmd, $cwd) : quiet($cmd, $cwd); // the build's output only when it fails
+    $say = function (string $msg) use ($all): void { if ($all) { logf($msg); } };
 
     ['dir' => $dir, 'config' => $c] = project($args);
     $targetDev = DeviceManager::findDevice($deviceId);
@@ -2502,63 +2843,67 @@ function runCommand(array $args): void
         fail($deviceId !== '' ? "No device found matching \"$deviceId\". Run `myphp devices` to list available devices." : "No available devices or simulators found.");
     }
 
-    logf("Selected target device: {$targetDev->name} ({$targetDev->platform})");
+    $say("Selected target device: {$targetDev->name} ({$targetDev->platform})");
 
     if ($targetDev->platform === 'android') {
         // 1. Android Workflow
-        logf("Building Android APK...");
         $out = path($dir, $c['out']);
         is_dir($out) || mkdir($out, 0755, true);
         $name = orElse($c['name'], 'app');
+        logf("building $name for Android");
         $apk = "$out/$name.apk";
         $script = FRAMEWORK . '/scripts/package-android-apk.sh';
-        sh([$script, $dir, $apk, $name], $dir) === 0 || fail("Failed to build Android APK");
+        $files = phoneFiles($dir, 'android', '');
+        $seen = fileStamps($files); // before the build: what changes during it is restarted with
+        putenv('MYPHP_ANDROID_DEBUGGABLE=1'); // run-as copies the changed files into it (phoneSync)
+        $step([$script, $dir, $apk, $name], $dir) === 0 || fail("Failed to build Android APK");
 
-        logf("Installing APK on device {$targetDev->id}...");
-        sh(['adb', '-s', $targetDev->id, 'install', '-r', $apk]) === 0 || fail("Failed to install APK via adb");
+        $say("Installing APK on device {$targetDev->id}...");
+        $step(['adb', '-s', $targetDev->id, 'install', '-r', $apk]) === 0 || fail("Failed to install APK via adb");
 
-        logf("Launching application...");
-        sh(['adb', '-s', $targetDev->id, 'logcat', '-c']); // cleared before the start: a crash in the first moments is in the log
-        sh(['adb', '-s', $targetDev->id, 'shell', 'am', 'start', '-n', 'com.owner888.myphp/.MyphpActivity']) === 0 || fail("Failed to start activity");
+        $say("Launching application...");
+        $step(['adb', '-s', $targetDev->id, 'logcat', '-c']); // cleared before the start: a crash in the first moments is in the log
+        $step(['adb', '-s', $targetDev->id, 'shell', 'am', 'start', '-n', ANDROID_PACKAGE . '/.MyphpActivity']) === 0 || fail("Failed to start activity");
 
-        echo "\n  ✓ Application is now running on {$targetDev->name}\n";
-        echo "  Streaming logs from device (Ctrl+C to quit):\n\n";
+        logf("$name is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
         // the launcher (MyPHP), the activity (MyPHP_Java), Java crashes, native crashes (DEBUG: the tombstone's lines)
-        passthru("adb -s {$targetDev->id} logcat -s MyPHP:D MyPHP_Java:D AndroidRuntime:E DEBUG:I");
+        streamLog("adb -s {$targetDev->id} logcat -v threadtime -s MyPHP:V MyPHP_Java:V AndroidRuntime:E DEBUG:I", 'android', $all,
+            phoneHot($targetDev, ANDROID_PACKAGE, $name, fn() => phoneFiles($dir, 'android', ''), $seen, $step));
     } elseif ($targetDev->platform === 'ios') {
         // 2. iOS Workflow
         if ($targetDev->status === 'shutdown') {
-            logf("Booting iOS Simulator {$targetDev->name}...");
-            sh(['xcrun', 'simctl', 'boot', $targetDev->id]);
+            $say("Booting iOS Simulator {$targetDev->name}...");
+            $step(['xcrun', 'simctl', 'boot', $targetDev->id]);
         }
         // the Simulator app (or DeviceHub on Xcode 27+) showing this device, and the device ready for an install
         if (Cmd::output(['open', '-Ra', 'Simulator'])[0] === 0) {
-            sh(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', $targetDev->id]);
+            $step(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', $targetDev->id]);
         } elseif (Cmd::output(['open', '-Rb', 'com.apple.dt.Devices'])[0] === 0) {
-            sh(['open', '-b', 'com.apple.dt.Devices', "devices://device/open?id={$targetDev->id}"]);
+            $step(['open', '-b', 'com.apple.dt.Devices', "devices://device/open?id={$targetDev->id}"]);
         }
-        sh(['xcrun', 'simctl', 'bootstatus', $targetDev->id, '-b']);
-        logf("Building iOS App Bundle...");
+        $step(['xcrun', 'simctl', 'bootstatus', $targetDev->id, '-b']);
         $out = path($dir, $c['out']);
         is_dir($out) || mkdir($out, 0755, true);
         $name = orElse($c['name'], 'app');
+        logf("building $name for iOS");
         $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
         $mainPhp = file_exists($dir . '/main.php') ? $dir . '/main.php' : $dir . '/app.php';
         $script = FRAMEWORK . '/scripts/package-ios-app.sh';
+        $seen = fileStamps(phoneFiles($dir, 'ios', $mainPhp)); // before the build: what changes during it is restarted with
         putenv('MYPHP_IOS_SDK=' . ($targetDev->type === 'simulator' ? 'iphonesimulator' : 'iphoneos')); // the simulator's runtime and binary are another architecture slice
-        sh([$script, $mainPhp, $bundleId, $name, $out], $dir) === 0 || fail("Failed to build iOS application");
+        $step([$script, $mainPhp, $bundleId, $name, $out], $dir) === 0 || fail("Failed to build iOS application");
 
         $appBundle = "$out/$name.app";
-        logf("Installing app on simulator {$targetDev->id}...");
-        sh(['xcrun', 'simctl', 'install', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on iOS simulator");
+        $say("Installing app on simulator {$targetDev->id}...");
+        $step(['xcrun', 'simctl', 'install', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on iOS simulator");
 
-        logf("Launching application ($bundleId)...");
-        sh(['xcrun', 'simctl', 'launch', $targetDev->id, $bundleId]) === 0 || fail("Failed to launch app on iOS simulator");
+        $say("Launching application ($bundleId)...");
+        $step(['xcrun', 'simctl', 'launch', $targetDev->id, $bundleId]) === 0 || fail("Failed to launch app on iOS simulator");
 
-        echo "\n  ✓ Application is now running on {$targetDev->name}\n";
-        echo "  Streaming logs from the simulator (Ctrl+C to quit):\n\n";
+        logf("$name is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
         // the app's own lines (os_log, PHP's output), and the system's about it: a crash says why
-        passthru('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level info --predicate ' . escapeshellarg("(process == \"$name\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$name\" AND messageType == error) OR (eventMessage CONTAINS \"$name\" AND eventMessage CONTAINS \"exited\")"));
+        streamLog('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level debug --predicate ' . escapeshellarg("(process == \"$name\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$name\" AND messageType == error) OR (eventMessage CONTAINS \"$name\" AND eventMessage CONTAINS \"exited\")"), 'ios', $all,
+            phoneHot($targetDev, $bundleId, $name, fn() => phoneFiles($dir, 'ios', $mainPhp), $seen, $step));
     } else {
         // 3. Desktop Workflow
         logf("Running on desktop...");
@@ -2611,6 +2956,7 @@ function run(string $cmd, array $args): void
         'build' => build($args),
         'run' => runCommand($args),
         'devices' => devices($args),
+        'emulators' => emulators($args),
         'screenshot' => screenshot($args),
         'micro' => micro($args),
         'keygen' => keygen($args),

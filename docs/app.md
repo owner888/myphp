@@ -32,6 +32,17 @@ system (`App::setOpenAtLogin()`, `App::registerURLScheme()`). The
 clipboard, displays, dialogs, notifications, global shortcuts, trays and
 the like need the running app: use them from `whenReady()` on.
 
+## The log
+
+`Logger::verbose()`, `debug()`, `info()`, `warn()`, `error()` and `fault()`
+write a line of the app's log, `[subsystem][W] message`, under a
+subsystem of the app's naming ("app" when none): kept for the log viewer
+(`Context::logViewer`), written to the terminal in development, to a
+file with `Logger::logToFile(true)`, and on iOS and Android to the system
+log, which `myphp run` shows, each line's level a letter (E, F, W, I, D,
+V) and colored. `Logger::setLevel(Logger::INFO)` drops what is under it;
+in development it is `DEBUG`, built for production `WARNING`.
+
 ## One thread
 
 PHP runs the app on one thread, the main one, which also draws the UI:

@@ -1737,7 +1737,11 @@ final class Context
         $bordered = !$primary && !$toolbar && !$segment;
         $edge = $bordered ? 2.0 : 0.0; // its border, a point each side, around the padding, as mygo's
         [$py, $px] = [$t->space($segment ? 1 : 1.5), $t->space($segment ? 3 : ($toolbar ? 2.5 : 3.5))];
+        if ($t->controlHeight > 0 && !$segment && !$toolbar) { // a phone's: UIButton's 44 points at least, padded 20 at the sides, a capsule
+            $py = max($py, ($t->controlHeight - $h - $edge) / 2); $px = 20.0;
+        }
         $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + 2 * $px + $edge, $h + 2 * $py + $edge, 0, $s, $on ? $pressed : $base, $size, $fg));
+        if ($t->controlHeight > 0 && !$segment && !$toolbar) { $n->radius($n->fh / 2); }
         $n->madePad = [[$py, $px, $py, $px], [$n->fw, $n->fh]];
         $n->bordered = $bordered;
         $n->metrics = $this->metrics; // a style of its own (bold(), italic()) measures its label again in layout
@@ -1912,7 +1916,8 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $t->space(9) : $w + $t->space(11), max($h, $t->space(5)), 0, $label, null, $size, $t->text)); // the track Space(9), the gap Space(2) before a label; without one the track alone, as mygo's
+        [$tw, $th] = $t->switchWidth > 0 ? [$t->switchWidth, $t->switchHeight] : [$t->space(9), $t->space(5)]; // the track: UISwitch's 51 × 31 on a phone, mygo's Space(9) × Space(5) on the desktop
+        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $tw : $w + $tw + $t->space(2), max($h, $th), 0, $label, null, $size, $t->text)); // the gap Space(2) before a label; without one the track alone, as mygo's
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $on = !$on;
@@ -4296,6 +4301,7 @@ final class Context
         $index = max(0, min($index, count($options) - 1));
         // The track, a radio group the arrows choose in: the surface inside its border, as wide as it is given (mygo's).
         $n = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->radius($t->radius)->border(1, $t->border)->alignItems(Node::STRETCH)->shrink(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP);
+        if ($t->segmentedHeight > 0) { $n->minHeight($t->segmentedHeight); } // UISegmentedControl's 32 points on a phone
           foreach ($options as $i => $label) {
               $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->radius(max($t->radius - $t->space(0.5), 0))->focusable()->center();
               $seg->on = $i === $index; // Tab enters the group at the one chosen
@@ -4618,7 +4624,7 @@ final class Context
         $t = $this->theme;
         $sel = $this->selectBase($index);
         $b = $sel->trigger;
-        $b->padding($t->space(1.5), $t->space(3.5))->radius($t->radius)->border()->justify(Node::SPACE_BETWEEN)->minWidth($t->space(35))->minHeight(0)->background($t->surface); // mygo's styleButton, at least Space(35) wide whatever width it is given, as mygo's MinWidth
+        $b->padding($t->space(1.5), $t->space(3.5))->radius($t->radius)->border()->justify(Node::SPACE_BETWEEN)->minWidth($t->space(35))->minHeight($t->controlHeight)->background($t->surface); // mygo's styleButton, at least Space(35) wide whatever width it is given, as mygo's MinWidth; a phone's 44 high
         if ($width !== null) { $b->width($width); }
         if ($this->hovered($b)) { $b->color = $this->runtime->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
         $b->gap = $t->space(1.5);
@@ -4668,7 +4674,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
-        $fh = $h + $t->space(3) + 2; // mygo's: padding Space(1.5) by Space(2.5) and its border, a point each side, as a plain button's
+        $fh = max($h + $t->space(3) + 2, $t->controlHeight); // mygo's: padding Space(1.5) by Space(2.5) and its border, a point each side, as a plain button's; a phone's field 44 at least
         $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $fh, $this->growsAlong($width, $fh), $placeholder, $t->surface, $size, $t->text)); // the surface, bordered; 0: fills a row's remaining width, a column's across
         $n->bordered = true;
         $n->edit = $state;

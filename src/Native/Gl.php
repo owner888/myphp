@@ -28,7 +28,7 @@ final class Gl
     private const TEXTURE_2D = 0x0DE1, TEXTURE_2D_ARRAY = 0x8C1A, TEXTURE_BUFFER = 0x8C2A;
     private const TEXTURE0 = 0x84C0, TEXTURE_MIN_FILTER = 0x2801, TEXTURE_MAG_FILTER = 0x2800, TEXTURE_WRAP_S = 0x2802, TEXTURE_WRAP_T = 0x2803;
     private const TEXTURE_BORDER_COLOR = 0x1004, LINEAR = 0x2601, NEAREST = 0x2600, CLAMP_TO_EDGE = 0x812F, CLAMP_TO_BORDER = 0x812D;
-    private const R8 = 0x8229, RED = 0x1903, RGBA8 = 0x8058, RGBA = 0x1908, BGRA = 0x80E1, RGBA32F = 0x8814, UNSIGNED_BYTE = 0x1401;
+    private const R8 = 0x8229, RED = 0x1903, RGBA8 = 0x8058, RGBA = 0x1908, BGRA = 0x80E1, RGBA32F = 0x8814, UNSIGNED_BYTE = 0x1401, FLOAT = 0x1406;
     private const ARRAY_BUFFER = 0x8892, DYNAMIC_DRAW = 0x88E8, UNPACK_ALIGNMENT = 0x0CF5, PACK_ALIGNMENT = 0x0D05;
     private const FRAMEBUFFER = 0x8D40, READ_FRAMEBUFFER = 0x8CA8, DRAW_FRAMEBUFFER = 0x8CA9, COLOR_ATTACHMENT0 = 0x8CE0, FRAMEBUFFER_COMPLETE = 0x8CD5;
     private const DRAW_FRAMEBUFFER_BINDING = 0x8CA6, READ_FRAMEBUFFER_BINDING = 0x8CAA, VIEWPORT = 0x0BA2, MAX_TEXTURE_BUFFER_SIZE = 0x8C2B;
@@ -36,6 +36,9 @@ final class Gl
     private const BLEND = 0x0BE2, SCISSOR_TEST = 0x0C11, DEPTH_TEST = 0x0B71, CULL_FACE = 0x0B44;
     private const ZERO = 0, ONE = 1, SRC_ALPHA = 0x0302, ONE_MINUS_SRC_ALPHA = 0x0303;
     private const TRIANGLES = 0x0004, TRIANGLE_STRIP = 0x0005, COLOR_BUFFER_BIT = 0x4000;
+    private const SHADING_LANGUAGE_VERSION = 0x8B8C, EXTENSIONS = 0x1F03, NUM_EXTENSIONS = 0x821D;
+    /** The shaders' #version for the GPU of the context (Android's: GlShader::esVersion), found once. */
+    private static ?string $esVersion = null;
     private const VERTEX_SHADER = 0x8B31, FRAGMENT_SHADER = 0x8B30, COMPILE_STATUS = 0x8B81, LINK_STATUS = 0x8B82;
     private const TRANSFORMS = 16384;
 
@@ -55,6 +58,8 @@ final class Gl
     private const RING = 4;
     /** @var list<int> ring of quad/xform buffer objects and texture objects so TBDR GPUs (Adreno) never read an overwritten buffer mid-frame */
     private array $quadBuffers = [], $quadTextures = [], $xformBuffers = [], $xformTextures = [];
+    /** Whether the quads and transforms are rows of 2D textures (GlShader::texelRows) rather than buffer textures. */
+    private bool $rows = false;
     private int $ringSlot = 0;
     private int $atlasTexture = 0, $imagesTexture = 0;
     private ?Atlas $atlas = null;
@@ -86,10 +91,14 @@ final class Gl
     public function __construct(public int $capacity = 65536)
     {
         $f = self::ffi();
-        $max = $f->new('int[1]');
-        (self::$f->epoxy_glGetIntegerv)(self::MAX_TEXTURE_BUFFER_SIZE, $max);
-        if ($max[0] < $capacity * 4) {
-            throw new RuntimeException("myphp: OpenGL's buffer textures hold {$max[0]} texels, fewer than " . ($capacity * 4));
+        self::$esVersion ??= \MyPHP\App::isAndroid() ? GlShader::esVersion((string)(self::$f->epoxy_glGetString)(self::SHADING_LANGUAGE_VERSION), self::extensions()) : '';
+        $this->rows = GlShader::texelRows(self::$esVersion);
+        if (!$this->rows) {
+            $max = $f->new('int[1]');
+            (self::$f->epoxy_glGetIntegerv)(self::MAX_TEXTURE_BUFFER_SIZE, $max);
+            if ($max[0] < $capacity * 4) {
+                throw new RuntimeException("myphp: OpenGL's buffer textures hold {$max[0]} texels, fewer than " . ($capacity * 4));
+            }
         }
         $this->programs = new \WeakMap();
         $this->imageTextures = new \WeakMap();
@@ -129,6 +138,7 @@ final class Gl
             typedef long GLsizeiptr; typedef long GLintptr; typedef unsigned char GLboolean; typedef unsigned int GLbitfield;
             int epoxy_gl_version(void); int epoxy_is_desktop_gl(void);
             const char* (*epoxy_glGetString)(GLenum);
+            const char* (*epoxy_glGetStringi)(GLenum, GLuint);
             GLenum (*epoxy_glGetError)(void);
             void (*epoxy_glGetIntegerv)(GLenum, GLint*);
             GLuint (*epoxy_glCreateShader)(GLenum);
@@ -194,12 +204,25 @@ final class Gl
     }
 
     /** A program of the two shaders, compiled and linked; a failure throws, with GL's log. */
+    /** The context's extensions, space separated: glGetStringi's, one by one, as a core context has them (GLES 3 too). */
+    private static function extensions(): string
+    {
+        $g = self::$f;
+        $n = $g->new('int[1]');
+        ($g->epoxy_glGetIntegerv)(self::NUM_EXTENSIONS, $n);
+        $out = [];
+        for ($i = 0; $i < $n[0]; $i++) {
+            $out[] = (string)($g->epoxy_glGetStringi)(self::EXTENSIONS, $i);
+        }
+        return implode(' ', $out);
+    }
+
     private function program(string $vertex, string $fragment): int
     {
         $g = self::$f;
         $p = ($g->epoxy_glCreateProgram)();
         foreach ([[self::VERTEX_SHADER, $vertex], [self::FRAGMENT_SHADER, $fragment]] as [$type, $src]) {
-            $src = GlShader::adapt($src);
+            $src = GlShader::adapt($src, self::$esVersion);
             $s = ($g->epoxy_glCreateShader)($type);
             $str = $g->new('char[' . (strlen($src) + 1) . ']', false);
             FFI::memcpy($str, $src, strlen($src));
@@ -229,11 +252,18 @@ final class Gl
         return $p;
     }
 
-    /** A buffer of $bytes and the RGBA32F buffer texture reading it. @return array{0: int, 1: int} */
+    /** A buffer of $bytes and the RGBA32F buffer texture reading it; with rows, no buffer and an RGBA32F 2D texture of rows of GlShader::TEXEL_ROW texels. @return array{0: int, 1: int} */
     private function bufferTexture(int $bytes): array
     {
         $g = self::$f;
         $ids = $g->new('unsigned int[1]');
+        if ($this->rows) {
+            ($g->epoxy_glGenTextures)(1, $ids);
+            ($g->epoxy_glBindTexture)(self::TEXTURE_2D, $ids[0]);
+            ($g->epoxy_glTexImage2D)(self::TEXTURE_2D, 0, self::RGBA32F, GlShader::TEXEL_ROW, intdiv(intdiv($bytes, 16) + GlShader::TEXEL_ROW - 1, GlShader::TEXEL_ROW), 0, self::RGBA, self::FLOAT, null);
+            $this->params(self::TEXTURE_2D, self::NEAREST, self::CLAMP_TO_EDGE);
+            return [0, $ids[0]];
+        }
         ($g->epoxy_glGenBuffers)(1, $ids);
         $buf = $ids[0];
         ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $buf);
@@ -442,11 +472,32 @@ final class Gl
     {
         $g = self::$f;
         $slot = $this->ringSlot = ($this->ringSlot + 1) % self::RING;
-        ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->quadBuffers[$slot]);
-        ($g->epoxy_glBufferSubData)(self::TEXTURE_BUFFER, 0, ($list->n + $extra) * DisplayList::FLOATS_PER_RECT * 4, $list->buf);
-        ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->xformBuffers[$slot]);
-        ($g->epoxy_glBufferSubData)(self::TEXTURE_BUFFER, 0, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4, $list->xforms);
+        if ($this->rows) {
+            $this->uploadTexels($this->quadTextures[$slot], $list->buf, ($list->n + $extra) * DisplayList::FLOATS_PER_RECT / 4);
+            $this->uploadTexels($this->xformTextures[$slot], $list->xforms, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM / 4);
+        } else {
+            ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->quadBuffers[$slot]);
+            ($g->epoxy_glBufferSubData)(self::TEXTURE_BUFFER, 0, ($list->n + $extra) * DisplayList::FLOATS_PER_RECT * 4, $list->buf);
+            ($g->epoxy_glBindBuffer)(self::TEXTURE_BUFFER, $this->xformBuffers[$slot]);
+            ($g->epoxy_glBufferSubData)(self::TEXTURE_BUFFER, 0, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4, $list->xforms);
+        }
         $this->useProgram($this->quadProgram, $this->u);
+    }
+
+    /** Uploads the first $texels RGBA float texels of $floats into the rows of $tex: the whole rows, then what is left of the last. */
+    private function uploadTexels(int $tex, \FFI\CData $floats, int $texels): void
+    {
+        $g = self::$f;
+        $w = GlShader::TEXEL_ROW;
+        ($g->epoxy_glBindTexture)(self::TEXTURE_2D, $tex);
+        ($g->epoxy_glPixelStorei)(self::UNPACK_ALIGNMENT, 4);
+        $full = intdiv($texels, $w);
+        if ($full > 0) {
+            ($g->epoxy_glTexSubImage2D)(self::TEXTURE_2D, 0, 0, 0, $w, $full, self::RGBA, self::FLOAT, $floats);
+        }
+        if ($texels % $w > 0) {
+            ($g->epoxy_glTexSubImage2D)(self::TEXTURE_2D, 0, 0, $full, $texels % $w, 1, self::RGBA, self::FLOAT, FFI::addr($floats[$full * $w * 4]));
+        }
     }
 
     /** Draws with $program from now, its uniforms of the target ($this->target) and the renderer's textures set. @param array<string, int> $u its uniforms' locations */
@@ -465,7 +516,8 @@ final class Gl
         ($g->epoxy_glUniform1f)($u['uFlip'], $flip);
         ($g->epoxy_glUniform1f)($u['uTargetH'], $th);
         $slot = $this->ringSlot;
-        foreach ([['uQuads', 0, self::TEXTURE_BUFFER, $this->quadTextures[$slot]], ['uXforms', 1, self::TEXTURE_BUFFER, $this->xformTextures[$slot]],
+        $buffer = $this->rows ? self::TEXTURE_2D : self::TEXTURE_BUFFER;
+        foreach ([['uQuads', 0, $buffer, $this->quadTextures[$slot]], ['uXforms', 1, $buffer, $this->xformTextures[$slot]],
                   ['uAtlasTex', 2, self::TEXTURE_2D, $this->atlasTexture], ['uImages', 3, self::TEXTURE_2D_ARRAY, $this->imagesTexture],
                   ['uBackdrop', 4, self::TEXTURE_2D, $this->backdrop]] as [$name, $unit, $kind, $tex]) {
             ($g->epoxy_glActiveTexture)(self::TEXTURE0 + $unit);

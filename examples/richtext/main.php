@@ -8,9 +8,8 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\Text\Params;
-use MyPHP\UI\{Content, Context};
-use MyPHP\UI\RichText\{Attributes, Document, EditorOptions, FormatState, ListKind, Paragraph, ParagraphStyle, RichText, Run, Text};
+use MyPHP\UI\Content;
+use MyPHP\UI\RichText\{Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -37,54 +36,10 @@ function sampleNote(): Text
     );
 }
 
-function view(Context $c, Document $doc): void
-{
-    $t = $c->theme;
-    $f = $doc->formatting();
-    $button = function (string $label, bool $on, Closure $run) use ($c, $t): void {
-        $b = $c->button($label)->keepFocus();
-        if ($on) { $b->background($t->accent, 0.18); }
-        if ($c->clicked($b)) { $run(); }
-    };
-    $rule = fn() => $c->box(1, 20, $t->border);
-    $c->column(20, 12, 1);
-      $c->row(0, 4)->wrap($c->width - 40);
-        $button('B', $f->bold === FormatState::FormatOn, $doc->toggleBold(...));
-        $button('I', $f->italic === FormatState::FormatOn, $doc->toggleItalic(...));
-        $button('U', $f->underline === FormatState::FormatOn, $doc->toggleUnderline(...));
-        $button('S', $f->strikethrough === FormatState::FormatOn, $doc->toggleStrikethrough(...));
-        $button('</>', $f->code === FormatState::FormatOn, $doc->toggleCode(...));
-        $rule();
-        foreach (['Body', 'H1', 'H2', 'H3'] as $level => $name) {
-            $button($name, !$f->paragraphsMixed && $f->paragraph->heading === $level, fn() => $doc->setHeading($level));
-        }
-        $rule();
-        $button('• List', $f->paragraph->list === ListKind::Bullets, fn() => $doc->toggleList(ListKind::Bullets));
-        $button('1. List', $f->paragraph->list === ListKind::Numbers, fn() => $doc->toggleList(ListKind::Numbers));
-        $button('☑ Tasks', $f->paragraph->list === ListKind::Tasks, fn() => $doc->toggleList(ListKind::Tasks));
-        $button('❝', $f->paragraph->quote, $doc->toggleQuote(...));
-        $button('{ }', $f->paragraph->codeBlock, $doc->toggleCodeBlock(...));
-        $rule();
-        $button('Left', $f->paragraph->align === Params::START, fn() => $doc->setAlign(Params::START));
-        $button('Center', $f->paragraph->align === Params::CENTER, fn() => $doc->setAlign(Params::CENTER));
-        $button('Right', $f->paragraph->align === Params::END, fn() => $doc->setAlign(Params::END));
-        $rule();
-        $undo = $c->button('Undo')->keepFocus();
-        $undo->disabled = !$doc->canUndo();
-        if ($c->clicked($undo)) { $doc->undo(); }
-        $redo = $c->button('Redo')->keepFocus();
-        $redo->disabled = !$doc->canRedo();
-        if ($c->clicked($redo)) { $doc->redo(); }
-      $c->end();
-      RichText::editor($c, $doc, new EditorOptions(label: 'Note'))->size(0, 460);
-      $c->muted('⌘B, ⌘I, ⌘U, ⇧⌘X, ⌘E and ⌘K format; ⇧⌘7, ⇧⌘8 and ⇧⌘L make lists, Tab and ⇧Tab indent them; ⌥⌘1–3 make headings.', 12);
-    $c->end();
-}
-
 $doc = new Document(sampleNote());
 App::setName('Rich text');
 App::whenReady(function () use ($doc) {
     new Window(new WindowOptions(title: 'MyPHP native — Rich text', width: 820, height: 640,
-        content: Content::view(fn(Context $c) => view($c, $doc))));
+        content: Content::file(__DIR__ . '/view.php', $doc)));
 });
 App::run();

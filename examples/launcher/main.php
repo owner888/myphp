@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, CloseEvent, GlobalShortcut, InstalledApp, Menu, MenuItem, QuitEvent, Screen, Shell, Tray, TrayOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Handle, Image, Key, ListState, Node, SVG, TextState};
+use MyPHP\UI\{Content, Handle, Image, ListState, SVG, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -56,12 +56,6 @@ function where(InstalledApp $app): string
         if (str_starts_with($dir, $system)) { return 'System' . substr($dir, strlen($system)); }
     }
     return ltrim($dir, '/');
-}
-
-/** A shortcut spelled as macOS does: ⌥⇧Space. */
-function keys(string $shortcut): string
-{
-    return strtr($shortcut, ['CmdOrCtrl+' => '⌘', 'Cmd+' => '⌘', 'Ctrl+' => '⌃', 'Alt+' => '⌥', 'Shift+' => '⇧']);
 }
 
 /** What the panel shows, read and changed on the main thread by the view and the callbacks of the app, the tray and the shortcut. */
@@ -165,7 +159,7 @@ final class Launcher
     public function ready(): void
     {
         $this->panel = new Window(new WindowOptions(title: 'Launcher', panel: true, hidden: true, frameless: true, transparent: true, vibrancy: 'popover',
-            width: WIDTH, height: HEIGHT, disableResize: true, content: Content::view(fn(Context $c) => view($c, $this))));
+            width: WIDTH, height: HEIGHT, disableResize: true, content: Content::file(__DIR__ . '/view.php', $this)));
         // Hidden rather than closed, on Escape or Cmd-W, and when the user goes elsewhere: it shows again at once, as it was.
         $this->panel->on('close', function (CloseEvent $e) { $e->cancel(); $this->panel->hide(); });
         $this->panel->on('blur', fn() => $this->panel->hide());
@@ -201,55 +195,6 @@ final class Launcher
         ]));
         App::onWillQuit(fn(QuitEvent $e) => $this->tray->destroy());
     }
-}
-
-function view(Context $c, Launcher $l): void
-{
-    $t = $c->theme;
-    $c->root->color = $c->vibrancy() ? null : $t->background; // the material shows through
-    // An Escape left to the panel closes it, which hides it: with a query, Escape clears it first.
-    if ($l->query->text !== '' && $c->shortcut(Key::ESCAPE)) { $l->query->text = ''; $l->filter(); }
-    if ($c->shortcut(Key::DOWN)) { $l->choose($l->chosen() + 1); }
-    if ($c->shortcut(Key::UP)) { $l->choose($l->chosen() - 1); }
-    if ($c->shortcut(Key::RETURN)) { $l->open(); }
-    $c->onShortcut(Key::Q, Key::COMMAND, App::quit(...));
-    $c->column(0, 0, 1);
-      $c->row(0, 12)->padding(16, 18)->alignItems(Node::CENTER);
-        $c->icon($l->searchIcon, 20, $t->textMuted);
-        if ($c->changed($c->textInputBase($l->query)->bind($l->input)->grow(1)->fontSize(22)->label('Search apps'))) { $l->filter(); }
-      $c->end();
-      $c->divider();
-      if ($l->results === []) {
-          $c->column(16, 0, 1);
-            $c->muted($l->loading ? 'Finding apps…' : 'No apps found');
-          $c->end();
-      } else {
-          $l->list->key = fn(int $i) => $l->results[$i]->path;
-          $list = $c->list($l->list, count($l->results), fn(int $i) => row($c, $l, $i))->grow(1)->padding(6);
-          if ($l->list->submitted()) { $l->open(); }
-      }
-      $c->divider();
-      $c->row(0, 16)->padding(8, 16);
-        $c->text(keys($l->shortcut) . ' to show or hide', 11, $t->textMuted)->grow(1);
-        $c->text('↑↓ Choose   ↵ Open   esc Close', 11, $t->textMuted);
-      $c->end();
-    $c->end();
-}
-
-/** An app, with its icon, its name, and where it is. */
-function row(Context $c, Launcher $l, int $i): void
-{
-    $app = $l->results[$i];
-    $t = $c->theme;
-    $chosen = $i === $l->chosen();
-    $r = $c->row(0, 12)->padding(6, 10)->alignItems(Node::CENTER)->radius(8);
-    if ($chosen) { $r->background($t->accent, 0.85); }
-      if (($icon = $l->icon($app)) !== null) { $c->image($icon, ICON_SIZE, ICON_SIZE); } else { $c->avatar($app->name)->size(ICON_SIZE, ICON_SIZE); } // its initial
-      $c->column(0, 1, 1);
-        $c->text($app->name, color: $chosen ? $t->accentText : $t->text)->singleLine();
-        $c->text(where($app), 11, $chosen ? $t->accentText : $t->textMuted)->singleLine();
-      $c->end();
-    $c->end();
 }
 
 $s = new Launcher();

@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\Plugins\Automation\Automation;
-use MyPHP\UI\{Content, Context, Node, TextState};
+use MyPHP\UI\{Content, Context, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -21,36 +21,6 @@ final class Driven
     public TextState $name;
 
     public function __construct() { $this->name = new TextState(''); }
-}
-
-function view(Context $c, Driven $s): void
-{
-    $t = $c->theme;
-    $c->column(20, 12, 1)->fill();
-      $c->text("Count: {$s->count}");
-      if ($c->clicked($c->key('add')->button('Add'))) { $s->count++; }
-      $c->key('name')->input($s->name, 'Name', 240)->label('Name');
-      $c->text("Hello, {$s->name->text}");
-      // Its Delete button shows while the row hovers; at rest it ignores input, a press there the row's, but assistive technology presses it.
-      $row = $c->key('row')->row(8, 8, 0, $t->surface)->size(320, 44)->radius(8)->label('Row')->alignItems(Node::CENTER);
-      $hovered = $c->hovered($row);
-        $c->text('A row')->grow = 1;
-        $del = $c->key('delete')->button('Delete')->ignoreInput(!$hovered);
-        if (!$hovered) { $del->opacity(0); }
-        if ($c->clicked($del)) { $s->deletes++; }
-      $c->end();
-      if ($c->clicked($row)) { $s->rowClicks++; }
-      $c->text("Row clicks: {$s->rowClicks}, deletes: {$s->deletes}");
-      // Shapes drawn in bands of rows around their round corners (v1.115): their edges should look as ever.
-      $c->row(0, 16)->alignItems(Node::CENTER);
-        $c->column(0, 0)->size(64, 64)->radius(32)->border(2, $t->accent);
-        $c->end();
-        $c->column(0, 0)->size(120, 64)->radius(12)->border(1, $t->border);
-        $c->end();
-        $c->column(0, 0, 0, $t->background)->size(120, 64)->radius(16)->shadow(0, 6, 18, 0, 0x000000, 0.35);
-        $c->end();
-      $c->end();
-    $c->end();
 }
 
 $s = new Driven();
@@ -67,7 +37,7 @@ App::whenReady(function () use ($s) {
             new MenuItem(label: 'Quit', click: fn() => App::quit()),
         ]),
     ]));
-    new Window(new WindowOptions(title: 'Automation', width: 420, height: 400, content: Content::view(fn(Context $c) => view($c, $s))));
+    new Window(new WindowOptions(title: 'Automation', width: 420, height: 400, content: Content::file(__DIR__ . '/view.php', $s)));
     // Made hidden, it shows once its first frame is drawn (mygo 0cb6d05).
     $hidden = new Window(new WindowOptions(title: 'Shown when ready', width: 260, height: 120, hidden: true,
         content: Content::view(fn(Context $c) => $c->text('Drawn while hidden, then shown'))));

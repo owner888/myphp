@@ -14,6 +14,7 @@ As with Flutter, the CLI is the one way to a device, on every platform:
 ```sh
 myphp doctor                               # the NDK, Xcode, adb, the phone runtimes
 myphp devices                              # phones over adb, simulators
+myphp emulators --launch pixel_11_pro      # an Android emulator, booted (--create makes one)
 myphp run -d android examples/counter-native   # the APK, signed, installed, started; adb logcat MyPHP
 myphp run -d ios examples/counter-native       # the .app in the simulator
 myphp run -d macos examples/counter-native
@@ -99,6 +100,23 @@ the keyboard loses the focus; else a dialog, sheet, popover or menu
 closes (what Escape closes); else the router shown goes back a page;
 and at the first page the app ends, as Android's apps do.
 
+## The phone's theme
+
+On iOS and Android the window starts from `Theme::phone()`: UIKit's
+system colors (systemBlue, label and secondaryLabel, systemBackground,
+the separator, systemRed, the grouped backgrounds, pure black in the dark),
+17-point text, corners rounded 12, and UIKit's control sizes — buttons,
+fields and selects 44 points high (buttons as capsules), switches 51 × 31,
+segmented controls 32 — the one design on both. The desktop keeps mygo's
+theme and sizes. `$c->theme->groupBackground` and `groupSurface` are the
+grouped list's page and sections (`insetGroupedList()`, `section()`).
+
+On iOS the glass of the tab bar and the navigation bar, and any
+`systemMaterial()`, is UIKit's: Liquid Glass (UIGlassEffect) on iOS 26,
+the system's blurs on iOS 16 to 18, over the page so the page shows
+through it as it scrolls under. Android has no system glass for what
+myphp draws, and draws its own (`Plugins\Glass`), as Linux does.
+
 ## The system's settings
 
 The theme follows the phone's as it follows the desktop's
@@ -109,6 +127,40 @@ Remove animations (Android), with which what animates settles at once.
 Changing a setting while the app runs changes the window.
 
 ## Files and photos
+
+A list's rows take swipe actions, as Mail's: the finger drags the row's
+content toward the start, uncovering a button per action at its end (the
+first nearest the content, gray; one marked `!` red); let go past half
+their width the row stays open, a tap on a button reports its index in
+`$action` and closes the row; swiped on 48 points past the buttons, the
+first action is performed (UIKit's full swipe). The row still scrolls: a
+finger moving up or down scrolls the list, moving sideways swipes the row
+(the first few points decide, as UIScrollView's directional lock).
+
+```php
+$c->list($app->list, count($app->mails), function (int $i) use ($c, $app) {
+    $row = $c->swipeActions($action, fn() => $c->text($app->mails[$i])->padding(12, 16), 'Flag', '!Delete');
+    if ($action === 0) { $app->flag($i); }
+    if ($action === 1) { $app->delete($i); }
+    if ($c->clicked($row)) { $app->open($i); }
+});
+```
+
+A page pulled down at its top refreshes, as UIRefreshControl: the
+content follows the finger, a spinner in the room it leaves; let go past
+60 points, `$refreshing` turns true and the content waits under the
+spinner until the app sets it false. A large title, as Mail's, is
+`largeTitle()` first in the page's scroll, the bar given the same
+`ScrollState` so its own title shows once the large one went under it:
+
+```php
+$c->navigationBar('Mail', $router, null, $app->scroll);
+$c->refreshable($app->scroll, $app->refreshing, function () use ($c, $app) {
+    $c->largeTitle('Mail');
+    foreach ($app->mails as $m) { $c->text($m)->padding(12, 16); }
+});
+if ($app->refreshing && !$app->loading) { $app->loading = true; App::go(function () use ($app) { $app->load(); $app->refreshing = $app->loading = false; }); }
+```
 
 A settings page is sections of cells in a scroll:
 
@@ -156,12 +208,13 @@ with inertia — a phone has, in `src/UI/ContextMobile.php`:
 | | |
 |---|---|
 | `tabView($items, &$index, $content)` | the tabs where Apple puts them: bottom on a phone, top on a tablet upright, a sidebar on its side and on the desktop |
-| `tabBar($items, &$index)` | across the bottom: icons over labels, the chosen one in the accent |
+| `tabBar($items, &$index)` | iOS 26's: a capsule of glass floating over the bottom, icons over labels, the chosen one in the accent on a capsule of its own |
 | `navigationBar($title, ?$router, ?$trailing)` | across the top: the title, the way back, buttons at the end |
 | `sheet(&$open, $fn)` | a panel rising from the bottom, a grabber over it; a tap outside closes it |
 | `actionSheet(&$open, $title, ...$actions)` | choices rising from the bottom with a Cancel; `"!Delete"` is destructive |
 | `section($header, $rows, $footer)` | a section of an inset grouped list, as Settings: the header in capitals, the rows in a rounded group 16 in from the sides, separators between them, the footer below |
 | `cell($title, $detail, $disclosure)` | a row of one: the title, a muted detail at the end, a chevron for a row that opens a page; 44 high; `clicked()` |
+| `swipeActions(&$action, $content, ...$actions)` | a row swiped toward the start to show its actions at the end, as Mail's; `"!Delete"` is red; a full swipe performs the first; `$action` is the one tapped this frame |
 | `safeArea($fn)` | content kept out of the bars, the cutout and the keyboard |
 
 Their sizes are UIKit's, the one design on every platform
@@ -180,14 +233,17 @@ UIKit; what Apple has no name for takes Flutter's.
 
 | SwiftUI | Flutter | myphp |
 |---|---|---|
-| `NavigationStack` + `navigationTitle` | `Navigator` + `AppBar` | `Router` + `navigationBar($title, $router)` |
+| `NavigationStack` + `navigationTitle` | `Navigator` + `AppBar` | `Router` + `navigationBar($title, $router)`: iOS 26's, clear, the way back a chevron in a circle of glass; a finger from the start edge swipes back |
+| `.navigationBarTitleDisplayMode(.large)` | `SliverAppBar.large` | `largeTitle($title)` first in the page's scroll, its `ScrollState` given to `navigationBar()` |
+| `.refreshable` | `RefreshIndicator` | `refreshable($scrollState, &$refreshing, $fn)` |
 | `NavigationLink` / `path.append` | `Navigator.push` | `$router->push('/note/42')` |
 | `dismiss()` / the back button | `Navigator.pop` | `$router->back()`; the bar's chevron, Android's Back |
 | `TabView` (`.sidebarAdaptable`) | `Scaffold.bottomNavigationBar` / `NavigationRail` | `tabView($items, &$index, $content)`: bottom on a phone, top on a tablet upright, a sidebar on its side and the desktop; `tabBar` is the bar alone |
 | `.safeAreaInset`, `ignoresSafeArea` | `SafeArea` | `safeArea($fn)`; `$c->safeArea`, `$c->keyboard` |
 | `.sheet(isPresented:)` | `showModalBottomSheet` | `sheet(&$open, $fn)` |
-| `List { Section("General") { … } }.listStyle(.insetGrouped)`, `Form` | `ListView` of `Card`s | `$c->scroll(); $c->section('General', fn() => …); … $c->end();` |
+| `List { Section("General") { … } }.listStyle(.insetGrouped)`, `Form` | `ListView` of `Card`s | `$c->insetGroupedList(fn() => $c->section('General', fn() => …));` or `$c->scroll(); $c->section('General', fn() => …); … $c->end();` |
 | `LabeledContent("Language", value: "English")`, `NavigationLink { Text("About") }` in a List | `ListTile(title:, trailing:)` | `$c->cell('Language', 'English', disclosure: true)`; `if ($c->clicked($cell)) { $router->push(…); }` |
+| `.swipeActions { Button("Flag") {}; Button("Delete", role: .destructive) {} }`, `.onDelete` | `Dismissible`, `flutter_slidable` | `$row = $c->swipeActions($action, fn() => …, 'Flag', '!Delete'); if ($action === 1) { delete }` |
 | `.confirmationDialog` | a bottom sheet of `ListTile`s | `actionSheet(&$open, $title, ...$actions)` |
 | `.alert` | `showDialog` + `AlertDialog` | `alertDialog(&$open, $title, $message, ...$buttons)` |
 | — | `SnackBar` | `toast($message)` |

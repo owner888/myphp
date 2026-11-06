@@ -7,8 +7,8 @@
 // Run: ./run.sh menubar-native
 declare(strict_types=1);
 
-use MyPHP\{ActivationPolicy, App, Clipboard, CloseEvent, Menu, MenuItem, Point, QuitEvent, Screen, Tray, TrayOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Handle, Key, TextState};
+use MyPHP\{ActivationPolicy, App, CloseEvent, Menu, MenuItem, Point, QuitEvent, Screen, Tray, TrayOptions, Window, WindowOptions};
+use MyPHP\UI\{Content, Handle, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -74,7 +74,7 @@ final class Notes
         $this->tray = new Tray(new TrayOptions(icon: trayIcon([[5, 3, 27, 6], [5, 26, 27, 29], [5, 6, 8, 26], [24, 6, 27, 26], [11, 10, 21, 12], [11, 16, 21, 18], [11, 22, 18, 24]]),
             iconIsTemplate: true, toolTip: 'Quick Notes — click to open'));
         $this->win = new Window(new WindowOptions(title: 'Quick Notes', width: 380, height: 340, hidden: true, frameless: true, disableResize: true,
-            disableMinimize: true, disableMaximize: true, disableFullScreen: true, alwaysOnTop: true, content: Content::view(fn(Context $c) => view($c, $this))));
+            disableMinimize: true, disableMaximize: true, disableFullScreen: true, alwaysOnTop: true, content: Content::file(__DIR__ . '/view.php', $this)));
         $this->win->on('blur', fn() => $this->win->hide());
         $this->win->on('close', function (CloseEvent $e) {
             // Cmd+W dismisses the panel; quitting still closes it.
@@ -91,39 +91,6 @@ final class Notes
         });
         App::onWillQuit(fn(QuitEvent $e) => $this->tray->destroy());
     }
-}
-
-function view(Context $c, Notes $s): void
-{
-    if ($c->shortcut(Key::ESCAPE) || $c->shortcut(Key::W, Key::COMMAND)) { $s->win?->hide(); }
-    $c->onShortcut(Key::Q, Key::COMMAND, App::quit(...));
-    $t = $c->theme;
-    $c->column(20, 12, 1);
-      $c->row(0, 12);
-        $c->column(0, 4, 1);
-          $c->text('Quick Notes', 22, style: Font::BOLD);
-          $c->text('A little space for a quick thought.', 12, $t->textMuted);
-        $c->end();
-        if ($c->clicked($c->button('Hide')->label('Hide Quick Notes'))) { $s->win?->hide(); }
-      $c->end();
-      if ($c->changed($c->key('note')->textarea($s->text, 'Write something to remember…', 0, 0)->bind($s->editor)->label('Note'))) { $s->status = ''; }
-      $c->row(0, 8);
-        if ($c->clicked($c->button('Clear')->disabled($s->text->text === ''))) {
-            $s->text->text = ''; $s->status = '';
-            $s->editor->focus($c);
-        }
-        $c->spacer();
-        if ($c->clicked($c->primaryButton('Copy note')->disabled($s->text->text === ''))) {
-            Clipboard::writeText($s->text->text);
-            $s->status = 'Copied to clipboard.';
-        }
-      $c->end();
-      $c->divider();
-      $c->row(0, 8);
-        $c->text($s->status === '' ? 'Kept here until you quit.' : $s->status, 11, $t->textMuted)->grow(1);
-        $c->button('Quit')->onClick(App::quit(...));
-      $c->end();
-    $c->end();
 }
 
 $s = new Notes();

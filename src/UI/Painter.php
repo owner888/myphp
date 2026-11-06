@@ -699,6 +699,10 @@ final class Painter
             $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
             return;
         }
+        if ($n->systemMaterial !== null && $rt !== null && $rt->overLayer && !$rt->paintingOver) { // the system draws the material over this view, the node and what it holds paint in the view over it (iOS)
+            $rt->overPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
+            return;
+        }
         if ($n->effect !== null && !$n->blurring && $rt !== null && self::paintEffected($n, $list, $text, $t, $rt)) {
             return;
         }
@@ -974,7 +978,7 @@ final class Painter
         $inner = [max(0.0, $radii[0] - max($bt, $bl)), max(0.0, $radii[1] - max($bt, $br)), max(0.0, $radii[2] - max($bb, $br)), max(0.0, $radii[3] - max($bb, $bl))];
         $picture = $n->movie?->out->frame(); // the renderers' picture as an image (Linux), else none: the system shows it under the hole (macOS)
         if ($picture === null) {
-            $list->hole($x, $y, $w, $h, $inner);
+            if (!($n->systemMaterial !== null && $rt->overLayer)) { $list->hole($x, $y, $w, $h, $inner); } // a material over the view (iOS) blurs what the view shows: no hole
         } else {
             self::moviePicture($list, $text, $n->movie, $picture, $x, $y, $w, $h, $inner);
         }
@@ -1078,9 +1082,9 @@ final class Painter
         if ($n->focusVisible && $n->color !== null && $n->radii !== null) { // around corners each their own
             $list->box($n->x - 3, $n->y - 3, $n->w + 6, $n->h + 6, array_map(static fn(float $r): float => $r + 3, $n->radii), 0, 0.0, [2.0, 2.0, 2.0, 2.0], $t->focus, $t->focusAlpha);
         } elseif ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
-            self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON => $t->radius, default => $n->radius }, $t);
+            self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON => $n->radius > 0 ? $n->radius : $t->radius, default => $n->radius }, $t);
         }
-        $radius = match ($n->kind) { Node::BUTTON => $t->radius, default => $n->radius };
+        $radius = match ($n->kind) { Node::BUTTON => $n->radius > 0 ? $n->radius : $t->radius, default => $n->radius }; // a button rounds as the theme does, unless made otherwise (a phone's capsule)
         $box = [$n->x, $n->y, $n->w, $n->h];
         $radii = $n->radii ?? [$radius, $radius, $radius, $radius];
         foreach ($n->shadows as $sh) { // outside the box, under it (mygo's Shadow)
@@ -1591,7 +1595,8 @@ final class Painter
      */
     private static function paintSwitch(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
-        $tw = $t->space(9); $th = $t->space(5); $in = $t->space(0.5); $d = $th - 2 * $in;
+        [$tw, $th] = $t->switchWidth > 0 ? [$t->switchWidth, $t->switchHeight] : [$t->space(9), $t->space(5)]; // UISwitch's track on a phone (Context::switch)
+        $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
         $sx = $n->rtl ? $n->x + $n->w - $tw : $n->x; // right to left: the switch at the right, on toward the left
         $hovered = $rt?->hovered($n->id) ?? false;

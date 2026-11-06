@@ -13,7 +13,6 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Theme as AppTheme, ThemeSource, Window, WindowOptions};
-use MyPHP\Text\Glyph;
 use MyPHP\UI\{Content, Context, Image, LinearGradient, Node, Painter, Path, TextStyle};
 use MyPHP\UI\Svg\Path as SvgPath;
 
@@ -752,35 +751,6 @@ final class Slider
     }
 }
 
-function view(Context $c, Slider $s): void
-{
-    $s->prepare($c);
-    [$w, $h] = $c->size();
-    // Centered across, on whole points so that the card's edges are crisp.
-    $ox = round(($w - CARD_W) / 2); $oy = round(CARD_Y + ($h - WINDOW_H) / 2);
-    $c->column(0, 0, 1, PAGE_COLOR)->fill()->draw(function (Painter $p, array $r) use ($s, $ox, $oy): void {
-        if ($s->drawCard($p, $ox, $oy, $p->now())) { $p->animationFrame(); }
-    });
-      // The title bar, under the traffic lights, drags the window.
-      $c->column()->absolute()->left(0)->top(0)->size($w, max($c->titleBar()['height'], 32))->dragWindow();
-      $c->end();
-      // The slider takes the keys, as assistive technology sees it, and
-      // the pointer across the track; its content box spans the thumb's
-      // travel. A drag moves the thumb with the pointer rather than from
-      // level to level.
-      $sb = $c->sliderBase($s->value, 0, GALAXY, 1)->focusRing(false)->absolute()
-          ->left($ox + TRACK_X)->top($oy + TRACK_Y - 6)->size(TRACK_W, TRACK_H + 12)->paddingX(STOP_X - TRACK_X);
-      $t = $c->now();
-      if ($c->changed($sb) && !$s->holding) { $s->setLevel((int)round($s->value), $t); }
-      if ($c->dragged($sb) !== null) {
-          [$x] = $c->pointerPosition($sb);
-          $s->hold(($x - (STOP_X - TRACK_X)) / STOP_GAP, $t);
-      } else {
-          $s->release($t);
-      }
-    $c->end();
-}
-
 $s = new Slider();
 App::setName('Effort');
 // The demo is dark whatever the system's appearance, and so are the window controls over it.
@@ -788,6 +758,6 @@ AppTheme::setSource(ThemeSource::Dark);
 App::whenReady(function () use ($s) {
     // The card floats on the page's background, under the traffic lights.
     new Window(new WindowOptions(title: 'Effort', width: WINDOW_W, height: WINDOW_H, titleBarStyle: 'hidden', backgroundColor: '#101010',
-        content: Content::view(fn(Context $c) => view($c, $s))));
+        content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

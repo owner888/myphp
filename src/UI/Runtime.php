@@ -712,6 +712,11 @@ final class Runtime
                         $this->touchScrollUntil = $this->now / 1e9 + 0.65;
                     }
                     break; // ['scroll', x, y, dx, dy, precise]: a mouse wheel's notches are not precise
+                case 'scrollEnd': // a finger that scrolled lifted (the phone Windows): what it pulled past a top is let go (Context::refreshable)
+                    foreach ($this->scrolls as $state) {
+                        if ($state instanceof ScrollState && $state->pull > 0) { $state->released = true; $this->changed(); }
+                    }
+                    break;
                 case 'magnify': $this->magnifies[] = [$e[1], $e[2], (float)$e[3], (int)$e[4]]; break;
                 case 'pressure':
                     if ($e[3] >= 2 && $this->pressureStage < 2) { $this->forceClicks[] = [$e[1], $e[2]]; } // once, as it goes deep
@@ -1117,6 +1122,16 @@ final class Runtime
     public bool $systemMaterials = true, $ownMaterialsTold = false;
     /** @internal Window: whether it paints the nodes belowMaterials() in a layer of their own, under its materials (else they paint where they are) */
     public bool $underLayer = false;
+    /**
+     * Whether the window's system draws its materials over its view and what
+     * a material's node holds paints in a view over them (iOS's: a
+     * UIVisualEffectView blurs what the Metal layer under it shows, the page
+     * itself): a systemMaterial node's painting is recorded in $overPaints
+     * for that view, and leaves no hole. Not mygo's.
+     */
+    public bool $overLayer = false, $paintingOver = false;
+    /** @var list<array{node: Node, world: Affine, opacity: float, clip: array, mask: mixed}> the material nodes the frame met, to paint over the materials (overLayer) */
+    public array $overPaints = [];
     /**
      * @internal the subtrees the window paints in that layer, as the frame met them: its transform, opacity and clip there
      * @var list<array{node: Node, world: Affine, opacity: float, clip: array{0: float, 1: float, 2: float, 3: float}}>
@@ -3455,6 +3470,16 @@ final class Runtime
         return $id !== null && (isset($this->draggables[$id]) || isset($this->dragSources[$id]) || isset($this->dataSources[$id]) || isset($this->inputs[$id]));
     }
 
+    /** The axes the pressed node is dragged along (Context::draggable's DraggableOptions::$axis): Node::HORIZONTAL, VERTICAL, both, or 0 for a press on nothing draggable. A touch screen lets a move across a node dragged along one axis scroll instead (Platform Window). */
+    public function pressDragAxes(): int
+    {
+        $id = $this->pointerPress['id'] ?? null;
+        if ($id === null || !isset($this->draggables[$id])) {
+            return 0;
+        }
+        return $this->dragRecs[$id]->axes ?? 0;
+    }
+
     /** Cancels an active touch press when finger movement transitions into a container scroll, preventing accidental clicks on release. */
     public function cancelTouchPress(): void
     {
@@ -3628,6 +3653,15 @@ final class Runtime
             }
             unset($this->wheels[spl_object_id($state)]);
             $state->stop();
+            if ($state instanceof ScrollState && $state->overscrolls && $this->touch && $sy != 0 && ($state->pull > 0 || ($sy < 0 && $state->y <= 0))) {
+                // a finger at the top pulls past it (Context::refreshable): down adds to the pull, up takes it back before the content scrolls
+                $back = $sy > 0 ? min($sy, $state->pull) : 0.0;
+                $state->pull = max(0.0, $state->pull - $sy);
+                $state->released = false;
+                $sy -= $sy > 0 ? $back : $sy;
+                $this->changed();
+                if ($sy == 0) { return; }
+            }
             $was = [$state->extent()[0], $state instanceof ScrollState || $state instanceof ListState ? $state->extentX()[0] : 0.0];
             if ($sy != 0) { $state->scrollBy($sy); }
             if ($sx != 0) { $state->scrollByX($sx); } // right to left as well: the offset counts from the right, so the content moves as the wheel does

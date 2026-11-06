@@ -26,7 +26,7 @@ final class Windows
         if (isset($this->editors[$id])) { $this->editors[$id]->focus(); return; }
         $doc = $this->lib->open($id);
         $win = ($this->open)(new WindowOptions(title: $doc->title, width: 640, height: 480,
-            content: Content::view(fn(Context $c) => $doc->view($c))));
+            content: Content::file(__DIR__ . '/../editor.php', $doc))); // editor.php: the view, $this the document
         $win->on('close', function (CloseEvent $e) use ($doc) {
             if ($doc->dirty() && !$doc->mayClose) { $e->cancel(); $doc->askToSave = true; }
         });
@@ -38,7 +38,7 @@ final class Windows
     {
         if ($this->prefs !== null) { $this->prefs->focus(); return; }
         $this->prefs = ($this->open)(new WindowOptions(title: 'Preferences', width: 420, height: 300,
-            content: Content::view(fn(Context $c) => $this->lib->settingsView($c))));
+            content: Content::file(__DIR__ . '/../settings.php', $this->lib))); // settings.php: $this the library
         $this->prefs->on('closed', function () { $this->prefs = null; });
     }
 }

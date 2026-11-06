@@ -23,14 +23,21 @@ Logger::warn('a warning');
 $subs = Logger::subsystems(); $rest = array_slice($subs, 1); $sorted = $rest; sort($sorted, SORT_STRING);
 check($subs[0] === 'app' && in_array('alpha', $rest, true) && in_array('zeta', $rest, true) && $rest === $sorted, 'its subsystems: "app" first, the others sorted: ' . implode(', ', $subs));
 $entries = Logger::entries();
-check(preg_match('/^\d\d:\d\d:\d\d\.\d{3} \[alpha\]\[e\] an error\n$/', Logger::line($entries[count($entries) - 2])) === 1, 'a line as IINA writes it: ' . Logger::line($entries[count($entries) - 2]));
+check(preg_match('/^\d\d:\d\d:\d\d\.\d{3} \[alpha\]\[E\] an error\n$/', Logger::line($entries[count($entries) - 2])) === 1, 'a line as IINA writes it, its level a capital: ' . Logger::line($entries[count($entries) - 2]));
 $file = Logger::directory() . '/' . \MyPHP\App::name() . '.log';
 $text = (string)@file_get_contents($file);
-check(str_contains($text, '[app][w] a warning') && !str_contains($text, 'a message'), 'in the session\'s file once it is on, not before');
+check(str_contains($text, '[app][W] a warning') && !str_contains($text, 'a message'), 'in the session\'s file once it is on, not before');
 $err = null;
 try { Logger::log(7, 'x'); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
-same('Logger: no level 7', $err, 'no level but its four');
+same('Logger: no level 7', $err, 'no level but its six');
 Logger::logToFile(false);
+// The six levels: IINA's four, info and fault; IINA's setting maps onto them.
+$before = Logger::count();
+Logger::info('an info'); Logger::fault('a fault');
+same($before + 2, Logger::count(), 'info and fault are over the debug level set');
+$entries = Logger::entries();
+same(['[app][I] an info', '[app][F] a fault'], array_map(fn($e) => substr(rtrim(Logger::line($e)), 13), array_slice($entries, -2)), 'their letters');
+same([Logger::VERBOSE, Logger::DEBUG, Logger::WARNING, Logger::ERROR], Logger::IINA, 'IINA\'s verbose, debug, warning, error');
 if (PHP_OS_FAMILY === 'Darwin') { // its symbols are the system's (SF Symbols)
     $h = new Headless(fn(Context $c) => $c->logViewer(), 800, 500);
     $h->frame(); $h->frame();

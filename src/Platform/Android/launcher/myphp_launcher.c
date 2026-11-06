@@ -184,7 +184,6 @@ static jmethodID g_mid_clipboard_get = NULL;
 static jmethodID g_mid_clipboard_set = NULL;
 static jmethodID g_mid_open_url = NULL;
 static jmethodID g_mid_keep_screen_on = NULL;
-static jmethodID g_mid_perform_haptic = NULL;
 static jmethodID g_mid_perform_haptic_kind = NULL;
 static jmethodID g_mid_show_alert_dialog = NULL;
 static jmethodID g_mid_show_notification = NULL;
@@ -300,13 +299,14 @@ static void* php_worker_thread(void *arg) {
         char init_code[2048];
         snprintf(init_code, sizeof(init_code),
             "putenv('MYPHP_PLATFORM=android');"
+            "putenv('MYPHP_HOT_RELOAD=%s/.myphp-reload');" // where myphp run asks for a hot reload (Content::hotReloadFile): beside app.php
             "require '%s/src/autoload.php';" // the framework the APK carries: an app needs no autoloader of its own, as on the desktop with Composer's
             // why PHP ended, in the log: the error that ended it (a fatal is written before the bailout, but not always through ub_write), an uncaught exception's trace
             "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
             "$app = '%s/app.php';"
             "if (!file_exists($app)) { error_log('[myphp] no app.php at ' . $app); }"
             "try { require $app; } catch (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); throw $e; }",
-            g_files_dir, g_files_dir
+            g_files_dir, g_files_dir, g_files_dir
         );
 
         LOGI("Executing app.php...");
@@ -352,7 +352,6 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_clipboard_set = (*env)->GetStaticMethodID(env, clazz, "setClipboardText", "(Ljava/lang/String;)V");
     g_mid_open_url = (*env)->GetStaticMethodID(env, clazz, "openUrl", "(Ljava/lang/String;)V");
     g_mid_keep_screen_on = (*env)->GetStaticMethodID(env, clazz, "setKeepScreenOn", "(Z)V");
-    g_mid_perform_haptic = (*env)->GetStaticMethodID(env, clazz, "performHapticFeedback", "()V");
     g_mid_perform_haptic_kind = (*env)->GetStaticMethodID(env, clazz, "performHaptic", "(I)V");
     g_mid_show_alert_dialog = (*env)->GetStaticMethodID(env, clazz, "showAlertDialog", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V");
     g_mid_show_notification = (*env)->GetStaticMethodID(env, clazz, "showNotification", "(Ljava/lang/String;Ljava/lang/String;I)V");
@@ -602,10 +601,11 @@ void myphp_set_keep_screen_on(int on) {
     (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_keep_screen_on, (jboolean)(on ? JNI_TRUE : JNI_FALSE));
 }
 
-void myphp_perform_haptic(void) {
-    JNIEnv *env = get_jni_env();
-    if (!env || !g_activity_class || !g_mid_perform_haptic) return;
-    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_perform_haptic);
+// A line of the app's log (MyPHP\Logger) into logcat under MyPHP at its level: verbose, debug, info, warning,
+// error, fault as fatal.
+void myphp_android_log(int level, const char *message) {
+    static const int prio[] = {ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO, ANDROID_LOG_WARN, ANDROID_LOG_ERROR, ANDROID_LOG_FATAL};
+    __android_log_write(prio[level < 0 ? 0 : (level > 5 ? 5 : level)], LOG_TAG, message);
 }
 
 // Plays one of View.HapticFeedbackConstants (Platform\Android\Shell::CONSTANTS) on the surface view.

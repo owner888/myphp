@@ -506,7 +506,8 @@ final class Node
      * window's system has no materials (Platform\Window::hasSystemMaterials:
      * Linux), myphp's own stand in, which blur what the window painted
      * under them, a video's picture too: glass and clear-glass are
-     * Plugins\Glass\Glass, Regular and Clear; the others a Blur tinted as
+     * Plugins\Glass\Glass, Regular and Clear, casting a soft shadow as the
+     * system's glass does; the others a Blur tinted as
      * the theme, or $dark, implies (Plugins\Glass\Vibrancy); told once a
      * window in the log.
      */
@@ -519,9 +520,12 @@ final class Node
         if ($rt !== null && !$rt->systemMaterials) {
             if (!$rt->ownMaterialsTold) {
                 $rt->ownMaterialsTold = true;
-                \MyPHP\Logger::debug("the system has no materials: myphp's own draw \"$material\" and the others (Glass, Blur)", 'ui');
+                \MyPHP\Logger::verbose("the system has no materials: myphp's own draw \"$material\" and the others (Glass, Blur)", 'ui');
             }
             $this->color = null;
+            if ($material === 'glass' || $material === 'clear-glass') {
+                $this->shadow(0, 2, 12, 0, 0x000000, 0.12); // the soft shadow the system's glass casts, which keeps a pane of it seen over white
+            }
             return $this->material(match ($material) {
                 'glass' => new \MyPHP\Plugins\Glass\Glass(),
                 'clear-glass' => new \MyPHP\Plugins\Glass\Glass(\MyPHP\Plugins\Glass\Style::Clear),

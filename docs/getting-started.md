@@ -64,7 +64,8 @@ shows [native UI](ui/README.md): PHP alone, with no frontend and no Bun.
 
 ```
 my-app/
-├── app.php          the app: its state, its view and its window
+├── app.php          the app: its state and its window
+├── view.php         the window's view, $this the state (Content::file)
 ├── boot.php         loads MyPHP
 ├── myphp.json       the app's name, identifier and version
 └── resources/
@@ -83,10 +84,13 @@ bun run dev        # a web frontend: runs myphp dev
 myphp dev          # native UI
 ```
 
-`myphp dev` builds a development version of the app and starts it, then
-rebuilds and restarts it when you edit a `.php` file, the configuration,
-the icon or a resource. A build that fails keeps the previous one running.
-Quit the app, or press Ctrl+C, to stop.
+`myphp dev` builds a development version of the app and starts it. A
+saved `.php` file hot reloads it, as Flutter's run does: the window loads
+`view.php` again and shows the new code with the state as it was
+([view files](ui/views.md#view-files-and-hot-reload)); `r` does too, and
+`R` rebuilds and restarts it. It rebuilds and restarts it when you edit the
+configuration, the icon or a resource. A build that fails keeps the
+previous one running. Quit the app, or press `q` or Ctrl+C, to stop.
 
 With a web frontend, it also writes `src/myphp.ts` and starts the Vite dev
 server, from which the development app loads its pages: edit `src/main.ts`

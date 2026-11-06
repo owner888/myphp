@@ -20,7 +20,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Canvas, Content, Context, Easing, Image, InputEvent, Key, Node, Painter, TextState, TextStyle};
+use MyPHP\UI\{Canvas, Content, Context, Easing, Image, Painter, TextState, TextStyle};
 use MyPHP\UI\Shader\{Options, Shader};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
@@ -836,62 +836,9 @@ final class WindApp
     }
 }
 
-function view(Context $c, WindApp $s): void
-{
-    $t = $c->theme;
-    // While the desktop asks for less motion, the texture shows the wind as it stands.
-    $s->tex->still = $c->preferences()->reduceMotion;
-    if ($c->shortcut(Key::R, Key::COMMAND)) {
-        $s->tex->reseed(random_int(0, U32));
-    }
-    if ($s->draft->text !== $s->typed) {
-        $s->typed = $s->draft->text;
-        $s->tex->wake();
-    }
-    $s->tex->makeAtlases($c);
-    [$w] = $c->size();
-
-    $pane = $c->column(0, 0, 0, $t->background)->fill()->alignItems(Node::CENTER);
-    $pane->draw(fn(Painter $p, array $r) => $s->tex->draw($p, $r, $t->dark));
-    // The pointer stirs the air wherever it is over the pane, but for the
-    // controls, which take it themselves.
-    $pane->handleInput(function (InputEvent $ev) use ($s): bool {
-        switch ($ev->kind) {
-            case InputEvent::POINTER_MOVE:
-                $calm = $s->tex->calm;
-                $s->tex->move($ev->x, $ev->y, hrtime(true));
-                // A frame, to wake the texture as it rests.
-                return $calm;
-            case InputEvent::POINTER_DOWN:
-                if ($ev->button === 0 && !$s->onControl($ev->x, $ev->y)) {
-                    $s->tex->tap($ev->x, $ev->y, hrtime(true));
-                    return true;
-                }
-                break;
-            case InputEvent::KEY_DOWN:
-                $s->tex->wake();
-                break;
-        }
-        return false;
-    });
-      // The card's middle lies where the texture is calmest, 45% down.
-      $c->spacer()->grow(45);
-      $c->column(0, 12)->width(min(640, $w - 48));
-        $input = $c->key('draft')->input($s->draft, 'Describe a task or ask a question', 0)->label('Task')->padding(14, 16)->radius(14)
-            ->background($t->surface)->shadow(0, 4, 18, 0, 0x000000, 0x0f / 255);
-        $s->controls = [$c->bounds($input)];
-        $c->text('Move the pointer to warm the air, click to blow a ripple (every third a heart), ⌘R for another wind.', 12, $t->textMuted)->textAlign(Node::CENTER);
-      $c->end();
-      $c->spacer()->grow(55);
-      $c->row()->alignSelf(Node::END)->padding(0, 14, 10, 0);
-        $c->text(sprintf('%s/%08x', $s->tex->w->look, $s->tex->w->seed), 11, $t->textMuted)->font(FAMILY);
-      $c->end();
-    $c->end();
-}
-
 $s = new WindApp(random_int(0, U32), new Shaders());
 App::setName('Wind');
 App::whenReady(function () use ($s): void {
-    new Window(new WindowOptions(title: 'Wind', width: WINDOW_W, height: WINDOW_H, content: Content::view(fn(Context $c) => view($c, $s))));
+    new Window(new WindowOptions(title: 'Wind', width: WINDOW_W, height: WINDOW_H, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

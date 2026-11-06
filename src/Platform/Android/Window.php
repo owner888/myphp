@@ -7,7 +7,7 @@ use FFI;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\{Android, Gl};
 use MyPHP\Platform;
-use MyPHP\UI\{DisplayList, Image, Key, TextInputRange, TextState};
+use MyPHP\UI\{DisplayList, Image, Key, Node, TextInputRange, TextState};
 
 /**
  * Android Window backed by Activity SurfaceView, rendered via EGL & GLES 3.2.
@@ -103,7 +103,7 @@ final class Window implements Platform\Window
             $this->surfaceWidth = $f->myphp_get_surface_width();
             $this->surfaceHeight = $f->myphp_get_surface_height();
             $this->initialized = true;
-            Logger::debug('EGLSurface seamlessly restored with existing Context', 'android');
+            Logger::verbose('EGLSurface seamlessly restored with existing Context', 'android');
             return true;
         }
 
@@ -179,7 +179,7 @@ final class Window implements Platform\Window
 
         $this->initialized = true;
 
-        Logger::debug('EGL initialized successfully on Android Surface', 'android');
+        Logger::verbose('EGL initialized successfully on Android Surface', 'android');
         return true;
     }
 
@@ -225,7 +225,7 @@ final class Window implements Platform\Window
         $this->eglSurface = $surface;
         $this->surfaceWidth = $wPx;
         $this->surfaceHeight = $hPx;
-        Logger::debug("Surface recreated on size change: {$wPx}x{$hPx}", 'android');
+        Logger::verbose("Surface recreated on size change: {$wPx}x{$hPx}", 'android');
         $this->requestFrame();
     }
 
@@ -237,7 +237,7 @@ final class Window implements Platform\Window
             $egl->eglDestroySurface($this->eglDisplay, $this->eglSurface);
             $this->eglSurface = null;
         }
-        Logger::debug('EGL surface destroyed (Context preserved)', 'android');
+        Logger::verbose('EGL surface destroyed (Context preserved)', 'android');
     }
 
     public function requestFrame(int $every = 1, bool $repaint = false): void
@@ -263,6 +263,8 @@ final class Window implements Platform\Window
     private bool $touchIsScrolling = false;
     private bool $touchLongPressed = false;
     private bool $touchInField = false;
+    /** A finger on a node dragged along one axis moved along it: the drag's, not the scroll's, until it lifts. */
+    private bool $touchAxisTaken = false;
     private bool $downFrameDrawn = false;
     private int $longPressId = 0;
     private int $releaseSeq = 0;
@@ -289,13 +291,13 @@ final class Window implements Platform\Window
     {
         $this->paused = true;
         $this->flingActive = false;
-        Logger::debug('Window paused', 'android');
+        Logger::verbose('Window paused', 'android');
     }
 
     public function onResume(): void
     {
         $this->paused = false;
-        Logger::debug('Window resumed', 'android');
+        Logger::verbose('Window resumed', 'android');
         $this->requestFrame();
     }
 
@@ -309,7 +311,7 @@ final class Window implements Platform\Window
             $rightPx / $density,
         ];
         $this->keyboard = $keyboardPx / $density;
-        Logger::debug("Window insets updated (pt): top={$this->insets[0]}, bottom={$this->insets[1]}, left={$this->insets[2]}, right={$this->insets[3]}, keyboard={$this->keyboard}", 'android');
+        Logger::verbose("Window insets updated (pt): top={$this->insets[0]}, bottom={$this->insets[1]}, left={$this->insets[2]}, right={$this->insets[3]}, keyboard={$this->keyboard}", 'android');
         $this->requestFrame();
     }
 
@@ -436,6 +438,7 @@ final class Window implements Platform\Window
                 $this->touchLastTime = $time;
                 $this->touchIsScrolling = false;
                 $this->touchLongPressed = false;
+                $this->touchAxisTaken = false;
                 $this->touchHistory = [[$time, $ptX, $ptY]];
 
                 // Check if touch begins inside the focused text field box
@@ -453,7 +456,6 @@ final class Window implements Platform\Window
                 $hitId = $rt?->pressTarget($ptX, $ptY);
                 if ($hitId !== null) {
                     $rt->flashTouch($hitId, 2.0);
-                    Android::ffi()->myphp_perform_haptic();
                 }
                 $this->requestFrame();
 
@@ -478,11 +480,29 @@ final class Window implements Platform\Window
                 }
                 $rt = $this->w->runtime;
                 if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && $rt->isDraggingControl())) {
-                    // Dragging across a text field, slider, rangeSlider, splitter or scrollbar thumb
-                    $input->mouse($ptX, $ptY);
-                    $input->push(['drag', $ptX, $ptY, $time]);
-                    $this->requestFrame();
-                    break;
+                    // A node dragged along one axis alone (a row swiped sideways, a sheet pulled down) takes the finger
+                    // once it moved 8 points along that axis; moved across it first, the container scrolls instead, as
+                    // UIScrollView's directional lock; until either, nothing moves (the slop).
+                    $axes = $this->touchInField ? 0 : $rt->pressDragAxes();
+                    $undecided = ($axes === Node::HORIZONTAL || $axes === Node::VERTICAL) && !$this->touchAxisTaken;
+                    if ($undecided) {
+                        $along = abs($axes === Node::HORIZONTAL ? $ptX - $this->touchStartX : $ptY - $this->touchStartY);
+                        $across = abs($axes === Node::HORIZONTAL ? $ptY - $this->touchStartY : $ptX - $this->touchStartX);
+                        if ($along > 8.0) {
+                            $this->touchAxisTaken = true; $undecided = false;
+                        } elseif ($across > 8.0) {
+                            $rt->cancelTouchPress(); // the move is the scroll's: below, as any touch moving on a container
+                        } else {
+                            break;
+                        }
+                    }
+                    if (!$undecided) {
+                        // Dragging across a text field, slider, rangeSlider, splitter or scrollbar thumb
+                        $input->mouse($ptX, $ptY);
+                        $input->push(['drag', $ptX, $ptY, $time]);
+                        $this->requestFrame();
+                        break;
+                    }
                 }
 
                 $now = hrtime(true);
@@ -531,6 +551,7 @@ final class Window implements Platform\Window
                 if ($this->touchIsScrolling) {
                     $this->touchIsScrolling = false;
                     $rt?->cancelTouchPress();
+                    $input->push(['scrollEnd', $ptX, $ptY]); // what the finger pulled past a top is let go (Context::refreshable)
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];

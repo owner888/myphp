@@ -283,7 +283,7 @@ final class Window
         $list->zoom = $z; // drawn at the window's scale times it, in a viewport 1/z the window's
         $list->pixels = $n->backingScale(); // its fills on whole pixels
         $paint = function () use ($root, $list, $text, $width, $height, $in, $z): void {
-            $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = [];
+            $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = []; $this->runtime->overPaints = [];
             $list->pushClip(0, 0, $width / $z, $height / $z); // what lies outside the window is not painted (mygo's visible)
             $list->cull = true; // where the nodes are where the runtime recorded them
             $this->runtime->painting = true; // what drawings ask for now are frames that only paint again

@@ -28,7 +28,7 @@ final class LogViewer
 {
     private const BAR = 52, ROW = 18, LEVEL = 18, TIME = 90, SUBSYSTEM = 120;
     /** The levels' colors, the system's gray, green, yellow and red. */
-    private const COLORS = [0x8e8e93, 0x34c759, 0xffcc00, 0xff3b30];
+    private const COLORS = [0x8e8e93, 0x34c759, 0x007aff, 0xffcc00, 0xff3b30, 0xaf52de]; // by level: verbose, debug, info, warning, error, fault
     private static ?Window $window = null;
 
     /** The window of the log viewer, opened, or brought forward (the settings' Open the log viewer, IINA's Window > Log Viewer). */

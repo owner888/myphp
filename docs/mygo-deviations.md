@@ -2866,15 +2866,99 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   (UIKit's separatorInset); the header 13-point capitals and the footer
   13 points, muted, 16 in; a cell 44 high, padded 16, title and detail
   17, the chevron `disclosure()`'s. SwiftUI's Section and LabeledContent.
-- **`tabBar($items, &$index)`**: UITabBar's — 49 points (the hairline
-  above it included) over the safe area's bottom, which it fills; items
-  of a 25-point icon over a 10-point label, in the accent when chosen,
-  muted otherwise, sharing the width.
-- **`navigationBar($title, ?$router, ?$trailing)`**: UINavigationBar's —
-  44 points (the hairline below it included) under the safe area's top,
-  which it fills; the title 17 semibold centered; with a router that can
-  go back, a chevron and `Router::previousTitle()` (new; "Back" without
-  one) in the accent lead, and a tap goes back; margins 8.
+- **The platform's text size** (v1.176): mygo's `defaultFontSize()` (13
+  on macOS, 14 elsewhere) is `Theme::defaultFontSize()`, 17 on iOS and
+  Android (the HIG's body, the one design on both), applied by
+  `App::systemTheme()` rather than by `Theme::light()`, so a headless test
+  measures 13 on every platform; `Theme::$baseFontSize` keeps what the
+  system theme started from, which `textScale()` measures `fontSize`
+  against. Before, every platform started from 13.
+- **A tap plays no haptic** (v1.176): the phone backends no longer play
+  one on every press (UIKit's and Material's buttons do not), and
+  Android's `performHapticFeedback()` — a vibration ignoring the user's
+  setting, its errors swallowed — is gone; an app asks with `Haptics`.
+- **`swipeActions(&$action, $content, ...$actions)`** (v1.176): UITableView's
+  trailing swipe actions, on mygo's `draggable` along the horizontal axis
+  (bounds 48 past the buttons, a snap to closed, open or the full swipe):
+  buttons 74 points at least or the label plus 32, 17-point labels, the
+  gray `textMuted` and the red `danger`; the row's content is the press
+  target, so its `clicked()` is the row's, and the tap that closes an open
+  row is consumed by the widget. The buttons are built only while the row
+  is open, in a strip clipped to the room the content left.
+- **Directional lock on a touch screen** (v1.176): a press on a node
+  dragged along one axis alone (`Runtime::pressDragAxes`) decides by its
+  first 8 points — along the axis the drag takes the finger, across it
+  the container scrolls (`cancelTouchPress`), until then nothing moves —
+  as UIScrollView's directional lock; the desktop's pointer has no scroll
+  to compete with. In both phone Windows' touch-moved handlers.
+- **The phone's theme** (v1.176): `Theme::phone($dark)` — UIKit's
+  system colors, 17-point text, radius 12, and the control sizes
+  `$controlHeight` (44: buttons, fields, selects; a phone's button a
+  capsule), `$switchWidth` × `$switchHeight` (51 × 31), `$segmentedHeight`
+  (32), and `$groupBackground` / `$groupSurface` — which
+  `App::systemTheme()` takes on iOS and Android. The fields are 0 and
+  null in mygo's light and dark themes, which the controls read as mygo's
+  measured sizes, so the desktop is unchanged.
+- **iOS 26's bars** (v1.176): `tabBar` a capsule of `systemMaterial('glass')`
+  56 high floating 16 in and 8 over the safe area's bottom (its band
+  `tabBarInset()`), the chosen item on a capsule of its own;
+  `navigationBar` clear, the way back a 44-point circle of glass with the
+  chevron alone, the trailing items in a capsule of glass, and with a
+  `ScrollState` its title fading in as `largeTitle()` (34 bold, 52 high)
+  goes under it.
+- **iOS's system materials** (v1.176): `Node::systemMaterial()` is
+  UIKit's on iOS — `glass` and `clear-glass` UIGlassEffect's styles on
+  iOS 26 (looked up at run time), the chrome and ultra-thin blurs before
+  it; the other names a UIBlurEffectStyle (`Platform\iOS\Window::MATERIALS`).
+  Unlike macOS, where the materials are under the window's view and show
+  through its holes, they go over the Metal view, so they blur the page
+  it shows (what the bars float over): `Runtime::$overLayer` makes the
+  painter leave a material's node, and what it holds, to `$overPaints`,
+  painted in the launcher's clear view over the materials, which takes no
+  touches; the node leaves no hole. `belowMaterials()` needs no layer of
+  its own there (`$underLayer` is false). Android has no system material
+  for a GL surface and keeps `Plugins\Glass`.
+- **The interactive pop gesture** (v1.176): on a touch screen a top-level
+  `Router` with a page to go back to builds a 20-point edge draggable
+  along the horizontal axis over its page (`Router::popGesture`); the page
+  follows it over the page before (built inert, as the slide shows it),
+  let go past a third it goes back with the animations of that frame
+  disabled, the gesture having been the transition.
+- **Pull to refresh** (v1.176): `ScrollState::$pull`, `$overscrolls`,
+  `$released`; `Runtime::scrollAt` adds a touch screen's drag past the top
+  of an overscrolling ScrollState to `$pull` instead of scrolling, and the
+  phone Windows push `['scrollEnd', x, y]` as a finger that scrolled lifts;
+  `refreshable($state, &$refreshing, $fn)` shows the pull rubber-banded
+  (`Motion::rubberband`), a spinner in the room, refreshing past 60.
+- **The log's six levels, and on phones** (v1.176): `Logger`'s levels are
+  `VERBOSE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `FAULT` (`verbose()` …
+  `fault()`): IINA's four with info and fault, as the system logs have them, written in a line
+  as `[subsystem][W]`; IINA's logLevel setting maps through `Logger::IINA`.
+  On iOS and Android a line goes to the system log at its level
+  (`myphp_ios_log`: os_log's debug, info, default, error, fault;
+  `myphp_android_log`: logcat's V to F) rather than to the standard error,
+  which goes nowhere there. `myphp run` prints a device's log with its
+  level as one of those letters (E, F, W, I, D, V), colored.
+- **View files and hot reload** (v1.176): `Content::file($path, $state)`
+  is a window's view from a file that returns it, run bound to `$state`
+  (its scope too; a `stdClass` without one, as PHP binds no closure to an
+  internal class's scope). In development it loads the file again when the
+  file `MYPHP_HOT_RELOAD` names (or `.myphp-reload` beside the entry) lists
+  it, checked three times a second — what `myphp dev` and `myphp run` write
+  on a save or `r` — refusing a file that declares a named class or
+  function (`Content::declared`), keeping the view it had when the file
+  fails, and telling the other files changed. mygo's Go has no such
+  thing; its `dev` rebuilds. The examples keep their views in `view.php`.
+- **`myphp run`'s and `myphp dev`'s keys** (v1.176): Flutter's single keys
+  without Enter (`r` hot reload, `R` restart, `c`, `q`, `h`), the terminal
+  set back on exit and on Ctrl+C (pcntl). `myphp run` on a phone copies
+  the changed PHP files into the installed app (Android: a debuggable APK
+  and `run-as`; the iOS simulator: the installed bundle), with
+  `myphp.keepFiles` keeping the launcher's assets from copying over them.
+- **`navigationBar($title, ?$router, ?$trailing, ?$largeTitle)`**: 44
+  points under the safe area's top, which it extends into; the title 17
+  semibold centered; margins 16 (the rest under "iOS 26's bars" above).
+  `Router::previousTitle()` is new.
 - **`sheet(&$open, $fn)`**: a UISheetPresentationController's — rises
   from the bottom (0.35 s), its top corners rounded 10, a 36×5 grabber,
   content padded 16 over the safe area's bottom, at most the window less

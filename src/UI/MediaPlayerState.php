@@ -1364,7 +1364,7 @@ final class MediaPlayerState
     /** The app's log (Logger) as IINA's settings say, with the advanced settings on (which hold them): their log level, else the app's kind's; written to its file with logging on. */
     private static function applyLog(PlayerSettings $set): void
     {
-        Logger::setLevel($set->get('enableAdvancedSettings') ? $set->get('logLevel') : Logger::defaultLevel());
+        Logger::setLevel($set->get('enableAdvancedSettings') ? Logger::IINA[$set->get('logLevel')] ?? Logger::DEBUG : Logger::defaultLevel()); // IINA's setting, of its four levels
         Logger::logToFile($set->get('enableAdvancedSettings') && $set->get('enableLogging'));
     }
 

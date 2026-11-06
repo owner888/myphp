@@ -41,9 +41,11 @@ mkdir -p "${WORK_DIR}/gen" "${WORK_DIR}/classes" "${WORK_DIR}/dex" "${WORK_DIR}/
 echo "==> Compiling resources with aapt2..."
 "$AAPT2" compile --dir "${TEMPLATE_DIR}/res" -o "${WORK_DIR}/res.zip"
 
-# 2. Link resources and generate R.java
+# 2. Link resources and generate R.java; debuggable for myphp run (MYPHP_ANDROID_DEBUGGABLE=1), whose hot restart copies files in with run-as
 echo "==> Linking APK and generating R.java..."
-"$AAPT2" link \
+DEBUG_MODE=""
+if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
+"$AAPT2" link $DEBUG_MODE \
     -I "$PLATFORM_JAR" \
     --manifest "${TEMPLATE_DIR}/AndroidManifest.xml" \
     --java "${WORK_DIR}/gen" \

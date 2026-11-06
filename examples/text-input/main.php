@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, Menu, MenuItem, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, InputEvent, Key, Painter, Role, TextInputClient, TextInputRange, TextInputSelection, TextLayout, TextStyle};
+use MyPHP\UI\{Content, InputEvent, Key, Painter, TextInputClient, TextInputRange, TextInputSelection, TextLayout};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -153,28 +153,10 @@ final class Field implements TextInputClient
     }
 }
 
-function view(Context $c, Field $f): void
-{
-    $t = $c->theme;
-    if ($f->shaper === null) {
-        $font = new TextStyle();
-        $font->size = 18;
-        $f->shaper = fn(string $s) => $c->shapeText($s, 0, $font);
-        $f->shape();
-    }
-    $c->column(24, 12, 1);
-      $c->text('Application-owned text input', 22, style: Font::BOLD);
-      $c->muted('Click, type, compose with your input method, select with Shift, and use the Edit menu.');
-      $c->box(0, 60, $t->surface)->fillWidth()->border(1, $t->border)->radius($t->radius)->label('Custom text field')->role(Role::TEXT_FIELD)->value($f->text)
-          ->focusable()->handleTextInput($f)->autoFocus()->handleInput($f->input(...))->draw($f->draw(...));
-      $c->muted('Storage, navigation, clipboard policy and rendering belong to this example; the primitive supplies native text services.');
-    $c->end();
-}
-
 $s = new Field('Type here: é, 😀, العربية, עברית');
 App::setName('Text input');
 App::whenReady(function () use ($s) {
     App::setMenu(new Menu([new MenuItem(role: 'appMenu'), new MenuItem(role: 'editMenu')]));
-    new Window(new WindowOptions(title: 'Text input primitive', width: 760, height: 240, content: Content::view(fn(Context $c) => view($c, $s))));
+    new Window(new WindowOptions(title: 'Text input primitive', width: 760, height: 240, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

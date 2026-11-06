@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
+use MyPHP\Haptics;
 
 /**
  * The widgets of a phone (not mygo's, which has no mobile platform;
@@ -112,69 +113,88 @@ trait ContextMobile
     }
 
     /**
-     * A tab bar across the bottom of the window, as UITabBar: $items are
-     * [SVG icon, label] pairs sharing the width, the chosen one in the
-     * accent, the others muted; a tap chooses, which changed() reports.
-     * 49 points high (the hairline above it included) over the safe area's
-     * bottom, which it extends into. Build it last in a column that fills the
-     * window, the page's content growing above it (a Router's view).
+     * A tab bar across the bottom of the window, as UITabBar on iOS 26: a
+     * capsule of glass floating 16 points in from the sides and 8 over the
+     * safe area's bottom (8 at least), 56 high, its items sharing its width,
+     * each a 24-point icon over a 10-point label, the chosen one in the
+     * accent on a capsule of its own, the others muted; a tap chooses, which
+     * changed() reports. The band it floats in is clear, so the page shows
+     * around it. Build it last in a column that fills the window, the
+     * page's content growing above it (a Router's view); tabBarInset() is
+     * the height the band takes. Not mygo's.
      * @param list<array{0: SVG, 1: string}> $items
      */
     public function tabBar(array $items, int &$index): Node
     {
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
-        $bottom = $this->safeArea[2];
-        $n = $this->row(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->shrink(0)->padding(0, 0, $bottom, 0)->borderWidth(1, 0, 0, 0)->borderColor($t->border)
+        $bottom = max($this->safeArea[2], 8.0);
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->padding(8, 16, $bottom, 16)->justify(Node::CENTER)->alignItems(Node::STRETCH)
             ->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
-        foreach ($items as $i => [$svg, $label]) {
-            $on = $i === $index;
-            $color = $on ? $t->accent : $t->textMuted;
-            $tab = $this->column(0, 2, 1)->basis(0)->size(0, 48)->padding(6, 0, 0, 0)->alignItems(Node::CENTER)->focusable()->role(Role::TAB)->label($label);
-            $tab->on = $on; $tab->checked($on);
-              $this->icon($svg, 25, $color);
-              $this->text($label, 10, $color)->singleLine()->fontWeight($on ? 500 : 400);
-            $this->end();
-            if ($this->clicked($tab) && !$on) {
-                $index = $i;
-                $n->changed = true;
+          $pill = $this->row(4, 0, 1)->size(0, 56)->radius(28)->alignItems(Node::STRETCH)->systemMaterial('glass');
+            foreach ($items as $i => [$svg, $label]) {
+                $on = $i === $index;
+                $color = $on ? $t->accent : $t->textMuted;
+                $tab = $this->column(0, 2, 1)->basis(0)->radius(24)->alignItems(Node::CENTER)->justify(Node::CENTER)->focusable()->role(Role::TAB)->label($label);
+                if ($on) { $tab->background($t->text, 0.08); } // the chosen tab's capsule, a shade of the text over the glass
+                $tab->on = $on; $tab->checked($on);
+                  $this->icon($svg, 24, $color);
+                  $this->text($label, 10, $color)->singleLine()->fontWeight($on ? 600 : 500);
+                $this->end();
+                if ($this->clicked($tab) && !$on) {
+                    $index = $i;
+                    $n->changed = true;
+                }
             }
-        }
+          $this->end();
         $this->end();
         return $n;
     }
 
+    /** The height the floating tabBar's band takes at the bottom of the window: the capsule, its margins and the safe area's bottom (8 at least). */
+    public function tabBarInset(): float
+    {
+        return 8.0 + 56.0 + max($this->safeArea[2], 8.0);
+    }
+
     /**
-     * A navigation bar across the top of the window, as UINavigationBar:
-     * $title centered in 17 points semibold, 44 points high (the hairline
-     * below it included) under the safe area's top, which it extends into. With a
-     * $router that can go back, a chevron and the previous page's title
-     * (or "Back") lead, in the accent, and a tap on them goes back; $trailing
-     * builds what ends the bar (buttons, text in the accent). Build it first
-     * in a column that fills the window.
+     * A navigation bar across the top of the window, as UINavigationBar on
+     * iOS 26: $title centered in 17 points semibold, 44 points high under the
+     * safe area's top, which it extends into, clear over the page. With a
+     * $router that can go back, a chevron in a 44-point circle of glass
+     * leads, in the accent, and a tap on it goes back (iOS 26 shows the
+     * chevron alone); $trailing builds what ends the bar (buttons, text in
+     * the accent), in a capsule of glass 44 high. With $largeTitle, the
+     * ScrollState of a page that begins with largeTitle(), the bar's title
+     * shows only once that one scrolled under it, as iOS's large titles do.
+     * Build it first in a column that fills the window. Not mygo's.
      */
-    public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null): Node
+    public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null, ?ScrollState $largeTitle = null): Node
     {
         $t = $this->theme;
         $top = $this->safeArea[0];
         $this->safeArea[0] = 0.0; // the bar took the top: a safeArea() built below it starts at the bar's bottom
-        $n = $this->row(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 44 + $top)->padding($top, 8, 0, 8)->alignItems(Node::CENTER)
-            ->borderWidth(0, 0, 1, 0)->borderColor($t->border)->role(Role::TOOLBAR);
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 44 + $top)->padding($top, 16, 0, 16)->alignItems(Node::CENTER)->role(Role::TOOLBAR);
           // the leading third, the title and the trailing third share the width, so the title centers in the bar
           $lead = $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::START);
             if ($router !== null && $router->canGoBack()) {
-                $back = $this->row(0, 6)->padding(0, 8, 0, 0)->radius($t->radius)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($this->texts()->get('back'));
+                $back = $this->column(0, 0)->size(44, 44)->radius(22)->systemMaterial('glass')->center()->focusable()->role(Role::BUTTON)->label($this->texts()->get('back'));
                   $a = $this->box(12, 20, 0)->shrink(0); $a->color = null;
                   $a->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), [$r[0] - 4, $r[1], 20, 20], 180, $p->theme()->accent));
-                  $prev = $router->previousTitle();
-                  $this->text($prev !== '' ? $prev : $this->texts()->get('back'), 17, $t->accent)->singleLine();
                 $this->end();
                 if ($this->clicked($back)) { $router->back(); }
             }
           $this->end();
-          $this->text($title, 17, $t->text)->fontWeight(600)->singleLine()->shrink(1);
-          $this->row(0, 16, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::END);
-            if ($trailing !== null) { $trailing(); }
+          $inline = $this->text($title, 17, $t->text)->fontWeight(600)->singleLine()->shrink(1);
+          if ($largeTitle !== null) { // the large title in the page's scroll: the bar's title fades in over the last 10 points of its 52 going under the bar
+              $inline->opacity(max(0.0, min(1.0, ($largeTitle->y - 42) / 10)));
+          }
+          $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::END);
+            if ($trailing !== null) {
+                $this->row(0, 16)->minHeight(44)->padding(0, 16)->radius(22)->systemMaterial('glass')->alignItems(Node::CENTER);
+                  $trailing();
+                $this->end();
+            }
           $this->end();
         $this->end();
         return $n;
@@ -280,6 +300,81 @@ trait ContextMobile
     }
 
     /**
+     * A scroll whose content a finger pulls down past its top to refresh,
+     * as UIRefreshControl and SwiftUI's .refreshable: the content follows
+     * the finger rubber-banded, a spinner showing in the room it leaves;
+     * let go 60 points down or more, $refreshing turns true, which
+     * changed() reports, and the content rests 60 down under the spinner
+     * until the app sets $refreshing false again (its work done), when it
+     * goes back up. $state keeps the scroll's place, as scroll()'s; $fn
+     * builds the content. On a touch screen; the desktop's wheel scrolls it
+     * as any scroll. Not mygo's.
+     * @param Closure(): void $fn
+     */
+    public function refreshable(ScrollState $state, bool &$refreshing, Closure $fn): Node
+    {
+        $t = $this->theme;
+        $state->overscrolls = true;
+        $n = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->scroll($state);
+          $holder = $this->column(0, 0)->alignSelf(Node::STRETCH);
+            $fn();
+          $this->end();
+        $this->end();
+        $rest = 60.0;
+        $vp = $state->viewport > 0 ? $state->viewport : $this->height;
+        if ($state->pull > 0 && !$state->released) { // the finger holds it: rubber-banded, as UIScrollView past its top
+            $shown = $this->jump($holder, 'pull', Motion::rubberband(-$state->pull, 0, 0, $vp) * -1);
+        } else {
+            if ($state->released) {
+                $shownNow = Motion::rubberband(-$state->pull, 0, 0, $vp) * -1;
+                if ($shownNow >= $rest && !$refreshing) { $refreshing = true; $n->changed = true; Haptics::impact('medium'); }
+                $state->pull = 0.0; $state->released = false;
+            }
+            $shown = $this->animateTo($holder, 'pull', $refreshing ? $rest : 0.0, Animation::smooth());
+        }
+        if ($shown > 0.5) {
+            $holder->translate(0, $shown);
+            $spin = $this->spinner()->absolute()->top(max(0.0, ($shown - 20) / 2))->left(0)->right(0)->size(0, 20); // in the room the content leaves
+            $spin->opacity($refreshing ? 1.0 : min(1.0, $shown / $rest));
+            $spin->color = $t->textMuted;
+        }
+        return $n;
+    }
+
+    /**
+     * A page's title in large type, as UINavigationBar's prefersLargeTitles:
+     * 34 points bold at the start of the content, 52 high, padded 16; build
+     * it first in the page's scroll, and give the page's navigationBar the
+     * same ScrollState, whose title then shows only once this one scrolled
+     * under the bar. Not mygo's.
+     */
+    public function largeTitle(string $title): Node
+    {
+        $t = $this->theme;
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->size(0, 52)->padding(0, 16)->alignItems(Node::END)->role(Role::HEADING);
+          $this->text($title, 34, $t->text)->fontWeight(700)->singleLine()->shrink(1);
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * The page of an inset grouped list, as UITableView's insetGrouped style
+     * and SwiftUI's List with .insetGrouped: a scroll filling what holds it,
+     * on the grouped background (the gray in the light appearance, black in
+     * the dark), with the sections $fn builds (section()) one under the
+     * other. Not mygo's.
+     * @param Closure(): void $fn
+     */
+    public function insetGroupedList(Closure $fn): Node
+    {
+        $t = $this->theme;
+        $n = $this->scroll(0, 0, 1, $t->groupBackground ?? $t->background)->alignSelf(Node::STRETCH)->role(Role::LIST);
+          $fn();
+        $this->end();
+        return $n;
+    }
+
+    /**
      * A section of an inset grouped list, as UITableView's insetGrouped
      * style (Settings) and SwiftUI's Section in a List or Form: $header in
      * 13-point capitals, muted; the rows $rows builds in a group of the
@@ -299,7 +394,7 @@ trait ContextMobile
           if ($header !== '') {
               $this->text(mb_strtoupper($header, 'UTF-8'), 13, $t->textMuted)->padding(16, 16, 7, 16)->role(Role::HEADING);
           }
-          $group = $this->column(0, 0, 0, $t->surface)->alignSelf(Node::STRETCH)->radius(10)->clip();
+          $group = $this->column(0, 0, 0, $t->groupSurface ?? $t->surface)->alignSelf(Node::STRETCH)->radius(10)->clip();
             $rows();
           $this->end();
           $group->drawOver(static function (Painter $p, array $r) use ($group): void { // the separators: under each row but the last, from 16 in to the end
@@ -314,6 +409,75 @@ trait ContextMobile
           }
         $this->end();
         return $n;
+    }
+
+    /**
+     * A row swiped toward the start to show actions at its end, as
+     * UITableView's trailing swipe actions and SwiftUI's .swipeActions:
+     * $content builds the row, which the finger drags sideways
+     * (draggable, along that axis alone, so the list still scrolls); the
+     * buttons of $actions, each as wide as its label and 74 points at least,
+     * show in the room it leaves, the first nearest the content, gray, or
+     * red for one marked "!Delete"; let go past half their width the row
+     * stays open, else it closes; swiped on 48 points past them it performs
+     * the first action (UIKit's full swipe). A tap on an open row closes it;
+     * a tap on a closed one is the row's clicked(). $action is the index of
+     * the action tapped this frame, -1 for none. Returns the content's node,
+     * the one dragged, which clicked() and focused() ask about; a key given
+     * before the call names the row around it. Not mygo's.
+     * @param Closure(): void $content
+     */
+    public function swipeActions(?int &$action, Closure $content, string ...$actions): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $action = -1;
+        $rtl = $this->direction() === Direction::RightToLeft;
+        $widths = [];
+        foreach ($actions as $label) {
+            $widths[] = max(74.0, $this->measureText(0, new Span(ltrim($label, '!'), 17))[0] + 32);
+        }
+        $total = array_sum($widths);
+        $full = $total + 48; // swiped on this far, the first action is performed
+        $sign = $rtl ? 1.0 : -1.0; // the content moves toward the start
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->clip();
+          $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its
+            $content();
+          $this->end();
+          $offset = $rt?->dragRecs[$inner->id]->own ?? [0.0, 0.0]; // where the row rests, kept with its drag record between frames
+          $this->draggable($inner, $offset, new DraggableOptions(Node::HORIZONTAL,
+              bounds: $rtl ? [0, 0, $full, 0] : [-$full, 0, $full, 0],
+              snap: fn(array $p) => abs($p[0]) >= $full ? [$sign * $full, 0.0] : (abs($p[0]) > $total / 2 ? [$sign * $total, 0.0] : [0.0, 0.0])));
+          $shown = $this->dragOffset($inner);
+          $open = abs($shown[0]) > 0.5;
+          $buttons = [];
+          if ($open) { // the room the content leaves at its end, the buttons in it, the first nearest the content; closed, there is nothing of them to tap or read
+              $strip = $this->row(0, 0)->absolute()->top(0)->bottom(0)->end(0)->size(min(abs($shown[0]), $full), 0)->clip()->justify(Node::END)->alignItems(Node::STRETCH);
+              foreach ($actions as $i => $label) {
+                  $destructive = $label !== '' && $label[0] === '!';
+                  if ($destructive) { $label = substr($label, 1); }
+                  $bg = $destructive ? $t->danger : $t->textMuted;
+                  $b = $this->column(0, 0, 0, $bg)->size($widths[$i], 0)->shrink(0)->center()->focusable()->role(Role::BUTTON)->label($label);
+                  if ($this->hovered($b) && ($rt?->input->mouseDown ?? false)) { $b->color = Theme::mix($bg, 0x000000, 0.15); }
+                    $this->text($label, 17, (Theme::luminance($bg) & 255) > 165 ? $t->text : 0xffffff)->singleLine(); // white on the gray and the red, as UIKit's
+                  $this->end();
+                  $buttons[$i] = $b;
+              }
+              $this->end();
+          }
+        $this->end();
+        $close = static function () use (&$offset, $rt): void { $offset = [0.0, 0.0]; $rt?->changed(); };
+        if (abs($offset[0]) == $full) { // let go past the buttons by 48: the full swipe performs the first action
+            $action = 0; $close();
+        }
+        foreach ($buttons as $i => $b) {
+            if ($this->clicked($b)) { $action = $i; $close(); }
+        }
+        if ($open && abs($offset[0]) == $total && $this->clicked($inner)) { // a tap on an open row closes it
+            $close();
+        }
+        if ($rt !== null) { $rt->dragRecs[$inner->id]->own = $offset; }
+        return $inner;
     }
 
     /**

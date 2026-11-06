@@ -22,6 +22,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -48,7 +49,6 @@ import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -167,7 +167,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             }
         }, new IntentFilter("com.owner888.myphp.IME_COMMIT"), Context.RECEIVER_EXPORTED);
 
-        copyAssetsToFilesDir();
+        // myphp run's hot restart copied the changed PHP files over the assets' copies: a debuggable build started with myphp.keepFiles keeps them
+        boolean keep = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0 && getIntent().getBooleanExtra("myphp.keepFiles", false);
+        if (!keep) {
+            copyAssetsToFilesDir();
+        }
         writeCaCertificates(new File(getFilesDir(), "cacerts.pem"));
 
         DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -558,26 +562,6 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     public static void performHaptic(int constant) {
         if (sInstance == null || sInstance.surfaceView == null) return;
         sInstance.runOnUiThread(() -> sInstance.surfaceView.performHapticFeedback(constant));
-    }
-
-    public static void performHapticFeedback() {
-        if (sInstance == null) return;
-        try {
-            android.os.Vibrator vib = sInstance.getSystemService(android.os.Vibrator.class);
-            if (vib != null && vib.hasVibrator()) {
-                vib.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_CLICK));
-            }
-        } catch (Exception ignored) {}
-        if (sInstance.surfaceView != null) {
-            sInstance.runOnUiThread(() -> {
-                try {
-                    sInstance.surfaceView.performHapticFeedback(
-                        HapticFeedbackConstants.VIRTUAL_KEY,
-                        HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
-                    );
-                } catch (Exception ignored) {}
-            });
-        }
     }
 
     public static void showAlertDialog(String title, String message, String[] buttons, int callbackId) {

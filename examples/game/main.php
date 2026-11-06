@@ -117,8 +117,6 @@ final class Meadow extends Game
 
 App::whenReady(function () {
     $meadow = new Meadow(sheet());
-    new Window(new WindowOptions(title: 'Meadow', width: 720, height: 480, content: Content::view(function (Context $c) use ($meadow): void {
-        Game::view($c, $meadow)->grow = 1;
-    })));
+    new Window(new WindowOptions(title: 'Meadow', width: 720, height: 480, content: Content::file(__DIR__ . '/view.php', $meadow)));
 });
 App::run();

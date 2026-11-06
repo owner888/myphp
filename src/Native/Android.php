@@ -91,8 +91,8 @@ final class Android
             void myphp_clipboard_set_text(const char *text);
             void myphp_open_url(const char *url);
             void myphp_set_keep_screen_on(int on);
-            void myphp_perform_haptic(void);
             void myphp_perform_haptic_kind(int constant);
+            void myphp_android_log(int level, const char *message);
             void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             void myphp_show_notification(const char *title, const char *body, int id);
             void myphp_pick_files(const char **mime_types, int mime_count, int multiple, int photos, int callback_id);

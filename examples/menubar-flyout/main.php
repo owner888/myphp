@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, FlyoutOptions, Menu, MenuItem, QuitEvent, Tray, TrayOptions, Window};
-use MyPHP\UI\{Content, Context, Font, Node};
+use MyPHP\UI\Content;
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -37,7 +37,7 @@ final class Focus
     {
         if ($this->panel !== null) { $this->panel->close(); return; }
         $this->panel = Window::flyout(new FlyoutOptions(tray: $this->tray, placement: FlyoutOptions::BOTTOM, gap: 4, width: 280, height: 230,
-            focusable: true, shadow: true, popover: true, content: Content::view(fn(Context $c) => view($c, $this))));
+            focusable: true, shadow: true, popover: true, content: Content::file(__DIR__ . '/view.php', $this)));
         $this->panel->on('closed', function () { $this->panel = null; });
     }
 
@@ -59,31 +59,6 @@ final class Focus
         });
         App::onWillQuit(fn(QuitEvent $e) => $this->tray->destroy());
     }
-}
-
-function view(Context $c, Focus $a): void
-{
-    $t = $c->theme;
-    $c->root->color = null;
-    $box = $c->column(16, 12, 1);
-    if (!$c->vibrancy()) { $box->background($t->surface)->radius(10)->border(1, $t->border); } // over the popover's material, nothing
-      $c->text('Focus', 17, style: Font::BOLD);
-      $c->row(0, 12)->alignItems(Node::CENTER);
-        $c->text('Focus mode')->grow(1);
-        $c->key('focus')->switch('', $a->focus)->label('Focus mode');
-      $c->end();
-      $c->row(0, 12)->alignItems(Node::CENTER);
-        $c->text('Sound')->grow(1);
-        $c->key('sound')->switch('', $a->sound)->label('Sound');
-      $c->end();
-      $c->text(sprintf('Sessions of %d minutes', (int)$a->minutes), 12, $t->textMuted);
-      $c->key('minutes')->slider($a->minutes, 5, 60, 0)->fillWidth()->label('Session length');
-      $c->spacer();
-      $c->row();
-        $c->spacer();
-        $c->key('quit')->button('Quit')->onClick(App::quit(...));
-      $c->end();
-    $c->end();
 }
 
 $s = new Focus();

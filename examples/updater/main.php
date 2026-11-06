@@ -59,16 +59,7 @@ MyPHP\Ipc::bind(new Demo());
 
 App::whenReady(function () use ($native) {
     if ($native) {
-        new Window(new WindowOptions(title: 'Updater', width: 420, height: 200, content: Content::view(function (Context $c): void {
-            $c->column(24, 12, 1);
-            $c->text('Check from the app menu, or here:');
-            $c->row();
-            if ($c->clicked($c->button('Check for Updates…'))) {
-                Updater::checkForUpdates();
-            }
-            $c->end();
-            $c->end();
-        })));
+        new Window(new WindowOptions(title: 'Updater', width: 420, height: 200, content: Content::file(__DIR__ . '/view.php')));
         return;
     }
     new Window(new WindowOptions(title: 'Updater', width: 420, height: 200, html: <<<'HTML'

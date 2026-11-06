@@ -16,19 +16,59 @@ namespace MyPHP\Native;
  */
 final class GlShader
 {
-    /** Adapts desktop GLSL 3.30 to GLES 3.2 on Android */
-    public static function adapt(string $glsl): string
+    /** Adapts desktop GLSL 3.30 to GLSL ES on Android: $esVersion, esVersion()'s header for the context's GPU, in place of the #version line. */
+    public static function adapt(string $glsl, string $esVersion = "#version 320 es\n"): string
     {
         if (!\MyPHP\App::isAndroid()) {
             return $glsl;
         }
-        $header = "#version 320 es\n"
+        $header = $esVersion
             . "precision highp float;\n"
             . "precision highp int;\n"
             . "precision highp sampler2D;\n"
-            . "precision highp sampler2DArray;\n"
-            . "precision highp samplerBuffer;\n";
+            . "precision highp sampler2DArray;\n";
+        if (self::texelRows($esVersion)) {
+            $header .= "vec4 texelRow(highp sampler2D s, int i) { return texelFetch(s, ivec2(i & " . (self::TEXEL_ROW - 1) . ", i >> " . (int)log(self::TEXEL_ROW, 2) . "), 0); }\n";
+            $glsl = preg_replace('/\buniform\s+samplerBuffer\s+(\w+)\s*;/', 'uniform highp sampler2D $1;', $glsl);
+            $glsl = preg_replace('/\btexelFetch\((uQuads|uXforms),/', 'texelRow($1,', $glsl);
+        } else {
+            $header .= "precision highp samplerBuffer;\n";
+        }
         return preg_replace('/^\s*#version\s+330\s+core\s*/m', $header, $glsl);
+    }
+
+    /** The texels of a row of the 2D textures that hold the quads and transforms on a GPU without texture buffers. */
+    public const TEXEL_ROW = 2048;
+
+    /** Whether shaders of $esVersion read the quads and transforms from rows of 2D textures (GLSL ES 3.00: no texture buffers). */
+    public static function texelRows(string $esVersion): bool
+    {
+        return str_starts_with($esVersion, '#version 300 es');
+    }
+
+    /**
+     * The #version line (and #extension) of the shaders for a GPU of GLSL ES $glsl (GL_SHADING_LANGUAGE_VERSION, as
+     * "OpenGL ES GLSL ES 3.10") and $extensions (GL_EXTENSIONS): 3.20, whose texture buffers the shaders read
+     * (samplerBuffer), on a phone's GPU; 3.10 with GL_EXT_texture_buffer or GL_OES_texture_buffer on one that has no
+     * 3.2; 3.00 otherwise, as the Android emulator's on a Mac, whose shaders read rows of 2D textures in place of
+     * texture buffers (texelRows). Throws for a GPU below 3.00.
+     */
+    public static function esVersion(string $glsl, string $extensions): string
+    {
+        $v = preg_match('/(\d+)\.(\d+)/', $glsl, $m) ? (int)$m[1] * 100 + (int)$m[2] : 0;
+        if ($v >= 320) {
+            return "#version 320 es\n";
+        }
+        $names = preg_split('/\s+/', trim($extensions)) ?: [];
+        foreach (['GL_EXT_texture_buffer', 'GL_OES_texture_buffer'] as $ext) {
+            if ($v >= 310 && in_array($ext, $names, true)) {
+                return "#version 310 es\n#extension $ext : require\n";
+            }
+        }
+        if ($v >= 300) {
+            return "#version 300 es\n";
+        }
+        throw new \RuntimeException("myphp: the GPU offers GLSL ES " . ($v > 0 ? sprintf('%d.%02d', intdiv($v, 100), $v % 100) : "\"$glsl\"") . ': myphp needs 3.00 or later');
     }
 
     public const COMMON = <<<'GLSL'

@@ -44,8 +44,8 @@ final class DeviceManager
         }
 
         // 2. Android Devices via adb
-        if (Cmd::look('adb') !== null) {
-            $adbOut = (string)@shell_exec('adb devices -l 2>/dev/null');
+        if (($adb = Emulators::tool('adb')) !== '') {
+            $adbOut = (string)@shell_exec(escapeshellarg($adb) . ' devices -l 2>/dev/null');
             foreach (explode("\n", $adbOut) as $line) {
                 $line = trim($line);
                 if ($line === '' || str_starts_with($line, 'List of devices')) {
@@ -59,6 +59,11 @@ final class DeviceManager
                         $model = str_replace('_', ' ', $m[1]);
                     }
                     $isEmulator = str_starts_with($serial, 'emulator-');
+                    if ($isEmulator) { // the AVD's name, as `myphp emulators` lists it, rather than the system image's model
+                        [, $avd] = Cmd::output([$adb, '-s', $serial, 'emu', 'avd', 'name']);
+                        $avd = trim(explode("\n", $avd)[0]);
+                        if ($avd !== '' && $avd !== 'OK') { $model = $avd; }
+                    }
                     $devices[] = new TargetDevice(
                         id: $serial,
                         name: "Android " . ($isEmulator ? "Emulator" : "Device") . " ($model)",
@@ -71,7 +76,7 @@ final class DeviceManager
         }
 
         // 3. iOS Simulators and Devices via xcrun simctl
-        if (PHP_OS_FAMILY === 'Darwin' && Cmd::look('xcrun') !== null) {
+        if (PHP_OS_FAMILY === 'Darwin' && Cmd::look('xcrun') !== '') {
             $simOut = (string)@shell_exec('xcrun simctl list devices available 2>/dev/null');
             foreach (explode("\n", $simOut) as $line) {
                 $line = trim($line);

@@ -47,6 +47,7 @@ void (*epoxy_glGetProgramiv)(GLuint, GLenum, GLint*) = glGetProgramiv;
 void (*epoxy_glGetShaderInfoLog)(GLuint, GLsizei, GLsizei*, char*) = glGetShaderInfoLog;
 void (*epoxy_glGetShaderiv)(GLuint, GLenum, GLint*) = glGetShaderiv;
 const GLubyte* (*epoxy_glGetString)(GLenum) = glGetString;
+const GLubyte* (*epoxy_glGetStringi)(GLenum, GLuint) = glGetStringi;
 GLuint (*epoxy_glGetUniformBlockIndex)(GLuint, const char*) = glGetUniformBlockIndex;
 GLint (*epoxy_glGetUniformLocation)(GLuint, const char*) = glGetUniformLocation;
 void (*epoxy_glLinkProgram)(GLuint) = glLinkProgram;

@@ -11,7 +11,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, GifDecoder, Node, VideoPlayer};
+use MyPHP\UI\{Content, GifDecoder, VideoPlayer};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -26,24 +26,9 @@ final class Wavelength
     }
 }
 
-/** The interface of the state, built whenever the window needs a frame. */
-function view(Context $c, Wavelength $s): void
-{
-    $c->column()->fill();
-      $c->video($s->waves)->fill()->fit(Node::COVER);
-      // Over the clip, which takes the window.
-      $c->column(0, 16)->absolute()->top(0)->left(0)->right(0)->bottom(0)->center();
-        $c->text('Wavelength', 44, 0xffffff, style: Font::BOLD);
-        if ($c->clicked($c->key('play')->button($s->waves->playing() ? 'Pause' : 'Play')->size(96, 0))) {
-            if ($s->waves->playing()) { $s->waves->pause(); } else { $s->waves->play(); }
-        }
-      $c->end();
-    $c->end();
-}
-
 $s = new Wavelength();
 App::setName('Video');
 App::whenReady(function () use ($s) {
-    new Window(new WindowOptions(title: 'Video', width: 640, height: 360, content: Content::view(fn(Context $c) => view($c, $s))));
+    new Window(new WindowOptions(title: 'Video', width: 640, height: 360, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

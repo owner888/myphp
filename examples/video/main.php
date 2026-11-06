@@ -118,18 +118,6 @@ final class Log
     }
 }
 
-/** A player's window: its film, or what failed to open. */
-function view(Context $c, MediaPlayerState $s): void
-{
-    if ($s->player !== null || $s->opening !== null) { // a film, or a URL opening (the player's indicator)
-        $c->mediaPlayer($s);
-        return;
-    }
-    $c->column(0, 0, 1, 0x000000)->center();
-      if ($s->error !== '') { $c->text($s->error, 13, 0xff6b6b); }
-    $c->end();
-}
-
 /**
  * The players and the app's other windows, as IINA's PlayerCore and
  * AppDelegate keep them: a window a player, the one in front the active
@@ -152,8 +140,9 @@ final class Players
     private static function create(): array
     {
         $s = new MediaPlayerState();
+        $view = Content::file(__DIR__ . '/view.php', $s); // the player's view (hot reloaded), timed and followed by the menu's state
         $w = new Window(new WindowOptions(title: 'Video', width: 960, height: 540, stateKey: 'video', backgroundColor: '#000000', titleBarStyle: 'hidden',
-            content: Content::view(function (Context $c) use ($s): void { Log::frame($s, function () use ($c, $s): void { view($c, $s); }); self::syncMenu(); })));
+            content: Content::view(function (Context $c) use ($s, $view): void { Log::frame($s, fn() => ($view->view)($c)); self::syncMenu(); })));
         $w->on('fileDrop', fn(FileDropEvent $e) => self::drop($s, $e->paths));
         $id = $w->id;
         $w->on('closed', function () use ($id, $s): void { $s->player?->pause(); unset(self::$players[$id]); self::syncMenu(); });

@@ -9,8 +9,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Node, Painter, Path};
-use MyPHP\UI\Chart\{Axes, Chart, Linear, Side, Tick};
+use MyPHP\UI\{Content, Path};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -69,41 +68,6 @@ final class Waveform
     }
 }
 
-function view(Context $c, Waveform $s): void
-{
-    $s->update($c->now());
-    $c->animationFrame();
-    $t = $c->theme;
-    $x = new Linear(-15, 0);
-    $y = new Linear(0, 1);
-    $label = fn(Side $side, Tick $tick) => $c->text($tick->label, 11, $t->textMuted)->noWrap();
-    $c->column(8, 8, 1, $t->background)->fill();
-      Chart::plot($c, new Axes(left: $y->ticks(5), bottom: $x->ticks(5), label: $label), function (Node $area) use ($s, $y, $t): void {
-          $area->description = '15 seconds at 1000 samples per second per series';
-          $area->label('Three live waveforms')->draw(function (Painter $p, array $r) use ($s, $y, $t): void {
-              foreach ($y->ticks(5) as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $t->border); }
-              $p->clip($r, function () use ($p, $r, $s): void {
-                  foreach (COLORS as $k => $color) {
-                      if ($s->mode === 'raw') {
-                          $p->strokePath(Chart::line($r, $s->xs, $s->ys[$k]), 2, $color);
-                          continue;
-                      }
-                      // The extremes of each pixel column.
-                      [$xs, $ys] = Chart::minMax($s->xs, $s->ys[$k], (int)ceil($r[2] * $p->scale()));
-                      if ($s->mode === 'path') {
-                          $p->strokePath(Chart::lineInto($s->paths[$k], $r, $xs, $ys), 2, $color);
-                          continue;
-                      }
-                      $points = [];
-                      foreach ($xs as $i => $f) { $points[] = [Chart::x($r, $f), Chart::y($r, $ys[$i])]; }
-                      $p->strokePolyline($points, 2, $color);
-                  }
-              });
-          });
-      })->fill();
-    $c->end();
-}
-
 $mode = $argv[1] ?? 'polyline';
 if (!in_array($mode, ['polyline', 'path', 'raw'], true)) {
     fwrite(STDERR, "unknown mode $mode: polyline, path or raw\n");
@@ -112,6 +76,6 @@ if (!in_array($mode, ['polyline', 'path', 'raw'], true)) {
 $s = new Waveform($mode);
 App::setName('Streaming chart');
 App::whenReady(function () use ($s): void {
-    new Window(new WindowOptions(title: 'Streaming chart', width: 1000, height: 600, content: Content::view(fn(Context $c) => view($c, $s))));
+    new Window(new WindowOptions(title: 'Streaming chart', width: 1000, height: 600, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

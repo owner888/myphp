@@ -15,7 +15,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Canvas, Content, Context, Cursor, InputEvent, Node, Painter};
+use MyPHP\UI\{Canvas, Content, InputEvent, Painter};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
@@ -288,26 +288,10 @@ final class BlackHole
     }
 }
 
-function view(Context $c, BlackHole $a): void
-{
-    $reduce = $c->preferences()->reduceMotion;
-    $root = $c->row(0, 0, 0, 0x000000)->fill()->alignItems(Node::END)->padding(0, 28, 26, 30);
-    $root->cursor($a->down ? Cursor::Grabbing : Cursor::Grab);
-    $root->draw(fn(Painter $p, array $r) => $a->draw($p, $r, $reduce));
-    $root->handleInput($a->input(...));
-      $c->column(0, 4);
-        $c->text('Gargantua', 22)->fontWeight(600)->textColor(0xffffff, WHITE_ALPHA);
-        $c->text('A black hole, its light traced through gravity by shaders written in PHP', 12)->textColor(0xffffff, MUTED_ALPHA);
-      $c->end();
-      $c->spacer();
-      $c->text('Drag to orbit · Scroll to zoom', 12)->textColor(0xffffff, MUTED_ALPHA)->opacity($a->hint);
-    $c->end();
-}
-
 $s = new BlackHole(new Shaders());
 App::setName('Black Hole');
 App::whenReady(function () use ($s): void {
     new Window(new WindowOptions(title: 'Black Hole', width: 1200, height: 760, titleBarStyle: 'hiddenInset', backgroundColor: '#000000',
-        content: Content::view(fn(Context $c) => view($c, $s))));
+        content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();
