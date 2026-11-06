@@ -161,3 +161,30 @@ $h->frame();
 check($h->byText('First Title') !== null, 'the Route title shows in the navigationBar on the first frame');
 same([0.0, 94.0, 390.0, 667.0], $h->rect($body), 'safeArea inside tabView + navigationBar does not double-count top or bottom insets');
 
+
+// section and cell: the inset grouped list — the group 16 in from the sides, rounded 10, the header in capitals above it, the footer below; cells 44 high, padded 16, clicked() reports a tap.
+$section = $group = $cell = $plain = null; $opened = 0;
+$h = new Headless(function (Context $c) use (&$section, &$group, &$cell, &$plain, &$opened): void {
+    $c->scroll(0, 0, 1)->fill();
+      $section = $c->section('General', function () use ($c, &$cell, &$plain): void {
+          $cell = $c->cell('Language', 'English', true);
+          $plain = $c->cell('About');
+      }, 'The language of the app.');
+    $c->end();
+    if ($c->clicked($cell)) { $opened++; }
+}, 390, 844);
+$h->rt->touch = true;
+$h->frame();
+$h->paint(); // the separators drawn over the group
+$r = $h->rect($section);
+same([0.0, 0.0, 390.0], [$r[0], $r[1], $r[2]], 'a section stretches across its parent');
+check($h->byText('GENERAL') !== null, 'the header shows in capitals: ' . json_encode($h->texts()));
+check($h->byText('The language of the app.') !== null, 'the footer shows');
+$rc = $h->rect($cell); $rp = $h->rect($plain);
+same([16.0, 358.0, 44.0], [$rc[0], $rc[2], $rc[3]], 'a cell is 44 high across the group, 16 in from the sides');
+same($rc[1] + 44.0, $rp[1], 'the cells follow each other without a gap');
+$rt = $h->rect($h->byText('Language')); $rd = $h->rect($h->byText('English'));
+same(32.0, $rt[0], 'the title starts 16 in from the group');
+check($rd[0] > $rt[0] + $rt[2] && $rd[0] + $rd[2] < 390.0 - 16.0 - 16.0, 'the detail sits at the end, before the chevron: ' . json_encode($rd));
+$h->clickText('Language');
+same(1, $opened, 'a tap on the cell reports clicked()');

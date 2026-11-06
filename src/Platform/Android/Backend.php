@@ -130,7 +130,8 @@ final class Backend implements Platform\Backend
                         $win?->onResume();
                         break;
                     case Android::EVENT_CONFIGURATION:
-                        \MyPHP\App::setTheme($ev->night_mode ? \MyPHP\UI\Theme::dark() : \MyPHP\UI\Theme::light());
+                        $this->theme()->setConfiguration((bool)$ev->night_mode, (float)$ev->font_scale, (bool)$ev->reduce_motion);
+                        $this->h->themeChanged(); // App::systemChanged: the theme follows night mode, the font size and animations anew, unless the app set its own
                         $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3], (int)$ev->keyboard);
                         break;
                     case Android::EVENT_DIALOG_RESULT:
@@ -245,7 +246,7 @@ final class Backend implements Platform\Backend
         return $this->screen ??= new Screen();
     }
 
-    public function theme(): Platform\Theme
+    public function theme(): Theme
     {
         return $this->theme ??= new Theme();
     }

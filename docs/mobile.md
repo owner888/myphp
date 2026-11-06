@@ -99,7 +99,29 @@ the keyboard loses the focus; else a dialog, sheet, popover or menu
 closes (what Escape closes); else the router shown goes back a page;
 and at the first page the app ends, as Android's apps do.
 
+## The system's settings
+
+The theme follows the phone's as it follows the desktop's
+(`Theme::follow`): dark mode; the text size (iOS's Settings > Display >
+Text Size, Android's Font size), which scales the theme's text and every
+`preferredFont()` style as Dynamic Type does; and Reduce Motion (iOS) or
+Remove animations (Android), with which what animates settles at once.
+Changing a setting while the app runs changes the window.
+
 ## Files and photos
+
+A settings page is sections of cells in a scroll:
+
+```php
+$c->scroll(0, 0, 1)->fill();
+  $c->section('General', function () use ($c) {
+      $language = $c->cell('Language', 'English', disclosure: true);
+      $c->cell('About');
+  }, 'The language of the app.');
+  $c->section('Sounds', fn() => $c->cell('Haptics', $app->haptics ? 'On' : 'Off'));
+$c->end();
+if ($c->clicked($language)) { $router->push('/language'); }
+```
 
 `Dialog::open()` is the system's picker. Filters naming only pictures and
 films open the photo picker (no permission needed on either platform),
@@ -138,10 +160,14 @@ with inertia — a phone has, in `src/UI/ContextMobile.php`:
 | `navigationBar($title, ?$router, ?$trailing)` | across the top: the title, the way back, buttons at the end |
 | `sheet(&$open, $fn)` | a panel rising from the bottom, a grabber over it; a tap outside closes it |
 | `actionSheet(&$open, $title, ...$actions)` | choices rising from the bottom with a Cancel; `"!Delete"` is destructive |
+| `section($header, $rows, $footer)` | a section of an inset grouped list, as Settings: the header in capitals, the rows in a rounded group 16 in from the sides, separators between them, the footer below |
+| `cell($title, $detail, $disclosure)` | a row of one: the title, a muted detail at the end, a chevron for a row that opens a page; 44 high; `clicked()` |
 | `safeArea($fn)` | content kept out of the bars, the cutout and the keyboard |
 
 Their sizes are UIKit's, the one design on every platform
-(`tests/mobile_test.php` checks them headless).
+(`tests/mobile_test.php` checks them headless). `Haptics::impact()`,
+`selection()`, `success()`, `warning()` and `error()` play the phone's
+haptics from an action (docs/native.md, "The shell").
 
 ## Coming from SwiftUI or Flutter
 
@@ -160,6 +186,8 @@ UIKit; what Apple has no name for takes Flutter's.
 | `TabView` (`.sidebarAdaptable`) | `Scaffold.bottomNavigationBar` / `NavigationRail` | `tabView($items, &$index, $content)`: bottom on a phone, top on a tablet upright, a sidebar on its side and the desktop; `tabBar` is the bar alone |
 | `.safeAreaInset`, `ignoresSafeArea` | `SafeArea` | `safeArea($fn)`; `$c->safeArea`, `$c->keyboard` |
 | `.sheet(isPresented:)` | `showModalBottomSheet` | `sheet(&$open, $fn)` |
+| `List { Section("General") { … } }.listStyle(.insetGrouped)`, `Form` | `ListView` of `Card`s | `$c->scroll(); $c->section('General', fn() => …); … $c->end();` |
+| `LabeledContent("Language", value: "English")`, `NavigationLink { Text("About") }` in a List | `ListTile(title:, trailing:)` | `$c->cell('Language', 'English', disclosure: true)`; `if ($c->clicked($cell)) { $router->push(…); }` |
 | `.confirmationDialog` | a bottom sheet of `ListTile`s | `actionSheet(&$open, $title, ...$actions)` |
 | `.alert` | `showDialog` + `AlertDialog` | `alertDialog(&$open, $title, $message, ...$buttons)` |
 | — | `SnackBar` | `toast($message)` |
@@ -167,8 +195,10 @@ UIKit; what Apple has no name for takes Flutter's.
 | `List` / `ScrollView` | `ListView.builder` + `ScrollController` | `list($state, $n, $row)` + `ListState`; `scroll()` + `ScrollState` |
 | `Button("…") { }` | `ElevatedButton(onPressed:)` | `if ($c->clicked($c->button('…'))) { }` |
 | `.padding()`, `.cornerRadius()` | `Padding`, `ClipRRect` | `->padding()`, `->radius()` (modifiers on the node) |
+| `.font(.title2)`, `.font(.headline)` | `Theme.of(context).textTheme.titleLarge` | `->preferredFont(Font::TITLE2)`, `Font::HEADLINE`…: UIKit's text styles at the HIG's sizes, iOS's on a phone, macOS's on the desktop |
 | `PhotosPicker`, `fileImporter` | `image_picker`, `file_picker` | `Dialog::open()` with filters |
 | `URLSession` | `http` | `Http::get()`, in `App::go()` |
+| `.sensoryFeedback(.success, trigger:)`, `UIImpactFeedbackGenerator` | `HapticFeedback.lightImpact()` | `Haptics::success()`, `Haptics::impact('light')`, `Haptics::selection()`, from the action |
 
 ## Checking on a device
 

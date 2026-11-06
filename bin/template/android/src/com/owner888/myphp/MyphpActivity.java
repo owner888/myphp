@@ -248,7 +248,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             right = insets.right;
             keyboard = windowInsets.getInsets(WindowInsets.Type.ime()).bottom;
         }
-        nativeConfigurationChanged(isDark, top, bottom, left, right, keyboard);
+        // The user's text size (Settings > Display > Font size) and "Remove animations", which sets the animator scale to 0: the theme follows them (Preferences::$textScale, $reduceMotion).
+        float fontScale = getResources().getConfiguration().fontScale;
+        boolean reduceMotion = android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
+        nativeConfigurationChanged(isDark, top, bottom, left, right, keyboard, fontScale, reduceMotion);
     }
 
     /**
@@ -549,6 +552,12 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 sInstance.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             }
         });
+    }
+
+    /** Plays one of View.HapticFeedbackConstants on the surface view, honoring the user's haptics setting (MyPHP\Haptics). */
+    public static void performHaptic(int constant) {
+        if (sInstance == null || sInstance.surfaceView == null) return;
+        sInstance.runOnUiThread(() -> sInstance.surfaceView.performHapticFeedback(constant));
     }
 
     public static void performHapticFeedback() {
@@ -1480,7 +1489,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeKeyEvent(int keyCode, int action, int unicodeChar);
     private static native void nativePause();
     private static native void nativeResume();
-    private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight, int keyboard);
+    private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight, int keyboard, float fontScale, boolean reduceMotion);
     private static native void nativeDialogResult(int callbackId, int buttonIndex);
     private static native void nativeFilesResult(int callbackId, String paths);
     private static native void nativeBack();

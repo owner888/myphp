@@ -244,11 +244,31 @@ int myphp_ios_poll_open_url(char *out, int max_len) {
     return has;
 }
 
+// Haptic feedback by code (Platform\iOS\Shell::CODES): 0-4 an impact of
+// UIImpactFeedbackGenerator's styles light, medium, heavy, soft, rigid;
+// 10 a selection change; 20-22 a notification of success, warning, error.
 void myphp_ios_haptic_feedback(int style) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (style == 10) {
+            UISelectionFeedbackGenerator *gen = [[UISelectionFeedbackGenerator alloc] init];
+            [gen prepare];
+            [gen selectionChanged];
+            return;
+        }
+        if (style >= 20 && style <= 22) {
+            UINotificationFeedbackType t = UINotificationFeedbackTypeSuccess;
+            if (style == 21) t = UINotificationFeedbackTypeWarning;
+            else if (style == 22) t = UINotificationFeedbackTypeError;
+            UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
+            [gen prepare];
+            [gen notificationOccurred:t];
+            return;
+        }
         UIImpactFeedbackStyle s = UIImpactFeedbackStyleLight;
         if (style == 1) s = UIImpactFeedbackStyleMedium;
         else if (style == 2) s = UIImpactFeedbackStyleHeavy;
+        else if (style == 3) s = UIImpactFeedbackStyleSoft;
+        else if (style == 4) s = UIImpactFeedbackStyleRigid;
         UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:s];
         [gen prepare];
         [gen impactOccurred];
@@ -632,6 +652,17 @@ static volatile int g_is_dark = 0;
 
 int myphp_ios_is_dark(void) {
     return g_is_dark;
+}
+
+// How many times larger than the default the user's text is (Dynamic Type, Settings > Display > Text Size):
+// the body style's size over its default 17 points, as UIKit scales every style (Preferences::$textScale).
+float myphp_ios_text_scale(void) {
+    return (float)([UIFont preferredFontForTextStyle:UIFontTextStyleBody].pointSize / 17.0);
+}
+
+// Settings > Accessibility > Motion > Reduce Motion (Preferences::$reduceMotion).
+int myphp_ios_reduce_motion(void) {
+    return UIAccessibilityIsReduceMotionEnabled() ? 1 : 0;
 }
 
 static void update_is_dark(UITraitCollection *tc) {
@@ -1120,6 +1151,14 @@ static void* php_worker_thread(void *arg) {
     nw_path_monitor_start(g_path_monitor);
 
     [UNUserNotificationCenter currentNotificationCenter].delegate = self;
+
+    // The text size or Reduce Motion changed in Settings: the theme and the windows follow (Window polls myphp_ios_poll_theme_changed).
+    for (NSNotificationName name in @[UIContentSizeCategoryDidChangeNotification, UIAccessibilityReduceMotionStatusDidChangeNotification]) {
+        [[NSNotificationCenter defaultCenter] addObserverForName:name object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
+            g_theme_changed = 1;
+            g_needs_render = 1;
+        }];
+    }
 
     [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillChangeFrameNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
         CGRect end = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];

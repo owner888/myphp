@@ -81,6 +81,15 @@ final class Shell implements Platform\Shell
         (self::$kit ??= FFI::cdef('void NSBeep(void);', '/System/Library/Frameworks/AppKit.framework/AppKit'))->NSBeep();
     }
 
+    /** NSHapticFeedbackManager's patterns for the kinds: a selection ticks (LevelChange, 2), the rest are the generic tap (0). Alignment (1) is for snapping while dragging, which no kind is. */
+    public const PATTERNS = ['light' => 0, 'medium' => 0, 'heavy' => 0, 'soft' => 0, 'rigid' => 0, 'selection' => 2, 'success' => 0, 'warning' => 0, 'error' => 0];
+
+    public function haptic(string $kind): void
+    {
+        $performer = ObjC::msg('p:', ObjC::cls('NSHapticFeedbackManager'), 'defaultPerformer');
+        ObjC::msg('v:ll', $performer, 'performFeedbackPattern:performanceTime:', self::PATTERNS[$kind], 1); // NSHapticFeedbackPerformanceTimeNow
+    }
+
     /**
      * The applications installed on the Mac, sorted by name, as a launcher
      * shows them (mygo's darwin Applications): the .app bundles in

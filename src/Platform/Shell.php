@@ -16,6 +16,15 @@ interface Shell
 
     public function beep(): void;
 
+    /**
+     * Plays haptic feedback $kind, one of Haptics::KINDS (UIKit's: an impact
+     * light, medium, heavy, soft or rigid; selection; a notification of
+     * success, warning or error), where the device has a Taptic Engine or a
+     * vibrator: the phones; the Mac's trackpad while a finger is on it (as
+     * NSHapticFeedbackManager plays). Nothing on Linux, which has none.
+     */
+    public function haptic(string $kind): void;
+
     /** The icon the file manager shows for a file, a folder or an application, as a PNG of $size by $size pixels. */
     public function fileIcon(string $path, int $size): string;
 

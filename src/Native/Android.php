@@ -73,6 +73,8 @@ final class Android
                 int32_t insets[4];
                 int32_t night_mode;
                 int32_t keyboard;
+                float font_scale;
+                int32_t reduce_motion;
                 char text[256];
             } MyphpEvent;
 
@@ -90,6 +92,7 @@ final class Android
             void myphp_open_url(const char *url);
             void myphp_set_keep_screen_on(int on);
             void myphp_perform_haptic(void);
+            void myphp_perform_haptic_kind(int constant);
             void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id);
             void myphp_show_notification(const char *title, const char *body, int id);
             void myphp_pick_files(const char **mime_types, int mime_count, int multiple, int photos, int callback_id);

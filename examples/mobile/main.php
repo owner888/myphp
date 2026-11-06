@@ -1,13 +1,15 @@
 <?php
 // A phone app in native UI: a tab bar, a navigation bar over a router's
 // pages, a list of 200 000 rows, a form with the keyboard and the system's
-// pickers, an HTTPS request, and the sheets. The same app runs on the
+// pickers, an HTTPS request, the sheets, and a settings page of inset
+// grouped sections: the text styles, haptics, and the system's settings
+// the theme follows. The same app runs on the
 // desktop in a phone-sized window, where the list's scrolling is measured.
 // Run: myphp run -d android examples/mobile   (ios, macos)
 declare(strict_types=1);
 
-use MyPHP\{App, Dialog, FileFilter, Http, OpenDialogOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Image, ListState, Node, Route, Router, SVG, TextState};
+use MyPHP\{App, Dialog, FileFilter, Haptics, Http, OpenDialogOptions, Window, WindowOptions};
+use MyPHP\UI\{Content, Context, Font, Image, ListState, Node, Route, Router, SVG, TextState};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'); // MyPHP's classes alone: a probe for another class (class_exists) is not a missing file
 
@@ -88,14 +90,36 @@ final class Mobile
             $c->end();
         } elseif ($r->match('/me')) {
             $r->title('我的');
-            $c->column(16, 12, 1)->alignSelf(Node::STRETCH);
-              if ($c->clicked($c->button('底部弹层 sheet'))) { $this->sheet = true; }
-              if ($c->clicked($c->button('操作菜单 actionSheet'))) { $this->actions = true; }
-              if ($c->clicked($c->button('确认弹窗 alertDialog'))) { $this->alert = true; }
-              if ($c->clicked($c->button('提示 toast'))) { $c->toast('已保存'); }
-              if ($this->lastAction !== '') { $c->text($this->lastAction, 13, $t->textMuted); }
-              $c->spacer();
-              $c->text("安全区 " . implode(', ', array_map(fn(float $v) => (string)round($v), $c->safeArea)) . " · 键盘 " . round($c->keyboard) . ' · 标签在' . $c->tabsPlacement(), 12, $t->textMuted);
+            // a settings page as iOS's: inset grouped sections of cells, the text styles, haptics, and the system's settings the theme follows
+            $c->scroll(0, 0, 1)->alignSelf(Node::STRETCH);
+              $c->section('弹层', function () use ($c): void {
+                  if ($c->clicked($c->cell('底部弹层 sheet', '', true))) { $this->sheet = true; }
+                  if ($c->clicked($c->cell('操作菜单 actionSheet', '', true))) { $this->actions = true; }
+                  if ($c->clicked($c->cell('确认弹窗 alertDialog', '', true))) { $this->alert = true; }
+                  if ($c->clicked($c->cell('提示 toast'))) { $c->toast('已保存'); }
+              }, $this->lastAction);
+              $c->section('触感 Haptics', function () use ($c): void {
+                  foreach (['light', 'medium', 'heavy', 'soft', 'rigid'] as $style) {
+                      if ($c->clicked($c->cell("impact $style"))) { Haptics::impact($style); }
+                  }
+                  if ($c->clicked($c->cell('selection'))) { Haptics::selection(); }
+                  if ($c->clicked($c->cell('success'))) { Haptics::success(); }
+                  if ($c->clicked($c->cell('warning'))) { Haptics::warning(); }
+                  if ($c->clicked($c->cell('error'))) { Haptics::error(); }
+              }, 'iPhone 的 Taptic Engine、Android 的振动马达；Mac 的触控板要有手指放着。');
+              $c->section('文字层级 preferredFont', function () use ($c): void {
+                  foreach (['LARGE_TITLE', 'TITLE1', 'TITLE2', 'TITLE3', 'HEADLINE', 'BODY', 'CALLOUT', 'SUBHEADLINE', 'FOOTNOTE', 'CAPTION1', 'CAPTION2'] as $name) {
+                      $style = constant(Font::class . '::' . $name);
+                      $n = $c->text($style)->preferredFont($style)->padding(11, 16);
+                      $n->tooltip(round($n->textStyle()->size ?? 0, 1) . ' pt');
+                  }
+              }, '手机上是 iOS 的尺寸（body 17），桌面是 macOS 的（body 13），都随系统文字大小缩放。');
+              $c->section('系统设置', function () use ($c, $t): void {
+                  $c->cell('文字大小 textScale', sprintf('%.2f × · body %.1f pt', $t->textScale(), Font::preferred(Font::BODY, $c->runtime?->touch ?? false, $t->textScale())[0]));
+                  $c->cell('减弱动态效果 Reduce Motion', ($c->runtime?->reduceMotion ?? false) ? '开' : '关');
+                  $c->cell('深色模式', $t->dark ? '开' : '关');
+                  $c->cell('安全区 · 键盘 · 标签', implode(', ', array_map(fn(float $v) => (string)round($v), $c->safeArea)) . ' · ' . round($c->keyboard) . ' · ' . $c->tabsPlacement());
+              }, '在系统设置里改文字大小、减弱动态效果或深浅模式，回到这里应当立刻跟着变。');
             $c->end();
         } else {
             $c->text('没有这一页');

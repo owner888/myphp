@@ -41,6 +41,8 @@ final class iOS
             int myphp_ios_take_files_result(int callback_id, char *out, int max_len);
             float myphp_ios_get_keyboard_height(void);
             int myphp_ios_is_dark(void);
+            float myphp_ios_text_scale(void);
+            int myphp_ios_reduce_motion(void);
             char *myphp_ios_clipboard_get_text(void);
             void myphp_ios_clipboard_set_text(const char *text);
             void myphp_ios_free_string(char *s);

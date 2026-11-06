@@ -105,6 +105,19 @@ Shell::beep();
 `trashItem()` never deletes for good: when the item cannot go to the
 trash it throws and leaves the item where it is.
 
+`Haptics` plays haptic feedback as UIKit's feedback generators do, on a
+phone's Taptic Engine or vibrator and on the Mac's trackpad while a
+finger rests on it (nothing on Linux): `Haptics::impact('light')`
+(`'medium'`, `'heavy'`, `'soft'`, `'rigid'`) for a press or a collision,
+`Haptics::selection()` as a picker ticks, `Haptics::success()`,
+`warning()` and `error()` for an outcome. Call it from the action, once:
+as a switch flips, a long press opens a menu, a save succeeds — not on
+every button, which the system's own controls do not do either.
+
+```php
+if ($c->changed($c->switch('Wi-Fi', $app->wifi))) { Haptics::impact('light'); }
+```
+
 `fileIcon()` returns the icon the file manager shows for a file, a folder
 or an application, as a PNG of the size asked for in pixels: pass the size
 in points times the display's scale factor.

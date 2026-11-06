@@ -2833,6 +2833,39 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   tablet upright (iPadOS's), a `sidebar` of the items on a tablet on its
   side and on the desktop. The content builds its own `navigationBar` and
   `safeArea`; with the tabs across the top, the top inset is theirs.
+- **`Node::preferredFont($style)`, `Font::preferred()`, `Theme::textScale()`**
+  (v1.175): UIKit's text styles (`Font::LARGE_TITLE` … `CAPTION2`) at
+  the HIG's size and weight, iOS's table on a touch screen
+  (`Runtime::$touch`), macOS's on the desktop, both times the theme's
+  text size over the default 13 points (`textScale()`), so larger text
+  scales them. mygo sizes text in points alone; this is for apps written
+  against Apple's names (`docs/swiftui.md`).
+- **`Haptics`, `Platform\Shell::haptic($kind)`** (v1.175): UIKit's
+  feedback generators for apps — `impact('light'|'medium'|'heavy'|'soft'|
+  'rigid')`, `selection()`, `success()`, `warning()`, `error()` — played by
+  the iOS launcher's `myphp_ios_haptic_feedback` (codes in
+  `iOS\Shell::CODES`), Android's `performHaptic(int)` with
+  `View.HapticFeedbackConstants` (`Android\Shell::CONSTANTS`, honoring the
+  user's haptics setting), the Mac's `NSHapticFeedbackManager`
+  (`Darwin\Shell::PATTERNS`), and nothing on Linux. mygo has none.
+- **The phone's settings** (v1.175): iOS's `Platform\iOS\Theme::preferences()`
+  reads Dynamic Type (`myphp_ios_text_scale`, the body style's size over
+  17) and Reduce Motion, and the launcher raises the theme-changed poll on
+  `UIContentSizeCategoryDidChangeNotification` and
+  `UIAccessibilityReduceMotionStatusDidChangeNotification`; Android's
+  configuration event carries `font_scale` and `reduce_motion` (the
+  animator scale at 0), kept by `Platform\Android\Theme::setConfiguration`.
+  Both now reach `App::systemChanged()` through the app handler
+  (`themeChanged`), as the desktop's do, so `Theme::follow` applies —
+  before, iOS's change reached no one and Android fixed the theme with
+  `App::setTheme`, which an app could not undo.
+- **`section($header, $rows, $footer)`, `cell($title, $detail, $disclosure)`**
+  (v1.175): UITableView's insetGrouped style and a value1 cell — the
+  group of the theme's surface rounded 10, inset 16, separators a point
+  thick from 16 in drawn over the group under each row but the last
+  (UIKit's separatorInset); the header 13-point capitals and the footer
+  13 points, muted, 16 in; a cell 44 high, padded 16, title and detail
+  17, the chevron `disclosure()`'s. SwiftUI's Section and LabeledContent.
 - **`tabBar($items, &$index)`**: UITabBar's — 49 points (the hairline
   above it included) over the safe area's bottom, which it fills; items
   of a 25-point icon over a 10-point label, in the accent when chosen,

@@ -55,6 +55,8 @@ typedef struct {
     int32_t insets[4];
     int32_t night_mode;
     int32_t keyboard;
+    float font_scale;
+    int32_t reduce_motion;
     char text[256];
 } MyphpEvent;
 
@@ -183,6 +185,7 @@ static jmethodID g_mid_clipboard_set = NULL;
 static jmethodID g_mid_open_url = NULL;
 static jmethodID g_mid_keep_screen_on = NULL;
 static jmethodID g_mid_perform_haptic = NULL;
+static jmethodID g_mid_perform_haptic_kind = NULL;
 static jmethodID g_mid_show_alert_dialog = NULL;
 static jmethodID g_mid_show_notification = NULL;
 static jmethodID g_mid_pick_files = NULL;
@@ -350,6 +353,7 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_open_url = (*env)->GetStaticMethodID(env, clazz, "openUrl", "(Ljava/lang/String;)V");
     g_mid_keep_screen_on = (*env)->GetStaticMethodID(env, clazz, "setKeepScreenOn", "(Z)V");
     g_mid_perform_haptic = (*env)->GetStaticMethodID(env, clazz, "performHapticFeedback", "()V");
+    g_mid_perform_haptic_kind = (*env)->GetStaticMethodID(env, clazz, "performHaptic", "(I)V");
     g_mid_show_alert_dialog = (*env)->GetStaticMethodID(env, clazz, "showAlertDialog", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V");
     g_mid_show_notification = (*env)->GetStaticMethodID(env, clazz, "showNotification", "(Ljava/lang/String;Ljava/lang/String;I)V");
     g_mid_pick_files = (*env)->GetStaticMethodID(env, clazz, "pickFiles", "([Ljava/lang/String;ZZI)V");
@@ -533,14 +537,16 @@ Java_com_owner888_myphp_MyphpActivity_nativeResume(JNIEnv *env, jclass clazz) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_owner888_myphp_MyphpActivity_nativeConfigurationChanged(JNIEnv *env, jclass clazz, jboolean isDark, jint insetTop, jint insetBottom, jint insetLeft, jint insetRight, jint keyboard) {
-    LOGI("nativeConfigurationChanged: dark=%d insets=[%d, %d, %d, %d] keyboard=%d", isDark, insetTop, insetBottom, insetLeft, insetRight, keyboard);
+Java_com_owner888_myphp_MyphpActivity_nativeConfigurationChanged(JNIEnv *env, jclass clazz, jboolean isDark, jint insetTop, jint insetBottom, jint insetLeft, jint insetRight, jint keyboard, jfloat fontScale, jboolean reduceMotion) {
+    LOGI("nativeConfigurationChanged: dark=%d insets=[%d, %d, %d, %d] keyboard=%d fontScale=%.2f reduceMotion=%d", isDark, insetTop, insetBottom, insetLeft, insetRight, keyboard, fontScale, reduceMotion);
     if (g_event_pipe[1] >= 0) {
         MyphpEvent ev = {
             .type = MYPHP_EVENT_CONFIGURATION,
             .night_mode = isDark ? 1 : 0,
             .insets = {insetTop, insetBottom, insetLeft, insetRight},
-            .keyboard = keyboard
+            .keyboard = keyboard,
+            .font_scale = fontScale,
+            .reduce_motion = reduceMotion ? 1 : 0
         };
         write(g_event_pipe[1], &ev, sizeof(ev));
     }
@@ -600,6 +606,13 @@ void myphp_perform_haptic(void) {
     JNIEnv *env = get_jni_env();
     if (!env || !g_activity_class || !g_mid_perform_haptic) return;
     (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_perform_haptic);
+}
+
+// Plays one of View.HapticFeedbackConstants (Platform\Android\Shell::CONSTANTS) on the surface view.
+void myphp_perform_haptic_kind(int constant) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_perform_haptic_kind) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_perform_haptic_kind, (jint)constant);
 }
 
 void myphp_show_alert_dialog(const char *title, const char *message, const char **buttons, int button_count, int callback_id) {

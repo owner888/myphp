@@ -76,6 +76,8 @@ UI as they read other apps (see [Accessibility](accessibility.md)).
 
 - [Views](views.md): build lifetimes, event queries and callbacks, keys,
   and changing the state from outside the view.
+- [Coming from SwiftUI](../swiftui.md): every SwiftUI view, modifier and
+  pattern beside its myphp equivalent, and what myphp lacks.
 - [Layout](layout.md): rows and columns, sizes, spacing, alignment and
   positioning.
 - [Text](text.md): text and its style, rich text, links within sentences,

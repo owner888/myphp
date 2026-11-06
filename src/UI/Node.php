@@ -1166,6 +1166,19 @@ final class Node
         return $this->ts ??= new TextStyle();
     }
 
+    /**
+     * Gives the text one of UIKit's text styles (UIFont.preferredFont(forTextStyle:), SwiftUI's .font(.title2)):
+     * the HIG's size and weight for it, iOS's on a touch screen and macOS's on the desktop, scaled with the theme's
+     * text size (Font::preferred). Not mygo's: a style of myphp's for apps written against Apple's names.
+     * $style is one of Font::LARGE_TITLE … Font::CAPTION2; another throws.
+     */
+    public function preferredFont(string $style): static
+    {
+        [$size, $weight] = Font::preferred($style, $this->context?->runtime?->touch ?? false, $this->context?->theme?->textScale() ?? 1.0);
+        $t = $this->ts(); $t->size = $size; $t->weight = $weight;
+        return $this;
+    }
+
     /** Sets the size of text in points, for the node's text and its descendants' (mygo's FontSize). */
     public function fontSize(float $v): static { $this->ts()->size = $v; return $this; }
 

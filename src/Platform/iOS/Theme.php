@@ -3,14 +3,12 @@ declare(strict_types=1);
 
 namespace MyPHP\Platform\iOS;
 
-use Closure;
 use MyPHP\Native\iOS;
 use MyPHP\Platform;
 use MyPHP\ThemePreferences;
 
 final class Theme implements Platform\Theme
 {
-    private ?Closure $onChange = null;
     private \MyPHP\ThemeSource $source = \MyPHP\ThemeSource::System;
 
     public function setSource(\MyPHP\ThemeSource $source): void
@@ -31,22 +29,15 @@ final class Theme implements Platform\Theme
         return [0.0, 0.478, 1.0, 1.0]; // iOS System Blue #007AFF
     }
 
+    /** The system blue, Reduce Motion, and the text size over the default (Dynamic Type), which the theme's text and the text styles scale by. */
     public function preferences(): ThemePreferences
     {
+        $f = iOS::ffi();
         return new ThemePreferences(
             accent: 0x007AFF, // iOS System Blue
+            reduceMotion: $f->myphp_ios_reduce_motion() === 1,
+            textScale: $f->myphp_ios_text_scale(),
         );
     }
 
-    public function onChange(Closure $fn): void
-    {
-        $this->onChange = $fn;
-    }
-
-    public function notifyChanged(): void
-    {
-        if ($this->onChange !== null) {
-            ($this->onChange)();
-        }
-    }
 }
