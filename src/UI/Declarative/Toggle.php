@@ -5,7 +5,7 @@ namespace MyPHP\UI\Declarative;
 
 use MyPHP\UI\{Context, Node};
 
-/** Toggle, as SwiftUI's: $isOn, bound, switched by a switch with its title, or a checkbox with toggleStyle(ToggleStyle::checkbox). */
+/** Toggle, as SwiftUI's: $isOn, bound, its title beside a switch, a checkbox or a button that stays pressed (toggleStyle); a switch on a phone and a checkbox on a Mac by default. */
 final class Toggle extends View
 {
     private bool $isOn;
@@ -27,7 +27,12 @@ final class Toggle extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $title = Localized::string($this->title, $env);
-        $n = $this->style === \ToggleStyle::checkbox ? $c->checkbox($title, $this->isOn) : $c->toggle($this->isOn, $title);
+        $style = $this->style === \ToggleStyle::automatic ? (($c->runtime?->touch ?? false) ? \ToggleStyle::switch : \ToggleStyle::checkbox) : $this->style;
+        $n = match ($style) {
+            \ToggleStyle::checkbox => $c->checkbox($title, $this->isOn),
+            \ToggleStyle::button => $c->toggle($this->isOn, $title),
+            default => $c->switch($title, $this->isOn),
+        };
         if ($env->disabled) { $n->disabled(); }
         return $n;
     }

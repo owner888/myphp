@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\Plugins\Automation\Automation;
-use MyPHP\UI\{Content, Context, TextState};
+use MyPHP\UI\{Content, Context};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -18,9 +18,10 @@ require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views
 final class Driven
 {
     public int $count = 0, $rowClicks = 0, $deletes = 0;
-    public TextState $name;
+    public string $name = '';
+    /** The pointer is over the row, whose Delete shows then. */
+    public bool $rowHovered = false;
 
-    public function __construct() { $this->name = new TextState(''); }
 }
 
 $s = new Driven();

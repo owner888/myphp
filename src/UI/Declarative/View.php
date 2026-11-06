@@ -153,6 +153,22 @@ abstract class View
      */
     public function environment(?string $locale = null): static { $this->sets['locale'] = $locale; return $this; }
 
+    /** Whether the view takes the pointer: false lets a press through to what is under it, as SwiftUI's allowsHitTesting; assistive technology still presses it. */
+    public function allowsHitTesting(bool $enabled): static { $this->events[] = ['hit', $enabled]; return $this; }
+
+    /** A gesture of the view's: WindowDragGesture() moves the window, as SwiftUI's gesture(WindowDragGesture()). */
+    public function gesture(\WindowDragGesture $gesture): static { $this->events[] = ['windowDrag', null]; return $this; }
+
+    /** The keyboard focus as the view first shows, as SwiftUI's defaultFocus: a terminal, an editor, ready to type in. */
+    public function defaultFocus(): static { $this->events[] = ['defaultFocus', null]; return $this; }
+
+    /** The keyboard focus, bound to $isFocused, as SwiftUI's focused($isFocused) of a FocusState: true focuses the view, and a click elsewhere makes it false. */
+    public function focused(bool &$isFocused): static
+    {
+        $this->events[] = ['focused', [&$isFocused]];
+        return $this;
+    }
+
     /** The controls inside show no title, which stays their accessibility label, as SwiftUI's labelsHidden. */
     public function labelsHidden(): static { $this->sets['labelsHidden'] = true; return $this; }
 
@@ -278,7 +294,7 @@ abstract class View
         }
         foreach (array_reverse($outer) as [$box, $mods]) {
             $c->end();
-            self::fill($box, $env->axis, self::flexOfKids($box)); // a box around a view that takes the room takes it
+            self::takeRoom($box, $env->axis, self::flexOfKids($box)); // a box around a view that takes the room takes it
             $this->apply($box, $mods, $env);
         }
         return $outer === [] ? $node : $outer[0][0];
@@ -337,7 +353,7 @@ abstract class View
     }
 
     /** Makes $n, in a stack along $axis, take the room in $flex (FLEX_X, FLEX_Y). @internal */
-    public static function fill(Node $n, int $axis, int $flex): void
+    public static function takeRoom(Node $n, int $axis, int $flex): void
     {
         $along = $axis === Node::ROW ? self::FLEX_X : self::FLEX_Y;
         if ($flex & $along) { $n->grow = max($n->grow, 1); }
@@ -367,6 +383,24 @@ abstract class View
                     if (self::$scheme !== [$a]) { // the app's appearance, set as it changes
                         self::$scheme = [$a];
                         \MyPHP\App::setTheme(match ($a) { \ColorScheme::light => \MyPHP\UI\Theme::light(), \ColorScheme::dark => \MyPHP\UI\Theme::dark(), null => null });
+                    }
+                    break;
+                case 'hit':
+                    $node->ignoreInput(!$a);
+                    break;
+                case 'windowDrag':
+                    $node->dragWindow();
+                    break;
+                case 'defaultFocus':
+                    $node->autoFocus();
+                    break;
+                case 'focused':
+                    $rt = $c->runtime;
+                    $node->focusable();
+                    $kept = Lifecycle::of($c, $node);
+                    if ($rt !== null && $kept !== null) {
+                        $id = $node->id;
+                        $a[0] = $kept->focus($a[0], $rt->focus === $id, static function () use ($rt, $id): void { $rt->focus = $id; }); // $a[0] the binding
                     }
                     break;
                 case 'menu':

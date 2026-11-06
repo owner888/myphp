@@ -5,14 +5,16 @@ declare(strict_types=1);
 use MyPHP\UI\{Context, Node, Painter};
 use MyPHP\UI\Chart\{Axes, Chart, Linear, Side, Tick};
 
-return function (Context $c): void {
+// Three waveforms streamed at 1000 samples a second, drawn every frame by the example (as SwiftUI's TimelineView of
+// a Canvas, in a representable), taking the window.
+return fn() => Representable(function (Context $c) {
     $this->update($c->now());
     $c->animationFrame();
     $t = $c->theme;
     $x = new Linear(-15, 0);
     $y = new Linear(0, 1);
     $label = fn(Side $side, Tick $tick) => $c->text($tick->label, 11, $t->textMuted)->noWrap();
-    $c->column(8, 8, 1, $t->background)->fill();
+    $n = $c->column(8, 8, 1, $t->background);
       Chart::plot($c, new Axes(left: $y->ticks(5), bottom: $x->ticks(5), label: $label), function (Node $area) use ($y, $t): void {
           $area->description = '15 seconds at 1000 samples per second per series';
           $area->label('Three live waveforms')->draw(function (Painter $p, array $r) use ($y, $t): void {
@@ -37,4 +39,5 @@ return function (Context $c): void {
           });
       })->fill();
     $c->end();
-};
+    return $n;
+}, fills: true);

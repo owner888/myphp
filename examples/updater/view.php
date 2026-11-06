@@ -1,17 +1,10 @@
 <?php
-// The native window's view (Content::file): saved, it hot reloads.
+// The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
 use MyPHP\Plugins\Updater\Updater;
-use MyPHP\UI\Context;
 
-return function (Context $c): void {
-    $c->column(24, 12, 1);
-    $c->text('Check from the app menu, or here:');
-    $c->row();
-    if ($c->clicked($c->button('Check for Updates…'))) {
-        Updater::checkForUpdates();
-    }
-    $c->end();
-    $c->end();
-};
+return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+    Text('Check from the app menu, or here:'),
+    Button('Check for Updates…', action: fn() => Updater::checkForUpdates()),
+)->padding(24)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading);

@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, CloseEvent, Menu, MenuItem, Point, QuitEvent, Screen, Tray, TrayOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Handle, TextState};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -33,16 +33,11 @@ final class Notes
 {
     public ?Window $win = null;
     public ?Tray $tray = null;
-    public Handle $editor;
-    public TextState $text;
+    /** The note, and whether its editor has the keyboard (focused()), which showing the panel gives it. */
+    public string $text = '';
+    public bool $editing = false;
     public string $status = '';
     public bool $quitting = false;
-
-    public function __construct()
-    {
-        $this->editor = new Handle();
-        $this->text = new TextState();
-    }
 
     /** Places the panel under the icon on its display, within its work area. */
     public function show(): void
@@ -60,7 +55,7 @@ final class Notes
             $y = max($area->y, min($y, $area->y + max(0, $area->height - $b->height)));
             $this->win->setPosition($x, $y);
         }
-        $this->editor->focus();
+        $this->editing = true;
         $this->win->show();
     }
 

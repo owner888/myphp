@@ -7,13 +7,13 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, TextState};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 $style = $argv[1] ?? 'hidden';
 $lights = isset($argv[2]) ? array_map('floatval', explode(',', $argv[2])) : null;
-$s = (object)['count' => 0, 'query' => new TextState, 'style' => $style];
+$s = (object)['count' => 0, 'query' => '', 'style' => $style];
 
 App::whenReady(function () use ($s, $style, $lights) {
     new Window(new WindowOptions(

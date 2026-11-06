@@ -45,7 +45,7 @@ enum Weight: int
 /** SwiftUI's system colors, light and dark (UIKit's), and the theme's: primary the text, secondary the muted text, accentColor the accent. */
 enum Color
 {
-    case primary; case secondary; case accentColor; case background;
+    case primary; case secondary; case accentColor; case background; case separator;
     case red; case orange; case yellow; case green; case mint; case teal; case cyan; case blue; case indigo; case purple; case pink; case brown;
     case gray; case white; case black; case clear;
 
@@ -66,7 +66,7 @@ enum Color
     {
         $d = $t->dark;
         return match ($this) {
-            self::primary => $t->text, self::secondary => $t->textMuted, self::accentColor => $t->accent, self::background => $t->background,
+            self::primary => $t->text, self::secondary => $t->textMuted, self::accentColor => $t->accent, self::background => $t->background, self::separator => $t->border,
             self::red => $d ? 0xff453a : 0xff3b30, self::orange => $d ? 0xff9f0a : 0xff9500, self::yellow => $d ? 0xffd60a : 0xffcc00,
             self::green => $d ? 0x30d158 : 0x34c759, self::mint => $d ? 0x63e6e2 : 0x00c7be, self::teal => $d ? 0x40c8e0 : 0x30b0c7,
             self::cyan => $d ? 0x64d2ff : 0x32ade6, self::blue => $d ? 0x0a84ff : 0x007aff, self::indigo => $d ? 0x5e5ce6 : 0x5856d6,
@@ -173,7 +173,8 @@ final class KeyPress
     }
 }
 
-enum ToggleStyle { case automatic; case switch; case checkbox; }
+/** How a Toggle draws: a switch, a checkbox, a button that stays pressed; automatic is a switch on a phone and a checkbox on a Mac, as SwiftUI's. */
+enum ToggleStyle { case automatic; case switch; case checkbox; case button; }
 
 /** How a Picker draws: a pop-up menu (automatic, menu), a segmented control, radio buttons (radioGroup, inline). */
 enum PickerStyle { case automatic; case menu; case segmented; case radioGroup; case inline; }
@@ -186,6 +187,12 @@ enum DatePickerComponents { case date; case hourAndMinute; }
 
 /** The type of every view, for a parameter or return type: fn(): View => …. */
 class_alias(D\View::class, 'View');
+
+/** What a GeometryReader gives its content: fn(GeometryProxy $g) => …. */
+class_alias(D\GeometryProxy::class, 'GeometryProxy');
+
+/** A column of a LazyVGrid: GridItem::adaptive(minimum: 132). */
+class_alias(D\GridItem::class, 'GridItem');
 
 // ---- views ---------------------------------------------------------------------------------------------------
 
@@ -266,7 +273,11 @@ function Circle(): D\Shape { return new D\Shape(D\Shape::CIRCLE); }
 function Capsule(): D\Shape { return new D\Shape(D\Shape::CAPSULE); }
 function Ellipse(): D\Shape { return new D\Shape(D\Shape::ELLIPSE); }
 
-/** SwiftUI's ForEach (foreach is PHP's): Each($this->todos, id: 'id')(fn(Todo $t) => Text($t->title)). @param iterable<mixed> $items */
+/**
+ * SwiftUI's ForEach (foreach is PHP's): Each($this->todos, id: 'id')(fn(Todo $t) => Text($t->title)). A string or an int is
+ * its own id, as id: \.self; lines that repeat are told apart by their place, as id: \.offset: id: fn($line, int $i) => $i.
+ * @param iterable<mixed> $items
+ */
 function Each(iterable $items, string|Closure|null $id = null): D\Each
 {
     return new D\Each($items, $id);
@@ -345,8 +356,16 @@ function Gauge(float $value, array $in = [0.0, 1.0], string $title = ''): D\Gaug
 /** A button opening a menu of its content: Menu('Sort')( Button('Name', action: …), Divider(), Toggle('Reverse', isOn: …) ). */
 function Menu(string $title): D\Menu { return new D\Menu($title); }
 
-/** Text editing $text over lines, taking the room it is given, as SwiftUI's TextEditor. */
-function TextEditor(string &$text): D\TextField { return new D\TextField('', $text, null, false, false, true); }
+/**
+ * Text editing $text over lines, taking the room it is given, as SwiftUI's TextEditor; or a large document, a
+ * MyPHP\UI\TextBuffer indexed by its lines, edited in place: TextEditor(buffer: $this->document).
+ */
+function TextEditor(?string &$text = null, ?MyPHP\UI\TextBuffer $buffer = null): D\View
+{
+    if ($buffer !== null) { return new D\Representable(static fn(MyPHP\UI\Context $c) => $c->textAreaBuffer($buffer, '', 0, 0), true); }
+    $text ??= '';
+    return new D\TextField('', $text, null, false, false, true);
+}
 
 /** SwiftUI's Link, named WebLink (PHP has a link() of its own): WebLink('Docs', destination: 'https://…'). */
 function WebLink(string $title, string $destination): D\WebLink { return new D\WebLink($title, $destination); }
@@ -360,3 +379,30 @@ function DisclosureGroup(string $title, ?bool &$isExpanded = null): D\Disclosure
  * Label('Inbox', systemImage: 'tray')->tag('inbox'), … ), detail: Detail($this->page)).
  */
 function NavigationSplitView(D\ListView $sidebar, D\View|array $detail): D\NavigationSplitView { return new D\NavigationSplitView($sidebar, $detail); }
+
+// ---- other views of myphp's, among the declarative ones --------------------------------------------------------
+
+/** SwiftUI's NSViewRepresentable: the node $make builds into the context, a plugin's view, among the declarative views. */
+function Representable(Closure $make, bool $fills = false): D\Representable { return new D\Representable($make, $fills); }
+
+/** A game of the Game plugin, its scene, taking the room it is given, as SwiftUI's SpriteView(scene:). */
+function SpriteView(MyPHP\Plugins\Game\Game $scene): D\Representable { return new D\Representable(static fn(MyPHP\UI\Context $c) => MyPHP\Plugins\Game\Game::view($c, $scene), true); }
+
+/** A film and its controls, taking the room it is given, as SwiftUI's VideoPlayer(player:). */
+function VideoPlayer(MyPHP\UI\MediaPlayerState $player, ?MyPHP\UI\MediaPlayerOptions $options = null): D\Representable
+{
+    return new D\Representable(static fn(MyPHP\UI\Context $c) => $c->mediaPlayer($player, $options), true);
+}
+
+/** A terminal of the Terminal plugin, taking the room it is given. */
+function TerminalView(MyPHP\Plugins\Terminal\Terminal $terminal): D\Representable { return new D\Representable(static fn(MyPHP\UI\Context $c) => MyPHP\Plugins\Terminal\Terminal::view($c, $terminal), true); }
+
+/** A drag that moves the window, of a view standing in for its title bar, as SwiftUI's WindowDragGesture: ->gesture(WindowDragGesture()). */
+final class WindowDragGesture {}
+function WindowDragGesture(): WindowDragGesture { return new WindowDragGesture(); }
+
+/** GeometryReader, as SwiftUI's: the view $content makes of the room it is given (GeometryProxy), which it takes. */
+function GeometryReader(Closure $content): D\GeometryReader { return new D\GeometryReader($content); }
+
+/** Cells in as many columns as fit, row by row: LazyVGrid(columns: [GridItem::adaptive(minimum: 132)], spacing: 12)( … ). @param list<D\GridItem> $columns */
+function LazyVGrid(array $columns, float $spacing = 8): D\LazyVGrid { return new D\LazyVGrid($columns, $spacing); }

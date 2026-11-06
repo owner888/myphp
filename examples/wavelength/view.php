@@ -2,18 +2,15 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Font, Node};
+use MyPHP\UI\{Context, Node};
 
-/** The interface of the state, built whenever the window needs a frame. */
-return function (Context $c): void {
-    $c->column()->fill();
-      $c->video($this->waves)->fill()->fit(Node::COVER);
-      // Over the clip, which takes the window.
-      $c->column(0, 16)->absolute()->top(0)->left(0)->right(0)->bottom(0)->center();
-        $c->text('Wavelength', 44, 0xffffff, style: Font::BOLD);
-        if ($c->clicked($c->key('play')->button($this->waves->playing() ? 'Pause' : 'Play')->size(96, 0))) {
-            if ($this->waves->playing()) { $this->waves->pause(); } else { $this->waves->play(); }
-        }
-      $c->end();
-    $c->end();
-};
+// The clip takes the window, a layer of its own (as SwiftUI's AVPlayerLayer in a representable), the title and its
+// button over it.
+return fn() => ZStack()(
+    Representable(fn(Context $c) => $c->video($this->waves)->fit(Node::COVER), fills: true),
+    VStack(spacing: 16)(
+        Text('Wavelength')->font(Font::system(size: 44, weight: Weight::bold))->foregroundStyle(Color::white),
+        Button($this->waves->playing() ? 'Pause' : 'Play', action: fn() => $this->waves->playing() ? $this->waves->pause() : $this->waves->play())
+            ->frame(width: 96)->id('play'),
+    ),
+);

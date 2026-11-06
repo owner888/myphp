@@ -7,14 +7,14 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Document, Documents, DocumentsOptions, DocumentType, Window, WindowOptions};
-use MyPHP\UI\{Content, TextState};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
 /** A note's window: its document, and the text being edited, which view.php shows. */
 final class Note
 {
-    public function __construct(public Document $doc, public TextState $text) {}
+    public function __construct(public Document $doc, public string $text) {}
 }
 
 $notes = new Documents(new DocumentsOptions(
@@ -25,11 +25,10 @@ $notes = new Documents(new DocumentsOptions(
     // Undoing back to what the file has leaves the note unedited.
     equal: fn(string $a, string $b): bool => $a === $b,
     window: function (Document $doc): Window {
-        $text = new TextState($doc->content());
-        $text->multiline = true;
-        $w = new Window(new WindowOptions(width: 640, height: 480, stateKey: 'note', content: Content::file(__DIR__ . '/view.php', new Note($doc, $text))));
+        $note = new Note($doc, $doc->content());
+        $w = new Window(new WindowOptions(width: 640, height: 480, stateKey: 'note', content: Content::file(__DIR__ . '/view.php', $note)));
         // Reverted, or changed by another app: show the file's text.
-        $doc->onReload(function () use ($doc, $text, $w): void { $text->text = $doc->content(); $text->setCursor(0); $w->invalidate(); });
+        $doc->onReload(function () use ($doc, $note, $w): void { $note->text = $doc->content(); $w->invalidate(); });
         $doc->onStateChange(fn() => $w->invalidate());
         return $w;
     },

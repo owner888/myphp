@@ -583,7 +583,7 @@ final class Headless
     }
 
     /** The global enums of the declarative views, which a view file in an example's namespace names as the app's global ones. */
-    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'PickerStyle', 'DatePickerStyle', 'DatePickerComponents', 'TextSelectability', 'ColorScheme', 'KeyPressResult', 'KeyPress', 'Axis', 'TitleDisplayMode', 'NavigationPath'];
+    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'PickerStyle', 'DatePickerStyle', 'DatePickerComponents', 'TextSelectability', 'ColorScheme', 'KeyPressResult', 'KeyPress', 'GeometryProxy', 'GridItem', 'WindowDragGesture', 'Axis', 'TitleDisplayMode', 'NavigationPath'];
 
     /** The use line naming the declarative globals $src does not name of its own, for $src in an example's namespace. */
     private static function declarativeUses(string $src): string
