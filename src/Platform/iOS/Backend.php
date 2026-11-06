@@ -65,16 +65,21 @@ final class Backend implements Platform\Backend
 
     public function step(): void
     {
+        // The timers due, taken out before they run: one a callback sets (App::after again, as a repeating timer does) is kept for its time
         $now = hrtime(true) / 1e9;
-        $remaining = [];
-        foreach ($this->timers as $timer) {
+        $timers = $this->timers;
+        $this->timers = [];
+        $due = [];
+        foreach ($timers as $timer) {
             if ($now >= $timer['at']) {
-                ($timer['fn'])();
+                $due[] = $timer['fn'];
             } else {
-                $remaining[] = $timer;
+                $this->timers[] = $timer;
             }
         }
-        $this->timers = $remaining;
+        foreach ($due as $fn) {
+            $fn();
+        }
 
         \MyPHP\Native\CurlLoop::pollSockets(); // the transfers' sockets: no loop of the system's watches them for PHP here
 

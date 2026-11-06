@@ -167,6 +167,7 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
             --disable-mbregex \
             --enable-ctype \
             --enable-filter \
+            --enable-tokenizer \
             --with-zlib \
             --with-curl \
             --with-openssl \
