@@ -202,7 +202,7 @@ final class ListView extends View
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false]), is_array($v) ? $v : [$v]);
             $c->end();
         } else {
-            $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(11, 16)->alignItems(Node::CENTER);
+            $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight($env->theme->rowHeight)->padding(11, 16)->alignItems(Node::CENTER);
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true]), is_array($v) ? $v : [$v]);
               if ($v instanceof View && $v->badgeValue !== null) { $c->spacer(); $c->text((string)$v->badgeValue, color: $env->theme->textMuted); }
             $c->end();

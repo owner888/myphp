@@ -510,12 +510,12 @@ $choice = $h->byText('Default');
 same([$h->theme->textMuted, true, true, true], [$choice->fg, $h->rect($choice)[0] > 393 / 2, $h->rect($h->byLabel('Mode'))[2] > 393 - 4 * 16 - 4, $h->byText('Settings page') !== null],
     'a phone\'s form: the choice muted at the end, the segments across the row, the page\'s title in its bar');
 
-// A phone's form as iOS draws it: every row 44 high (a switch's and segments' too); a Toggle its title leading and the
+// A phone's form as iOS 26 draws it: every row 52 high (a switch's and segments' too); its header as written; a Toggle its title leading and the
 // switch at the row's end; segments on a see-through gray track, the chosen one white; the page's title large; and
 // the grouped gray behind the bar and the tab bar, which are clear over the page.
 $iosApp = new class { public int $speed = 0; public int $mode = 1; public bool $on = true; public string $tab = 'a'; };
 $h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $iosApp->tab)(
-    Tab('A', systemImage: 'gearshape', value: 'a')(Form()(Section(header: 'S')(
+    Tab('A', systemImage: 'gearshape', value: 'a')(Form()(Section(header: 'Noise')(
         Picker('Mode', selection: $iosApp->mode)(Text('Off')->tag(0), Text('On')->tag(1))->pickerStyle(\PickerStyle::segmented)->labelsHidden(),
         Toggle('Awareness', isOn: $iosApp->on),
         Picker('Speed', selection: $iosApp->speed)(Text('Default')->tag(0), Text('Slower')->tag(1)),
@@ -533,10 +533,10 @@ $switch = $h->byLabel('Awareness');
 $track = $h->byLabel('Mode');
 $chosen = array_values(array_filter($track->kids, fn(Node $k) => $k->on))[0];
 $bar = $h->root->kids[0]->kids[0]->kids[0]->kids[0];
-same([[44.0, 44.0, 44.0, 44.0], true, $h->rect($parentOf($switch))[2] - 32, [0x767680, 0.12, 0xffffff], true, 0xf2f2f7, 0xf2f2f7],
-    [array_map($rowOf, [$track, $switch, $parentOf($parentOf($h->byText('Default'))), $h->byText('Plain')]), $switch->reverse, $h->rect($switch)[2], [$track->color, $track->bgAlpha, $chosen->color],
+same([[52.0, 52.0, 52.0, 52.0], [true, false], true, $h->rect($parentOf($switch))[2] - 32, [0x767680, 0.12, 0xffffff], true, 0xf2f2f7, 0xf2f2f7],
+    [array_map($rowOf, [$track, $switch, $parentOf($parentOf($h->byText('Default'))), $h->byText('Plain')]), [$h->byText('Noise') !== null, $h->byText('NOISE') !== null], $switch->reverse, $h->rect($switch)[2], [$track->color, $track->bgAlpha, $chosen->color],
      count(array_filter($h->texts(), fn($t) => $t === 'Settings page')) === 2, $bar->color, $h->root->kids[0]->color],
-    'a phone\'s form as iOS\'s: rows 44 high, the switch at the end, the segments\' track, a large title, the page\'s gray behind the bars');
+    'a phone\'s form as iOS 26\'s: rows 52 high, the header as written, the switch at the end, the segments\' track, a large title, the page\'s gray behind the bars');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);

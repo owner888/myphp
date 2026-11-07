@@ -2890,10 +2890,12 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   `App::setTheme`, which an app could not undo.
 - **`section($header, $rows, $footer)`, `cell($title, $detail, $disclosure)`**
   (v1.175): UITableView's insetGrouped style and a value1 cell — the
-  group of the theme's surface rounded 10, inset 16, separators a point
-  thick from 16 in drawn over the group under each row but the last
-  (UIKit's separatorInset); the header 13-point capitals and the footer
-  13 points, muted, 16 in; a cell 44 high, padded 16, title and detail
+  group of the theme's surface rounded `$groupRadius` (iOS 26's 26 on a
+  phone, 10 on the Mac), inset 16, hairline separators from 16 in (16
+  short of the end on a phone) drawn over the group under each row but
+  the last (UIKit's separatorInset); the header as written, muted, in the
+  body style on a phone (iOS 26's) and the footer 13 points, muted, 16
+  in; a cell `$rowHeight` high (52 on a phone, iOS 26's), padded 16, title and detail
   17, the chevron `disclosure()`'s. SwiftUI's Section and LabeledContent.
 - **The platform's text size** (v1.176): mygo's `defaultFontSize()` (13
   on macOS, 14 elsewhere) is `Theme::defaultFontSize()`, 17 on iOS and
@@ -2923,7 +2925,7 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
 - **The phone's theme** (v1.176): `Theme::phone($dark)` — UIKit's
   system colors, 17-point text, radius 12, and the control sizes
   `$controlHeight` (44: buttons, fields, selects; a phone's button a
-  capsule), `$switchWidth` × `$switchHeight` (51 × 31), `$segmentedHeight`
+  capsule), `$switchWidth` × `$switchHeight` (iOS 26's 63 × 28, its knob a capsule), `$segmentedHeight`
   (32), and `$groupBackground` / `$groupSurface` — which
   `App::systemTheme()` takes on iOS and Android. The fields are 0 and
   null in mygo's light and dark themes, which the controls read as mygo's

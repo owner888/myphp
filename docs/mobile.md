@@ -111,7 +111,7 @@ On iOS and Android the window starts from `Theme::phone()`: UIKit's
 system colors (systemBlue, label and secondaryLabel, systemBackground,
 the separator, systemRed, the grouped backgrounds, pure black in the dark),
 17-point text, corners rounded 12, and UIKit's control sizes — buttons,
-fields and selects 44 points high (buttons as capsules), switches 51 × 31,
+fields and selects 44 points high (buttons as capsules), switches 63 × 28 (iOS 26's),
 segmented controls 32 — the one design on both. The desktop keeps mygo's
 theme and sizes. `$c->theme->groupBackground` and `groupSurface` are the
 grouped list's page and sections (`insetGroupedList()`, `section()`).
@@ -217,7 +217,7 @@ with inertia — a phone has, in `src/UI/ContextMobile.php`:
 | `navigationBar($title, ?$router, ?$trailing)` | across the top: the title, the way back, buttons at the end |
 | `sheet(&$open, $fn)` | a panel rising from the bottom, a grabber over it; a tap outside closes it |
 | `actionSheet(&$open, $title, ...$actions)` | choices rising from the bottom with a Cancel; `"!Delete"` is destructive |
-| `section($header, $rows, $footer)` | a section of an inset grouped list, as Settings: the header in capitals, the rows in a rounded group 16 in from the sides, separators between them, the footer below |
+| `section($header, $rows, $footer)` | a section of an inset grouped list, as Settings: the header as written (iOS 26's), the rows in a rounded group 16 in from the sides, separators between them, the footer below |
 | `cell($title, $detail, $disclosure)` | a row of one: the title, a muted detail at the end, a chevron for a row that opens a page; 44 high; `clicked()` |
 | `swipeActions(&$action, $content, ...$actions)` | a row swiped toward the start to show its actions at the end, as Mail's; `"!Delete"` is red; a full swipe performs the first; `$action` is the one tapped this frame |
 | `safeArea($fn)` | content kept out of the bars, the cutout and the keyboard |
