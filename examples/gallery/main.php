@@ -12,8 +12,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Glass\Glass;
-use MyPHP\UI\{Content, Context, Font, GridState, Key, ListState, Motion, Node, OutlineState, Painter, Router, Selection, Span, SVG, TextState};
-use MyPHP\UI\Chart\{Chart, Side, Tick};
+use MyPHP\UI\{Content, Context, Font, GridState, Key, ListState, Motion, Node, OutlineState, Router, Selection, Span, SVG, TextState};
 use MyPHP\UI\Markdown\{Markdown, Options as MarkdownOptions, RevealUnit};
 use MyPHP\UI\RichText\{Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text as RichTextText};
 
@@ -199,12 +198,12 @@ const CHART_VISITS = [
 const CHART_PLATFORMS = ['macOS', 'Windows', 'Linux', 'Browsers'];
 const CHART_SHARES = [46, 31, 14, 9];
 
-/** The state of the Charts page: the sales of the bar chart and the month clicked, the point chosen on the live line, how the areas stack, and the points of the scatter plot. */
+/** The state of the Charts page: the sales of the bar chart, how the areas stack, and the points of the scatter plot. */
 final class GalleryCharts
 {
     /** @var list<float> */
     public array $sales = [];
-    public int $month = -1, $selected = -1, $stacking = 0;
+    public int $stacking = 0;
     /** The month and the second the pointer is on, and the share of the donut, null for none. */
     public ?string $hoverMonth = null;
     public ?DateTimeImmutable $at = null;
@@ -225,34 +224,6 @@ final class GalleryCharts
             }
         }
     }
-}
-
-/** The look of the labels of the charts' axes. */
-function axisLabel(Context $c): Closure
-{
-    return fn(Side $s, Tick $tick) => $c->text($tick->label, 11, $c->theme->textMuted)->noWrap();
-}
-
-/** Paints a line across the plot at each tick of $y, and along it at each of $x. @param list<Tick> $x @param list<Tick> $y */
-function gridLines(Context $c, Node $area, array $x, array $y, int $color): void
-{
-    $area->draw(function (Painter $p, array $r) use ($x, $y, $color): void {
-        foreach ($y as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $color); }
-        foreach ($x as $tick) { $p->line(Chart::x($r, $tick->at), $r[1], Chart::x($r, $tick->at), $r[1] + $r[3], 1, $color); }
-    });
-}
-
-/** The series' names by their colors. @param list<string> $names */
-function legend(Context $c, array $names): void
-{
-    $c->row(0, 14)->wrap(0);
-      foreach ($names as $i => $name) {
-          $c->row(0, 6)->alignItems(Node::CENTER);
-            $c->box(10, 10, CHART_COLORS[$i])->radius(3);
-            $c->text($name, 12, $c->theme->textMuted);
-          $c->end();
-      }
-    $c->end();
 }
 
 // The Markdown page.
@@ -344,20 +315,19 @@ final class Gallery
     public int $size = 1;
     public string $plan = 'Pro';
     public float $volume = 35;
-    public TextState $name, $email, $bio, $filter, $search, $city, $findQuery, $draft, $motionText;
+    public TextState $name, $email, $bio, $findQuery, $draft, $motionText;
     public int $picked = -1;
     /** @var array<int, bool> */
     public array $starred = [];
     public int $tab = 0;
-    public float $split = 160, $copies = 1;
-    public int $file = -1;
+    public float $copies = 1;
     public Selection $chosen;
     /** @var array<string, bool> the tree's folders open */
     public array $tree = ['src' => true];
     public string $leaf = '';
     public DateTimeImmutable $birthday, $now, $meeting, $due;
     public bool $dueOpen = false;
-    public bool $dialog = false, $menu = false;
+    public bool $dialog = false;
     /** @var list<string> */
     public array $files = [];
     /** @var list<float> */
@@ -390,8 +360,6 @@ final class Gallery
     public array $sections = [true, false, false];
     /** @var list<TableFile> */
     public array $tableFiles = [];
-    /** Which sections of the sidebar show. @var list<bool> */
-    public array $sectionsOpen = [true, true];
     /** The alert, the notes deleted with an undo, the find bar, the notifications' check boxes, and the path. */
     public bool $alert = false, $finding = false;
     public int $notes = 12, $findAt = 0;
@@ -420,9 +388,7 @@ final class Gallery
     public array $tasks = [];
     /** The outline and its order. */
     public OutlineState $outline;
-    public ListState $rows, $chat, $table;
-    /** @var list<int> the rows the list showed in the last build, by index */
-    private array $shownRows = [];
+    public ListState $chat, $table;
     /** @var list<Message> */
     public array $messages = [];
     public GalleryCharts $chart;
@@ -431,7 +397,7 @@ final class Gallery
     {
         $this->router = new Router($path);
         $this->md = new MarkdownDemo();
-        foreach (['name', 'email', 'bio', 'filter', 'search', 'city', 'findQuery', 'draft', 'motionText'] as $f) { $this->$f = new TextState(''); }
+        foreach (['name', 'email', 'bio', 'findQuery', 'draft', 'motionText'] as $f) { $this->$f = new TextState(''); }
         $this->chosen = new Selection();
         $this->birthday = new DateTimeImmutable('1815-12-10 00:00', new \DateTimeZone('UTC'));
         $this->now = new DateTimeImmutable();
@@ -441,7 +407,7 @@ final class Gallery
         $this->swatches = new GridState();
         $this->swatchesChosen = new Selection();
         $this->outline = new OutlineState();
-        $this->rows = new ListState(); $this->chat = new ListState(); $this->table = new ListState();
+        $this->chat = new ListState(); $this->table = new ListState();
         $this->chart = new GalleryCharts();
     }
 

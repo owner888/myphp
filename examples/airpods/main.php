@@ -18,7 +18,7 @@ if (file_exists(__DIR__ . '/src/Native/LocalePolyfill.php')) {
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Examples\Airpods\{AacpProtocol, AirPodsBleBroadcast, AirPodsCrypto, AirPodsTransport, AndroidBluetoothTransport, HeadGestureDetector, L2capProbeResult, SimulatedAirPods4Transport, };
-use MyPHP\UI\{Content, ListState, ScrollState, TextState};
+use MyPHP\UI\Content;
 
 spl_autoload_register(function ($c) {
     if (str_starts_with($c, 'MyPHP\\') && !str_starts_with($c, 'MyPHP\\Examples\\')) {
@@ -118,9 +118,10 @@ final class AirPodsApp
     public int $lastPitch = 0;
     public int $lastYaw = 0;
 
-    public TextState $renameInput;
-    public ListState $packetList;
-    public ScrollState $pageScroll;
+    /** The name typed in the rename field. */
+    public string $renameText = '';
+    /** The tab shown: the AirPods' settings, the connection, or the packets. */
+    public string $page = 'AirPods';
     /** @var list<array{dir: string, summary: string, hex: string}> */
     public array $packets = [];
     private ?string $lastBleRaw = null;
@@ -139,9 +140,7 @@ final class AirPodsApp
         }
         $this->probe = new L2capProbeResult();
         $this->gestures = new HeadGestureDetector();
-        $this->renameInput = new TextState($this->deviceName);
-        $this->packetList = new ListState();
-        $this->pageScroll = new ScrollState();
+        $this->renameText = $this->deviceName;
         if ($this->useSimulator) {
             $this->runProbe();
         } elseif ($this->androidBt !== null) {
@@ -150,7 +149,7 @@ final class AirPodsApp
             $this->localMac = $st['localMac'] !== '' ? $st['localMac'] : $this->localMac;
             $this->macAddress = $st['mac'] !== '' ? $st['mac'] : $this->macAddress;
             $this->deviceName = $st['name'] !== '' ? $st['name'] : $this->deviceName;
-            $this->renameInput->text = $this->deviceName;
+            $this->renameText = $this->deviceName;
             $this->isBonded = $st['mac'] !== '';
             $this->probe = new L2capProbeResult(
                 verdict: L2capProbeResult::VERDICT_NATIVE_READY,
@@ -212,7 +211,7 @@ final class AirPodsApp
             }
             if ($st['name'] !== '') {
                 $this->deviceName = $st['name'];
-                $this->renameInput->text = $this->deviceName;
+                $this->renameText = $this->deviceName;
             }
         } else {
             $this->isBonded = true;
@@ -585,7 +584,7 @@ final class AirPodsApp
                 $this->modelNumber = $d['modelNumber'] !== '' ? $d['modelNumber'] : $this->modelNumber;
                 $this->firmware = $d['firmware'] !== '' ? $d['firmware'] : $this->firmware;
                 $this->serial = $d['serial'] !== '' ? $d['serial'] : $this->serial;
-                $this->renameInput->text = $this->deviceName;
+                $this->renameText = $this->deviceName;
                 $this->logPacket('RX', sprintf('Device Info: %s (%s fw %s)', $this->deviceName, $this->modelNumber, $this->firmware), $hex);
                 // Re-send notification & proximity key requests once 0x001D confirms handshake completion on real hardware
                 if ($this->transport instanceof AndroidBluetoothTransport && $this->irk === null && $this->transport->isConnected()) {
@@ -808,6 +807,9 @@ App::whenReady(function () use ($s) {
         title: 'AirPods 4 · Xiaomi 14 Ultra',
         width: 980,
         height: 640,
+        minWidth: 560,
+        titleBarStyle: 'hiddenInset', // the window controls over the sidebar, whose material shows through it, as the Mac's settings
+        vibrancy: 'sidebar',
         content: Content::file(__DIR__ . '/view.php', $s),
     ));
     if (getenv('MYPHP_PLATFORM') === 'android') {

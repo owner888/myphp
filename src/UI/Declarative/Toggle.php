@@ -9,13 +9,16 @@ use MyPHP\UI\{Context, Node};
 final class Toggle extends View
 {
     private bool $isOn;
+    private ?Binding $binding = null;
     private \ToggleStyle $style = \ToggleStyle::automatic;
 
     /** @var list<bool>|null the bindings a Toggle(sources:) switches together */
     private ?array $sources = null;
 
-    public function __construct(public readonly string $title, bool &$isOn)
+    /** $isOn: a variable, or a Binding(get:set:), whose set() a switch by the user runs, not a change of the app's. */
+    public function __construct(public readonly string $title, bool|Binding &$isOn)
     {
+        if ($isOn instanceof Binding) { $this->binding = $isOn; $this->isOn = (bool)$isOn->get(); return; }
         $this->isOn = &$isOn;
     }
 
@@ -32,7 +35,7 @@ final class Toggle extends View
     public function isOn(): bool { return $this->isOn; }
 
     /** Switches it, as choosing it in a menu does. @internal */
-    public function flip(): void { $this->isOn = !$this->isOn; }
+    public function flip(): void { $this->isOn = !$this->isOn; $this->binding?->set($this->isOn); }
 
     public function toggleStyle(\ToggleStyle $style): static { $this->style = $style; return $this; }
 
@@ -41,11 +44,13 @@ final class Toggle extends View
         $title = Localized::string($this->title, $env);
         $style = $this->style === \ToggleStyle::automatic ? (($c->runtime?->touch ?? false) ? \ToggleStyle::switch : \ToggleStyle::checkbox) : $this->style;
         if ($this->sources !== null) { return $this->mixed($c, $title, $style); }
+        $was = $this->isOn;
         $n = match ($style) {
             \ToggleStyle::checkbox => $c->checkbox($title, $this->isOn),
             \ToggleStyle::button => $c->toggle($this->isOn, $title),
             default => $c->switch($title, $this->isOn),
         };
+        if ($this->isOn !== $was) { $this->binding?->set($this->isOn); }
         if ($env->disabled) { $n->disabled(); }
         return $n;
     }

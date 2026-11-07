@@ -125,6 +125,36 @@ items:)`, `TokenField(title, tokens:, suggestions:)`, `Rating(title, value:)`,
 `RangeSlider(lower:, upper:, in:, step:)`, `Breadcrumbs(path, selection:)`,
 `Avatar(name)`; and the modifier `toast($message)`.
 
+## One app, every screen: TabView(.sidebarAdaptable)
+
+An app of a few top-level pages (Mail's mailboxes, Settings' panes, a
+companion app's Devices, Connection and Log) writes them once as a
+`TabView` with `.tabViewStyle(.sidebarAdaptable)`, as SwiftUI does on
+iOS 18 and macOS 15, and gets each screen's own navigation:
+
+| Screen | The tabs show as |
+|---|---|
+| Desktop (macOS, Linux, Windows) | a `NavigationSplitView`: the sidebar of the tabs' titles, icons and badges, its button hiding it, beside the chosen tab, its `navigationTitle` and `toolbar` in the window's title bar |
+| Tablet on its side (iPad, Android tablet) | the same sidebar |
+| Tablet held upright | tabs across the top, as iPadOS 18's |
+| Phone (narrower than 600 or lower than 500 points) | the tab bar across the bottom |
+
+```php
+return fn() => TabView(selection: $this->page)(
+    Tab('Devices', systemImage: 'airpods', value: 'devices')($devices()),
+    Tab('Connection', systemImage: 'antenna.radiowaves.left.and.right', value: 'connection')($connection()),
+    Tab('Log', systemImage: 'list.bullet.rectangle', value: 'log')($log())->badge(count($this->packets)),
+)->tabViewStyle(TabViewStyle::sidebarAdaptable);
+```
+
+Each tab's views are a page: a `Form`, a `ListView`, or a `NavigationStack`
+for pages under it, with `->navigationTitle()` and `->toolbar()`. For the
+look of the Mac's own apps, open the window with
+`titleBarStyle: 'hiddenInset', vibrancy: 'sidebar'`: the window controls
+over the sidebar, its material showing through. `NavigationSplitView`
+itself is for a sidebar of the app's data (Notes' notes, Finder's places)
+rather than of its pages: a desktop's, as SwiftUI's on the Mac.
+
 ## The modifiers
 
 `padding(edges, length)`, `frame(width:, height:, minWidth:, maxWidth:,

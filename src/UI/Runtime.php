@@ -332,7 +332,7 @@ final class Runtime
     private float $blinkStart = 0;
     private ?array $blinkSeen = null;
     public const BLINK = 0.5;
-    /** After this long without edits the caret stays on and stops asking for frames. */
+    /** After this long without edits the caret asks for no more frames, stopping on: it blinks on in the frames something else asks for (mygo's). */
     public const BLINK_FOR = 30.0;
     private ?int $activated = null;
     /** The node the keys or assistive technology clicked this frame, whose tip goes. */
@@ -980,11 +980,11 @@ final class Runtime
         }
     }
 
-    /** Whether the focused field's caret is in the shown half of its blink (always, once it has rested a while). */
+    /** Whether the focused field's caret is in the shown half of its blink: it blinks for as long as frames come, an animation's after it has rested too, as mygo's and the Mac's. */
     public function caretVisible(): bool
     {
         $phase = hrtime(true) / 1e9 - $this->blinkStart;
-        return $phase >= self::BLINK_FOR || ((int)floor($phase / self::BLINK)) % 2 === 0;
+        return ((int)floor($phase / self::BLINK)) % 2 === 0;
     }
 
     private bool $tipPending = false;
@@ -2068,7 +2068,9 @@ final class Runtime
             return null;
         }
         $phase = hrtime(true) / 1e9 - $this->blinkStart;
-        return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
+        $shown = ((int)floor($phase / self::BLINK)) % 2 === 0;
+        return $phase >= self::BLINK_FOR && $shown ? null : self::BLINK - fmod($phase, self::BLINK); // rested: one frame more if it is off, so that it stops on
+
     }
 
     private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false, bool $hidden = false, int $clipper = 0): void

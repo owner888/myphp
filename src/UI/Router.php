@@ -355,7 +355,7 @@ final class Router
                 self::$noPage[$r->path()] = true;
                 \MyPHP\Logger::warn('no page for ' . $r->path() . ': none of ' . implode(', ', array_keys($pages)) . " matches it, and no '*'", 'ui');
             }
-            $c->text('No page for ' . $r->path(), 13, $c->theme->textMuted);
+            $c->text('No page for ' . $r->path(), $c->theme->fontSize, $c->theme->textMuted);
         };
     }
 

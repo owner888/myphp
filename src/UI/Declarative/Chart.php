@@ -120,7 +120,7 @@ final class Chart extends View
                     foreach ($marks as $m) { if (self::seriesOf($m) === $name) { $sample = $m; break; } }
                     $c->row(0, 6)->alignItems(Node::CENTER);
                       $c->box(8, 8, $colorOf($sample))->radius(4);
-                      $c->text((string)$name, 11, $env->theme->textMuted);
+                      $c->text((string)$name, $env->theme->fontSize, $env->theme->textMuted)->preferredFont(\MyPHP\UI\Font::CAPTION2); // Swift Charts' legend and axis labels: caption2
                     $c->end();
                 }
               $c->end();
@@ -232,7 +232,7 @@ final class Chart extends View
         if ($this->yAxis?->format !== null) { $y->format = $this->yAxis->format; }
         elseif ($how === Stacking::Normalized && $stackAreas !== []) { $y->format = fn(float $v) => sprintf('%.0f%%', 100 * $v); }
         $yTicks = $this->yAxis?->values !== null ? array_map(fn($v) => new Tick($y->at((float)$v), (float)$v, self::label($v, $this->yAxis)), $this->yAxis->values) : $y->ticks($count);
-        $label = fn(Side $s, Tick $tk) => $c->text($tk->label, 11, $t->textMuted)->noWrap()->margin($s === Side::Bottom ? 4 : 0, $s === Side::Right ? 0 : 6, 0, $s === Side::Right ? 6 : 0);
+        $label = fn(Side $s, Tick $tk) => $c->text($tk->label, $t->fontSize, $t->textMuted)->preferredFont(\MyPHP\UI\Font::CAPTION2)->noWrap()->margin($s === Side::Bottom ? 4 : 0, $s === Side::Right ? 0 : 6, 0, $s === Side::Right ? 6 : 0);
         $leading = $this->yAxis?->position === \AxisMarkPosition::leading;
         $axes = new Axes(left: $leading ? $yTicks : [], right: $leading ? [] : $yTicks, bottom: $xTicks, label: $label);
         $curve = fn(ChartMark $m): Curve => match ($m->interpolation) { \InterpolationMethod::monotone, \InterpolationMethod::catmullRom, \InterpolationMethod::cardinal => Curve::Monotone, \InterpolationMethod::stepStart => Curve::StepAfter, \InterpolationMethod::stepEnd => Curve::StepBefore, \InterpolationMethod::stepCenter => Curve::Step, default => Curve::Linear };

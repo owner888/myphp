@@ -293,8 +293,8 @@ function Button(string $title = '', ?Closure $action = null, ?ButtonRole $role =
     return new D\Button($title, $action, $role, $label);
 }
 
-/** A switch bound to $isOn: Toggle('Wi-Fi', isOn: $this->wifi); or of several, Toggle('All', sources: [&$this->mail, &$this->calendar]), mixed while some are on. */
-function Toggle(string $title, ?bool &$isOn = null, ?array $sources = null): D\Toggle
+/** A switch bound to $isOn: Toggle('Wi-Fi', isOn: $this->wifi), or a Binding(get:set:) whose set() runs as the user switches it; or of several, Toggle('All', sources: [&$this->mail, &$this->calendar]), mixed while some are on. */
+function Toggle(string $title, bool|D\Binding|null &$isOn = null, ?array $sources = null): D\Toggle
 {
     if ($sources !== null) { return D\Toggle::of($title, $sources); }
     return new D\Toggle($title, $isOn);
@@ -403,7 +403,8 @@ function NavigationLink(string $title = '', string $value = '/', ?D\View $label 
 function TabView(mixed &$selection): D\TabView { return new D\TabView($selection); }
 
 /** A tab of a TabView, its $value what the TabView's selection holds while it shows; its $image shows on a phone's tab bar and in a sidebar. */
-function Tab(string $title, ?SVG $image = null, mixed $value = null): D\Tab { return new D\Tab($title, $image, $value); }
+/** A tab of a TabView: Tab('Inbox', systemImage: 'tray', value: 'inbox')( …its views… ), or with an SVG, image: $svg. */
+function Tab(string $title, ?SVG $image = null, mixed $value = null, ?string $systemImage = null): D\Tab { return new D\Tab($title, $image, $value, $systemImage); }
 
 /** How a TabView shows its tabs, as SwiftUI's TabViewStyle. */
 enum TabViewStyle { case automatic; case sidebarAdaptable; }

@@ -78,6 +78,7 @@ place. When two fit, take the first: it is the simpler one.
 | Two panes the user resizes | `$c->split(&$size, $first, $second)` | split.md |
 | Pages with a history, Back | `new Router('/')` + `$router->view($c, ['/notes' => __DIR__ . '/pages/notes.php', '/notes/{id}' => …])`, a page a file; `->push()`, `->back()` | navigation.md |
 | A few pages switched by tabs | `$c->tabs($labels, &$index)` on the desktop; `$c->tabView($items, &$index, $content)` adapts to phones and tablets | tabs.md, ../mobile.md |
+| An app's top-level pages, on every screen (desktop, tablet, phone) | In the declarative views, `TabView(selection:)( Tab(title, systemImage:, value:)( page ) … )->tabViewStyle(TabViewStyle::sidebarAdaptable)`: a sidebar (NavigationSplitView) on the desktop and a tablet on its side, tabs across the top of an upright tablet, the bottom tab bar on a phone. Write it once; never branch on the platform for it | ../declarative.md "One app, every screen" |
 | Where am I | `$c->breadcrumbs($items, &$chosen)`; `$c->backButton()` | breadcrumbs.md, history-buttons.md |
 | Sections that fold | `$c->collapsible($label, &$open, $fn)`; `accordion` for several | collapsible.md, accordion.md |
 | A card, a panel | `$c->column(16, 8)->background($t->surface)->radius(12)->border(1, $t->border)` | styling.md |
