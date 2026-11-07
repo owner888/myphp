@@ -538,6 +538,21 @@ same([[52.0, 52.0, 52.0, 52.0], [true, false], true, $h->rect($parentOf($switch)
      count(array_filter($h->texts(), fn($t) => $t === 'Settings page')) === 2, $bar->color, $h->root->kids[0]->color],
     'a phone\'s form as iOS 26\'s: rows 52 high, the header as written, the switch at the end, the segments\' track, a large title, the page\'s gray behind the bars');
 
+// In a phone's form, as SwiftUI's on iOS: a Button in a row, alone or in an HStack, is its title in the tint with no
+// face, and a TextField has no box; on the desktop they keep theirs.
+$fieldApp = new class { public string $name = 'Pods'; };
+$formOf = fn(bool $touch) => (function () use ($touch, $fieldApp): array {
+    $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(
+        HStack()(TextField('Name', text: $fieldApp->name)->labelsHidden(), Button('Rename', action: fn() => null)),
+        Button('Pair', action: fn() => null),
+    )), $c), 393, 400);
+    $h->rt->touch = $touch;
+    $h->frame(2);
+    $rename = $h->byLabel('Rename');
+    return [$rename->bordered, $rename->color === null, $h->byLabel('Name')->bordered];
+})();
+same([[false, true, false], [true, false, true]], [$formOf(true), $formOf(false)], 'a phone\'s form row: buttons in the tint, fields without a box');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

@@ -8585,7 +8585,11 @@ changed, which no hot reload can take.
   systemGreen; segments as UISegmentedControl's; rows 52 high, groups
   rounded 26, headers as written, the switch 63 × 28 (iOS 26's); separators
   a hairline; a stack's title large (`automatic`); the bars clear over
-  the page's color (`Env::backdrop`).
+  the page's color (`Env::backdrop`). In a phone's form row a Button of the
+  automatic style is its title in the tint and a TextField has no box (two
+  bordered buttons in an HStack ran past the row); a plain List's rows are
+  cells with separators; what scrolls up fades under the bar (iOS 26's
+  scroll edge) rather than being cut at it.
 
 ## Open items
 

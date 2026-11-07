@@ -65,15 +65,17 @@ final class TextField extends View
             return false;
         };
         $placeholder = Localized::string($this->prompt ?? $this->title, $env);
+        $touch = $c->runtime?->touch ?? false;
+        $plain = $env->textFieldStyle === \TextFieldStyle::plain || (($env->textFieldStyle ?? \TextFieldStyle::automatic) === \TextFieldStyle::automatic && $env->formRow && $touch); // in a phone's form, as SwiftUI's on iOS: no box, the row is the field
         $n = match (true) {
             $this->editor => $c->textarea($state, '', 0, 0),
             $this->search => $c->searchField($state, 0),
             $this->suggestions !== null => $c->autocomplete($state, $this->suggestions, $placeholder, 0),
             $this->vertical => $c->textarea($state, $placeholder, 0, 0, null, $env->linesReserved ? ($env->lineLimit ?? 1) : 1, $env->lineLimit ?? 8), // growing with its lines to lineLimit's
-            $env->textFieldStyle === \TextFieldStyle::plain => $c->textInputBase($state),
+            $plain => $c->textInputBase($state),
             default => $c->input($state, $placeholder, 0),
         };
-        if ($env->textFieldStyle === \TextFieldStyle::plain && !$this->editor && !$this->vertical) { $n->text = $placeholder; } // its prompt, as an input()'s
+        if ($plain && !$this->editor && !$this->vertical) { $n->text = $placeholder; } // its prompt, as an input()'s
         View::takeRoom($n, $env->axis, $this->editor ? View::FLEX_X | View::FLEX_Y : View::FLEX_X); // as SwiftUI's: a field takes the width it is given, a TextEditor the room
         if ($this->secure) { $n->password(); }
         $n->label(Localized::string($this->title, $env));
