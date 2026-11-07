@@ -24,8 +24,7 @@ final class Presentation
     {
         switch ($this->kind) {
             case 'sheet':
-                if (!$this->shown) { break; }
-                $views = ($this->content)();
+                $views = ($this->content)(); // closed too: what goes down as it closes
                 $first = is_array($views) ? ($views[0] ?? null) : $views;
                 $detents = $first instanceof View ? ($first->sheetDetents ?? []) : []; // the content's presentationDetents, as SwiftUI's
                 $large = $c->height - $c->windowSafeArea[0] - 10;

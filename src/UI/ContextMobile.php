@@ -24,6 +24,9 @@ trait ContextMobile
     /** Where tabView put its tabs: across the bottom (a phone), across the top (a tablet upright), as a sidebar (a tablet on its side, the desktop). */
     public const TABS_BOTTOM = 'bottom', TABS_TOP = 'top', TABS_SIDEBAR = 'sidebar';
 
+    /** How many sheets the frame built so far, open or closed, which keys each (sheet()). */
+    private int $sheets = 0;
+
     /**
      * The tabs of an app, placed as Apple places them (SwiftUI's TabView
      * with the sidebarAdaptable style): a tab bar across the bottom on a
@@ -265,16 +268,21 @@ trait ContextMobile
      */
     public function sheet(bool &$open, Closure $fn, array $detents = []): ?Node
     {
-        if (!$open) {
-            return null;
-        }
         $t = $this->theme;
         $rt = $this->runtime;
         $back = $panel = null;
         $gone = false;
-        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents): void {
-            $back = $this->key('sheet')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->block();
-            $back->alpha = 0.4;
+        $shown = $open;
+        $key = 'sheet' . $this->sheets++; // each sheet of the frame its own, open or closed: two (one going, one coming) do not share a state
+        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key): void {
+            $this->key($key);
+            $rise = $rt?->motions[$this->upcomingId()]['rise'] ?? null;
+            if (!$shown && ($rise === null || ($rise->value <= 0.001 && !$rise->moving))) { // closed, and gone below the window
+                $this->nextKey = null;
+                return;
+            }
+            $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->justify(Node::END);
+            if ($shown) { $back->block(); } else { $back->passThrough(); } // going down, the window under it takes the pointer again
               $large = $this->height - $this->windowSafeArea[0] - 10;
               $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($large)->role(Role::DIALOG);
               if ($detents !== []) { // as high as the largest, moved down to show the others: the offset of each its height short of the largest
@@ -289,11 +297,11 @@ trait ContextMobile
                   $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $this->dragOffset($panel)[1] >= $top - 2; // let go toward below the window, and there: gone
               }
               $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
-              if ($rt !== null && !isset($rt->motions[$panel->id]['rise'])) { $this->jump($panel, 'rise', 0.0); } // shown now: from below the window, not at its place
-              $p = $this->animate($panel, 'rise', 1, 0.35);
+              if ($rt !== null && !isset($rt->motions[$back->id]['rise'])) { $this->jump($back, 'rise', 0.0); } // shown now: from below the window, not at its place
+              $p = $this->animate($back, 'rise', $shown ? 1 : 0, $shown ? 0.35 : 0.3); // up as it shows, back down as it closes
               $panel->translate(0, (1 - $p) * $h); // rises from below the window
               $back->alpha = 0.4 * $p; // the window dims as it rises
-              $panel->draw(static fn(Painter $pt, array $r) => $pt->fill([$r[0], $r[1], $r[2], $r[3] + 10], $pt->theme()->background, 10)); // its bottom corners below the window
+              $panel->draw(static fn(Painter $pt, array $r) => $pt->fill([$r[0], $r[1], $r[2], $r[3] + 10], $pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background, 10)); // its bottom corners below the window; in the dark UIKit's elevated background, a gray over the black
                 $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                   $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
                 $this->end();
@@ -303,6 +311,9 @@ trait ContextMobile
               $this->end();
             $this->end();
         });
+        if ($back === null || !$open) { // closed: nothing, or what goes down
+            return $back;
+        }
         if ($gone || $this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // dragged away, Escape, or a tap outside
             $open = false;
             $back->dismissed = true;
