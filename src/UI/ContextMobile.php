@@ -59,6 +59,7 @@ trait ContextMobile
               $this->safeArea[2] = $bottom;
               $bar = $this->tabBar($items, $index);
               $bar->absolute()->bottom(0)->start(0)->end(0);
+              $bar->floats = true; // a tap on it is its, not the page's under it
               if ($bar->changed) { $n->changed = true; }
             $this->end();
             return $n;
