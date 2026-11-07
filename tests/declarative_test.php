@@ -553,6 +553,24 @@ $formOf = fn(bool $touch) => (function () use ($touch, $fieldApp): array {
 })();
 same([[false, true, false], [true, false, true]], [$formOf(true), $formOf(false)], 'a phone\'s form row: buttons in the tint, fields without a box');
 
+// A plain List of data on a phone's page, as SwiftUI's in a NavigationStack: the page's title large, its first row,
+// scrolling with the rows; the bar's title shows once it went under the bar. A list that chooses keeps the bar's.
+$logApp = new class { public string $tab = 'a'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $logApp->tab)(
+    Tab('Log', systemImage: 'list.bullet', value: 'a')(ListView(200)(fn(int $i) => Text("Frame $i"))->listStyle(\ListStyle::plain)->navigationTitle('Packet Log')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$h->frame(3);
+$find = function (\Closure $is) use ($h): ?Node {
+    $walk = function (Node $n) use (&$walk, $is): ?Node { if ($is($n)) { return $n; } foreach ($n->kids as $k) { if (($f = $walk($k)) !== null) { return $f; } } return null; };
+    return $walk($h->root);
+};
+$barTitle = fn() => $find(fn(Node $n) => $n->role === \MyPHP\UI\Role::TOOLBAR)->kids[1];
+$rest = [$barTitle()->opacity, $h->rect($h->byText('Packet Log'))[1] < $h->rect($h->byText('Frame 0'))[1]];
+for ($k = 0; $k < 5; $k++) { $h->wheel(196, 400, 0, -600); } // down the rows
+$h->frame(30);
+same([[0.0, true], 1.0], [$rest, $barTitle()->opacity], 'a list\'s large title its first row, the bar\'s title once it scrolled under');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

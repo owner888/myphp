@@ -166,15 +166,15 @@ trait ContextMobile
      * $router that can go back, a chevron in a 44-point circle of glass
      * leads, in the accent, and a tap on it goes back (iOS 26 shows the
      * chevron alone); $trailing builds what ends the bar (buttons, text in
-     * the accent), in a capsule of glass 44 high. With $largeTitle, the
-     * ScrollState of a page that begins with largeTitle(), the bar's title
+     * the accent), in a capsule of glass 44 high. With $largeTitle, what
+     * scrolls a page that begins with largeTitle(), the bar's title
      * shows only once that one scrolled under it, as iOS's large titles do.
      * Where the screen is not touched (a Mac, a PC), the bar is a window's
      * toolbar, as macOS 26's: 52 high, the title in 15 points, the back
      * button and the trailing capsule 32 high. Build it first in a column
      * that fills the window. Not mygo's.
      */
-    public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null, ?ScrollState $largeTitle = null): Node
+    public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null, ?Scrollable $largeTitle = null): Node
     {
         $t = $this->theme;
         $top = $this->safeArea[0];
@@ -194,7 +194,8 @@ trait ContextMobile
           $this->end();
           $inline = $this->text($title, $size, $t->text)->fontWeight(600)->singleLine()->shrink(1);
           if ($largeTitle !== null) { // the large title in the page's scroll: the bar's title fades in over the last 10 points of its 52 going under the bar
-              $inline->opacity(max(0.0, min(1.0, ($largeTitle->y - 42) / 10)));
+              $y = $largeTitle instanceof ListState ? ($largeTitle->row > 0 ? INF : $largeTitle->offset) : $largeTitle->extent()[0]; // a list's title its first row: past it, gone under the bar (its estimate would say otherwise)
+              $inline->opacity(max(0.0, min(1.0, ($y - 42) / 10)));
           }
           $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::END);
             if ($trailing !== null) {

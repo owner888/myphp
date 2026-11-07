@@ -30,8 +30,9 @@ final class RouteEntry
 
     /** @var list<mixed>|null what the page's declarative view puts at the end of its NavigationStack's bar (View::toolbar) @internal */
     public ?array $toolbar = null;
-    /** The ScrollState of the page's large title while it asks for one, and the one it keeps for it. @internal */
-    public ?ScrollState $largeTitle = null, $largeScroll = null;
+    /** What scrolls the page's large title while it asks for one (a ScrollState, a list's ListState), and the ScrollState it keeps for it. @internal */
+    public ?Scrollable $largeTitle = null;
+    public ?ScrollState $largeScroll = null;
     /** @var array<string, true> what the page's last build put in the bar @internal */
     public array $barSeen = [];
 }
