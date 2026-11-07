@@ -263,6 +263,9 @@ abstract class View
     /** The appearance the app takes while the view shows: light, dark, or null to follow the system, as SwiftUI's preferredColorScheme. */
     public function preferredColorScheme(?\ColorScheme $scheme): static { $this->events[] = ['scheme', $scheme]; return $this; }
 
+    /** The app's text size, whatever the system's, as SwiftUI's dynamicTypeSize: DynamicTypeSize::xxLarge, say; null follows the system's again. */
+    public function dynamicTypeSize(?\DynamicTypeSize $size): static { $this->events[] = ['typeSize', $size]; return $this; }
+
     /** How the Pickers inside draw: menu, segmented, radioGroup, inline. */
     /** How the rows of the ListView inside draw: ListStyle::plain, rows of their content's height without separators, as SwiftUI's listStyle(.plain) on macOS. */
     public function listStyle(\ListStyle $style): static { $this->sets['listStyle'] = $style; return $this; }
@@ -733,6 +736,8 @@ abstract class View
 
     /** @var list<?\ColorScheme> the appearance preferredColorScheme() set last, none before */
     private static array $scheme = [];
+    /** The DynamicTypeSize the app's views asked for last, in a list: [] before any. @var list<?\DynamicTypeSize> */
+    private static array $typeSize = [];
 
     /** The events and accessibility of $node, the view's own; the gestures (a tap, the pointer over it, its menus, a tip) $whole's, the frame around it with what it holds, as SwiftUI's gestures after a frame. */
     private function events(Context $c, Node $node, Node $whole, Env $env): void
@@ -763,7 +768,13 @@ abstract class View
                 case 'scheme':
                     if (self::$scheme !== [$a]) { // the app's appearance, set as it changes
                         self::$scheme = [$a];
-                        \MyPHP\App::setTheme(match ($a) { \ColorScheme::light => \MyPHP\UI\Theme::light(), \ColorScheme::dark => \MyPHP\UI\Theme::dark(), null => null });
+                        \MyPHP\App::setColorScheme(match ($a) { \ColorScheme::light => false, \ColorScheme::dark => true, null => null }); // the platform's theme in it: a phone's stays UIKit's
+                    }
+                    break;
+                case 'typeSize':
+                    if (self::$typeSize !== [$a]) { // the app's text size, set as it changes
+                        self::$typeSize = [$a];
+                        \MyPHP\App::setTextScale($a?->scale());
                     }
                     break;
                 case 'drag':

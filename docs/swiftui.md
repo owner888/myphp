@@ -167,7 +167,8 @@ $view = function (Context $c) {
 | `.shadow(radius: 8, y: 4)` | `->shadow(0, 4, 8, 0, 0x000000, 0.2)` |
 | `.opacity(0.5)` | `->opacity(0.5)` |
 | `LinearGradient(...)` | `->gradient($from, $to, $angle)`, `->linearGradient(new LinearGradient(…))` |
-| `preferredColorScheme(.dark)` | `App::setTheme(Theme::dark())` for the app; `$c->themed(Theme::dark())` for a part. |
+| `preferredColorScheme(.dark)` | the same in a declarative view, or `App::setColorScheme(true)` (null follows the system): the platform's theme in that appearance; `$c->themed(Theme::dark())` for a part. |
+| `dynamicTypeSize(.xxLarge)` | the same in a declarative view, or `App::setTextScale(DynamicTypeSize::xxLarge->scale())` (null follows the system's text size). |
 
 Take colors from `$c->theme` rather than literals: the theme switches with
 the system's appearance, accent, contrast and text size (see

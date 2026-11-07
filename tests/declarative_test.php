@@ -607,6 +607,17 @@ $below = array_values(array_filter(range(0, 29), function (int $i) use ($h, $y):
 $h->clickOn($tabB); $h->frame(3);
 same([true, 'b', []], [$below !== [], $underApp->tab, array_keys(array_filter($underApp->on))], 'a tap on the tab bar chooses its tab, the switch under it untouched');
 
+// preferredColorScheme and dynamicTypeSize choose the app's appearance and text size over the system's, as SwiftUI's:
+// the platform's theme in that appearance (a phone's stays UIKit's), its text DynamicTypeSize's times larger; null
+// follows the system again.
+$looks = new class { public ?\ColorScheme $scheme = \ColorScheme::dark; public ?\DynamicTypeSize $size = \DynamicTypeSize::xxLarge; };
+$chosen = fn() => [(new \ReflectionProperty(\MyPHP\App::class, 'darkChosen'))->getValue(), (new \ReflectionProperty(\MyPHP\App::class, 'textScaleChosen'))->getValue()];
+$h = new Headless(fn(Context $c) => Content::render(fn() => Text('Hi')->preferredColorScheme($looks->scheme)->dynamicTypeSize($looks->size), $c), 200, 100);
+$h->frame();
+$dark = $chosen();
+[$looks->scheme, $looks->size] = [null, null]; $h->frame();
+same([[true, 21 / 17], [null, null], 53 / 17], [$dark, $chosen(), \DynamicTypeSize::accessibility5->scale()], 'the app\'s appearance and text size, chosen and followed again');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

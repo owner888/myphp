@@ -35,14 +35,18 @@ spl_autoload_register(function ($c) {
     }
 });
 require_once __DIR__ . '/Protocol.php';
+require_once __DIR__ . '/strings/Strings.php'; // the catalogs, which myphp dev writes from strings/*.json (Strings, not Locales: the form example's class)
 
 final class AirPodsApp
 {
-    public const LISTENING_MODES = ['Off', 'ANC', 'Transp.', 'Adaptive'];
+    public const LISTENING_MODES = ['Off', 'ANC', 'Transparency', 'Adaptive'];
     public const MIC_MODES = ['Auto', 'Right', 'Left'];
     public const CALL_END_MODES = ['Single', 'Double'];
     public const SPEED_MODES = ['Default', 'Slower', 'Slowest'];
     public const HOLD_MODES = ['Default', 'Shorter', 'Shortest'];
+    /** The text sizes the Settings tab offers, by DynamicTypeSize's case: the system's, then iOS's, the first accessibility sizes after. */
+    public const TEXT_SIZES = ['system' => 'System', 'xSmall' => 'Extra Small', 'small' => 'Small', 'medium' => 'Medium', 'large' => 'Default', 'xLarge' => 'Large',
+        'xxLarge' => 'Extra Large', 'xxxLarge' => 'Extra Extra Large', 'accessibility1' => 'Larger Accessibility Size', 'accessibility3' => 'Largest Accessibility Size'];
 
     public SimulatedAirPods4Transport $sim;
     public ?AndroidBluetoothTransport $androidBt = null;
@@ -122,6 +126,8 @@ final class AirPodsApp
     public string $renameText = '';
     /** The tab shown: the AirPods' settings, the connection, or the packets. */
     public string $page = 'AirPods';
+    /** The app's appearance (system, light, dark), its text size (a key of TEXT_SIZES) and its language ('' for the system's), as its Settings tab chooses them. */
+    public string $appearance = 'system', $textSize = 'system', $lang = '';
     /** @var list<array{dir: string, summary: string, hex: string}> */
     public array $packets = [];
     private ?string $lastBleRaw = null;
