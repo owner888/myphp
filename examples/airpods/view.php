@@ -171,8 +171,7 @@ $connection = function (bool $connected) use ($check, $tr) {
 };
 
 /** The frames sent and received, newest last, only those in view built. */
-$packets = fn() => ListView(count($this->packets))(function (int $i) {
-        $p = $this->packets[$i];
+$packets = fn() => ListView($this->packets)(function (array $p, int $i) { // the frames as the frame began: a row deleting one does not move the rows after it in this pass
         return Button(action: function () use ($i) { $this->packetShown = $i; $this->packetOpen = true; }, label: HStack(alignment: VerticalAlignment::top, spacing: 10)(
             Text(verbatim: $p['dir'])->font(Font::caption)->bold()->monospaced()
                 ->foregroundStyle($p['dir'] === 'TX' ? Color::accentColor : ($p['dir'] === 'RX' ? Color::green : Color::orange))->frame(width: 28, alignment: Alignment::leading),
@@ -180,10 +179,19 @@ $packets = fn() => ListView(count($this->packets))(function (int $i) {
                 Text(verbatim: $p['summary'])->lineLimit(1),
                 Text(verbatim: $p['hex'])->font(Font::caption)->monospaced()->foregroundStyle(Color::secondary)->lineLimit(1),
             ),
-        ))->buttonStyle(ButtonStyle::plain); // a tap opens the frame's sheet
+        ))->buttonStyle(ButtonStyle::plain) // a tap opens the frame's sheet
+            ->swipeActions(Button('Delete', role: ButtonRole::destructive, action: fn() => array_splice($this->packets, $i, 1))) // swiped toward the start, as a Mail's row
+            ->contextMenu(
+                Button('Copy Hex', action: fn() => \MyPHP\Clipboard::writeText($p['hex'])),
+                Button('Delete', role: ButtonRole::destructive, action: fn() => array_splice($this->packets, $i, 1)),
+            ); // held, as an iPhone's long press
     })->listStyle(ListStyle::plain)
     ->navigationTitle('Packet Log')
-    ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', ['count' => count($this->packets)])->foregroundStyle(Color::secondary));
+    ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', ['count' => count($this->packets)])->foregroundStyle(Color::secondary), Button('Clear', action: function () { $this->clearAsked = true; }))
+    ->confirmationDialog('Clear every frame of the log?', isPresented: $this->clearAsked, actions: [
+        Button('Clear Log', role: ButtonRole::destructive, action: function () { $this->packets = []; }),
+        Button('Cancel', role: ButtonRole::cancel),
+    ]);
 
 /** A frame of the log, whole, in a sheet at half the window that a drag takes to the whole (presentationDetents). */
 $packetSheet = function () {

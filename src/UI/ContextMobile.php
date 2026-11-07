@@ -24,6 +24,9 @@ trait ContextMobile
     /** Where tabView put its tabs: across the bottom (a phone), across the top (a tablet upright), as a sidebar (a tablet on its side, the desktop). */
     public const TABS_BOTTOM = 'bottom', TABS_TOP = 'top', TABS_SIDEBAR = 'sidebar';
 
+    /** The row the last swipeActions() built around its content, which a stack along a row makes as wide as it (the declarative views'). @internal */
+    public ?Node $swipedRow = null;
+
     /** How many sheets the frame built so far, open or closed, which keys each (sheet()). */
     private int $sheets = 0;
 
@@ -535,6 +538,7 @@ trait ContextMobile
         $full = $total + 48; // swiped on this far, the first action is performed
         $sign = $rtl ? 1.0 : -1.0; // the content moves toward the start
         $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->clip();
+        $this->swipedRow = $n;
           $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its
             $content();
           $this->end();

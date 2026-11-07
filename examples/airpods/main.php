@@ -131,6 +131,8 @@ final class AirPodsApp
     /** The frame of the log its sheet shows, and whether it shows. */
     public int $packetShown = 0;
     public bool $packetOpen = false;
+    /** Whether the log's Clear asks to confirm. */
+    public bool $clearAsked = false;
     /** @var list<array{dir: string, summary: string, hex: string}> */
     public array $packets = [];
     private ?string $lastBleRaw = null;

@@ -665,6 +665,7 @@ final class Runtime
                     }
                     $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($e[6] ?? $this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0], 'chain' => $this->hitChain($e[1], $e[2])];
                     $this->pressDragger = $this->pressDragger($this->pointerPress['id']);
+                    $this->pressDraggable = $this->draggableAround($this->pointerPress['id']);
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
                             $this->sliding = $id;
@@ -678,6 +679,7 @@ final class Runtime
                     $this->selection->dragging = false;
                     $this->sliding = null;
                     $this->hold = null;
+                    $this->pressDraggable = null;
                     if ($e[3] === 0 && $this->menuRelease) {
                         $this->menuRelease = false;
                         break; // the menu button's menu took the release
@@ -701,6 +703,10 @@ final class Runtime
                 case 'drag':
                     if ($this->pointerPress !== null && $this->pointerPress['down']) {
                         $this->pointerPress['track']->move($e[3] ?? $this->now, $e[1], $e[2]);
+                        if ($this->pressDraggable !== null && $this->pointerPress['track']->far) { // moved far: the press is the draggable's around the button pressed (a row swiped), no click
+                            $this->pointerPress['id'] = $this->pressDraggable;
+                            $this->pressDraggable = null;
+                        }
                         $this->dragMove($e[1], $e[2]);
                     }
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
@@ -1295,6 +1301,21 @@ final class Runtime
             return;
         }
         $this->valueDrag['over'] = $this->valueTarget($x, $y, $this->valueDrag['value']);
+    }
+
+    /** The press's node goes to the draggable around it once it moves far (a swiped row around its button): null for none, or a press the node keeps. */
+    private ?int $pressDraggable = null;
+
+    /** The draggable (Context::draggable) around $target, the node pressed, when $target only takes clicks; null for none, or for a node taking the pointer's moves itself. */
+    private function draggableAround(?int $target): ?int
+    {
+        if ($target === null || isset($this->draggables[$target]) || isset($this->fields[$target]) || isset($this->sliders[$target]) || isset($this->inputs[$target]) || $this->drags($target)) {
+            return null;
+        }
+        for ($id = $this->parents[$target] ?? 0, $n = 0; $id !== 0 && $n < 1024; $id = $this->parents[$id] ?? 0, $n++) {
+            if (isset($this->draggables[$id])) { return $id; }
+        }
+        return null;
     }
 
     /** Whether node $id drags a value (Context::drag) or data (dragData), last frame. */
@@ -3520,13 +3541,13 @@ final class Runtime
             return true;
         }
         $id = $this->pointerPress['id'] ?? null;
-        return $id !== null && (isset($this->draggables[$id]) || isset($this->dragSources[$id]) || isset($this->dataSources[$id]) || isset($this->inputs[$id]));
+        return $this->pressDraggable !== null || ($id !== null && (isset($this->draggables[$id]) || isset($this->dragSources[$id]) || isset($this->dataSources[$id]) || isset($this->inputs[$id])));
     }
 
     /** The axes the pressed node is dragged along (Context::draggable's DraggableOptions::$axis): Node::HORIZONTAL, VERTICAL, both, or 0 for a press on nothing draggable. A touch screen lets a move across a node dragged along one axis scroll instead (Platform Window). */
     public function pressDragAxes(): int
     {
-        $id = $this->pointerPress['id'] ?? null;
+        $id = $this->pressDraggable ?? $this->pointerPress['id'] ?? null; // a button in a swiped row: the row's axes
         if ($id === null || !isset($this->draggables[$id])) {
             return 0;
         }
@@ -3537,6 +3558,7 @@ final class Runtime
     public function cancelTouchPress(): void
     {
         $this->touchFlash = [];
+        $this->pressDraggable = null;
         $this->input->mouseDown = false;
         $this->input->mouseInside = false;
         $this->pointerPress = null;

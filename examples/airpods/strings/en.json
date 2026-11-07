@@ -127,5 +127,11 @@
   "Language": "Language",
   "Sent to the AirPods": "Sent to the AirPods",
   "Received from the AirPods": "Received from the AirPods",
-  "BLE broadcast": "BLE broadcast"
+  "BLE broadcast": "BLE broadcast",
+  "Delete": "Delete",
+  "Copy Hex": "Copy Hex",
+  "Clear": "Clear",
+  "Clear Log": "Clear Log",
+  "Cancel": "Cancel",
+  "Clear every frame of the log?": "Clear every frame of the log?"
 }

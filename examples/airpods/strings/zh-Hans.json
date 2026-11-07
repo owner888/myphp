@@ -127,5 +127,11 @@
   "Language": "语言",
   "Sent to the AirPods": "发送给 AirPods",
   "Received from the AirPods": "从 AirPods 收到",
-  "BLE broadcast": "BLE 广播"
+  "BLE broadcast": "BLE 广播",
+  "Delete": "删除",
+  "Copy Hex": "拷贝十六进制",
+  "Clear": "清除",
+  "Clear Log": "清除日志",
+  "Cancel": "取消",
+  "Clear every frame of the log?": "清除日志中的所有帧？"
 }
