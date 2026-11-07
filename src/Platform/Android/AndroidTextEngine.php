@@ -43,7 +43,8 @@ final class AndroidTextEngine implements Engine
     public function font(Style $style): ?Font
     {
         $size = $style->fontSize();
-        $fontStyle = ($style->weight() >= 700 ? 1 : 0) | ($style->italic ? 2 : 0);
+        $weight = (int)max(100, min(900, round($style->weight() / 100) * 100));
+        $fontStyle = ($weight >= 700 ? 1 : 0) | ($style->italic ? 2 : 0) | ($weight << 2); // the weight itself to the shaper (Roboto's 600, a semibold, too), bold and italic as before
         $key = "{$size}:{$fontStyle}";
         if (isset($this->fonts[$key])) {
             return $this->fonts[$key];

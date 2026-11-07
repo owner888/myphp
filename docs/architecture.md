@@ -8600,6 +8600,16 @@ changed, which no hot reload can take.
 - Under the floating tab bar the rows showed sharp through its glass
   (airpods' Packet Log). Rule: what scrolls under the bar fades into the
   page's color there, as iOS 26's scroll edge does at the bottom too.
+- On Android bold text drew regular (a large title, a bold Text), or in
+  the weight of whatever was shaped last. Cause: `MyphpActivity` kept the
+  font of each glyph by its id alone, and Roboto is one variable font whose
+  glyph ids are the same in every weight; 600 asked for regular too. Rule:
+  the glyph's font is kept by style and id, in the weight shaped (its
+  'wght' axis set); the style passes the weight itself (`weight << 2`).
+- On a phone, rows flashed pressed as a finger set off to scroll over
+  them. Cause: the press went down at once, and with it the pressed look.
+  Rule: what a finger presses looks pressed after 0.1 s held still
+  (`Runtime::touchSettling`), as UIScrollView's delaysContentTouches.
 
 ## Open items
 
