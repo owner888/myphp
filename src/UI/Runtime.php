@@ -64,6 +64,23 @@ final class Runtime
     public ?Closure $escape = null;
     /** A touch screen (Android, iOS): a press on nothing to focus takes the focus from a field too, which closes the keyboard, as a tap beside a field is meant on a phone; with a mouse a field keeps it (mygo's). */
     public bool $touch = false;
+
+    /** What plays a haptic (Haptics' kinds), null for the platform's: the tests record them. Not mygo's. */
+    public ?\Closure $playHaptic = null;
+
+    /**
+     * Plays haptic $kind where the screen is touched, as UIKit's controls
+     * do of themselves (a switch flipped, segments or a menu's choice
+     * changed, a row swiped through): 'light' and the other impact
+     * styles, or 'selection'. Nothing on the desktop, whose controls
+     * play none. Not mygo's.
+     */
+    public function haptic(string $kind): void
+    {
+        if (!$this->touch) { return; }
+        if ($this->playHaptic !== null) { ($this->playHaptic)($kind); return; }
+        $kind === 'selection' ? \MyPHP\Haptics::selection() : \MyPHP\Haptics::impact($kind);
+    }
     /** Called after a frame in which a Back (Key::BACK) came that nothing took, no router with a page to go back to: the system's Back on Android ends the app (Window::back). */
     public ?Closure $back = null;
     /** The drag handles of last frame (id => rect), and the links (ids), which keep their presses from a handle. */

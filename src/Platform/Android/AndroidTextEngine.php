@@ -71,7 +71,84 @@ final class AndroidTextEngine implements Engine
         return [];
     }
 
+    /**
+     * $runes in lines of at most $width points (Engine::shape), broken
+     * where a line may break: after spaces and hyphens, beside CJK
+     * characters, or inside a word too long for a line unless
+     * $wholeWords; each line shaped whole by TextRunShaper. Not mygo's.
+     */
     public function shape(array $runes, Style $style, array $spans, float $width, bool $rtl, bool $wholeWords): array
+    {
+        if ($runes === [] || $width <= 0 || $this->widthOf($runes, $style, $rtl) <= $width) {
+            return $this->line($runes, $style, $rtl);
+        }
+        $lines = [];
+        $n = count($runes);
+        $start = 0;
+        while ($start < $n) {
+            $end = $start; // the furthest break whose line fits
+            for ($i = $start + 1; $i <= $n; $i++) {
+                if ($i < $n && !self::breaksBefore($runes, $i)) { continue; }
+                if ($this->widthOf(self::trimmed(array_slice($runes, $start, $i - $start)), $style, $rtl) > $width) { break; }
+                $end = $i;
+            }
+            if ($end === $start) { // a word longer than the line: overflowing it whole, or broken where it no longer fits
+                $next = $start + 1; // the word's end
+                while ($next < $n && !self::breaksBefore($runes, $next)) { $next++; }
+                $end = $start + 1;
+                if ($wholeWords) {
+                    $end = $next;
+                } else {
+                    while ($end < $next && $this->widthOf(array_slice($runes, $start, $end + 1 - $start), $style, $rtl) <= $width) { $end++; }
+                }
+            }
+            foreach ($this->line(array_slice($runes, $start, $end - $start), $style, $rtl) as $l) {
+                $l['start'] += $start; $l['end'] += $start;
+                foreach ($l['runs'] as &$r) {
+                    $r['start'] += $start; $r['end'] += $start;
+                    foreach ($r['glyphs'] as $g) { $g->cluster += $start; } // the paragraph's rune, as the Engine's lines give it
+                }
+                unset($r);
+                $lines[] = $l;
+            }
+            $start = $end;
+        }
+        return $lines;
+    }
+
+    /** Whether a line may break before rune $i: after a space or a hyphen, or beside a CJK character (UAX #14's main cases). */
+    private static function breaksBefore(array $runes, int $i): bool
+    {
+        $prev = $runes[$i - 1]; $at = $runes[$i];
+        if ($at === 0x20 || $at === 0x3000) { return false; } // spaces stay with the line before them
+        if ($prev === 0x20 || $prev === 0x3000 || $prev === 0x2d || $prev === 0x2010) { return true; }
+        return self::cjk($prev) || self::cjk($at);
+    }
+
+    private static function cjk(int $r): bool
+    {
+        return ($r >= 0x2e80 && $r <= 0x9fff) || ($r >= 0xac00 && $r <= 0xd7af) || ($r >= 0xf900 && $r <= 0xfaff) || ($r >= 0xff00 && $r <= 0xffef) || ($r >= 0x20000 && $r <= 0x2fa1f);
+    }
+
+    /** $runes without the spaces ending them, which hang past a line's end. */
+    private static function trimmed(array $runes): array
+    {
+        while ($runes !== [] && ($runes[count($runes) - 1] === 0x20 || $runes[count($runes) - 1] === 0x3000)) { array_pop($runes); }
+        return $runes;
+    }
+
+    /** How wide $runes are shaped on one line, in points. */
+    private function widthOf(array $runes, Style $style, bool $rtl): float
+    {
+        $w = 0.0;
+        foreach ($this->line($runes, $style, $rtl) as $l) {
+            foreach ($l['runs'] as $r) { foreach ($r['glyphs'] as $g) { $w = max($w, $g->x + $g->advance); } }
+        }
+        return $w;
+    }
+
+    /** $runes shaped on one line, kept by their text and font (TextRunShaper). */
+    private function line(array $runes, Style $style, bool $rtl): array
     {
         if ($runes === []) {
             return [];

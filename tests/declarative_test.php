@@ -618,6 +618,38 @@ $dark = $chosen();
 [$looks->scheme, $looks->size] = [null, null]; $h->frame();
 same([[\MyPHP\ThemeSource::Dark, 21 / 17], [\MyPHP\ThemeSource::System, null], 53 / 17], [$dark, $chosen(), \DynamicTypeSize::accessibility5->scale()], 'the app\'s appearance and text size, chosen and followed again');
 
+// Haptics where the screen is touched, as UIKit's controls play them of themselves: a switch flipped taps, segments and a
+// menu's choice changed tick; a tap on the segment already chosen plays none; the desktop's controls none at all.
+$hapticApp = new class { public bool $on = false; public int $mode = 0; public int $speed = 0; };
+$played = function (bool $touch) use ($hapticApp): array {
+    [$hapticApp->on, $hapticApp->mode, $hapticApp->speed] = [false, 0, 0];
+    $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(
+        Toggle('Switch', isOn: $hapticApp->on)->toggleStyle(\ToggleStyle::switch),
+        Picker('Mode', selection: $hapticApp->mode)(Text('Off')->tag(0), Text('On')->tag(1))->pickerStyle(\PickerStyle::segmented)->labelsHidden(),
+        Picker('Speed', selection: $hapticApp->speed)(Text('Default')->tag(0), Text('Slower')->tag(1)),
+    )), $c), 393, 600);
+    $h->rt->touch = $touch;
+    $h->frame(2);
+    $h->clickOn($h->byLabel('Switch')); $h->frame(2);
+    $h->clickText('On'); $h->frame(2);
+    $h->clickText('On'); $h->frame(2);
+    $h->clickText('Default'); $h->frame(2); // the menu's button, showing its choice
+    $h->menuLabels() !== null ? $h->chooseMenuItem('Slower') : $h->clickText('Slower'); $h->frame(2); // the system's menu where it has one
+    return [$h->haptics, [$hapticApp->on, $hapticApp->mode, $hapticApp->speed]];
+};
+same([[['light', 'selection', 'selection'], [true, 1, 1]], [[], [true, 1, 1]]], [$played(true), $played(false)], 'haptics as UIKit\'s controls play them, on a touch screen alone');
+
+// At the accessibility text sizes a phone's form row puts its title over its control, as UIKit's cells then; at the
+// usual sizes beside it.
+$axApp = new class { public int $size = 0; };
+$stacked = function (float $scale) use ($axApp): bool {
+    $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(Picker('Text Size', selection: $axApp->size)(Text('Largest Accessibility Size')->tag(0)))), $c), 393, 400);
+    $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false)->follow(new \MyPHP\UI\Preferences(textScale: $scale));
+    $h->frame(2);
+    return $h->rect($h->byText('Largest Accessibility Size'))[1] > $h->rect($h->byText('Text Size'))[1] + 8;
+};
+same([false, true], [$stacked(1.0), $stacked(40 / 17)], 'a form row\'s title over its control at the accessibility sizes');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

@@ -37,9 +37,10 @@ final class LabeledContent extends View
             if ($wide) { View::takeRoom($n, $env->axis, View::FLEX_X); }
             return $n;
         }
-        $row = $c->row(0, 8)->alignItems(Node::CENTER);
-          (new Text($title))->render($c, $env->along(Node::ROW)->with(['formRow' => false]));
-          if (!$wide && $env->formRow) { $c->spacer(); }
+        $stacked = $env->formRow && ($c->runtime?->touch ?? false) && $env->theme->textScale() >= 1.6; // the accessibility text sizes: the title over its control, as UIKit's cells then
+        $row = $stacked ? $c->column(0, 4)->alignItems(Node::START) : $c->row(0, 8)->alignItems(Node::CENTER);
+          (new Text($title))->render($c, $env->along($stacked ? Node::COLUMN : Node::ROW)->with(['formRow' => false]));
+          if (!$wide && $env->formRow && !$stacked) { $c->spacer(); }
           $n = $control();
           if ($wide) { $n->grow = max($n->grow, 1); }
         $c->end();

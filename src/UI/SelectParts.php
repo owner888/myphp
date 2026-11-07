@@ -34,6 +34,7 @@ final class SelectParts
         if ($this->selected !== $value) {
             $this->selected = $value;
             $this->trigger->changed = true;
+            $this->c->runtime?->haptic('selection'); // a menu's tick as its choice changes, as UIKit's
         }
         $this->local->open = false;
         $this->c->runtime?->changed();

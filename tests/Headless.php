@@ -94,6 +94,8 @@ final class Headless
     public Metrics $metrics;
     public ?Node $root = null;
     public Theme $theme;
+    /** The haptics the view played, in order (Runtime::haptic). @var list<string> */
+    public array $haptics = [];
     private ?DisplayList $list = null;
     private Closure $view;
 
@@ -119,6 +121,7 @@ final class Headless
         $this->input->mouseInside = true;
         $this->rt = new Runtime($this->input, $this->metrics);
         $this->rt->strict = true; // a duplicate key throws where it was given
+        $this->rt->playHaptic = function (string $kind): void { $this->haptics[] = $kind; }; // recorded, not played
         \MyPHP\UI\Editor\Editor::$text = $this->metrics;
         $this->theme = Theme::dark();
         $this->view = $view;

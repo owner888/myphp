@@ -1941,6 +1941,7 @@ final class Context
         if ($this->runtime?->clicked($n->id)) {
             $on = !$on;
             $n->changed = true;
+            $this->runtime->haptic('light'); // UISwitch's tap as it flips
         }
         $n->on = $on;
         $n->fraction = $this->animate($n, 'knob', $on ? 1 : 0, 0.14); // how far the knob is toward on
@@ -4343,6 +4344,7 @@ final class Context
               if ($this->clicked($seg) && $i !== $index) {
                   $index = $i;
                   $n->changed = true;
+                  $this->runtime?->haptic('selection'); // UISegmentedControl's tick as the choice changes
               }
           }
         $this->end();

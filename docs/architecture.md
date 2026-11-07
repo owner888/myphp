@@ -8610,6 +8610,12 @@ changed, which no hot reload can take.
   them. Cause: the press went down at once, and with it the pressed look.
   Rule: what a finger presses looks pressed after 0.1 s held still
   (`Runtime::touchSettling`), as UIScrollView's delaysContentTouches.
+- On Android a text never wrapped (a footer ran past the phone's edge in
+  one line). Cause: `AndroidTextEngine::shape` gave one line whatever the
+  width, where `Engine::shape` breaks its lines at the width asked, as
+  CoreText's and Pango's engines do. Rule: it breaks after spaces and
+  hyphens, beside CJK characters, inside a word too long for a line,
+  each line's clusters the paragraph's runes.
 
 ## Open items
 
