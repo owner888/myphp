@@ -74,9 +74,10 @@ trait ContextMobile
               }
               if ($this->bottomInset > 0) { $page->padding(0, 0, $inset, 0); } // no scroll took it: the page above the bar
               else { // iOS 26's scroll edge: what scrolls under the bar fades into the page's color there, not sharp through its glass
-                  $page->drawOver(static function (Painter $p, array $r) use ($n, $inset): void {
+                  $tabs = \WeakReference::create($n); // not $n itself: the page it holds keeping it would be a cycle each frame
+                  $page->drawOver(static function (Painter $p, array $r) use ($tabs, $inset): void {
                       $top = $r[1] + $r[3] - $inset - 16;
-                      $p->displayList()->gradient($r[0], $top, $r[2], $inset + 16, $n->color ?? $p->theme()->background, 0.0, 0.9);
+                      $p->displayList()->gradient($r[0], $top, $r[2], $inset + 16, $tabs->get()?->color ?? $p->theme()->background, 0.0, 0.9);
                   });
               }
               $this->bottomInset = $was;
@@ -285,6 +286,7 @@ trait ContextMobile
             if ($shown) { $back->block(); } else { $back->passThrough(); } // going down, the window under it takes the pointer again
               $large = $this->height - $this->windowSafeArea[0] - 10;
               $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($large)->role(Role::DIALOG);
+              $down = 0.0; // how far a drag moved it down from the largest
               if ($detents !== []) { // as high as the largest, moved down to show the others: the offset of each its height short of the largest
                   $heights = array_values(array_unique(array_map(fn(float $h) => min(max($h, 0.0), $large), $detents)));
                   sort($heights);
@@ -294,18 +296,24 @@ trait ContextMobile
                   $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);
                   $stops[] = [0.0, $top]; // below the window: gone
                   $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
-                  $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $this->dragOffset($panel)[1] >= $top - 2; // let go toward below the window, and there: gone
+                  $down = $this->dragOffset($panel)[1];
+                  $panel->minHeight(max($top - $down, 0.0))->maxHeight(max($top - $down, 0.0)); // as high as it shows, its content laid out in it (a scroll reaches its end at every height), the drag's move taken back below
+                  $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $down >= $top - 2; // let go toward below the window, and there: gone
               }
+              // iOS 26's: short of the whole window, a sheet floats, 8 in from the window's sides and bottom, rounded all round; at the whole, it meets them
+              $float = ($rt?->touch ?? false) ? ($detents === [] ? 1.0 : min(1.0, max(0.0, $down / 30))) : 0.0;
+              $panel->margin(0, 8 * $float, 8 * $float, 8 * $float);
+              $corner = ($rt?->touch ?? false) ? 32.0 : 10.0;
               $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
               if ($rt !== null && !isset($rt->motions[$back->id]['rise'])) { $this->jump($back, 'rise', 0.0); } // shown now: from below the window, not at its place
               $p = $this->animate($back, 'rise', $shown ? 1 : 0, $shown ? 0.35 : 0.3); // up as it shows, back down as it closes
-              $panel->translate(0, (1 - $p) * $h); // rises from below the window
+              $panel->translate(0, (1 - $p) * $h - $down); // rises from below the window; the drag's move is its height's
               $back->alpha = 0.4 * $p; // the window dims as it rises
-              $panel->draw(static fn(Painter $pt, array $r) => $pt->fill([$r[0], $r[1], $r[2], $r[3] + 10], $pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background, 10)); // its bottom corners below the window; in the dark UIKit's elevated background, a gray over the black
+              $panel->draw(static fn(Painter $pt, array $r) => $pt->displayList()->box($r[0], $r[1], $r[2], $r[3], [$corner, $corner, $corner * $float, $corner * $float], $pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background, 1.0)); // in the dark UIKit's elevated background, a gray over the black
                 $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                   $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
                 $this->end();
-                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding(16, 16, 16 + $this->windowSafeArea[2], 16);
+                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding(16, 16, 16 + max(0.0, $this->windowSafeArea[2] - 8 * $float), 16);
                   $fn();
                 $this->end();
               $this->end();

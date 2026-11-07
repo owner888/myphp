@@ -8625,6 +8625,12 @@ changed, which no hot reload can take.
   accessibility1; a view lays itself out by
   `DynamicTypeSize::current()->isAccessibilitySize()`.
 
+- MemoryWatch warned of thousands of cycles collected every ten seconds on
+  the phone (airpods). Cause: the fade under the floating tab bar, a
+  drawOver on the page, held the tabs' node, which holds the page: a cycle
+  each frame. Rule: a callback a node keeps holds no node above it nor
+  the Context; it takes the node it is given, or a WeakReference.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
