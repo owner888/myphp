@@ -571,6 +571,25 @@ for ($k = 0; $k < 5; $k++) { $h->wheel(196, 400, 0, -600); } // down the rows
 $h->frame(30);
 same([[0.0, true], 1.0], [$rest, $barTitle()->opacity], 'a list\'s large title its first row, the bar\'s title once it scrolled under');
 
+// A phone's tab bar floats over the page, as iOS 26's: the page's scroll reaches the window's bottom, its content
+// followed by the bar's height so its end scrolls above the bar; a page that does not scroll keeps above the bar.
+$floatApp = new class { public string $tab = 'a'; };
+$pageOf = function (\Closure $page) use ($floatApp): Headless {
+    $h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $floatApp->tab)(
+        Tab('A', systemImage: 'gearshape', value: 'a')($page()),
+    )->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 393, 852);
+    $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+    $h->frame(3);
+    return $h;
+};
+$h = $pageOf(fn() => Form()(Section()(Text('Row')))->navigationTitle('Scrolls'));
+$walk = function (Node $n) use (&$walk): ?Node { if ($n->scroll !== null) { return $n; } foreach ($n->kids as $k) { if (($f = $walk($k)) !== null) { return $f; } } return null; };
+$scrolls = $walk($h->root);
+$under = $h->rect($scrolls); $last = $h->rect(end($scrolls->kids));
+$h2 = $pageOf(fn() => VStack()(Spacer(), Text('At the bottom')));
+same([852.0, 72.0, true], [$under[1] + $under[3], $last[3], $h2->rect($h2->byText('At the bottom'))[1] + 16 <= 852 - 72],
+    'the page scrolls under the floating tab bar, its end above it; a page without a scroll above the bar');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

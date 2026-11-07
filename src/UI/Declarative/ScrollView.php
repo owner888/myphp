@@ -59,10 +59,12 @@ final class ScrollView extends View
     public static function scroller(Context $c, Env $env, \Closure $fn, bool $both = false, float $gap = 0, ?int $background = null): Node
     {
         $large = $env->stack?->largeTitle($c, $env);
+        $inset = $c->takeBottomInset(); // a bar floating over the page's bottom: room after the content, which scrolls under it
         $inner = $env->with(['refresh' => null]); // what is inside does not refresh again
-        $content = function () use ($c, $env, $inner, $fn, $large): void {
+        $content = function () use ($c, $env, $inner, $fn, $large, $inset): void {
             if ($large !== null) { $c->largeTitle(Localized::string($env->title ?? '', $env)); }
             $fn($inner);
+            if ($inset > 0) { $c->box(0, $inset, 0)->shrink(0)->color = null; }
         };
         $rt = $c->runtime;
         if ($env->refresh !== null) {

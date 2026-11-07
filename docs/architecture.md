@@ -8589,7 +8589,9 @@ changed, which no hot reload can take.
   automatic style is its title in the tint and a TextField has no box (two
   bordered buttons in an HStack ran past the row); a plain List's rows are
   cells with separators; what scrolls up fades under the bar (iOS 26's
-  scroll edge) rather than being cut at it.
+  scroll edge) rather than being cut at it. A phone's tab bar floats over
+  the page: the page's first scroll takes its height as room after its
+  content (`Context::$bottomInset`), a page that takes none keeps above it.
 
 ## Open items
 
