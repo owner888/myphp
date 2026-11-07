@@ -55,6 +55,12 @@ trait ContextMobile
                 $content($index, $where);
               $this->end();
               if ($this->bottomInset > 0) { $page->padding(0, 0, $inset, 0); } // no scroll took it: the page above the bar
+              else { // iOS 26's scroll edge: what scrolls under the bar fades into the page's color there, not sharp through its glass
+                  $page->drawOver(static function (Painter $p, array $r) use ($n, $inset): void {
+                      $top = $r[1] + $r[3] - $inset - 16;
+                      $p->displayList()->gradient($r[0], $top, $r[2], $inset + 16, $n->color ?? $p->theme()->background, 0.0, 0.9);
+                  });
+              }
               $this->bottomInset = $was;
               $this->safeArea[2] = $bottom;
               $bar = $this->tabBar($items, $index);

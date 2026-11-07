@@ -8597,6 +8597,9 @@ changed, which no hot reload can take.
   there). Cause: a click goes to the first node built that is under it,
   and only an absolute node at the root was over what was built before
   it. Rule: a node floating over the page sets `Node::$floats`.
+- Under the floating tab bar the rows showed sharp through its glass
+  (airpods' Packet Log). Rule: what scrolls under the bar fades into the
+  page's color there, as iOS 26's scroll edge does at the bottom too.
 
 ## Open items
 
