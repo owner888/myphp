@@ -506,9 +506,9 @@ trait ContextMobile
         $rt = $this->runtime;
         $n = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($detail === '' ? $title : "$title, $detail"); // 44 high, as a grouped list's other rows; its text the theme's: a phone's 17, the desktop's as its other rows'
         if ($this->hovered($n) && ($rt?->input->mouseDown ?? false)) { $n->color = $t->surfacePressed; }
-          $this->text($title, $t->fontSize, $t->text)->singleLine()->grow(1);
+          $this->text($title, $t->fontSize, $t->text)->singleLine()->grow(1)->shrink($detail === '' ? 1 : 0); // the title whole, as UIKit's value1 cell: the detail shortens first
           if ($detail !== '') {
-              $this->text($detail, $t->fontSize, $t->textMuted)->singleLine()->shrink(0);
+              $this->text($detail, $t->fontSize, $t->textMuted)->singleLine()->shrink(1)->minWidth(0);
           }
           if ($disclosure) {
               $a = $this->box(8, 20, 0)->shrink(0); $a->color = null;

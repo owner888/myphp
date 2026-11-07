@@ -41,6 +41,12 @@ final class MemoryWatch
             return;
         }
         $started = true;
+        // Whether the compiled code counts in "live": in opcache's shared memory it does not, without opcache it does (the
+        // framework's few MB), so that two platforms' numbers compare only with the same answer.
+        $st = function_exists('opcache_get_status') ? @opcache_get_status(false) : false;
+        Logger::debug(is_array($st) && ($st['opcache_enabled'] ?? false)
+            ? 'opcache caches the compiled code: "live" is the app\'s data'
+            : sprintf('no opcache: "live" counts the compiled code of the %d files loaded too', count(get_included_files())), 'memory');
         $w = new self(self::bytes((string)ini_get('memory_limit')));
         $tick = null;
         $tick = static function () use ($w, &$tick): void {

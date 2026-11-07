@@ -8568,6 +8568,13 @@ changed, which no hot reload can take.
   SwiftUI's `Font`) had `Font::system` resolve in the example's namespace in
   the tests. Cause: `Headless::declarativeUses` read `Font` in the use line
   as imported. Rule: an alias names what follows `as`.
+- On Android a phone's tab bar labels sank under their icons after the
+  first tap, and stayed there (8 points down at first, 16 after). Cause:
+  `AndroidTextEngine::shape` caches what it shaped and gave the cached
+  glyphs themselves, which `Text\System::line` moves onto the line's
+  baseline, so each layout of the same text moved them again. CoreText's
+  and Pango's engines shape anew each time. Rule: a cache of glyphs gives
+  copies (`copied()`); layout owns the glyphs it is given.
 
 ## Open items
 

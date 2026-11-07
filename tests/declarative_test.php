@@ -445,10 +445,10 @@ $blinkStart = new \ReflectionProperty(\MyPHP\UI\Runtime::class, 'blinkStart');
 $blinkSeen = new \ReflectionProperty(\MyPHP\UI\Runtime::class, 'blinkSeen');
 $h = new Headless(fn(Context $c) => null, 100, 100);
 $blinkSeen->setValue($h->rt, ['a field']);
-$now = hrtime(true) / 1e9;
-$blinkStart->setValue($h->rt, $now - 31.75); // rested, in the off half of its blink
+$restedAt = hrtime(true) / 1e9; // not $now: the tests share a scope, and draggable's $now is an int
+$blinkStart->setValue($h->rt, $restedAt - 31.75); // rested, in the off half of its blink
 [$off, $oneMore] = [$h->rt->caretVisible(), $h->rt->nextBlink()];
-$blinkStart->setValue($h->rt, $now - 31.25); // rested, in the on half
+$blinkStart->setValue($h->rt, $restedAt - 31.25); // rested, in the on half
 [$on, $none] = [$h->rt->caretVisible(), $h->rt->nextBlink()];
 same([false, true, true, null], [$off, $oneMore !== null && $oneMore <= 0.26, $on, $none], 'rested, the caret still blinks in the frames that come, and stops asking once on');
 
@@ -494,3 +494,24 @@ foreach (['desktop' => [false, 900, 600], 'phone' => [true, 390, 844], 'tablet u
     if ($name === 'desktop') { $where['badge'] = $h->byText('7') !== null; }
 }
 same(['desktop' => 'side, chosen', 'badge' => true, 'phone' => 'bottom, chosen', 'tablet upright' => 'top, chosen', 'tablet on its side' => 'side, chosen'], $where, 'sidebarAdaptable on each screen');
+
+// A phone's form, as UIKit's cells: a Picker's choice muted at the row's end with no face; a segmented Picker across the
+// row, its segments sharing it; and a tab's page in a NavigationStack, its navigationTitle in the bar.
+$phoneApp = new class { public int $speed = 0; public int $mode = 0; public string $tab = 'a'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $phoneApp->tab)(
+    Tab('A', systemImage: 'gearshape', value: 'a')(Form()(Section(header: 'S')(
+        Picker('Speed', selection: $phoneApp->speed)(Text('Default')->tag(0), Text('Slower')->tag(1)),
+        Picker('Mode', selection: $phoneApp->mode)(Text('Off')->tag(0), Text('On')->tag(1))->pickerStyle(\PickerStyle::segmented)->labelsHidden(),
+    ))->navigationTitle('Settings page')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 393, 852);
+$h->rt->touch = true;
+$h->frame(3);
+$choice = $h->byText('Default');
+same([$h->theme->textMuted, true, true, true], [$choice->fg, $h->rect($choice)[0] > 393 / 2, $h->rect($h->byLabel('Mode'))[2] > 393 - 4 * 16 - 4, $h->byText('Settings page') !== null],
+    'a phone\'s form: the choice muted at the end, the segments across the row, the page\'s title in its bar');
+
+// A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
+$h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
+$h->frame(2);
+$title = $h->byText('JNI constructor');
+same(mb_strlen('JNI constructor') * 7.0, $h->rect($title)[2], 'the title whole, the value shortened');

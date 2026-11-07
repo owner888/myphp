@@ -60,6 +60,7 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
         'hold' => $sent('holdDuration', AacpProtocol::CMD_CLICK_HOLD_INTERVAL, $same, 'Hold Duration'),
     ];
     $last = $this->gestures->lastGesture;
+    $off = !$connected; // the settings, not the AirPods' name and batteries, wait for the connection
     return Form()(
         Section()(
             HStack(alignment: VerticalAlignment::top)(
@@ -75,21 +76,21 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
         Section(header: 'Noise Control', footer: 'AACP 0x0009, setting 0x0D.')(
             Picker('Noise Control', selection: $b['listening'])(Each(AirPodsApp::LISTENING_MODES)(fn(string $n, int $i) => Text(verbatim: $n)->tag($i)))
                 ->pickerStyle(PickerStyle::segmented)->labelsHidden(),
-        ),
+        )->disabled($off),
         Section(header: 'General', footer: 'Settings 0x28, 0x0A, 0x20 and 0x35.')(
             Toggle('Conversational Awareness', isOn: $b['conversation'])->toggleStyle(ToggleStyle::switch),
             Toggle('Automatic Ear Detection', isOn: $b['ear'])->toggleStyle(ToggleStyle::switch),
             Toggle('Connect Automatically', isOn: $b['connect'])->toggleStyle(ToggleStyle::switch),
             Toggle('Pause Media When Falling Asleep', isOn: $b['sleep'])->toggleStyle(ToggleStyle::switch),
-        ),
+        )->disabled($off),
         Section(header: 'Press and Hold', footer: 'Settings 0x17 and 0x18.')(
             $choice('Press Speed', AirPodsApp::SPEED_MODES, $b['speed']),
             $choice('Press and Hold Duration', AirPodsApp::HOLD_MODES, $b['hold']),
-        ),
+        )->disabled($off),
         Section(header: 'Calls and Microphone', footer: 'Settings 0x24 and 0x01.')(
             $choice('End Call', AirPodsApp::CALL_END_MODES, $b['call']),
             $choice('Microphone', AirPodsApp::MIC_MODES, $b['mic']),
-        ),
+        )->disabled($off),
         Section(header: 'Head Gestures', footer: 'Nod to answer, shake to decline: the head-tracking stream, AACP 0x0017.')(
             LabeledContent('Last gesture', match ($last) {
                 HeadGestureDetector::NOD_YES => sprintf('Nod Yes (%d)', $this->gestures->nodCount),
@@ -102,14 +103,14 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
                 Button('Simulate Nod', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::NOD_YES)),
                 Button('Simulate Shake', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::SHAKE_NO)),
             ),
-        ),
+        )->disabled($off),
         Section(header: 'Name')(
             HStack(spacing: 8)(
                 TextField('Name', text: $this->renameText)->labelsHidden(),
                 Button('Rename', action: fn() => $this->rename($this->renameText))->disabled(trim($this->renameText) === '' || $this->renameText === $this->deviceName),
             ),
-        ),
-    )->disabled(!$connected)->navigationTitle('AirPods 4');
+        )->disabled($off),
+    )->navigationTitle('AirPods 4');
 };
 
 /** How the phone reaches the AirPods: its stack opening L2CAP 0x1001, pairing, and handing the audio over to and from an iPhone. */
@@ -122,24 +123,21 @@ $connection = function (bool $connected) use ($check) {
     foreach ($this->connectedDevices as $dev) { $dev['info1'] > 0 ? $active[] = "{$dev['type']} ({$dev['mac']})" : $standby[] = "{$dev['type']} ({$dev['mac']})"; }
     return Form()(
         Section(header: 'L2CAP Stack Probe', footer: $p->detail)(
-            HStack()(
-                Text(verbatim: match ($p->verdict) {
-                    L2capProbeResult::VERDICT_NATIVE_READY => 'Android 16 QPR3+ Ready (Rootless L2CAP OK)',
-                    L2capProbeResult::VERDICT_STACK_BLOCKED => 'Fluoride Blocked 0x1001 (Root Patch Needed)',
-                    L2capProbeResult::VERDICT_BLE_ONLY => 'BLE 0x004C Only',
-                    default => 'Untested',
+            Text(verbatim: match ($p->verdict) {
+                L2capProbeResult::VERDICT_NATIVE_READY => 'Android 16 QPR3+ Ready (Rootless L2CAP OK)',
+                L2capProbeResult::VERDICT_STACK_BLOCKED => 'Fluoride Blocked 0x1001 (Root Patch Needed)',
+                L2capProbeResult::VERDICT_BLE_ONLY => 'BLE 0x004C Only',
+                default => 'Untested',
                 })->font(Font::headline)->foregroundStyle(match ($p->verdict) {
-                    L2capProbeResult::VERDICT_NATIVE_READY => Color::green,
-                    L2capProbeResult::VERDICT_STACK_BLOCKED => Color::orange,
-                    default => Color::secondary,
+                L2capProbeResult::VERDICT_NATIVE_READY => Color::green,
+                L2capProbeResult::VERDICT_STACK_BLOCKED => Color::orange,
+                default => Color::secondary,
                 }),
-                Spacer(),
-                Button('Probe Again', action: fn() => $this->runProbe()),
-            ),
             $check('BLE beacon 0x004C', $p->bleBeaconSeen),
             $check('L2CAP socket 0x1001', $p->l2capSocketOpened, 'Blocked'),
             $check('AACP handshake', $p->handshakeAcked, 'No ACK'),
             $p->ctorSignature !== '' ? LabeledContent('JNI constructor', $p->ctorSignature) : null,
+            Button('Probe Again', action: fn() => $this->runProbe()),
         ),
         Section(header: 'Pairing')(
             LabeledContent('Address', $this->macAddress !== '' ? $this->macAddress : '--'),

@@ -386,7 +386,8 @@ AGENTS.md     entry point for coding agents and contributors
 
 ### License
 
-MIT.
+MIT. Android draws the SF Symbol names as Google's Material Symbols, which are Apache 2.0
+(`src/Platform/Android/MaterialSymbols.LICENSE`).
 
 ---
 
@@ -759,4 +760,5 @@ AGENTS.md     编码代理与贡献者的入口
 
 ### 许可
 
-MIT。
+MIT。安卓上 SF Symbols 的名字画成 Google 的 Material Symbols 图标，其许可为 Apache 2.0
+（`src/Platform/Android/MaterialSymbols.LICENSE`）。

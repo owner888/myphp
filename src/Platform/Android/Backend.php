@@ -10,6 +10,7 @@ use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler};
 
 final class Backend implements Platform\Backend
 {
+    private ?Platform\Symbols $symbols = null;
     private bool $running = false;
     private ?Window $mainWindow = null;
     private ?AppController $app = null;
@@ -273,7 +274,7 @@ final class Backend implements Platform\Backend
 
     public function symbols(): Platform\Symbols
     {
-        throw new Platform\Unsupported('Symbols not implemented on Android yet');
+        return $this->symbols ??= new Symbols; // Material Symbols for SF Symbol names
     }
 
     public function secrets(): Platform\Secrets
