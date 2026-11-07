@@ -91,7 +91,7 @@ check($t->byText('Connected') !== null, 'the settings page shows the AirPods con
 
 // A setting the user changes is sent as AACP 0x0009; one the AirPods report is shown, not sent back.
 $sent = count($s->packets);
-$t->clickText('Pause Media When Falling Asleep');
+$t->clickSwitch('Pause Media When Falling Asleep');
 $t->frame();
 check($s->sleepDetectionEnabled && count($s->packets) > $sent, 'Sleep detection toggled on and sent via AACP 0x0009');
 $sent = count($s->packets);
@@ -118,11 +118,11 @@ $t->clickText('Connection');
 $t->frame(2);
 same('Connection', $s->page, 'the sidebar goes to the Connection page');
 check($t->byText('Android 16 QPR3+ Ready (Rootless L2CAP OK)') !== null, 'Step 1 probe shows rootless L2CAP ready on startup');
-$t->clickText('Simulate Pre-QPR3 Fluoride Block');
+$t->clickSwitch('Simulate Pre-QPR3 Fluoride Block');
 $t->frame();
 same(L2capProbeResult::VERDICT_STACK_BLOCKED, $s->probe->verdict, 'UI switches to Fluoride blocked verdict');
 check($t->byText('Fluoride Blocked 0x1001 (Root Patch Needed)') !== null, 'blocked verdict badge shown');
-$t->clickText('Simulate Pre-QPR3 Fluoride Block');
+$t->clickSwitch('Simulate Pre-QPR3 Fluoride Block');
 $t->frame();
 same(L2capProbeResult::VERDICT_NATIVE_READY, $s->probe->verdict, 're-probed back to native ready');
 

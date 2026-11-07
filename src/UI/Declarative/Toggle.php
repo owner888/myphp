@@ -45,6 +45,17 @@ final class Toggle extends View
         $style = $this->style === \ToggleStyle::automatic ? (($c->runtime?->touch ?? false) ? \ToggleStyle::switch : \ToggleStyle::checkbox) : $this->style;
         if ($this->sources !== null) { return $this->mixed($c, $title, $style); }
         $was = $this->isOn;
+        if ($env->formRow && $style === \ToggleStyle::switch) { // a form's row, as SwiftUI's: the title leading, wrapping as long text does, the switch at the row's end
+            $row = $c->row(0, 8)->alignItems(Node::CENTER);
+              (new Text($this->title))->render($c, $env->along(Node::ROW)->with(['formRow' => false]))?->shrink(1)->grow(1);
+              $n = $c->switch('', $this->isOn)->shrink(0);
+              $n->label($title);
+            $c->end();
+            View::takeRoom($row, $env->axis, View::FLEX_X);
+            if ($this->isOn !== $was) { $this->binding?->set($this->isOn); }
+            if ($env->disabled) { $row->disabled(); } // the title and the switch dimmed together, neither taking a tap
+            return $row;
+        }
         $n = match ($style) {
             \ToggleStyle::checkbox => $c->checkbox($title, $this->isOn),
             \ToggleStyle::button => $c->toggle($this->isOn, $title),
@@ -52,10 +63,6 @@ final class Toggle extends View
         };
         if ($this->isOn !== $was) { $this->binding?->set($this->isOn); }
         if ($env->disabled) { $n->disabled(); }
-        if ($env->formRow && $n->kind === Node::SWITCH) { // a form's row, as SwiftUI's: the title leading, the switch at the row's end
-            $n->reverse = true;
-            View::takeRoom($n, $env->axis, View::FLEX_X);
-        }
         return $n;
     }
 

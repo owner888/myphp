@@ -8581,7 +8581,8 @@ changed, which no hot reload can take.
   white bar over the gray page. Cause: the declarative controls drew the
   engine's desktop controls in the phone's colors. Rule: what SwiftUI
   draws on iOS, the phone theme draws on iOS and Android alike, the font
-  aside: a form's Toggle leads with its title (`reverse`), on in
+  aside: a form's Toggle leads with its title, which wraps, the switch at
+  the row's end, on in
   systemGreen; segments as UISegmentedControl's; rows 52 high, groups
   rounded 26, headers as written, the switch 63 × 28 (iOS 26's); separators
   a hairline; a stack's title large (`automatic`); the bars clear over
@@ -8616,6 +8617,13 @@ changed, which no hot reload can take.
   CoreText's and Pango's engines do. Rule: it breaks after spaces and
   hyphens, beside CJK characters, inside a word too long for a line,
   each line's clusters the paragraph's runes.
+- At the accessibility text sizes a phone's form ran past its edges: a
+  switch's title drawn on one line under the switch, segments wider than
+  the row, a menu's choice past the card. Rule: a form's Toggle is a row
+  of its title (a Text, wrapping) and the switch; segments and a menu's
+  choice shorten; a row's title goes over its control from
+  accessibility1; a view lays itself out by
+  `DynamicTypeSize::current()->isAccessibilitySize()`.
 
 ## Open items
 

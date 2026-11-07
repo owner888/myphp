@@ -4340,6 +4340,7 @@ final class Context
               if ($i !== $index && $this->hovered($seg) && !$phone) { $seg->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
                 $l = $this->text($label, $phone ? 13.0 * $t->fontSize / 17.0 : $t->fontSize, $t->text)->singleLine();
                 if ($phone && $seg->on) { $l->fontWeight(600); }
+                if ($phone) { $seg->minWidth(0); $l->minWidth(0)->shrink(1)->maxWidthPercent(100); } // short of room, each label shortens inside its segment, as UISegmentedControl's
               $this->end();
               if ($this->clicked($seg) && $i !== $index) {
                   $index = $i;
