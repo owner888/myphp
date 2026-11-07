@@ -106,19 +106,27 @@ final class ListView extends View
                 default => $keys === null ? $i : $keys[$i],
             };
         };
+        // The page's large title the list's first row, as a SwiftUI List's in a NavigationStack on a phone, scrolling with the
+        // rows; a list that chooses or reorders its rows keeps the bar's title, its rows' indices the state's.
+        $top = !$this->selects && $this->move === null && $env->stack?->largeTitle($c, $env, $state) !== null ? 1 : 0;
+        $title = $top === 1 ? Localized::string($env->title ?? '', $env) : '';
+        $itemId = $idOf;
+        if ($top === 1) { $idOf = static fn(int $i): int|string|null => $i === 0 ? "\0largeTitle" : $itemId($i - 1); }
         if ($this->selects) { self::bind($state, $count, $idOf, $this->selection); }
         if ($this->move !== null) { $state->reorder = $this->move; $state->key = static fn(int $i) => $idOf($i); } // the choice following the rows dragged by their ids
-        if ($env->scrollProxy !== null) { $env->scrollProxy->list = self::scroller($state, $count, $idOf); }
+        if ($env->scrollProxy !== null) { $env->scrollProxy->list = self::scroller($state, $count + $top, $idOf); }
         $row = $this->row;
         $menu = $this->menu;
         $rowEnv = $env->along(Node::COLUMN)->with(['inList' => true]);
-        $n = $c->list($state, $count, function (int $i) use ($c, $env, $rowEnv, $items, $keys, $row, $idOf, $state, $menu): void {
-            $v = $row($items === null ? $i : $items[$i], $keys === null ? $i : $keys[$i]);
+        $n = $c->list($state, $count + $top, function (int $i) use ($c, $env, $rowEnv, $items, $keys, $row, $idOf, $itemId, $state, $menu, $top, $title): void {
+            if ($i < $top) { $c->largeTitle($title); return; }
+            $at = $i - $top; // the item's index; $i the state's row
+            $v = $row($items === null ? $at : $items[$at], $keys === null ? $at : $keys[$at]);
             if ($v === null) { return; }
-            if ($v instanceof View) { $v->identity ??= $items === null && !$this->id instanceof Closure ? $i : $idOf($i); }
+            if ($v instanceof View) { $v->identity ??= $items === null && !$this->id instanceof Closure ? $at : $itemId($at); }
             $r = self::row($c, $rowEnv, $v, $env->listStyle !== \ListStyle::plain || ($c->runtime?->touch ?? false)); // separated, but in a Mac's plain list
             if ($r === null) { return; }
-            if ($env->alternatingRows && $i & 1) { $r->background($env->theme->surface); }
+            if ($env->alternatingRows && $at & 1) { $r->background($env->theme->surface); }
             if ($menu !== null) {
                 $r->contextMenu(static function (\MyPHP\UI\Menu $m) use ($menu, $state, $i, $idOf, $rowEnv): void {
                     $ids = $state->chosen($i) ? self::chosenIds($state, $idOf) : [$idOf($i)];

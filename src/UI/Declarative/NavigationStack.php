@@ -140,8 +140,8 @@ final class NavigationStack extends View
         $entry->toolbar = $items;
     }
 
-    /** The ScrollState of the large title of the page $env is on, which its ScrollView or ListView scrolls by; null unless the page asks for one. @internal */
-    public function largeTitle(Context $c, Env $env): ?ScrollState
+    /** What scrolls the large title of the page $env is on: its ScrollView's ScrollState, kept by the page, or $scroll, a list's; null unless the page asks for one. @internal */
+    public function largeTitle(Context $c, Env $env, ?\MyPHP\UI\Scrollable $scroll = null): ?\MyPHP\UI\Scrollable
     {
         // automatic: large on a phone, as SwiftUI's stack on iOS; inline on the desktop, where macOS has none
         $mode = $env->titleMode ?? \TitleDisplayMode::automatic;
@@ -150,8 +150,9 @@ final class NavigationStack extends View
         $entry = $env->route->entry;
         if (isset($entry->barSeen['largeTitle'])) { return null; } // the page's first scroll has it, not one inside it
         $entry->barSeen['largeTitle'] = true;
-        if ($entry->largeTitle === null) {
-            $entry->largeTitle = $entry->largeScroll ??= new ScrollState();
+        $scroll ??= $entry->largeScroll ??= new ScrollState(); // a ScrollView's, kept by the page; or a list's own
+        if ($entry->largeTitle !== $scroll) {
+            $entry->largeTitle = $scroll;
             $this->router->titleChanged();
         }
         return $entry->largeTitle;
