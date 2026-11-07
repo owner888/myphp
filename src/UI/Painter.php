@@ -1613,10 +1613,12 @@ final class Painter
             $list->rect($sx, $y, $tw, $th, Theme::mix($offColor, $onColor, $n->fraction), 1.0, $th / 2);
         }
         $stretch = $pressed ? $t->space(0.75) : 0.0;
-        $kw = $d + $stretch;
+        $k0 = $t->switchWidth > 0 ? $tw * 37 / 63 : $d; // iOS 26's knob a capsule 37 wide, mygo's a circle
+        $kw = $k0 + $stretch;
+        $travel = $tw - 2 * $in - $k0;
         $kx = $n->rtl
-            ? $sx + $tw - $in - $d - $n->fraction * ($tw - $th) - (1.0 - $n->fraction) * $stretch
-            : $sx + $in + $n->fraction * ($tw - $th) - $n->fraction * $stretch;
+            ? $sx + $tw - $in - $k0 - $n->fraction * $travel - (1.0 - $n->fraction) * $stretch
+            : $sx + $in + $n->fraction * $travel - $n->fraction * $stretch;
         $list->shadow($kx, $y + $in, $kw, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
         $list->rect($kx, $y + $in, $kw, $d, 0xffffff, 1.0, $d / 2);
         if ($n->focusVisible) {

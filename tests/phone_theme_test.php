@@ -1,7 +1,7 @@
 <?php
 // The phone's theme (Theme::phone; not mygo's): UIKit's system colors and
 // 17-point text, and UIKit's control sizes — a button, a field and a select
-// 44 points high, the button a capsule; a switch's track 51 × 31; a
+// 44 points high, the button a capsule; a switch's track 63 × 28; a
 // segmented control 32 — where the desktop's theme keeps mygo's measured
 // sizes; the grouped list's page and sections in UIKit's colors.
 declare(strict_types=1);
@@ -35,7 +35,7 @@ $h->theme = Theme::phone(false);
 $h->frame();
 same(44.0, $h->rect($nodes['button'])[3], 'a button is 44 high on the phone');
 same(22.0, $nodes['button']->radius, 'and a capsule');
-same([51.0, 31.0], [$h->rect($nodes['switch'])[2], $h->rect($nodes['switch'])[3]], 'a switch without a label is its 51 × 31 track');
+same([63.0, 28.0], [$h->rect($nodes['switch'])[2], $h->rect($nodes['switch'])[3]], 'a switch without a label is its 63 × 28 track (iOS 26\'s)');
 check($h->rect($nodes['segmented'])[3] >= 32.0, 'a segmented control is 32 high at least: ' . $h->rect($nodes['segmented'])[3]);
 same(44.0, $h->rect($nodes['input'])[3], 'a field is 44 high');
 check($h->rect($nodes['select'])[3] >= 44.0, 'a select is 44 high at least: ' . $h->rect($nodes['select'])[3]);

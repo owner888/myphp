@@ -8582,7 +8582,8 @@ changed, which no hot reload can take.
   engine's desktop controls in the phone's colors. Rule: what SwiftUI
   draws on iOS, the phone theme draws on iOS and Android alike, the font
   aside: a form's Toggle leads with its title (`reverse`), on in
-  systemGreen; segments as UISegmentedControl's; rows 44 high; separators
+  systemGreen; segments as UISegmentedControl's; rows 52 high, groups
+  rounded 26, headers as written, the switch 63 × 28 (iOS 26's); separators
   a hairline; a stack's title large (`automatic`); the bars clear over
   the page's color (`Env::backdrop`).
 

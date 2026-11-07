@@ -29,7 +29,7 @@ final class NavigationLink extends View
     /** A row of a list holding $view, as a cell is: 44 high at least, padded 16 at the sides, a chevron at its end with $disclosure. @internal */
     public static function row(Context $c, Env $env, View $view, bool $disclosure = false): Node
     {
-        $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(11, 16)->alignItems(Node::CENTER);
+        $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight($env->theme->rowHeight)->padding(11, 16)->alignItems(Node::CENTER);
           $view->render($c, $env->along(Node::ROW)->with(['inList' => false]));
           if ($disclosure) { $c->spacer(); $c->text('›', 22, $env->theme->textMuted); }
         $c->end();

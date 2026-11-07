@@ -55,6 +55,8 @@ final class Theme
     public float $baseFontSize = 13.0;
     /** UIKit's sizes for a phone's controls, 0 for mygo's measured ones (the desktop): the least height of a button, a field and a select (44), a switch's track (51 × 31), a segmented control's height (32). Not mygo's; Theme::phone() sets them. */
     public float $controlHeight = 0.0, $switchWidth = 0.0, $switchHeight = 0.0, $segmentedHeight = 0.0;
+    /** The height of a grouped list's row at least: 44 (UIKit's before iOS 26, the Mac's form), 52 on a phone (iOS 26's), and the radius of its sections' groups. */
+    public float $rowHeight = 44.0, $groupRadius = 10.0;
     /** UIKit's grouped list colors, where they differ from $surface and $background: the page behind inset grouped sections (systemGroupedBackground) and the sections themselves (secondarySystemGroupedBackground); null for $surface and $background. Not mygo's. */
     public ?int $groupBackground = null, $groupSurface = null;
 
@@ -84,7 +86,8 @@ final class Theme
                 selection: 0x007aff, selectionAlpha: 0.25, focus: 0x007aff, focusAlpha: 0.55,
                 scrollbar: 0x000000, scrollbarAlpha: 0.35, scrollbarWidth: 3, radius: 12, fontSize: 17);
         $t->baseFontSize = 17.0;
-        $t->controlHeight = 44.0; $t->switchWidth = 51.0; $t->switchHeight = 31.0; $t->segmentedHeight = 32.0;
+        $t->controlHeight = 44.0; $t->switchWidth = 63.0; $t->switchHeight = 28.0; $t->segmentedHeight = 32.0; // iOS 26's UISwitch, 63 × 28 with a knob 37 wide
+        $t->rowHeight = 52.0; $t->groupRadius = 26.0; // iOS 26's cells and the round corners of their groups
         // the grouped page is the gray in the light, black in the dark; the sections white in the light, the dark gray in the dark: UIKit's inversion
         [$t->groupBackground, $t->groupSurface] = $dark ? [0x000000, 0x1c1c1e] : [0xf2f2f7, 0xffffff];
         return $t;

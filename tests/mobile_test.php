@@ -168,7 +168,7 @@ check($h->byText('First Title') !== null, 'the Route title shows in the navigati
 same([0.0, 94.0, 390.0, 652.0], $h->rect($body), 'safeArea inside tabView + navigationBar does not double-count top or bottom insets: the bar 94, the tab bar\'s band 98');
 
 
-// section and cell: the inset grouped list — the group 16 in from the sides, rounded 10, the header in capitals above it, the footer below; cells 44 high, padded 16, clicked() reports a tap.
+// section and cell: the inset grouped list — the group 16 in from the sides, rounded as the theme's groups, the header as written above it, the footer below; cells 44 high, padded 16, clicked() reports a tap.
 $section = $group = $cell = $plain = null; $opened = 0;
 $h = new Headless(function (Context $c) use (&$section, &$group, &$cell, &$plain, &$opened): void {
     $c->scroll(0, 0, 1)->fill();
@@ -184,7 +184,7 @@ $h->frame();
 $h->paint(); // the separators drawn over the group
 $r = $h->rect($section);
 same([0.0, 0.0, 390.0], [$r[0], $r[1], $r[2]], 'a section stretches across its parent');
-check($h->byText('GENERAL') !== null, 'the header shows in capitals: ' . json_encode($h->texts()));
+check($h->byText('General') !== null, 'the header shows as written, as iOS 26\'s: ' . json_encode($h->texts()));
 check($h->byText('The language of the app.') !== null, 'the footer shows');
 $rc = $h->rect($cell); $rp = $h->rect($plain);
 same([16.0, 358.0, 44.0], [$rc[0], $rc[2], $rc[3]], 'a cell is 44 high across the group, 16 in from the sides');

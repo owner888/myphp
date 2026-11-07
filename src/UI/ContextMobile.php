@@ -383,11 +383,12 @@ trait ContextMobile
 
     /**
      * A section of an inset grouped list, as UITableView's insetGrouped
-     * style (Settings) and SwiftUI's Section in a List or Form: $header in
-     * the footnote style's capitals, muted, on a phone, the headline style
-     * on the desktop; the rows $rows builds in a group of the theme's
-     * surface, its corners rounded 10, inset 16 from the sides, a hairline
-     * between each two rows starting 16 in, as UITableView's separators;
+     * style (Settings) and SwiftUI's Section in a List or Form: $header as
+     * written in the body style, muted, on a phone (iOS 26's), the headline
+     * style on the desktop; the rows $rows builds in a group of the theme's
+     * surface, its corners rounded the theme's groupRadius (26 on a phone,
+     * 10 on the Mac), inset 16 from the sides, a hairline between each two
+     * rows starting 16 in, as UITableView's separators;
      * $footer below, muted, in the footnote style on a phone, the
      * subheadline style on the desktop. The header and the footer sit 16 in
      * from the group's edge; a section without a header keeps 16 above its
@@ -401,18 +402,18 @@ trait ContextMobile
         $t = $this->theme;
         $n = $this->column(0, 0)->alignSelf(Node::STRETCH)->padding($header === '' ? 16 : 0, 16, 0, 16)->role(Role::GROUP); // without a header, as much room above its group as at its sides
         if ($header !== '') { $n->label($header); }
-          if ($header !== '') { // iOS's: in capitals, the footnote style, muted; the Mac's: the headline style, as System Settings' groups
-              $touch = $this->runtime?->touch ?? false;
-              $this->text($touch ? mb_strtoupper($header, 'UTF-8') : $header, $t->fontSize, $touch ? $t->textMuted : $t->text)->preferredFont($touch ? Font::FOOTNOTE : Font::HEADLINE)->padding(16, 16, 7, 16)->role(Role::HEADING);
+          $touch = $this->runtime?->touch ?? false;
+          if ($header !== '') { // iOS 26's: as written, the body's size, muted; the Mac's: the headline style, as System Settings' groups
+              $this->text($header, $t->fontSize, $touch ? $t->textMuted : $t->text)->preferredFont($touch ? Font::BODY : Font::HEADLINE)->padding(16, 16, 7, 16)->role(Role::HEADING);
           }
-          $group = $this->column(0, 0, 0, $t->groupSurface ?? $t->surface)->alignSelf(Node::STRETCH)->radius(10)->clip();
+          $group = $this->column(0, 0, 0, $t->groupSurface ?? $t->surface)->alignSelf(Node::STRETCH)->radius($t->groupRadius)->clip();
             $rows();
           $this->end();
-          $group->drawOver(static function (Painter $p, array $r, Node $group): void { // the separators: under each row but the last, from 16 in to the end
+          $group->drawOver(static function (Painter $p, array $r, Node $group) use ($touch): void { // the separators: under each row but the last, a hairline from 16 in, to 16 short of the end on a phone (iOS 26's), to the end on the Mac
               $rows = array_values(array_filter($group->kids, static fn(Node $k): bool => !$k->absolute));
               for ($i = 0, $last = count($rows) - 1; $i < $last; $i++) {
                   $k = $rows[$i];
-                  $p->fill([$r[0] + 16, $k->y + $k->h - 0.5, $r[2] - 16, 1.0], $p->theme()->border);
+                  $p->fill([$r[0] + 16, $k->y + $k->h - 0.5, $r[2] - ($touch ? 32 : 16), $touch ? 0.5 : 1.0], $p->theme()->border);
               }
           });
           if ($footer !== '') {
@@ -504,7 +505,7 @@ trait ContextMobile
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($detail === '' ? $title : "$title, $detail"); // 44 high, as a grouped list's other rows; its text the theme's: a phone's 17, the desktop's as its other rows'
+        $n = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight($t->rowHeight)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($detail === '' ? $title : "$title, $detail"); // 44 high, as a grouped list's other rows; its text the theme's: a phone's 17, the desktop's as its other rows'
         if ($this->hovered($n) && ($rt?->input->mouseDown ?? false)) { $n->color = $t->surfacePressed; }
           $this->text($title, $t->fontSize, $t->text)->singleLine()->grow(1)->shrink($detail === '' ? 1 : 0); // the title whole, as UIKit's value1 cell: the detail shortens first
           if ($detail !== '') {
