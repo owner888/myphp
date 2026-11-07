@@ -352,7 +352,7 @@ trait ContextMobile
         } else {
             if ($state->released) {
                 $shownNow = Motion::rubberband(-$state->pull, 0, 0, $vp) * -1;
-                if ($shownNow >= $rest && !$refreshing) { $refreshing = true; $n->changed = true; Haptics::impact('medium'); }
+                if ($shownNow >= $rest && !$refreshing) { $refreshing = true; $n->changed = true; $this->runtime?->haptic('medium'); }
                 $state->pull = 0.0; $state->released = false;
             }
             $shown = $this->animateTo($holder, 'pull', $refreshing ? $rest : 0.0, Animation::smooth());
@@ -376,7 +376,7 @@ trait ContextMobile
     public function largeTitle(string $title): Node
     {
         $t = $this->theme;
-        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->size(0, 52)->padding(0, 16)->alignItems(Node::END)->role(Role::HEADING);
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->minHeight(52)->padding(0, 16)->alignItems(Node::END)->role(Role::HEADING); // 52 high, higher as the text is larger
           $this->text($title, Font::preferred(Font::LARGE_TITLE, true, $t->textScale())[0], $t->text)->fontWeight(700)->singleLine()->shrink(1); // UIKit's large title, 34 bold, which only iOS has
         $this->end();
         return $n;
@@ -499,7 +499,7 @@ trait ContextMobile
         $this->end();
         $close = static function () use (&$offset, $rt): void { $offset = [0.0, 0.0]; $rt?->changed(); };
         if (abs($offset[0]) == $full) { // let go past the buttons by 48: the full swipe performs the first action
-            $action = 0; $close();
+            $action = 0; $close(); $rt?->haptic('medium'); // the full swipe's tap, as UIKit's
         }
         foreach ($buttons as $i => $b) {
             if ($this->clicked($b)) { $action = $i; $close(); }

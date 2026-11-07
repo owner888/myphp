@@ -65,10 +65,10 @@ final class Picker extends View
     private static function plain(\MyPHP\UI\Node $n, Env $env): void
     {
         $n->bordered = false; $n->color = null; $n->borderWidth = 0.0;
-        $n->padding(0)->minWidth(0)->minHeight(0);
+        $n->padding(0)->minWidth(0)->minHeight(0)->shrink(100); // short of room, the choice shortens first (to nothing before the title gives any), as a value1 cell's detail
         $n->gap = 6;
         foreach ($n->kids as $k) {
-            if ($k->kind === \MyPHP\UI\Node::TEXT) { $k->fg = $env->theme->textMuted; continue; }
+            if ($k->kind === \MyPHP\UI\Node::TEXT) { $k->fg = $env->theme->textMuted; $k->shrink(100)->minWidth(0); continue; }
             $k->draw(static function (\MyPHP\UI\Painter $p, array $r): void { // up over down, as the symbol
                 [$x, $y, $w] = $r; $c = $p->theme()->textMuted; $l = $p->displayList(); $h = $w * 0.32;
                 $l->line($x + $w * 0.2, $y + $h + $w * 0.05, $x + $w * 0.5, $y + $w * 0.05, $c, 1.0, 1.5);
