@@ -17,7 +17,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, GradientStop, ListState, Painter, Span, TextState, Theme};
+use MyPHP\UI\{Content, GradientStop, Painter, Span, Theme};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
@@ -227,8 +227,8 @@ final class ChatGlow
 {
     /** @var list<Message> */
     public array $messages = [];
-    public TextState $input;
-    public ListState $list;
+    /** What is written in the composer. */
+    public string $input = '';
     /** How many words of the replies the last frame showed. */
     public int $seen = 0;
     public int $next = 0;
@@ -252,8 +252,6 @@ final class ChatGlow
 
     public function __construct(public readonly Shaders $sh)
     {
-        $this->input = new TextState();
-        $this->list = new ListState();
         $this->stops = new Stops(fn(): float => mt_rand() / (mt_getrandmax() + 1));
         [$this->orb, $this->stillOrb, $this->ring, $this->shimmer] = [$sh->orb->newValues(), $sh->orb->newValues(), $sh->ring->newValues(), $sh->shimmer->newValues()];
     }
@@ -265,7 +263,7 @@ final class ChatGlow
         $this->messages[] = new Message(++$this->next, true, $text);
         $reply = REPLIES[$this->replies++ % count(REPLIES)];
         $this->messages[] = new Message(++$this->next, false, $reply, splitWords($reply));
-        $this->input->text = '';
+        $this->input = '';
         [$this->asked, $this->writing, $this->busy] = [$this->now, 0.0, true];
     }
 

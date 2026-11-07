@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, ListState, TextState};
+use MyPHP\UI\Content;
 use MyPHP\UI\Markdown\{Markdown, Options};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
@@ -35,8 +35,8 @@ final class Chat
     public ?Window $win = null;
     /** @var list<Message> */
     public array $messages = [];
-    public TextState $input;
-    public ListState $list;
+    /** What is being written. */
+    public string $input = '';
     public Options $md;
     public int $next = 0, $replies = 0;
     /** How replies come in: by word, sentence, line or paragraph, or at once. */
@@ -44,16 +44,14 @@ final class Chat
 
     public function __construct()
     {
-        $this->input = new TextState();
-        $this->list = new ListState();
         $this->md = new Options();
     }
 
     /** Sends the input, and streams the next reply in. */
     public function send(): void
     {
-        $this->messages[] = new Message(++$this->next, true, trim($this->input->text), true);
-        $this->input->text = '';
+        $this->messages[] = new Message(++$this->next, true, trim($this->input), true);
+        $this->input = '';
         $this->messages[] = $reply = new Message(++$this->next, false);
         $src = REPLIES[$this->replies++ % count(REPLIES)];
         if ($this->win === null) { // without a window, the reply comes whole

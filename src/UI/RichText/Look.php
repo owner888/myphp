@@ -16,6 +16,8 @@ final class Look
 {
     /** The room of the paragraph being laid out, which attachments shrink to. */
     public float $width = 0;
+    /** @var ?Closure(string, float): float the width of a text at a size in the editor's font, which an attachment's bounds ask for */
+    public ?Closure $measure = null;
 
     /**
      * @param array{0: int, 1: float} $border
@@ -67,11 +69,12 @@ final class Look
         if ($a->tag !== '' && $this->tagStyle !== null) { ($this->tagStyle)($a->tag, $s); }
         if (($at = $a->attachment) !== null) {
             // A box of the attachment's size, scaled down to the width.
-            [$w, $h] = $at->size();
+            [$w, $h] = $at->size($this->measure);
             if ($this->width > 0 && $w > $this->width) {
                 [$w, $h] = [$this->width, $h * $this->width / $w];
             }
             $s->objectWidth = $w; $s->objectHeight = $h;
+            $s->baselineShift = -$at->descent($this->measure); // lowered that far, its box as high
         }
         return $s;
     }

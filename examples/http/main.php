@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Process, Window, WindowOptions};
-use MyPHP\UI\{Content, ListState, Node, TableColumn, TextState};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -16,35 +16,30 @@ final class Http
     public const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
     public const SHOW = 256 * 1024; // bytes of a body shown; the rest is counted
     public int $method = 0;
-    public TextState $url, $headers, $body;
+    public string $url = 'https://httpbin.org/get', $headers = "Accept: application/json", $body = '';
     /** @var list<array{id: int, method: string, url: string, status: ?int, time: float, headers: string, body: string, error: string, at: int, lines: list<array{string, string}>}> newest first; lines: what the response pane lists, [kind, text] */
     public array $history = [];
-    public ListState $list, $lines;
-    /** @var list<TableColumn> */
-    public array $columns;
+    /** The id of the request chosen, whose response shows. */
+    public ?int $chosen = null;
+    /** The header the history is sorted by. */
+    public ?SortOrder $sortOrder = null;
     public ?Process $inFlight = null;
     private int $nextId = 0;
     public ?Window $window = null;
 
-    public function __construct()
-    {
-        $this->url = new TextState('https://httpbin.org/get');
-        $this->headers = new TextState("Accept: application/json");
-        $this->body = new TextState('');
-        $this->list = new ListState; $this->lines = new ListState;
-        $this->columns = [new TableColumn('Method', 64, sortable: true), new TableColumn('Status', 56, sortable: true), new TableColumn('Time', 60, align: Node::END, sortable: true), new TableColumn('URL', minWidth: 120)];
-    }
-
-    /** Reorders the history by the table's sort, keeping the chosen request chosen. */
+    /** Reorders the history by the table's sort; the chosen request stays chosen, by its id. */
     public function sort(): void
     {
-        $by = $this->list->sort?->column; $desc = $this->list->sort?->descending ?? false;
-        $chosen = $this->history[$this->list->selected ?? -1] ?? null;
-        $key = fn(array $r) => match ($by) { 'Method' => $r['method'], 'Status' => $r['status'] ?? -1, 'Time' => $r['time'], default => $r['url'] };
+        $by = $this->sortOrder?->column; $desc = $this->sortOrder?->descending ?? false;
+        $key = fn(array $r) => match ($by) { 'method' => $r['method'], 'status' => $r['status'] ?? -1, 'time' => $r['time'], default => $r['url'] };
         usort($this->history, fn($a, $b) => $desc ? $key($b) <=> $key($a) : $key($a) <=> $key($b));
-        if ($chosen !== null) {
-            $this->list->choose((int)array_search($chosen, $this->history, true));
-        }
+    }
+
+    /** The request chosen, or null. */
+    public function shown(): ?array
+    {
+        foreach ($this->history as $r) { if ($r['id'] === $this->chosen) { return $r; } }
+        return null;
     }
 
     public function send(): void
@@ -53,20 +48,19 @@ final class Http
             return;
         }
         $method = self::METHODS[$this->method];
-        $url = trim($this->url->text);
+        $url = trim($this->url);
         $argv = ['curl', '-sS', '-i', '-L', '--max-time', '30', '-X', $method, '-w', "\n\x1f%{http_code} %{time_total}"];
-        foreach (preg_split('/\R/', $this->headers->text) as $h) {
+        foreach (preg_split('/\R/', $this->headers) as $h) {
             if (trim($h) !== '') { $argv[] = '-H'; $argv[] = trim($h); }
         }
         $stdin = '';
-        if ($this->body->text !== '' && !in_array($method, ['GET', 'HEAD'], true)) {
-            $argv[] = '--data-binary'; $argv[] = '@-'; $stdin = $this->body->text;
+        if ($this->body !== '' && !in_array($method, ['GET', 'HEAD'], true)) {
+            $argv[] = '--data-binary'; $argv[] = '@-'; $stdin = $this->body;
         }
         $argv[] = $url;
         $id = ++$this->nextId;
         array_unshift($this->history, ['id' => $id, 'method' => $method, 'url' => $url, 'status' => null, 'time' => 0.0, 'headers' => '', 'body' => '', 'error' => '', 'at' => time(), 'lines' => []]);
-        $this->list->choose(0);
-        $this->lines->scrollTo(0, false);
+        $this->chosen = $id;
         $this->inFlight = Process::run($argv, $stdin, function (string $out, string $err, int $code) use ($id) {
             $this->inFlight = null;
             $r = &$this->history[array_search($id, array_column($this->history, 'id'), true)]; // the table may have sorted it away from the top

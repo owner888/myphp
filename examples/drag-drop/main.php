@@ -35,6 +35,8 @@ final class Pane
 {
     /** @var list<Note> */
     public array $notes = [];
+    /** A drag of what the zone takes is over it. */
+    public bool $targeted = false;
 
     public function __construct(public string $name, public string $file, public Demo $app, public string $status = 'Escape cancels a drag.') {}
 

@@ -39,6 +39,11 @@ final class Button extends View
         } else {
             $title = Localized::string($this->title, $env);
             $n = $style === \ButtonStyle::borderedProminent ? $c->primaryButton($title) : $c->button($title);
+            // Its title in the environment's weight, slant and lines, as a SwiftUI button's Text: Button('B')->bold()
+            if ($env->weight !== null && $env->weight !== \Weight::regular) { $n->fontWeight($env->weight->value); }
+            if ($env->italic) { $n->italic(); }
+            if ($env->underline) { $n->underline(); }
+            if ($env->strikethrough) { $n->strikethrough(); }
         }
         if ($style === \ButtonStyle::borderless || $style === \ButtonStyle::plain) {
             $n->bordered = false;
@@ -48,6 +53,7 @@ final class Button extends View
             $n->color = $env->tint->rgb($env);
         }
         if ($this->role === \ButtonRole::destructive) { $n->fg = $style === \ButtonStyle::borderedProminent ? 0xffffff : $env->theme->danger; if ($style === \ButtonStyle::borderedProminent) { $n->color = $env->theme->danger; } }
+        $n->keepFocus(); // a click leaves the keyboard focus where it is, as a macOS button's: the field or editor typed in keeps it
         if ($env->disabled) { $n->disabled(); }
         if ($this->label === null) { $n->label(Localized::string($this->title, $env)); }
         if ($c->clicked($n) && $this->action !== null) { ($this->action)(); }

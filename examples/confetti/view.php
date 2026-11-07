@@ -2,7 +2,6 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Animation, BorderStyle, Context, Cursor, Font, InputEvent, Node, Pose};
 
 /** One of canvas-confetti's demos: [name, about, run(Confetti, now)]. */
 $presets = function (): array {
@@ -26,8 +25,8 @@ $presets = function (): array {
             $fire($s, 0.1, function (Options $o) { [$o->spread, $o->startVelocity, $o->decay, $o->scalar] = [120, 25, 0.92, 1.2]; });
             $fire($s, 0.1, function (Options $o) { [$o->spread, $o->startVelocity] = [120, 45]; });
         }],
-        ['Fireworks', 'Bursts all around for 5 s', function (Confetti $s, int $now) {
-            $s->repeat($now, 0.25, 20, function (int $i, int $n) use ($s) {
+        ['Fireworks', 'Bursts all around for 5 s', function (Confetti $s) {
+            $s->repeat(0.25, 20, function (int $i, int $n) use ($s) {
                 foreach ([[0.1, 0.3], [0.7, 0.9]] as [$a, $b]) {
                     $o = new Options();
                     [$o->count, $o->startVelocity, $o->spread, $o->ticks] = [intdiv(50 * ($n - $i), $n), 30, 360, 60];
@@ -36,8 +35,8 @@ $presets = function (): array {
                 }
             });
         }],
-        ['Stars', 'Golden stars floating out', function (Confetti $s, int $now) {
-            $s->repeat($now, 0.1, 3, function () use ($s) {
+        ['Stars', 'Golden stars floating out', function (Confetti $s) {
+            $s->repeat(0.1, 3, function () use ($s) {
                 $o = new Options();
                 [$o->spread, $o->ticks, $o->gravity, $o->decay, $o->startVelocity] = [360, 50, 0, 0.94, 30];
                 $o->colors = [0xffe400, 0xffbd00, 0xe89400, 0xffca6c, 0xfdffb8];
@@ -47,9 +46,9 @@ $presets = function (): array {
                 $s->burst($o);
             });
         }],
-        ['Snow', 'Flakes drifting down for 8 s', function (Confetti $s, int $now) {
+        ['Snow', 'Flakes drifting down for 8 s', function (Confetti $s) {
             $skew = 1.0;
-            $s->repeat($now, 0.03, 270, function (int $i, int $n) use ($s, &$skew) {
+            $s->repeat(0.03, 270, function (int $i, int $n) use ($s, &$skew) {
                 $left = ($n - $i) / $n;
                 $skew = max(0.8, $skew - 0.001);
                 $o = new Options();
@@ -60,8 +59,8 @@ $presets = function (): array {
                 $s->burst($o);
             });
         }],
-        ['School Pride', 'Cannons from both sides', function (Confetti $s, int $now) {
-            $s->repeat($now, 0.025, 160, function () use ($s) {
+        ['School Pride', 'Cannons from both sides', function (Confetti $s) {
+            $s->repeat(0.025, 160, function () use ($s) {
                 foreach ([[60, 0], [120, 1]] as [$angle, $x]) {
                     $o = new Options();
                     [$o->count, $o->angle, $o->spread, $o->x] = [2, $angle, 55, $x];
@@ -70,8 +69,8 @@ $presets = function (): array {
                 }
             });
         }],
-        ['Emoji', 'Unicorns and rainbows', function (Confetti $s, int $now) {
-            $s->repeat($now, 0.1, 3, function () use ($s) {
+        ['Emoji', 'Unicorns and rainbows', function (Confetti $s) {
+            $s->repeat(0.1, 3, function () use ($s) {
                 $o = new Options();
                 [$o->spread, $o->ticks, $o->gravity, $o->decay, $o->startVelocity] = [360, 60, 0, 0.96, 20];
                 [$o->shapes, $o->scalar, $o->count] = [[Shape::text('🦄'), Shape::text('🌈')], 2, 30];
@@ -82,8 +81,8 @@ $presets = function (): array {
                 $s->burst($o);
             });
         }],
-        ['Hearts', 'A shape drawn as a path', function (Confetti $s, int $now) {
-            $s->repeat($now, 0.1, 3, function () use ($s) {
+        ['Hearts', 'A shape drawn as a path', function (Confetti $s) {
+            $s->repeat(0.1, 3, function () use ($s) {
                 $o = new Options();
                 [$o->spread, $o->ticks, $o->gravity, $o->decay, $o->startVelocity] = [360, 70, 0.3, 0.95, 25];
                 [$o->count, $o->scalar, $o->shapes, $o->flat] = [25, 1.5, [new Shape(Shape::HEART)], true];
@@ -94,102 +93,61 @@ $presets = function (): array {
     ];
 };
 
-/** A tile for each of canvas-confetti's demos, which lifts under the pointer and sinks as it presses: a pose, which moves in frames that only paint. */
-$presetTiles = function (Context $c, Confetti $s, int $now, bool $still) use (&$presets): void {
-    $t = $c->theme;
-    $c->grid(3, 12);
-      foreach ($presets() as $i => [$name, $about, $run]) {
-          $tile = $c->key($i)->buttonBase()->label($name)->padding(12, 14)->radius(10)->border(1, $t->border)->cursor(Cursor::Pointer);
-          [$bg, $lift] = $c->pressed($tile) ? [$t->surfacePressed, new Pose(scale: 0.97)] : ($c->hovered($tile) ? [$t->surfaceHover, new Pose(y: -2)] : [$t->surface, new Pose()]);
-          $tile->background($bg)->animatePose($lift, Animation::snappy());
-            $c->column(0, 4, 1);
-              $c->text($name, style: Font::BOLD);
-              $c->text($about, 12, $t->textMuted);
-            $c->end();
-          $c->end();
-          if ($c->clicked($tile) && !$still) { $run($s, $now); }
-      }
-    $c->end();
-};
+/** A slider of the stage's bursts: its label, the slider, its value. */
+$slider = fn(string $label, float &$v, float $lo, float $hi, string $format) => HStack(spacing: 8)(
+    Text($label)->font(Font::caption)->frame(width: 62, alignment: Alignment::leading),
+    Slider(value: $v, in: [$lo, $hi], title: $label)->labelsHidden(),
+    Text(verbatim: sprintf($format, $v))->font(Font::caption)->foregroundStyle(Color::secondary)->frame(width: 40, alignment: Alignment::trailing),
+);
 
-/** The sliders of the stage's bursts. */
-$controls = function (Context $c, Confetti $s): void {
-    $t = $c->theme;
-    $c->column(16, 10, 0, $t->surface)->size(280, 0)->radius(12)->border(1, $t->border);
-      $c->text('Your burst', style: Font::BOLD);
-      $slider = function (string $label, float &$v, float $lo, float $hi, string $format) use ($c, $t) {
-          $c->row(0, 8)->alignItems(Node::CENTER);
-            $c->text($label, 12)->size(62, 0);
-            $c->key($label)->slider($v, $lo, $hi, 0)->label($label)->grow(1);
-            $c->text(sprintf($format, $v), 12, $t->textMuted)->size(40, 0)->textAlign(Node::END);
-          $c->end();
-      };
-      $slider('Count', $s->count, 1, 400, '%.0f');
-      $slider('Angle', $s->angle, 0, 360, '%.0f°');
-      $slider('Spread', $s->spread, 0, 360, '%.0f°');
-      $slider('Velocity', $s->velocity, 0, 90, '%.0f');
-      $slider('Decay', $s->decay, 0.8, 0.99, '%.2f');
-      $slider('Gravity', $s->gravity, -1, 3, '%.1f');
-      $slider('Drift', $s->drift, -2, 2, '%.1f');
-      $slider('Size', $s->scalar, 0.4, 3, '%.1f×');
-      $c->spacer();
-      if ($c->clicked($c->button('Reset'))) { $s->resetOptions(); }
-    $c->end();
-};
-
-return function (Context $c) use (&$presetTiles, &$controls): void {
-    $t = $c->theme;
-    $now = $c->now();
-    [$this->w, $this->h] = $c->size();
-    $this->dark = $t->dark;
-    // While the desktop asks for less motion, nothing flies: the pieces would only show where they land, fading.
-    $still = $c->preferences()->reduceMotion;
-    foreach ($this->emitters as $k => &$e) {
-        for (; $e['i'] < $e['n'] && $now >= $e['next']; $e['i']++, $e['next'] += $e['every']) {
-            if (!$still) { ($e['fire'])($e['i'], $e['n']); }
-        }
-        if ($e['i'] >= $e['n']) { unset($this->emitters[$k]); }
-    }
-    unset($e);
-    $this->emitters = array_values($this->emitters);
-
-    $c->column(24, 20, 1);
-      $c->row(0, 12)->alignItems(Node::END);
-        $c->column(0, 4, 1);
-          $c->text('Confetti', 28, style: Font::BOLD);
-          $c->muted('canvas-confetti\'s demos in native UI, every piece moved by poses that only paint.');
-        $c->end();
-        $c->text($this->inAir() . ' in the air', 12, $t->textMuted);
-      $c->end();
-      if ($still) { $c->text('Confetti rests while the desktop asks for less motion.', color: $t->warning); }
-      $c->row(0, 16, 1)->alignItems(Node::STRETCH);
-        $c->column(0, 16, 1);
-          $presetTiles($c, $this, $now, $still);
-          $stage = $c->key('stage')->column(0, 6, 1)->alignItems(Node::CENTER)->justify(Node::CENTER)->radius(12)->border(1, $t->border)->borderStyle(BorderStyle::Dashed)->cursor(Cursor::Pointer);
-            $c->text('Click anywhere here', style: Font::BOLD);
-            $c->text('to throw your burst from the pointer', 12, $t->textMuted);
-          $c->end();
-          // Where the stage was pressed, noted as the press comes, for the click after.
-          $stage->handleInput(function (InputEvent $ev) {
-              if ($ev->kind === InputEvent::POINTER_DOWN) { [$this->pressX, $this->pressY] = [$ev->x, $ev->y]; }
-              return false;
-          });
-          if ($c->clicked($stage) && !$still) { $this->burst($this->custom(...$c->localToWindow($stage, $this->pressX, $this->pressY))); }
-        $c->end();
-        $controls($c, $this);
-      $c->end();
-    $c->end();
-
-    // The pieces fly over everything, from the window's (0, 0), and let the pointer through. Bursts that faded away go.
-    $this->bursts = array_values(array_filter($this->bursts, fn(Burst $b) => $b->launched === 0 || ($now - $b->launched) / 1e9 < $b->life));
-    $c->key('confetti')->column()->absolute()->top(0)->left(0)->right(0)->bottom(0)->passThrough();
-      foreach ($this->bursts as $b) { $b->build($c, $now); }
-    $c->end();
-    // The view runs again once a burst faded, to let it go, and when a demo throws more.
-    $gone = null;
-    foreach ($this->bursts as $b) {
-        if ($b->launched !== 0) { $d = $b->life - ($now - $b->launched) / 1e9; $gone = $gone === null ? $d : min($gone, $d); }
-    }
-    if ($gone !== null && $gone > 0) { $c->after($gone); }
-    foreach ($this->emitters as $e) { $c->after(($e['next'] - $now) / 1e9); }
-};
+// The demos' tiles, which lift under the pointer; the stage, which throws a burst of the sliders' from where it is
+// clicked; the sliders. Over it all, the bursts in the air, which let the pointer through.
+return fn() => TimelineView(explicit: fn() => $this->due())(fn(TimelineViewContext $context) => GeometryReader(function (GeometryProxy $g) use ($presets, $slider, $context) {
+    [$this->w, $this->h] = $g->size;
+    $this->tick($context->nanoseconds); // the demos' bursts due, those to launch and those gone
+    return ZStack(alignment: Alignment::topLeading)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 20)(
+            HStack(alignment: VerticalAlignment::bottom, spacing: 12)(
+                VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                    Text('Confetti')->font(Font::system(size: 28, weight: Weight::bold)),
+                    Text('canvas-confetti\'s demos in native UI, every piece animated by modifiers that only paint.')->foregroundStyle(Color::secondary),
+                ),
+                Spacer(),
+                Text(verbatim: $this->inAir() . ' in the air')->font(Font::caption)->foregroundStyle(Color::secondary),
+            ),
+            HStack(alignment: VerticalAlignment::top, spacing: 16)(
+                VStack(spacing: 16)(
+                    LazyVGrid(columns: [GridItem::adaptive(minimum: 180)], spacing: 12)(Each($presets(), id: fn(array $p) => $p[0])(fn(array $p, int $i) => Button(action: fn() => $p[2]($this), label: VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                        Text($p[0])->bold(),
+                        Text($p[1])->font(Font::caption)->foregroundStyle(Color::secondary),
+                    )->padding(Edge::vertical, 12)->padding(Edge::horizontal, 14)->frame(maxWidth: INF, alignment: Alignment::leading)
+                        ->background(Color::gray->opacity($this->hover === $i ? 0.2 : 0.12))->cornerRadius(10)->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator)))
+                        ->buttonStyle(ButtonStyle::plain)
+                        ->offset(y: $this->hover === $i ? -2 : 0)->animation(Animation::snappy(), value: $this->hover === $i) // it lifts under the pointer
+                        ->onHover(function (bool $over) use ($i) { $this->hover = $over ? $i : ($this->hover === $i ? null : $this->hover); }))),
+                    VStack(spacing: 6)(
+                        Text('Click anywhere here')->bold(),
+                        Text('to throw your burst from the pointer')->font(Font::caption)->foregroundStyle(Color::secondary),
+                    )
+                        ->frame(maxWidth: INF, maxHeight: INF)
+                        ->overlay(RoundedRectangle(cornerRadius: 12)->stroke(Color::separator, style: new StrokeStyle(lineWidth: 1, dash: [4, 4])))
+                        ->onTapGesture(fn(CGPoint $at) => $this->burst($this->custom($at->x, $at->y)), coordinateSpace: CoordinateSpace::global),
+                ),
+                VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+                    Text('Your burst')->bold(),
+                    $slider('Count', $this->count, 1, 400, '%.0f'),
+                    $slider('Angle', $this->angle, 0, 360, '%.0f°'),
+                    $slider('Spread', $this->spread, 0, 360, '%.0f°'),
+                    $slider('Velocity', $this->velocity, 0, 90, '%.0f'),
+                    $slider('Decay', $this->decay, 0.8, 0.99, '%.2f'),
+                    $slider('Gravity', $this->gravity, -1, 3, '%.1f'),
+                    $slider('Drift', $this->drift, -2, 2, '%.1f'),
+                    $slider('Size', $this->scalar, 0.4, 3, '%.1f×'),
+                    Spacer(),
+                    Button('Reset', action: fn() => $this->resetOptions()),
+                )->padding(16)->frame(width: 280)->frame(maxHeight: INF)->background(Color::gray->opacity(0.12))->cornerRadius(12)->overlay(RoundedRectangle(cornerRadius: 12)->stroke(Color::separator)),
+            )->frame(maxHeight: INF),
+        )->padding(24)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading),
+        Each($this->bursts, id: fn(Burst $b) => $b->id)(fn(Burst $b) => $b->view()),
+    );
+}));

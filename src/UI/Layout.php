@@ -64,6 +64,26 @@ final class Layout
         }
     }
 
+    /**
+     * The size $n asks, laid out at its own width ($w when given): its texts
+     * wrapped at the width they get there, as high as their lines then, as
+     * a popover sizes its window to its content before it shows. Before the
+     * frame's layout, of a node of $c's.
+     * @return array{0: float, 1: float}
+     */
+    public static function fit(Context $c, Node $n, float $w = 0): array
+    {
+        self::$metrics = $c->metrics();
+        self::measure($n);
+        $w = $w > 0 ? $w : $n->mw;
+        self::arrange($n, 0, 0, $w, $n->mh);
+        if (self::wrapTexts($n)) {
+            self::measure($n);
+            self::arrange($n, 0, 0, $w, $n->mh);
+        }
+        return [$w, $n->mh];
+    }
+
     /** Has the texts under $n arranged narrower than their lines wrap at the width they got, laid out by the text system; whether one did. */
     private static function wrapTexts(Node $n): bool
     {
@@ -357,7 +377,7 @@ final class Layout
             if ($n->fw == $ow) { $n->fw = $w; } // a size given to it stays
             if ($n->fh == $oh) { $n->fh = $h; }
         }
-        $n->metrics = null; // once
+        if ($n->kind === Node::BUTTON) { $n->metrics = null; } // once; a text keeps its metrics to wrap at the width it gets (wrapsAtWidth), measured again the same
     }
 
     /** A text field given a text style of its own: the size, color and Font bits its text shows in, a single line's field as much higher as its line. */

@@ -20,7 +20,21 @@ final class Lifecycle
     private bool $noted = false;
     /** @var array<int, mixed> the values onChange() saw last, by its place among the view's */
     private array $seen = [];
-    private bool $hovered = false;
+    private bool $hovered = false, $targeted = false;
+    /** @var array{0: float, 1: float}|null where a DragGesture's press started, in the window; its last velocity; whether it moved far enough */
+    public ?array $dragStart = null, $dragVelocity = null;
+    public ?DragGestureValue $dragLast = null;
+    public bool $dragActive = false;
+    private bool $editing = false;
+
+    /** Whether a control's being edited (a Slider dragged) changed to $now since the frame before. @internal */
+    public function editingChanged(bool $now): bool
+    {
+        $was = $this->editing;
+        $this->editing = $now;
+        return $was !== $now;
+    }
+
     /** What focused() bound last frame, null before. */
     private ?bool $focusWas = null;
 
@@ -29,6 +43,24 @@ final class Lifecycle
     {
         $rt = $c->runtime;
         return $rt === null ? null : $rt->lifecycles[$node->id] ??= new self();
+    }
+
+    /** The lifecycle of the node to be built with id $id (Context::upcomingId), before it is: what a view keeps of itself without taking the node's local state. @internal */
+    public static function ofId(Context $c, int $id): ?self
+    {
+        $rt = $c->runtime;
+        return $rt === null ? null : $rt->lifecycles[$id] ??= new self();
+    }
+
+    private bool $animatedSeen = false;
+    private mixed $animatedValue = null;
+
+    /** Whether the value of animation(_:value:) differs from the frame before's (not on the first). @internal */
+    public function animatedChanged(mixed $value): bool
+    {
+        $changed = $this->animatedSeen && $value !== $this->animatedValue;
+        [$this->animatedSeen, $this->animatedValue] = [true, $value];
+        return $changed;
     }
 
     /** Notes the lifecycle $events (kind, action) of $node, run as it appears. @internal @param list<array{0: string, 1: Closure}> $events */
@@ -74,6 +106,14 @@ final class Lifecycle
         }
         $this->focusWas = $now;
         return $now;
+    }
+
+    /** Whether a drag's being over the view, of what it takes, changed to $now since the frame before. @internal */
+    public function targetChanged(bool $now): bool
+    {
+        $was = $this->targeted;
+        $this->targeted = $now;
+        return $was !== $now;
     }
 
     public function __destruct()

@@ -37,21 +37,32 @@ final class Each extends View
     /** The view of each item, its identity its id: a list's rows, which a Section lays out one by one. @internal @return list<View> */
     public function views(): array
     {
-        $content = $this->content ?? throw new \LogicException('Each($items) takes the view of an item: Each($items, id: \'id\')(fn($item) => …)');
         $out = [];
         foreach ($this->items as $key => $item) {
-            $v = $content($item, $key);
-            if ($v === null) { continue; }
-            $id = match (true) {
+            if (($v = $this->viewOf($item, $key)) !== null) { $out[] = $v; }
+        }
+        return $out;
+    }
+
+    /** The view of $item, at $key, its identity its id. @internal */
+    public function viewOf(mixed $item, int|string $key): ?View
+    {
+        $content = $this->content ?? throw new \LogicException('Each($items) takes the view of an item: Each($items, id: \'id\')(fn($item) => …)');
+        $v = $content($item, $key);
+        if ($v === null) { return null; }
+        $v = $v instanceof View ? $v : Group()(...(is_array($v) ? $v : [$v]));
+        $v->identity ??= $this->idOf($item, $key);
+        return $v;
+    }
+
+    /** The id of $item, at $key. @internal */
+    public function idOf(mixed $item, int|string $key): int|string
+    {
+        return match (true) {
                 $this->id instanceof Closure => ($this->id)($item, $key), // fn($item, $key): its key too, as SwiftUI's id: \.offset
                 is_string($this->id) => is_array($item) ? $item[$this->id] : $item->{$this->id},
                 is_int($item) || is_string($item) => $item,
                 default => $key,
-            };
-            $v = $v instanceof View ? $v : Group()(...(is_array($v) ? $v : [$v]));
-            $v->identity ??= $id;
-            $out[] = $v;
-        }
-        return $out;
+        };
     }
 }

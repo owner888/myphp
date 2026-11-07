@@ -38,10 +38,11 @@ final class Menu extends View
             match (true) {
                 $v instanceof Button => $m->item(Localized::string($v->title, $env))->chosen() && $v->run(),
                 $v instanceof Toggle => $m->item(Localized::string($v->title, $env))->checked($v->isOn())->chosen() && $v->flip(),
+                $v instanceof Picker => $v->menuItems($m, $env), // its choices inline, the one chosen checked
                 $v instanceof Divider => $m->separator(),
                 $v instanceof Menu => $m->submenu(Localized::string($v->title, $env), fn(UIMenu $sub) => self::items($sub, $v->content, $env)),
                 $v instanceof Section => self::section($m, $v, $env),
-                default => throw new \LogicException('a menu holds Buttons, Toggles, Dividers, Sections and Menus, not ' . get_debug_type($v)),
+                default => throw new \LogicException('a menu holds Buttons, Toggles, Pickers, Dividers, Sections and Menus, not ' . get_debug_type($v)),
             };
         }
     }

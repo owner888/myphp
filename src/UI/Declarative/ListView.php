@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Declarative;
 
 use Closure;
-use MyPHP\UI\{Context, ListState, Node};
+use MyPHP\UI\{Context, ListState, Node, Selection};
 
 /**
  * ListView, SwiftUI's List (list is PHP's): rows one under the other,
@@ -23,20 +23,51 @@ final class ListView extends View
     private ?Closure $row = null;
 
     /** @param array<mixed>|int|null $items an int $n for the rows 0 to $n - 1, as SwiftUI's List(0..<n) */
-    private ?string $selection = null;
+    private mixed $selection = null;
     private bool $selects = false;
+    private ?Binding $binding = null;
 
-    /** $selection: the tag of the row chosen, bound, in a NavigationSplitView's sidebar. */
-    public function __construct(public readonly array|int|null $items = null, public readonly string|Closure|null $id = null, ?string &$selection = null, bool $selects = false)
+    /** The choice into the Binding given as the selection, when it changed. @internal */
+    public function commitBinding(): void
     {
-        if ($selects) { $this->selection = &$selection; $this->selects = true; }
+        if ($this->binding !== null && $this->selection !== $this->binding->get()) { $this->binding->set($this->selection); }
+    }
+    private ?Closure $menu = null, $primaryAction = null, $move = null;
+
+    /**
+     * Lets the rows of a ListView($items) be dragged to another place (several chosen with Cmd, together), as SwiftUI's
+     * onMove of the ForEach of a List's rows: $perform(array $rows, int $to) moves the items at the offsets $rows before
+     * the one at $to, as the app keeps them. The choice follows its rows by their ids.
+     */
+    public function onMove(Closure $perform): static { $this->move = $perform; return $this; }
+
+    /** $selection: the id of the row chosen, or an array of the ids chosen, bound; the tag chosen in a NavigationSplitView's sidebar. */
+    public function __construct(public readonly array|int|null $items = null, public readonly string|Closure|null $id = null, mixed &$selection = null, bool $selects = false)
+    {
+        if ($selects) { if ($selection instanceof Binding) { $this->binding = $selection; $this->selection = $selection->get(); } else { $this->selection = &$selection; } $this->selects = true; } // a variable, or a Binding(get:set:)
     }
 
     /** The binding of the row chosen, which a sidebar writes. @internal */
-    public function &selection(): ?string
+    public function &selection(): mixed
     {
         if (!$this->selects) { throw new \LogicException("a NavigationSplitView's sidebar is a ListView(selection: …): ListView(selection: \$this->page)( Label('Inbox', systemImage: 'tray')->tag('inbox'), … )"); }
         return $this->selection;
+    }
+
+    /**
+     * Of a ListView(selection:): $menu(array $ids) the menu of the rows a
+     * right click is on, those chosen when it is on one of them; and
+     * $primaryAction(array $ids) what a double click or Return does to those
+     * chosen, as SwiftUI's contextMenu(forSelectionType:menu:primaryAction:).
+     * Otherwise, the view's menu of $items.
+     */
+    public function contextMenu(View|array|null|Closure ...$items): static
+    {
+        if (!isset($items['menu']) && !isset($items['primaryAction'])) { return parent::contextMenu(...$items); }
+        if (!$this->selects || $this->items === null) { throw new \LogicException('contextMenu(menu:, primaryAction:) acts on the rows chosen of a ListView($items, selection: $this->chosen)'); }
+        $this->menu = $items['menu'] ?? null;
+        $this->primaryAction = $items['primaryAction'] ?? null;
+        return $this;
     }
 
     /** Its views. @internal @return array<mixed> */
@@ -62,28 +93,95 @@ final class ListView extends View
     private function dataRows(Context $c, Env $env): Node
     {
         $rt = $c->runtime;
-        $state = $rt === null ? new ListState() : $rt->local($c->upcomingId(), fn() => new ListState());
+        $state = $rt === null ? new ListState() : $rt->local($c->upcomingId(), fn() => new ListState(), ListState::class);
         $count = is_int($this->items) ? $this->items : count($this->items);
         $items = is_int($this->items) ? null : array_values($this->items);
         $keys = is_int($this->items) ? null : array_keys($this->items);
-        $row = $this->row;
-        $rowEnv = $env->along(Node::COLUMN)->with(['inList' => true]);
-        $n = $c->list($state, $count, function (int $i) use ($c, $rowEnv, $items, $keys, $row): void {
+        $idOf = function (int $i) use ($items, $keys): int|string|null {
             $item = $items === null ? $i : $items[$i];
-            $v = $row($item, $keys === null ? $i : $keys[$i]);
+            return match (true) {
+                $this->id instanceof Closure => ($this->id)($item, $keys === null ? $i : $keys[$i]),
+                is_string($this->id) => is_array($item) ? $item[$this->id] : $item->{$this->id},
+                is_int($item) || is_string($item) => $item, // a string or an int its own id, as Each's
+                default => $keys === null ? $i : $keys[$i],
+            };
+        };
+        if ($this->selects) { self::bind($state, $count, $idOf, $this->selection); }
+        if ($this->move !== null) { $state->reorder = $this->move; $state->key = static fn(int $i) => $idOf($i); } // the choice following the rows dragged by their ids
+        if ($env->scrollProxy !== null) { $env->scrollProxy->list = self::scroller($state, $count, $idOf); }
+        $row = $this->row;
+        $menu = $this->menu;
+        $rowEnv = $env->along(Node::COLUMN)->with(['inList' => true]);
+        $n = $c->list($state, $count, function (int $i) use ($c, $env, $rowEnv, $items, $keys, $row, $idOf, $state, $menu): void {
+            $v = $row($items === null ? $i : $items[$i], $keys === null ? $i : $keys[$i]);
             if ($v === null) { return; }
-            if ($v instanceof View) {
-                $v->identity ??= match (true) {
-                    $this->id instanceof Closure => ($this->id)($item),
-                    is_string($this->id) => is_array($item) ? $item[$this->id] : $item->{$this->id},
-                    default => $items === null ? $i : null,
-                };
+            if ($v instanceof View) { $v->identity ??= $items === null && !$this->id instanceof Closure ? $i : $idOf($i); }
+            $r = self::row($c, $rowEnv, $v, $env->listStyle !== \ListStyle::plain);
+            if ($r === null) { return; }
+            if ($env->alternatingRows && $i & 1) { $r->background($env->theme->surface); }
+            if ($menu !== null) {
+                $r->contextMenu(static function (\MyPHP\UI\Menu $m) use ($menu, $state, $i, $idOf, $rowEnv): void {
+                    $ids = $state->chosen($i) ? self::chosenIds($state, $idOf) : [$idOf($i)];
+                    Menu::items($m, (array)$menu($ids), $rowEnv);
+                });
             }
-            self::row($c, $rowEnv, $v, true);
         });
+        if ($this->selects) { self::chose($state, $idOf, $this->selection, $this->primaryAction); $this->commitBinding(); }
         $n->alignSelf(Node::STRETCH);
         $n->grow = max($n->grow, 1); // the room it is given, along the stack it is in and across it
         return $n;
+    }
+
+    /** What a ScrollViewProxy's scrollTo($id, $anchor) does to the rows of $state. @internal */
+    public static function scroller(ListState $state, int $count, Closure $idOf): Closure
+    {
+        return static function (int|string $id, ?\UnitPoint $anchor) use ($state, $count, $idOf): void {
+            for ($i = 0; $i < $count && $idOf($i) !== $id; $i++);
+            if ($i === $count) { throw new \OutOfRangeException("scrollTo(): no row of id $id"); }
+            $anchor === null ? $state->scrollIntoView($i) : $state->scrollTo($i, true, match ($anchor) { \UnitPoint::top => Node::START, \UnitPoint::center => Node::CENTER, \UnitPoint::bottom => Node::END });
+        };
+    }
+
+    /** Makes $state's choice the bound $selection, a single id or, an array, several. @internal @param Closure(int): (int|string|null) $idOf */
+    public static function bind(ListState $state, int $count, Closure $idOf, mixed &$selection): void
+    {
+        $several = is_array($selection);
+        if ($state->selected === null) { $state->selected = -1; } // rows can be chosen: click, Up/Down; double click or Return is the primary action
+        if ($several && $state->selection === null) { $state->selection = new Selection(); }
+        $state->key = $idOf; // the selection keeps the rows' ids
+        if ($state->changed()) { // chosen by the keys since the last build, before it: the user's choice, not the app's old one to put back
+            $selection = $several ? self::chosenIds($state, $idOf) : ($state->selected >= 0 && $state->selected < $count ? $idOf($state->selected) : null);
+            return;
+        }
+        if ($several) {
+            $want = array_keys(array_flip($selection)); // as the selection keeps them, keys of an array
+            $have = $state->selection->all();
+            sort($want); sort($have);
+            if ($want !== $have) { // set by the app
+                $state->selection->clear();
+                foreach ($want as $id) { $state->selection->add($id); }
+            }
+            return;
+        }
+        $at = $state->selected >= 0 && $state->selected < $count ? $idOf($state->selected) : null;
+        if ($at !== $selection) { // set by the app: its row
+            for ($i = 0; $i < $count && $idOf($i) !== $selection; $i++);
+            $state->selected = $i < $count ? $i : -1;
+        }
+    }
+
+    /** After the rows are built: the user's choice into $selection, and $primaryAction run on a double click or Return. @internal */
+    public static function chose(ListState $state, Closure $idOf, mixed &$selection, ?Closure $primaryAction): void
+    {
+        if ($state->changed()) { $selection = is_array($selection) ? self::chosenIds($state, $idOf) : ($state->selected >= 0 ? $idOf($state->selected) : null); }
+        if ($state->submitted() && $primaryAction !== null) { $primaryAction(self::chosenIds($state, $idOf)); }
+    }
+
+    /** The ids of the rows chosen. @return list<int|string> */
+    private static function chosenIds(ListState $state, Closure $idOf): array
+    {
+        if ($state->selection !== null) { return $state->selection->all(); }
+        return $state->selected !== null && $state->selected >= 0 ? [$idOf($state->selected)] : [];
     }
 
     /**
@@ -91,7 +189,7 @@ final class ListView extends View
      * Button a cell in the tint, any other view in the padding of a cell;
      * with $separator a hairline under it from 16 in. @internal
      */
-    public static function row(Context $c, Env $env, View|array $v, bool $separator = false): void
+    public static function row(Context $c, Env $env, View|array $v, bool $separator = false): ?Node
     {
         if ($v instanceof NavigationLink || $v instanceof Section || $v instanceof LabeledContent) { // cells of their own
             $n = $v->render($c, $env);
@@ -99,12 +197,18 @@ final class ListView extends View
             $n = $c->cell(Localized::string($v->title, $env));
             if ($n !== null && $c->clicked($n)) { $v->run(); }
             if ($v->role !== \ButtonRole::destructive) { $n->kids[0]?->textColor($env->tint?->rgb($env) ?? $env->theme->accent); } else { $n->kids[0]?->textColor($env->theme->danger); }
+        } elseif ($env->listStyle === \ListStyle::plain) { // a macOS list's row: its content's height, rounded
+            $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->padding(6, 10)->radius(8)->alignItems(Node::CENTER);
+              View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false]), is_array($v) ? $v : [$v]);
+            $c->end();
         } else {
             $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(11, 16)->alignItems(Node::CENTER);
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true]), is_array($v) ? $v : [$v]);
+              if ($v instanceof View && $v->badgeValue !== null) { $c->spacer(); $c->text((string)$v->badgeValue, color: $env->theme->textMuted); }
             $c->end();
         }
         if ($separator && $n !== null) { $n->borderWidth(0, 0, 1, 0)->borderColor($env->theme->border); }
+        return $n;
     }
 
     /** An inset grouped list of $content: sections, and rows outside one in a section of their own. @internal @param array<mixed> $content */

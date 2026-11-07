@@ -115,6 +115,8 @@ final class View implements TextInputClient
         $doc->shownIn = \WeakReference::create($v);
         $v->sys = $c->metrics()->textSystem();
         $v->setLook($t, $styled);
+        $metrics = $c->metrics();
+        $v->look->measure = static fn(string $s, float $size): float => $metrics->measure($s, $size, 0)[0]; // an attachment's bounds measure with it
         $v->sync();
         $now = $rt?->now ?? hrtime(true);
         $v->inView = $c->hovered($e);

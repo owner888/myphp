@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.181.0';
+const VERSION = '1.183.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -561,7 +561,7 @@ function generateBindings(string $dir, array $config): bool
 }
 
 const DEV_USAGE = <<<'TXT'
-dev [flags] [dir]
+dev [flags] [dir] [args...]
 
 Develops the app with live reload. It writes the TypeScript client of a
 frontend, runs devCommand from myphp.json (such as a Vite dev server),
@@ -587,6 +587,10 @@ With -lang, the app runs in that language, a BCP 47 tag such as de or
 zh-Hant, or a pseudo locale: en-XA (accented and longer text) or ar-XB
 (right to left), which test layouts without translations. It does not
 keep it: the app's own setting is left as it is.
+
+What follows dir goes to the app, its $argv, as each relaunch gives it
+again: myphp dev examples/photos ~/Pictures opens that folder. A path is
+made absolute, as the app runs in its project's folder.
 
 Flags:
   -lang tag           run the app in this language, without keeping it
@@ -726,6 +730,8 @@ final class DevSession
     /** @var resource|null the running app */
     public $app = null;
     public string $exe = '';
+    /** @var list<string> what follows the project's folder on the command line, for the app's \$argv */
+    public array $appArgs = [];
     /** The fingerprint of the running build. */
     public string $sum = '';
     private string $iconKey = '';
@@ -823,7 +829,7 @@ final class DevSession
     /** Starts the build at $exe in the project, with MYPHP_DEV=1, which App::relaunch() asks to be started again. */
     public function launch(string $exe): void
     {
-        $this->app = proc_open([$exe], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $this->root, $this->env + ['MYPHP_DEV' => '1'] + getenv());
+        $this->app = proc_open([$exe, ...$this->appArgs], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $this->root, $this->env + ['MYPHP_DEV' => '1'] + getenv());
         $this->app !== false || fail("cannot start $exe");
         $this->exe = $exe;
     }
@@ -895,6 +901,8 @@ function dev(array $args): void
     $reload = "$dir/.myphp/hot-reload"; // the app's views of files (Content::file) load again when it names them
     $env['MYPHP_HOT_RELOAD'] = $reload;
     $s = new DevSession($dir, $sign, devConfig($c)['name'], $env);
+    // The rest of the command line is the app's ($argv): a file or folder named relative to here, absolute, as the app runs in its project's folder.
+    $s->appArgs = array_map(fn(string $a) => !str_starts_with($a, '-') && ($real = realpath($a)) !== false ? $real : $a, array_slice(array_values($args), 1));
     $keys = singleKeys();
     $serverExited = false;
     $build = function (string $title, string $verb, array $changed) use ($s, $dir): bool {

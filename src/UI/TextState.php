@@ -58,6 +58,8 @@ final class TextState
     public float $scrollY = 0;
     /** How far through its text a text area is scrolled, 0..1 (the painter sets it), for anything that follows it. */
     public float $scrollFraction = 0;
+    /** How far a text area scrolls, and how high its room for lines is, as the painter last laid it out (a view's ScrollGeometry). */
+    public float $scrollRange = 0, $visibleHeight = 0;
     /** How far a single-line field's text is from its start, as the painter showed it: scrolled to the caret, or aligned. */
     public float $offsetX = 0.0;
     /** The Font bits the field shows its text in (a monospace family's, bold's), as its node's text style has them: what it is measured and painted with. */

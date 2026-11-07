@@ -54,6 +54,9 @@ its built frontend, and launches it. Without `devUrl`, the app serves
 `frontendDist` from disk. The development app is `<name> Dev` with the
 identifier `<identifier>.dev`, in `.myphp/dev`: a real bundle, with the
 app's icon and resources, whose launcher runs the project's files.
+What follows the folder goes to the app, its `$argv`, at each launch:
+`myphp dev examples/photos ~/Pictures` opens that folder; a path is made
+absolute, as the app runs in its project's folder.
 
 A saved PHP file hot reloads the app, as Flutter's run: the app loads its
 views of files (`Content::file`) again with its state kept, and says in its

@@ -300,6 +300,8 @@ final class Painter
         }
         [$x0, $y0] = $n->world->point($n->x + $bl, $n->y + $bt);
         [$x1, $y1] = $n->world->point($n->x + $n->w - $br, $n->y + $n->h - $bb);
+        $half = min(abs($x1 - $x0), abs($y1 - $y0)) / 2; // a circle's or a capsule's (a radius of 100,000) rounds at most to half a side, as rect()'s: past it the mask's corners cut out all it holds
+        $inner = array_map(fn(float $v): float => min($v, $half), $inner);
         $list->setMask(DisplayList::roundedMask(min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0), $inner));
         return true;
     }
@@ -2117,6 +2119,7 @@ final class Painter
             }
         }
         $s->scrollFraction = $range > 0 ? $s->scrollY / $range : 0.0;
+        $s->scrollRange = $range; $s->visibleHeight = $innerH;
         $tx = $n->x + $inset; $ty = $n->y + $insetT - $s->scrollY;
         $list->pushClip($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw); // inside the border
         if ($display === '' && $n->text !== null && $n->text !== '') { // the placeholder wraps as the text would (mygo's)

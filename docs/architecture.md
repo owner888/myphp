@@ -8465,6 +8465,95 @@ callback throws from. In development a view that throws shows
 kept; and `myphp dev` restarts the app when the entry or a framework file
 changed, which no hot reload can take.
 
+## Declarative views: traps found converting the examples
+
+- A styled Text did not wrap. Symptom: `Text(…)->foregroundStyle(…)` stayed
+  one line past the window's edge where a plain Text wrapped. Cause:
+  `Layout::restyle` set the node's `metrics` to null ("once"), and
+  `Node::wrapsAtWidth` needs them. Rule: only a button's metrics are
+  dropped; a text restyled keeps them and measures the same again.
+- State of another kind at a node's id. Symptom: "Undefined property
+  ScrollState::$fit" switching the files example from its icons to its
+  table. Cause: an `if`'s branches build different nodes at one place, so
+  one id, and `Runtime::local` handed the table the scroll state the grid
+  had kept there. Rule: `local($id, $make, Foo::class)` makes the state
+  anew when the one kept is not a Foo; a view keeping a stdClass keeps it
+  by a node of its own (Table, LazyVGrid wrap theirs). A key salted with
+  `^` is no fix: `Runtime` drops a local whose id no node had (its rect).
+- `Headless::withoutDeclarations` cut a class short at a `}` inside a
+  string ("delete {{$list}}"). Rule: braces count by token id (123, 125),
+  not by text.
+- `onChange(of:)` of an array of the state's properties never ran.
+  Symptom: the widgets example's bottom line stayed "nothing yet". Cause:
+  a property a view binds (`Stepper(value: $this->count)`) is a PHP
+  reference, and `get_object_vars()` copies it into the array as one, so
+  the array kept from the frame before changed along with the property.
+  Rule: build such an array by assigning each value
+  (`foreach (get_object_vars($this) as $k => $v) { $out[$k] = $v; }`).
+- A Chart's stacked areas came out flat (the charts example's visits by
+  week). Cause: the x values keyed an array as strings, and PHP makes the
+  key "3" the int 3, so a strict `array_search('3', array_keys(...))` found
+  nothing and every point went to the first column. Rule: key such maps
+  with a prefix (`'x' . $value`).
+- A ScrollView with `animation(_:value:)` showed nothing (chat-glow's
+  conversation). Cause: the modifier kept its last value as a
+  `Runtime::local` at the view's node id, typed, which replaced the
+  ScrollView's own scroll state there every frame. Rule: what a modifier
+  keeps of the view before it is built goes in its Lifecycle
+  (`Lifecycle::ofId($c, $c->upcomingId())`), never in the node's local.
+- A Canvas swallowed the views after it (chat-glow's greeting inside its
+  orb). Cause: `Canvas::build` opened a column and returned it unended.
+  Rule: a view's build ends what it opens.
+- A click on a field over a canvas went to the canvas too (the wind
+  example blew a ripple under its composer). Cause: `Runtime::inputAt`
+  gives a press to the smallest node taking input (handleInput) under the
+  pointer, whatever is drawn over it, and in a ZStack the field over the
+  canvas is no node of the canvas's. Rule: a focusable node under the
+  pointer that is neither inside the input node nor around it takes the
+  press, as the topmost view takes the pointer in SwiftUI; and a
+  Representable returns a node closed, a box or a column it ended, or the
+  views after it go inside it.
+- A suggesting TextField crashed in `Context::autocomplete` ("Undefined
+  property stdClass::$seen"): the field kept its text by the input's id,
+  where autocomplete keeps its own. Rule: a field whose control keeps a
+  local by the input (search, suggestions) keeps its text by a box around it.
+- Down in a `ListView(selection:)` did nothing (the gallery's list stayed on
+  its row). Cause: an arrow key chooses in `Runtime` before the build, and
+  `ListView::bind` then put the app's selection, still the old row, back
+  into the state. Rule: `bind` takes a change the state already has as the
+  user's choice first; only a selection the app changed moves the list.
+- Frames in frames came out wrong (confetti's panel narrower than its
+  `frame(width: 280)`, its Spacer not pushing Reset down; chat-glow's
+  composer, `frame(maxWidth:)` over a Canvas background, tall, mid-window
+  and at the left). Causes: the boxes of the layers inside the outermost
+  were placed as if in the parent stack (`renderBox` gave all of them the
+  stack's axis); a background view, moved under the view, was read as the
+  view for the box's flexibility; flexbox lays a stretched box capped by a
+  max width at the start, SwiftUI centers it; the outermost box shrank below
+  a fixed width inside. Rule: only the outermost box is in the stack, the
+  others in a column; a finite max across is `widthPercent(100)` and
+  centered; a size of its own inside keeps the outermost box from shrinking.
+- Confetti's page jumped shorter while bursts flew. Cause: a ZStack placed
+  in its cell only the node a view returned; an `Each` builds its views in
+  the stack and returns none, so the grid put them in rows of their own,
+  under the page. Rule: a container places every node a child built.
+- What a `clipShape(Circle())` or `Capsule()` held did not show on the Mac
+  (chat-glow's send arrow, drawn every frame, 34 by 34). Cause: those clip
+  with a radius of 100,000, which `rect()` caps at half a side for the box's
+  face, but `Painter::roundClip` gave the mask of what is inside as it was,
+  and past half a side the mask's corners cut out all of it. Rule: a rounded
+  clip's mask rounds at most to half the shorter side, as `rect()` does.
+- A plain TextField's text drew 11 points left of the field, against the
+  edge of the box around it (chat-glow's composer). Cause: `textInputBase`
+  took the field's text inset back with `inset(-FIELD_INSET)`, which only
+  cancels the inset of a field without a padding of its own; given one
+  (`padding(.vertical, 8)`), the inset is not added but was still taken.
+  Rule: a bare field has a padding of 0, not a negative inset.
+- A view file importing `MyPHP\UI\Font as Face` (the engine's styles beside
+  SwiftUI's `Font`) had `Font::system` resolve in the example's namespace in
+  the tests. Cause: `Headless::declarativeUses` read `Font` in the use line
+  as imported. Rule: an alias names what follows `as`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

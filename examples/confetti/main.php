@@ -3,17 +3,18 @@
 // examples/confetti): bursts of squares, circles, stars, hearts and emoji
 // that fly out, slow down, fall, tumble and fade. Pick one of
 // canvas-confetti's demos, or click the stage to throw a burst of your own
-// from the pointer. Each piece is three boxes posed one inside the other
-// (animatePose), as canvas-confetti adds up its motions: a burst whose speed
-// decays along an easing of its own, a steady fall that fades it, and a
-// spin in a plane turned away in 3D (rotationX), which makes it tumble.
-// Poses move in frames that only paint, so hundreds of pieces fly without
-// building the view again.
+// from the pointer. Each piece is three views one inside the other, each
+// animated to where it ends (animation(_:value:)) as SwiftUI animates
+// offsets, rotations and opacity, as canvas-confetti adds up its motions: a
+// burst whose speed decays along an easing of its own, a steady fall that
+// fades it, and a spin in a plane tipped away in 3D (rotation3DEffect),
+// which makes it tumble. They move in frames that only paint, so hundreds
+// of pieces fly without building the view again.
 // Run: ./run.sh confetti
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Animation, Content, Context, Easing, Node, Painter, Path, Pose, Transform};
+use MyPHP\UI\{Content, Easing, Path, Pose};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -92,8 +93,10 @@ final class Burst
     public Closure $ease;
     /** @var list<Piece> */
     public array $pieces = [];
-    /** When it headed for its poses, in nanoseconds, 0 while it still shows where it starts. */
-    public int $launched = 0;
+    /** Whether a frame showed it where it starts, and whether it heads for where its pieces end then. */
+    public bool $shown = false, $launched = false;
+    /** When it headed off, in nanoseconds of the frames' time. */
+    public int $at = 0;
 
     public function __construct(Options $o, public float $x, public float $y, public int $id)
     {
@@ -135,34 +138,37 @@ final class Burst
     }
 
     /**
-     * The burst: a box that falls and fades, and in it a box for each piece,
-     * tilted, which bursts out, with what it shows spinning in it (or on it,
-     * as a circle, which does not spin). A pose starts at the first one it
-     * gets, so a new burst shows where it starts until a frame showed it
-     * there, and then heads off.
+     * The burst: a view that falls and fades, and in it a view for each
+     * piece, tipped, which bursts out, with what it shows spinning in it (or
+     * on it, as a circle, which does not spin). Each starts where it is
+     * until the burst is launched, then animates to where it ends.
      */
-    public function build(Context $c, int $now): void
+    public function view(): View
     {
-        $group = $c->key($this->id)->column()->absolute()->left($this->x)->top($this->y)->size(1, 1)->passThrough();
-        if ($this->launched === 0 && $c->bounds($group)[2] > 0) { $this->launched = $now; }
-        $launched = $this->launched !== 0;
-        if (!$launched) { $c->animationFrame(); }
-        $linear = new Animation($this->life, Easing::linear(...));
-        $group->animatePose($launched ? $this->fall : new Pose(), $linear);
-          foreach ($this->pieces as $p) {
-              [$to, $spin] = $launched ? [$p->to, new Pose(rotate: $p->spin)] : [new Pose(), new Pose()];
-              $e = $p->spin == 0 ? shapeBox($c->key($p->id), $p) : $c->key($p->id)->column();
-              $e->absolute()->left(-$p->w / 2)->top(-$p->h / 2)->size($p->w, $p->h)->passThrough();
-              // The pose spins the piece in its plane, which this turns away: seen edge on as it spins, it tumbles. The burst moves it after.
-              if ($p->tilt != 0) { $e->transform(Transform::rotationX($p->tilt)->then(Transform::rotation($p->turn))); }
-              $e->animatePose($to, new Animation($this->life, $this->ease));
-              if ($p->spin != 0) {
-                  shapeBox($c, $p)->size($p->w, $p->h)->passThrough()->animatePose($spin, $linear);
-                  $c->end();
-              }
-              $c->end();
-          }
-        $c->end();
+        $l = $this->launched;
+        $linear = Animation::linear(duration: $this->life);
+        $out = new Animation($this->life, $this->ease);
+        return ZStack(alignment: Alignment::topLeading)(Each($this->pieces, id: fn(Piece $p) => $p->id)(fn(Piece $p) => self::shape($p)
+            ->frame(width: $p->w, height: $p->h)
+            ->rotationEffect($l ? $p->spin : 0)->animation($linear, value: $l) // it spins in its plane
+            ->rotation3DEffect($p->tilt, axis: [cos(deg2rad($p->turn)), sin(deg2rad($p->turn)), 0]) // which tips away: seen edge on as it spins, it tumbles
+            ->offset(x: -$p->w / 2 + ($l ? $p->to->x : 0), y: -$p->h / 2 + ($l ? $p->to->y : 0))->animation($out, value: $l))) // and bursts out
+            ->frame(width: 1, height: 1, alignment: Alignment::topLeading)
+            ->offset(x: $this->x + ($l ? $this->fall->x : 0), y: $this->y + ($l ? $this->fall->y : 0))->opacity($l ? 0 : 1)->animation($linear, value: $l) // falling, fading
+            ->allowsHitTesting(false);
+    }
+
+    /** What piece $p looks like. */
+    private static function shape(Piece $p): View
+    {
+        $color = Color::rgb($p->color);
+        return match ($p->shape->kind) {
+            Shape::CIRCLE => Circle()->fill($color),
+            Shape::STAR => Canvas(fn(GraphicsContext $g, CGSize $s) => $g->fill(starPath(0, 0, $s->width, $s->height), with: $color)),
+            Shape::HEART => Canvas(fn(GraphicsContext $g, CGSize $s) => $g->fill(heartPath(0, 0, $s->width, $s->height), with: $color)),
+            Shape::TEXT => Text(verbatim: $p->shape->text)->font(Font::system(size: $p->h)),
+            default => Rectangle()->fill($color),
+        };
     }
 }
 
@@ -192,14 +198,15 @@ final class Confetti
 {
     /** @var list<Burst> */
     public array $bursts = [];
+    public ?Window $win = null;
     /** @var list<array{next: int, every: int, i: int, n: int, fire: Closure}> the demos that throw confetti for a while */
     public array $emitters = [];
+    /** The demo's tile under the pointer, which lifts. */
+    public ?int $hover = null;
     public int $nextId = 0;
     /** The window's size as the view last ran, and whether its theme was dark, for demos whose white pieces would not show on a light background. */
     public float $w = WINDOW_W, $h = WINDOW_H;
     public bool $dark = false;
-    /** Where the stage was last pressed. */
-    public float $pressX = 0, $pressY = 0;
     /** The stage's options, as its sliders set them. */
     public float $count, $angle, $spread, $velocity, $decay, $gravity, $drift, $scalar;
 
@@ -230,11 +237,35 @@ final class Confetti
         return array_sum(array_map(fn(Burst $b) => count($b->pieces), $this->bursts));
     }
 
-    /** Calls $fire($i, $n) $n times, now and every $every seconds after. */
-    public function repeat(int $now, float $every, int $n, Closure $fire): void
+    /** Calls $fire($i, $n) $n times, now and every $every seconds after, as the frames come (tick). */
+    public function repeat(float $every, int $n, Closure $fire): void
     {
-        $fire(0, $n);
-        if ($n > 1) { $this->emitters[] = ['next' => $now + (int)($every * 1e9), 'every' => (int)($every * 1e9), 'i' => 1, 'n' => $n, 'fire' => $fire]; }
+        $this->emitters[] = ['next' => 0, 'every' => (int)($every * 1e9), 'i' => 0, 'n' => $n, 'fire' => $fire];
+    }
+
+    /** Moves things on to the frame at $now: the demos throw what is due; the bursts a frame showed where they start head off; those that faded go. */
+    public function tick(int $now): void
+    {
+        foreach ($this->emitters as $k => &$e) {
+            if ($e['next'] === 0) { $e['next'] = $now; }
+            for (; $e['i'] < $e['n'] && $now >= $e['next']; $e['i']++, $e['next'] += $e['every']) { ($e['fire'])($e['i'], $e['n']); }
+            if ($e['i'] >= $e['n']) { unset($this->emitters[$k]); }
+        }
+        unset($e);
+        $this->emitters = array_values($this->emitters);
+        $this->bursts = array_values(array_filter($this->bursts, fn(Burst $b) => !$b->launched || ($now - $b->at) / 1e9 < $b->life));
+        foreach ($this->bursts as $b) {
+            if (!$b->shown) { $b->shown = true; } // shown where it starts: the next frame launches it
+            elseif (!$b->launched) { [$b->launched, $b->at] = [true, $now]; }
+        }
+    }
+
+    /** The times of the frames it needs next, in nanoseconds: the demos' next bursts, a frame to launch the bursts shown, one to let each go once it faded. @return list<int> */
+    public function due(): array
+    {
+        $times = array_map(fn(array $e) => $e['next'], $this->emitters);
+        foreach ($this->bursts as $b) { $times[] = $b->launched ? $b->at + (int)($b->life * 1e9) + 1 : 0; } // 0: at once
+        return $times;
     }
 
     /** The stage's options for a burst from ($x, $y) in window points. */
@@ -249,25 +280,9 @@ final class Confetti
     }
 }
 
-/** What a piece looks like: a box opened, which the caller ends. */
-function shapeBox(Context $c, Piece $p): Node
-{
-    $color = $p->color;
-    $paint = fn(Closure $path) => fn(Painter $p, array $r) => $p->fillPath($path(...$r), $color);
-    $n = match ($p->shape->kind) {
-        Shape::CIRCLE => $c->column(0, 0, 0, $color)->radius($p->w / 2),
-        Shape::STAR => $c->column()->draw($paint(starPath(...))),
-        Shape::HEART => $c->column()->draw($paint(heartPath(...))),
-        Shape::TEXT => $c->column()->center(),
-        default => $c->column(0, 0, 0, $color),
-    };
-    if ($p->shape->kind === Shape::TEXT) { $c->text($p->shape->text, $p->h)->lineHeight(1); }
-    return $n;
-}
-
 $s = new Confetti();
 App::setName('Confetti');
 App::whenReady(function () use ($s) {
-    new Window(new WindowOptions(title: 'Confetti', width: WINDOW_W, height: WINDOW_H, content: Content::file(__DIR__ . '/view.php', $s)));
+    $s->win = new Window(new WindowOptions(title: 'Confetti', width: WINDOW_W, height: WINDOW_H, content: Content::file(__DIR__ . '/view.php', $s)));
 });
 App::run();

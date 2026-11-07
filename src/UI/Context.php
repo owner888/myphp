@@ -72,7 +72,7 @@ final class Context
         return $this->vibrancy;
     }
 
-    /** The room the window controls take in a window with a hidden title bar (Window::titleBar): height, left, right; zero elsewhere. */
+    /** The room the window controls take in a window with a hidden title bar (Window::titleBar): height, left, right, and on macOS controls, how far down their middle is (the bar may be taller); zero elsewhere. */
     public array $titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
     /** The safe area on the mobile platforms: how far from the window's top, right, bottom and left edges the system's bars, the cutout and the home indicator reach (zeros on the desktop); safeArea() keeps content out of it, a tabBar or navigationBar extends into it. Not mygo's. */
     public array $safeArea = [0.0, 0.0, 0.0, 0.0];
@@ -741,14 +741,14 @@ final class Context
     public function scroll(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
     {
         $n = $this->column($pad, $gap, $grow, $color);
-        return $n->scroll($this->runtime?->local($n->id, fn() => new ScrollState) ?? new ScrollState);
+        return $n->scroll($this->runtime?->local($n->id, fn() => new ScrollState, ScrollState::class) ?? new ScrollState);
     }
 
     /** A column that scrolls what is built in it both ways, keeping its offsets while it shows: end() it (mygo's ScrollBoth). */
     public function scrollBoth(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
     {
         $n = $this->column($pad, $gap, $grow, $color);
-        return $n->scroll($this->runtime?->local($n->id, fn() => new ScrollState) ?? new ScrollState, true, true);
+        return $n->scroll($this->runtime?->local($n->id, fn() => new ScrollState, ScrollState::class) ?? new ScrollState, true, true);
     }
 
     public function end(): void
@@ -1739,6 +1739,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($s, $size);
+        $h = max($h, $this->metrics->measure('X', $size)[1]); // a line of the font at least: a label of symbols another font draws (☐, ❝) is no lower a button
         $segment = $this->segments > 0 && !$primary; // in a toggle group: a segment, padded Space(1) by Space(3), no face but pressed or hovered
         $toolbar = $this->toolbars > 0 && !$primary && !$segment;
         [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$toolbar || $segment ? null : $t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
@@ -3295,8 +3296,9 @@ final class Context
                       $chosen = $s->chosen($i);
                       $cell->checked($chosen); $cell->choosable = true;
                       if ($i === $s->selected) { $cursor = $cell; }
-                      if ($chosen && $focused) { $cell->color = Theme::mix($t->accent, $t->background, 0.8); $cell->border(2.0, $t->accent); } // Accent.Alpha(0.2)
-                      elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border(2.0, $t->border); }
+                      if ($chosen && $focused) { $cell->color = Theme::mix($t->accent, $t->background, 0.8); $cell->border(2.0, $t->accent)->padding(0, 0); } // Accent.Alpha(0.2)
+                      elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border(2.0, $t->border)->padding(0, 0); }
+                      // The border in the padding's place: the cell as wide and its content where it was, chosen or not.
                       elseif ($this->hovered($cell)) { $cell->color = $t->surfaceHover; }
                       if ($i === $s->selected && $s->selection !== null && !$chosen && $rt?->focusVisible($id)) { // where the keys moved without choosing
                           $cell->draw(static fn(Painter $p, array $r, Node $cell) => $p->focusRing([$r[0] + 3, $r[1] + 3, $r[2] - 6, $r[3] - 6], $cell->radius));
@@ -3977,7 +3979,7 @@ final class Context
         $rt = $this->runtime;
         $n = $this->column(0, 0, 1)->role(Role::TABLE);
         $n->chooseMany = $state->selection !== null; // assistive technology hears that its rows are chosen several at a time
-        $drag = $rt?->local($n->id, fn() => new TableDrag()) ?? new TableDrag();
+        $drag = $rt?->local($n->id, fn() => new TableDrag(), TableDrag::class) ?? new TableDrag();
         $state->syncSort();
         $layout = $state->columns;
         $order = $layout->arrange($columns);

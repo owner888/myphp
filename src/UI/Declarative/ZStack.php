@@ -24,8 +24,9 @@ final class ZStack extends View
         $n = $c->grid([Track::fr()]);
         $flex = 0;
         foreach (self::flat($this->content) as $v) {
-            $kid = $v->render($c, $env);
-            if ($kid !== null) {
+            $from = count($n->kids);
+            $v->render($c, $env);
+            foreach (array_slice($n->kids, $from) as $kid) { // all it built: an Each's views too, which it builds in the stack, returning none
                 $kid->columnStart(1)->rowStart(1);
                 $f = View::flexOf($kid, $env->axis); // as SwiftUI's: a view that takes the room takes the stack's, the others placed by the alignment
                 $flex |= $f;

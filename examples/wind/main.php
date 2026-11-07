@@ -812,27 +812,12 @@ final class Texture
 final class WindApp
 {
     public Texture $tex;
-    /** The composer's text, and what the texture last saw of it: typing keeps the wind blowing. */
-    public TextState $draft;
-    public string $typed = '';
-    /** @var list<array{0: float, 1: float, 2: float, 3: float}> where the controls were in the last frame, in the pane: a press there is theirs, and blows no ripple */
-    public array $controls = [];
+    /** The composer's text: typing keeps the wind blowing. */
+    public string $draft = '';
 
     public function __construct(int $seed, Shaders $sh)
     {
         $this->tex = new Texture($seed, $sh);
-        $this->draft = new TextState();
-    }
-
-    /** Whether ($x, $y) in the pane lies on a control. */
-    public function onControl(float $x, float $y): bool
-    {
-        foreach ($this->controls as [$rx, $ry, $rw, $rh]) {
-            if ($x >= $rx && $x < $rx + $rw && $y >= $ry && $y < $ry + $rh) {
-                return true;
-            }
-        }
-        return false;
     }
 }
 

@@ -19,7 +19,12 @@ final class Shape extends View
 
     public function fill(\Color|ColorValue $color): static { $this->fill = ColorValue::of($color); return $this; }
 
-    public function stroke(\Color|ColorValue $color, float $lineWidth = 1): static { $this->stroke = [ColorValue::of($color), $lineWidth]; return $this; }
+    /** Outlines it $lineWidth wide, or as $style says: dashed, with dashes. */
+    public function stroke(\Color|ColorValue|\MyPHP\UI\ConicGradient $color, float $lineWidth = 1, ?StrokeStyle $style = null): static
+    {
+        $this->stroke = [$color instanceof \MyPHP\UI\ConicGradient ? $color : ColorValue::of($color), $style?->lineWidth ?? $lineWidth, $style !== null && $style->dash !== []]; // a ConicGradient: SwiftUI's AngularGradient
+        return $this;
+    }
 
     protected function build(Context $c, Env $env): ?Node
     {
@@ -28,7 +33,8 @@ final class Shape extends View
         $c->end();
         $n->alignSelf(Node::STRETCH);
         if ($color !== null) { $n->background($color->rgb($env), $color->alpha); }
-        if ($this->stroke !== null) { $n->border($this->stroke[1], $this->stroke[0]->rgb($env)); }
+        if ($this->stroke !== null && $this->stroke[0] instanceof \MyPHP\UI\ConicGradient) { $n->border($this->stroke[1])->borderConicGradient($this->stroke[0]); }
+        elseif ($this->stroke !== null && $this->stroke[0]->alpha > 0) { $n->border($this->stroke[1], $this->stroke[0]->rgb($env)); if ($this->stroke[2]) { $n->borderStyle(\MyPHP\UI\BorderStyle::Dashed); } }
         $this->clip($n);
         return $n;
     }

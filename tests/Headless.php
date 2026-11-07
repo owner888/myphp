@@ -16,7 +16,7 @@ spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_wi
 final class Metrics implements TextPainter
 {
     public function ascent(float $size, int $style = 0): float { return 12.0; }
-    /** @var array<int, float> the advance of a character in a style (Font bits) other than 7, for a test of faces; and the runs paintRuns painted, [text, style], while not null */
+    /** @var array<int, float> the advance of a character in a style (Font bits) other than 7, for a test of faces; and the texts paint() and paintRuns() painted, [text, style, x], while not null */
     public array $advances = [];
     public ?array $painted = null;
     private function adv(int $style): float { return $this->advances[$style] ?? 7.0; }
@@ -32,6 +32,7 @@ final class Metrics implements TextPainter
     public function indexForX(string $s, float $size, float $x, int $style = 0): int { return strlen(mb_substr($s, 0, max(0, min((int)round($x / $this->adv($style)), mb_strlen($s))))); }
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void
     {
+        if ($this->painted !== null) { $this->painted[] = [$text, $style, $x]; }
         for ($i = 0, $n = mb_strlen($text); $i < $n; $i++) { $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); }
     }
     public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void
@@ -583,13 +584,14 @@ final class Headless
     }
 
     /** The global enums of the declarative views, which a view file in an example's namespace names as the app's global ones. */
-    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'PickerStyle', 'DatePickerStyle', 'DatePickerComponents', 'TextSelectability', 'ColorScheme', 'KeyPressResult', 'KeyPress', 'GeometryProxy', 'GridItem', 'WindowDragGesture', 'Axis', 'TitleDisplayMode', 'NavigationPath'];
+    private const DECLARATIVE = ['View', 'Font', 'FontDesign', 'Weight', 'Color', 'Alignment', 'HorizontalAlignment', 'VerticalAlignment', 'TextAlignment', 'Edge', 'KeyEquivalent', 'EventModifiers', 'ButtonStyle', 'ButtonRole', 'ToggleStyle', 'PickerStyle', 'DatePickerStyle', 'DatePickerComponents', 'TextSelectability', 'TextFieldStyle', 'ListStyle', 'NavigationSplitViewVisibility', 'ColorScheme', 'KeyPressResult', 'KeyPress', 'GeometryProxy', 'ScrollViewProxy', 'SortOrder', 'Binding', 'ScrollGeometry', 'ScrollPosition', 'GridItem', 'UnitPoint', 'WindowDragGesture', 'Axis', 'TitleDisplayMode', 'NavigationPath', 'TabViewStyle', 'PlottableValue', 'MarkDimension', 'AxisMarks', 'StrokeStyle', 'MarkStackingMethod', 'InterpolationMethod', 'AnnotationPosition', 'AxisMarkPosition', 'Visibility', 'TimelineViewContext', 'Animation', 'AnyTransition', 'DragGesture', 'DragGestureValue', 'CGSize', 'CGPoint', 'KeyframeTimeline', 'GraphicsContext', 'Path', 'UnitCurve', 'CoordinateSpace', 'LayoutDirection'];
 
     /** The use line naming the declarative globals $src does not name of its own, for $src in an example's namespace. */
     private static function declarativeUses(string $src): string
     {
         preg_match_all('/^use [^;]+;/m', $src, $m);
-        $global = array_filter(self::DECLARATIVE, fn(string $n) => !preg_match('/\\b' . $n . '\\b/', implode(' ', $m[0])));
+        $named = preg_replace('/\\w+\\s+as\\s+/', '', implode(' ', $m[0])); // "Font as Face" names Face, not Font
+        $global = array_filter(self::DECLARATIVE, fn(string $n) => !preg_match('/\\b' . $n . '\\b/', $named));
         return $global === [] ? '' : ' use ' . implode(', ', $global) . ';';
     }
 
@@ -618,8 +620,8 @@ final class Headless
             if ($depth === 0 && $t->is([T_CLASS, T_ENUM, T_INTERFACE, T_TRAIT, T_FUNCTION]) && !($t->is(T_FUNCTION) && self::anonymous($tk, $i))) {
                 $out = (string)preg_replace('/(?:final|abstract|readonly|\s|\/\*\*.*?\*\/)*$/s', '', $out); // its modifiers and doc comment go with it
                 for ($open = 0, $i++; $i < $n; $i++) { // to the end of its body
-                    if ($tk[$i]->text === '{' || $tk[$i]->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $open++; }
-                    elseif ($tk[$i]->text === '}' && --$open === 0) { break; }
+                    if ($tk[$i]->id === 123 || $tk[$i]->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $open++; } // { and }, not a brace in a string's text ("delete {{$list}}")
+                    elseif ($tk[$i]->id === 125 && --$open === 0) { break; }
                 }
                 continue;
             }
@@ -629,7 +631,7 @@ final class Headless
                 }
                 continue;
             }
-            if ($t->text === '{' || $t->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $depth++; } elseif ($t->text === '}') { $depth--; }
+            if ($t->id === 123 || $t->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $depth++; } elseif ($t->id === 125) { $depth--; }
             $out .= $t->text;
         }
         return $out;

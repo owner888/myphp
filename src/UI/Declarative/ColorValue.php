@@ -15,7 +15,7 @@ final class ColorValue
 
     public static function of(\Color|self $c): self
     {
-        return $c instanceof self ? $c : new self($c);
+        return $c instanceof self ? $c : new self($c, 0, $c === \Color::clear ? 0.0 : 1.0); // clear: none of it shows
     }
 
     /** This color with $opacity, as SwiftUI's .opacity() of a color. */

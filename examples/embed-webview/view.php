@@ -3,63 +3,44 @@
 declare(strict_types=1);
 
 use MyPHP\App;
-use MyPHP\UI\{Context, Font, Node};
 
-return function (Context $c): void {
-    $t = $c->theme;
-    if ($this->tabs === []) { return; } // the web views come once the window shows
-    $shown = $this->tabs[0];
-    foreach ($this->tabs as $tb) { if ($tb->id === $this->tab) { $shown = $tb; } }
+// The tabs in the sidebar; the page of the one shown, rounded, a badge of likes over its corner, under a toolbar whose menu,
+// picker, help, sheet and alert show over the page. The other tabs keep their pages.
+return function () {
+    if ($this->tabs === []) { return Spacer(); } // the web views come once the window shows
+    $shown = $this->shown();
     $page = $shown->view->page();
-    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
-      $c->sidebar($this->tab, function () use ($c) {
-          foreach ($this->tabs as $tb) { $c->sidebarItem($tb->id, $tb->title); }
-      }, 180);
-      $c->column(0, 0, 1)->minWidth(0)->minHeight(0);
-        $c->row(0, 8)->padding(8, 12)->alignItems(Node::CENTER);
-          if ($c->clicked($c->button('‹')->label('Back')->disabled(!$page->canGoBack()))) { $page->goBack(); }
-          if ($c->clicked($c->button('›')->label('Forward')->disabled(!$page->canGoForward()))) { $page->goForward(); }
-          if ($c->clicked($c->button('Reload'))) { $page->reload(); }
-          $menu = $c->button('Menu ▾');
-          if ($c->clicked($menu)) { $this->menu = !$this->menu; }
-          // The popover shows over the page.
-          $c->popover($menu, $this->menu, function () use ($c, $t) {
-              foreach (MENU as $item) {
-                  $entry = $c->key($item)->row(0, 0)->padding(6, 12)->radius(5)->size(200, 0);
-                  if ($c->hovered($entry)) { $entry->background($t->accent); }
-                    $c->text($item, color: $c->hovered($entry) ? $t->accentText : $t->text);
-                  $c->end();
-                  if ($c->clicked($entry)) {
-                      $this->menu = false;
-                      match ($item) {
-                          'Like the note' => App::later(fn() => (new Notes($this))->like()),
-                          'Open the dialog' => $this->dialog = true,
-                          default => $c->toast('Toasts show over the page too'),
-                      };
-                  }
-              }
-          });
-          if ($c->changed($c->select(array_keys(ZOOMS), $this->zoom, 100))) {
-              foreach ($this->tabs as $tb) { $tb->view->page()->setZoomFactor(array_values(ZOOMS)[$this->zoom]); }
-          }
-          $c->button('?')->label('Help')->tooltip('Web views show under what MyPHP paints after them.');
-          $c->spacer();
-          $c->muted("{$this->likes} likes");
-        $c->end();
-        // The page of the tab shown, rounded, with a badge over its corner; the others keep their pages.
-        $c->column(0, 0, 1)->margin(0, 12, 12, 12);
-          $c->webView($shown->view)->grow(1)->radius(12)->border(1, $t->border);
-          $c->row(0, 0, 0, $t->accent)->absolute()->top(12)->right(16)->padding(4, 10)->radius(12)->shadow(0, 2, 8, 0, 0x000000, 60 / 255);
-            $c->text("♥ {$this->likes}", 12, $t->accentText, Font::BOLD);
-          $c->end();
-        $c->end();
-      $c->end();
-    $c->end();
-    $c->modal($this->dialog, function () use ($c, $t) {
-        $c->text('A dialog over the page', 18, style: Font::BOLD);
-        $c->muted('Its backdrop takes the pointer: the page under it does not.');
-        $c->row(0, 8)->justify(Node::END);
-          if ($c->clicked($c->primaryButton('Done'))) { $this->dialog = false; }
-        $c->end();
-    });
+    return NavigationSplitView(
+        columnVisibility: $this->visibility,
+        sidebar: ListView(selection: $this->tab)(
+            Each($this->tabs, id: fn($tb) => $tb->id)(fn($tb) => Label($tb->title, systemImage: $tb->id === 'notes' ? 'note.text' : 'globe')->tag($tb->id)),
+        )->navigationSplitViewColumnWidth(200),
+        detail: WebView($shown->view)
+            ->cornerRadius(12)->border(Color::separator)
+            ->overlay(Text(verbatim: "♥ {$this->likes}")->font(Font::caption)->bold()->foregroundStyle(Color::white)
+                ->padding(Edge::horizontal, 10)->padding(Edge::vertical, 4)->background(Color::accentColor)->clipShape(Capsule())->shadow(radius: 8)
+                ->padding(Edge::top, 12)->padding(Edge::trailing, 16), alignment: Alignment::topTrailing)
+            ->padding(Edge::horizontal, 12)->padding(Edge::bottom, 12)
+            ->navigationTitle($shown->title)
+            ->toolbar(
+                Button(action: fn() => $page->goBack(), label: Label('Back', systemImage: 'chevron.left'))->disabled(!$page->canGoBack())->help('Back'),
+                Button(action: fn() => $page->goForward(), label: Label('Forward', systemImage: 'chevron.right'))->disabled(!$page->canGoForward())->help('Forward'),
+                Button(action: fn() => $page->reload(), label: Label('Reload', systemImage: 'arrow.clockwise'))->help('Reload'),
+                Menu('Menu')(
+                    Button('Like the note', action: fn() => App::later(fn() => (new Notes($this))->like())), // after the frame: it tells every page
+                    Button('Open the sheet', action: fn() => $this->dialog = true),
+                    Button('Show an alert', action: fn() => $this->alert = true),
+                ),
+                Picker('Zoom', selection: $this->zoom)(Each(array_keys(ZOOMS), id: fn($z) => $z)(fn(string $z) => Text(verbatim: $z)->tag(array_search($z, array_keys(ZOOMS), true))))->labelsHidden()
+                    ->onChange(of: $this->zoom, action: fn() => $this->zoomed()),
+                Button(action: fn() => null, label: Label('Help', systemImage: 'questionmark.circle'))->help('Web views show under what MyPHP paints after them.'),
+                Text(verbatim: "{$this->likes} likes")->foregroundStyle(Color::secondary),
+            )
+            ->sheet(isPresented: $this->dialog, content: fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+                Text('A sheet over the page')->font(Font::title3)->bold(),
+                Text('Its backdrop takes the pointer: the page under it does not.')->foregroundStyle(Color::secondary),
+                HStack()(Spacer(), Button('Done', action: fn() => $this->dialog = false)->buttonStyle(ButtonStyle::borderedProminent)->keyboardShortcut(KeyEquivalent::return, modifiers: [])),
+            )->padding(20)->frame(width: 360))
+            ->alert('Alerts show over the page too', isPresented: $this->alert),
+    );
 };

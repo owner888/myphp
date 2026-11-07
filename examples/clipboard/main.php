@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, Window, WindowOptions};
 use MyPHP\Transfer\{Data, Format, FormatUnavailable, Item, Representation};
-use MyPHP\UI\{Content, TextState};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -15,22 +15,21 @@ const NOTE_FORMAT = 'application/vnd.myphp.clipboard-note+json';
 
 final class Demo
 {
-    public TextState $title, $body, $path;
+    public string $title = 'A portable note', $body = 'Shared clipboard and drag representations.', $path = '';
+    /** A drag of what the zone takes is over it. */
+    public bool $targeted = false;
     public string $status = '';
     public int $providers = 0, $releases = 0;
     public ?Window $win = null;
 
     public function __construct()
     {
-        $this->title = new TextState('A portable note');
-        $this->body = new TextState('Shared clipboard and drag representations.');
-        $this->path = new TextState();
     }
 
     /** The note as data: every representation describes the same note, frozen as it is now. */
     public function data(): Data
     {
-        [$title, $body] = [$this->title->text, $this->body->text];
+        [$title, $body] = [$this->title, $this->body];
         return new Data(new Item(
             Representation::bytes(Format::TEXT, "$title\n$body"),
             Representation::bytes(Format::HTML, '<h1>' . htmlspecialchars($title) . '</h1><p>' . htmlspecialchars($body) . '</p>'),
@@ -55,10 +54,10 @@ final class Demo
             if ($f === NOTE_FORMAT) {
                 $n = json_decode($b, true);
                 if (!is_array($n)) { $this->status = 'not a note: ' . json_last_error_msg(); return; }
-                $this->title->text = (string)($n['Title'] ?? '');
-                $this->body->text = (string)($n['Body'] ?? '');
+                $this->title = (string)($n['Title'] ?? '');
+                $this->body = (string)($n['Body'] ?? '');
             } else {
-                $this->body->text = $b;
+                $this->body = $b;
             }
             $this->status = "Received $f";
         } elseif ($data->preferred(Format::FILE_LIST, Format::URI_LIST) !== null) {

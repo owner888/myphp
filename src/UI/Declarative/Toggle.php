@@ -11,9 +11,21 @@ final class Toggle extends View
     private bool $isOn;
     private \ToggleStyle $style = \ToggleStyle::automatic;
 
+    /** @var list<bool>|null the bindings a Toggle(sources:) switches together */
+    private ?array $sources = null;
+
     public function __construct(public readonly string $title, bool &$isOn)
     {
         $this->isOn = &$isOn;
+    }
+
+    /** A Toggle of the bindings $sources: on while all are, mixed while some are; switching it switches them all, as SwiftUI's Toggle(sources:isOn:). @param list<bool> $sources references */
+    public static function of(string $title, array &$sources): self
+    {
+        $on = false;
+        $t = new self($title, $on);
+        $t->sources = &$sources;
+        return $t;
     }
 
     /** Whether it is on: a menu's item shows it checked. @internal */
@@ -28,12 +40,25 @@ final class Toggle extends View
     {
         $title = Localized::string($this->title, $env);
         $style = $this->style === \ToggleStyle::automatic ? (($c->runtime?->touch ?? false) ? \ToggleStyle::switch : \ToggleStyle::checkbox) : $this->style;
+        if ($this->sources !== null) { return $this->mixed($c, $title, $style); }
         $n = match ($style) {
             \ToggleStyle::checkbox => $c->checkbox($title, $this->isOn),
             \ToggleStyle::button => $c->toggle($this->isOn, $title),
             default => $c->switch($title, $this->isOn),
         };
         if ($env->disabled) { $n->disabled(); }
+        return $n;
+    }
+
+    /** The checkbox of a Toggle(sources:): checked, mixed or clear as its sources are; a click checks them all, or clears them all once all are. */
+    private function mixed(Context $c, string $title, \ToggleStyle $style): Node
+    {
+        $all = $this->sources !== [] && !in_array(false, $this->sources, true);
+        $some = in_array(true, $this->sources, true);
+        $on = $all;
+        $n = $style === \ToggleStyle::switch ? $c->switch($title, $on) : $c->checkbox($title, $on);
+        if ($on !== $all) { foreach ($this->sources as &$s) { $s = !$all; } unset($s); }
+        elseif (!$all && $some) { $n->mixed = true; $n->checked = 3; } // some on: neither, as the box shows
         return $n;
     }
 }

@@ -10,7 +10,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Shell, Window, WindowOptions};
-use MyPHP\UI\{Content, GridState, Image, ListState, Node, Selection, SVG, TableColumn, TextState};
+use MyPHP\UI\{Content, Image, SVG};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -24,15 +24,12 @@ final class Files
     private array $index = [];
     public string $place = 'home';
     public int $view = 0; // 0 a grid of icons, 1 a table
-    public GridState $grid;
-    public ListState $table;
-    public Selection $chosen;
-    /** @var list<TableColumn> */
-    public array $columns;
+    /** @var list<string> the paths of the entries chosen */
+    public array $chosen = [];
+    /** The header the entries are sorted by, folders first. */
+    public ?SortOrder $sortOrder = null;
     public bool $finding = false;
-    /** Whether the entries were last read with the find bar open (its query filtering them). */
-    public bool $filtered = false;
-    public TextState $find;
+    public string $find = '';
     public int $found = 0;
     public bool $asking = false;
     public ?Image $preview = null;
@@ -48,12 +45,6 @@ final class Files
 
     public function __construct(string $path)
     {
-        $this->grid = new GridState; $this->grid->selects = true; $this->grid->label = fn(int $i) => $this->entries[$i]['name'];
-        $this->table = new ListState; $this->table->selected = -1;
-        $this->chosen = new Selection; $this->grid->selection = $this->chosen; $this->table->selection = $this->chosen;
-        $this->grid->key = $this->table->key = fn(int $i) => $this->entries[$i]['path']; // the choice follows the entries as they are sorted or filtered
-        $this->columns = [new TableColumn('Name', minWidth: 160, sortable: true), new TableColumn('Size', 90, align: Node::END, sortable: true), new TableColumn('Modified', 150, sortable: true)];
-        $this->find = new TextState;
         $this->icons = ['folder' => SVG::fromFile(__DIR__ . '/icons/folder.svg'), 'file' => SVG::fromFile(__DIR__ . '/icons/file.svg')];
         $this->open($path);
     }
@@ -64,10 +55,8 @@ final class Files
         $path = rtrim(realpath($path) ?: $path, '/') ?: '/';
         if (!is_dir($path) || !is_readable($path)) { $this->status = "Can't open $path"; return; }
         $this->path = $path;
-        $this->chosen->clear(); $this->grid->selected = -1; $this->table->selected = -1;
+        $this->chosen = [];
         $this->thumbs = []; $this->wanted = [];
-        $this->table->scrollTo(0, false); $this->grid->scrollTo(0);
-        $this->table->forgetHeights();
         $this->reload();
         $this->place = array_search($path, self::places(), true) ?: '';
         $this->status = '';
@@ -84,10 +73,10 @@ final class Files
             $p = "$this->path/$f";
             $entries[] = ['name' => $f, 'path' => $p, 'dir' => is_dir($p), 'size' => is_dir($p) ? -1 : (filesize($p) ?: 0), 'mtime' => filemtime($p) ?: 0];
         }
-        $q = $this->finding ? trim($this->find->text) : '';
+        $q = $this->finding ? trim($this->find) : '';
         if ($q !== '') { $entries = array_values(array_filter($entries, fn($e) => stripos($e['name'], $q) !== false)); }
-        $by = $this->table->sort?->column ?? 'Name'; $desc = $this->table->sort?->descending ?? false;
-        $key = fn(array $e) => match ($by) { 'Size' => $e['size'], 'Modified' => $e['mtime'], default => strtolower($e['name']) };
+        $by = $this->sortOrder?->column ?? 'name'; $desc = $this->sortOrder?->descending ?? false;
+        $key = fn(array $e) => match ($by) { 'size' => $e['size'], 'mtime' => $e['mtime'], default => strtolower($e['name']) };
         usort($entries, fn($a, $b) => $a['dir'] !== $b['dir'] ? ($a['dir'] ? -1 : 1) : ($desc ? $key($b) <=> $key($a) : $key($a) <=> $key($b)));
         $this->entries = $entries;
         $this->index = array_flip(array_column($entries, 'path'));
@@ -107,15 +96,15 @@ final class Files
     public function chosenEntries(): array
     {
         $at = [];
-        foreach ($this->chosen->all() as $path) { if (isset($this->index[$path])) { $at[] = $this->index[$path]; } }
+        foreach ($this->chosen as $path) { if (isset($this->index[$path])) { $at[] = $this->index[$path]; } }
         sort($at);
         return array_map(fn(int $i) => $this->entries[$i], $at);
     }
 
-    /** Opens entry $i: a folder is shown, a file goes to the system. */
-    public function enter(int $i): void
+    /** Opens the entry at $path: a folder is shown, a file goes to the system. */
+    public function enter(string $path): void
     {
-        $e = $this->entries[$i] ?? null;
+        $e = $this->entries[$this->index[$path] ?? -1] ?? null;
         if ($e === null) { return; }
         if ($e['dir']) { $this->open($e['path']); } else { Shell::openPath($e['path']); }
     }
@@ -129,8 +118,20 @@ final class Files
         $out = []; $code = 0;
         exec('osascript -e ' . escapeshellarg("tell application \"Finder\" to delete {{$list}}") . ' 2>&1', $out, $code);
         $this->status = $code === 0 ? count($paths) . ' moved to the Trash' : 'Trash failed: ' . implode(' ', $out);
-        $this->chosen->clear();
+        $this->chosen = [];
         $this->reload();
+    }
+
+    /** Decodes the image chosen for the preview, shown once decoded if the preview is still open on it. */
+    public function preview(): void
+    {
+        $this->preview = null;
+        $one = $this->chosenEntries()[0]['path'] ?? null;
+        if ($one === null) { return; }
+        App::go(function () use ($one) {
+            $img = Image::fromFile($one, 2048);
+            if ($this->previewing && ($this->chosenEntries()[0]['path'] ?? null) === $one) { $this->preview = $img; $this->window?->invalidate(); }
+        });
     }
 
     public static function isImage(array $e): bool

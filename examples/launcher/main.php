@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, CloseEvent, GlobalShortcut, InstalledApp, Menu, MenuItem, QuitEvent, Screen, Shell, Tray, TrayOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Handle, Image, ListState, SVG, TextState};
+use MyPHP\UI\{Content, Image, SVG};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -66,9 +66,11 @@ final class Launcher
     public string $shortcut = '';
     /** @var list<InstalledApp> */
     public array $apps = [], $results = [];
-    public TextState $query;
-    public ListState $list;
-    public Handle $input;
+    public string $query = '';
+    /** The path of the app chosen. */
+    public ?string $chosen = null;
+    /** The query has the keyboard: as the panel shows. */
+    public bool $searching = true;
     /** @var array<string, ?Image> by app path; null where the app has none */
     public array $icons = [];
     public bool $loading = false;
@@ -76,18 +78,15 @@ final class Launcher
 
     public function __construct()
     {
-        $this->query = new TextState();
-        $this->list = new ListState();
-        $this->list->selected = 0;
-        $this->input = new Handle();
         $this->searchIcon = SVG::parse(SEARCH_ICON);
     }
 
-    public function chosen(): int { return $this->list->selected ?? 0; }
+    /** The place of the app chosen in the results. */
+    public function chosen(): int { return (int)array_search($this->chosen, array_map(fn($a) => $a->path, $this->results), true); }
 
     public function filter(): void
     {
-        $q = mb_strtolower(trim($this->query->text));
+        $q = mb_strtolower(trim($this->query));
         $found = [];
         foreach ($this->apps as $i => $app) {
             if (($r = rank(mb_strtolower($app->name), $q)) >= 0) { $found[] = [$r, $i, $app]; }
@@ -99,8 +98,7 @@ final class Launcher
 
     public function choose(int $i): void
     {
-        $this->list->selected = max(0, min($i, count($this->results) - 1));
-        if ($this->results !== []) { $this->list->scrollIntoView($this->list->selected); }
+        $this->chosen = $this->results[max(0, min($i, count($this->results) - 1))]->path ?? null;
     }
 
     /** An app's icon, drawn for the sharpest display the first time it shows, and kept. */
@@ -144,10 +142,10 @@ final class Launcher
         $d = Screen::displayNearestPoint(Screen::cursorScreenPoint());
         [$w, $h] = $this->panel->size();
         $this->panel->setPosition($d->workArea->x + intdiv($d->workArea->width - $w, 2), $d->workArea->y + intdiv($d->workArea->height - $h, 3));
-        $this->query->text = '';
+        $this->query = '';
         $this->filter();
         $this->load();
-        $this->input->focus();
+        $this->searching = true;
         $this->panel->show();
     }
 

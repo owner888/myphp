@@ -6,8 +6,8 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Content, Context, Node};
-use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem, GeometryProxy;
+use MyPHP\UI\{Content, Context, Key, Node};
+use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem, GeometryProxy, ScrollViewProxy, UnitPoint, Binding, ListStyle;
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 
@@ -294,3 +294,147 @@ same([400.0, 300.0], array_slice($h->rect($img), 2), 'a resizable picture scaled
 $h = new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 4)(Each(range(1, 10))(fn(int $i) => Rectangle()->fill(Color::red)->frame(width: 48, height: 48)->accessibilityLabel("sq $i"))), $c), 200, 100);
 $h->frame(2);
 same(48.0, $h->rect($h->byLabel('sq 1'))[2], 'a 48-point frame stays 48 in a row too narrow for ten');
+
+// ListView(selection:) of a single id: a click chooses, the app's choice is the list's, Return its primary action; a ScrollViewReader's proxy scrolls it.
+$app = new class { public ?string $chosen = null; public string $opened = ''; };
+$view = fn() => ScrollViewReader(fn(ScrollViewProxy $proxy) => VStack()(
+    Button('Last', action: fn() => $proxy->scrollTo('row 499', anchor: UnitPoint::bottom)),
+    ListView(array_map(fn(int $i) => "row $i", range(0, 499)), id: fn(string $s) => $s, selection: $app->chosen)(fn(string $s) => Text(verbatim: $s))
+        ->contextMenu(primaryAction: function (array $ids) use ($app) { $app->opened = implode(',', $ids); }),
+));
+$h = new Headless(fn(Context $c) => Content::render($view, $c), 400, 400);
+$h->frame(2);
+$h->clickText('row 3'); $h->frame(2);
+same('row 3', $app->chosen, 'a click chooses the row of its id');
+$h->down(); $h->frame(2);
+same('row 4', $app->chosen, 'Down chooses the next, not put back to the app\'s choice before it');
+$app->chosen = 'row 5'; $h->frame(2);
+$h->key(Key::RETURN, 'insertNewline:'); $h->frame(2);
+same('row 5', $app->opened, 'the app\'s choice is the list\'s; Return opens it');
+check($h->byText('row 499') === null, 'the last row not built yet');
+$h->clickText('Last'); $h->frame(40);
+check($h->byText('row 499') !== null, 'scrollTo() glides to it');
+
+// Frames in frames, as SwiftUI lays them: a panel frame(width: 280)->frame(maxHeight: INF) beside what takes the row is 280 wide and full height, its Spacer pushing
+// its last view down; a field's bar frame(maxWidth: 400) under what takes the column is at the bottom, 400 wide and centered, a background view under it taking no room.
+$field = '';
+$h = new Headless(fn(Context $c) => Content::render(fn() => HStack(alignment: \VerticalAlignment::top, spacing: 16)(
+    Color(\Color::red)->frame(maxWidth: INF, maxHeight: INF),
+    VStack(alignment: \HorizontalAlignment::leading)(Text('Top'), Spacer(), Text('Bottom'))->padding(16)->frame(width: 280)->frame(maxHeight: INF)
+        ->background(\Color::gray)->cornerRadius(12)->overlay(RoundedRectangle(cornerRadius: 12)->stroke(\Color::separator)),
+), $c), 1000, 600);
+$h->frame(3);
+same([568.0, 839.0], [$h->rect($h->byText('Bottom'))[1], $h->rect($h->byText('Top'))[0]], 'the panel 280 wide at the right, the stack centered in it, its Spacer taking its height');
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack(spacing: 0)(
+    Color(\Color::red)->frame(maxWidth: INF, maxHeight: INF),
+    HStack()(TextField('M', text: $field), Text('Send'))->padding(6)->background(\Color::gray)->cornerRadius(10)
+        ->padding(4)->background(Canvas(fn($g) => null))->frame(maxWidth: 400)->padding(\Edge::horizontal, 20)->accessibilityLabel('bar'),
+), $c), 1000, 600);
+$h->frame(3);
+same([304.0, 554.0, 392.0, 42.0], $h->rect($h->byLabel('bar')), 'the bar at the bottom, 400 wide (less its ring) and centered');
+
+// A ZStack over an Each: its views in the one cell, over the view that takes the room, which keeps all of it (confetti's bursts made the page shorter).
+$h = new Headless(fn(Context $c) => Content::render(fn() => ZStack(alignment: \Alignment::topLeading)(
+    \Color(\Color::red)->frame(maxWidth: INF, maxHeight: INF)->accessibilityLabel('page'),
+    Each([1, 2])(fn(int $i) => \Color(\Color::blue)->frame(width: 1, height: 1)->offset(x: 10 * $i)),
+), $c), 400, 300);
+$h->frame(2);
+same([0.0, 0.0, 400.0, 300.0], $h->rect($h->byLabel('page')), 'the page all the stack, the Each\'s views over it');
+
+// overlay: a shape over the view, as large as it, the view keeping its size; GroupBox as wide as it is given.
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack(alignment: HorizontalAlignment::leading)(
+    Text('Framed')->padding(10)->overlay(RoundedRectangle(cornerRadius: 6)->stroke(Color::red, lineWidth: 2)->accessibilityLabel('ring')),
+    GroupBox('Box')(Text('Inside')),
+), $c), 400, 300);
+$h->frame(2);
+$ring = $h->rect($h->byLabel('ring')); $framed = $h->rect($h->byText('Framed'));
+check($ring === $framed && $framed[2] > 40 && $framed[2] < 100, 'the overlay as large as the padded text, which keeps its size: ' . json_encode([$ring, $framed]));
+check($h->rect($h->byText('Inside'))[0] < 40 && $h->byText('Box') !== null, 'a GroupBox\'s title above its views, leading');
+
+// A styled Text wraps at the width it is given as a plain one does; a Divider framed in an HStack stays a vertical hairline.
+$long = str_repeat('Drag a card to the other window or a text editor. ', 4);
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack(alignment: HorizontalAlignment::leading)(
+    Text(verbatim: $long)->foregroundStyle(Color::secondary),
+    HStack()(Text('L'), Divider()->frame(height: 20)->accessibilityLabel('rule'), Text('R')),
+)->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading), $c), 400, 400);
+$h->frame(2);
+same(360.0, $h->rect($h->byText($long))[2], 'a secondary Text wraps at the 360 points it has');
+$walk = function (Node $n) use (&$walk) { if ($n->kind === Node::BOX && $n->fw == 1.0) { return $n; } foreach ($n->kids as $k) { if ($r = $walk($k)) { return $r; } } return null; };
+same([1.0, 20.0], array_slice($h->rect($walk($h->root)), 2), 'the framed Divider down the HStack, 20 high'); $walk = null;
+
+// A Picker of a Binding(get:set:): it shows what get() computes, and a choice goes through set().
+$heading = 3; $sets = [];
+$h = new Headless(function (Context $c) use (&$heading, &$sets) {
+    $style = new Binding(get: fn() => $heading, set: function (int $v) use (&$heading, &$sets) { $sets[] = $v; $heading = $v; });
+    Content::render(fn() => Picker('Style', selection: $style)(Text('Title')->tag(0), Text('Body')->tag(3))->pickerStyle(PickerStyle::segmented), $c);
+}, 400, 200);
+$h->frame(2);
+$h->clickText('Title'); $h->frame(2);
+same([[0], 0], [$sets, $heading], 'the choice set through the binding, once');
+
+// A chosen row of a plain list: its secondary text in the accent's text color, fainter, as SwiftUI's in a selected row.
+$pick = 'b';
+$h = new Headless(fn(Context $c) => Content::render(fn() => ListView(['a', 'b'], selection: $pick)(fn(string $s) => VStack()(Text(verbatim: "name $s"), Text(verbatim: "where $s")->foregroundStyle(Color::secondary)))->listStyle(ListStyle::plain), $c), 300, 200);
+$h->frame(2);
+$fg = fn(string $s) => [$h->byText($s)->ts?->color ?? $h->byText($s)->fg, $h->byText($s)->ts?->alpha ?? 1.0];
+same([[$h->theme->accentText, 0.75], [$h->theme->textMuted, 1.0]], [$fg('where b'), $fg('where a')], 'secondary on the accent of the chosen row, muted elsewhere');
+
+// Modifiers in their order, as SwiftUI's: a background after searchable() is behind the search field too; before it, the view's alone.
+$q = '';
+foreach ([true, false] as $after) {
+    $h = new Headless(function (Context $c) use (&$q, $after) {
+        Content::render(function () use (&$q, $after) {
+            $v = VStack()(Text('Rows'))->frame(maxWidth: INF, maxHeight: INF);
+            return $after ? $v->searchable(text: $q)->background(Color::red) : $v->background(Color::red)->searchable(text: $q);
+        }, $c);
+    }, 300, 200);
+    $h->frame(2);
+    $bg = null; $walk = function (Node $n) use (&$walk, &$bg) { if ($n->color === 0xff3b30 || $n->color === 0xff453a) { $bg ??= $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->root); $walk = null;
+    $field = $h->rect($h->byLabel('Search'));
+    same($after, $h->rect($bg)[1] <= $field[1], $after ? 'a background after searchable() is behind its field' : 'one before it is the view\'s alone');
+}
+$h = new Headless(function (Context $c) use (&$q) { Content::render(function () use (&$q) { return VStack()(Text('Rows'))->searchable(text: $q); }, $c); }, 300, 200);
+$h->frame(); $h->clickOn($h->byLabel('Search')); $h->type('ab'); $h->frame();
+same('ab', $q, 'the field binds its text');
+
+// A picture scaled to fit in a frame of a height: no higher than it, drawn within it, as SwiftUI's fits both sides.
+$tall = \MyPHP\UI\Image::fromPixels(30, 60, str_repeat("\x80\x80\x80\xff", 1800));
+$h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(Image($tall)->resizable()->scaledToFit()->frame(maxWidth: INF, height: 160)), $c), 300, 400);
+$h->frame(2);
+$img = null; $walk = function (Node $n) use (&$walk, &$img) { if ($n->kind === Node::IMAGE) { $img = $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->root); $walk = null;
+same(160.0, $h->rect($img)[3], 'a tall picture no higher than its frame');
+
+// help(): the tip of the view under the pointer, what a window whose system shows tips (macOS's) gives it; a press hides it.
+$h = new Headless(fn(Context $c) => Content::render(fn() => HStack()(Text('One')->help('First tip'), Text('Two')), $c), 300, 100);
+$h->frame(2);
+[$x, $y] = $h->middle($h->byText('One')); $h->hover($x, $y); $h->frame(2);
+same('First tip', $h->rt->hoverTip(), 'the tip of the view under the pointer');
+[$x2, $y2] = $h->middle($h->byText('Two')); $h->hover($x2, $y2); $h->frame(2);
+same('', $h->rt->hoverTip(), 'none over a view without one');
+
+// iOS's semantic colors follow the theme: a surface over the background, a grouped list's the other way round, the grays as Apple gives them.
+$ok = true;
+foreach ([\MyPHP\UI\Theme::light(), \MyPHP\UI\Theme::dark()] as $th) {
+    $ok = $ok && \Color::secondarySystemBackground->resolve($th) === $th->surface && \Color::systemGroupedBackground->resolve($th) === $th->surface
+        && \Color::secondarySystemGroupedBackground->resolve($th) === $th->background && \Color::secondaryLabel->resolve($th) === $th->textMuted;
+}
+same([true, 0xf2f2f7, 0x1c1c1e], [$ok, \Color::systemGray6->resolve(\MyPHP\UI\Theme::light()), \Color::systemGray6->resolve(\MyPHP\UI\Theme::dark())], 'iOS\'s semantic colors in the light theme and the dark');
+
+// A plain TextField's text starts at the field, and a padding put around it moves it in (it was drawn 11 points left of it).
+$typed = '';
+$h = new Headless(fn(Context $c) => Content::render(fn() => HStack()(TextField('M', text: $typed)->textFieldStyle(\TextFieldStyle::plain)->padding(\Edge::vertical, 8)->accessibilityLabel('plain'))
+    ->padding(\Edge::leading, 16)->frame(maxWidth: INF, alignment: \Alignment::leading), $c), 300, 100);
+$h->frame(2);
+$h->metrics->painted = [];
+$h->paint();
+$at = array_values(array_filter($h->metrics->painted, fn(array $p) => $p[0] === 'M'))[0][2] ?? null;
+$h->metrics->painted = null;
+same([16.0, 16.0], [$h->rect($h->byLabel('plain'))[0], $at], 'the field 16 in, and its prompt drawn where it starts');
+
+// What a Circle clips is masked by a circle, its radius half its side: a radius of 100,000 cut all of it out on the Mac (chat-glow's send arrow).
+$seen = new \ArrayObject();
+$h = new Headless(fn(Context $c) => Content::render(fn() => Canvas(function (\GraphicsContext $g) use ($seen) { $g->withPainter(function (\MyPHP\UI\Painter $p) use ($seen) { $seen['mask'] = $p->displayList()->mask(); }); })
+    ->frame(width: 34, height: 34)->background(\Color::gray)->clipShape(Circle()), $c), 100, 100);
+$h->frame(2); $h->paint();
+$m = $seen['mask'] ?? [];
+same([17.0, 17.0, 17.0], [$m[4] ?? null, $m[5] ?? null, -1.0 - ($m[6] ?? 0)], 'the circle\'s mask rounds 17, half its 34');

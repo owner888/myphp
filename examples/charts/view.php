@@ -2,190 +2,98 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, ElementTransition, Font, Node, Painter};
-use MyPHP\UI\Chart\{Axes, Band, Chart, Curve, Linear, Side, Stacking, Tick, Time};
-
-/** The look of the axes' labels. */
-$axisLabel = function (Context $c): Closure {
-    return fn(Side $s, Tick $t) => $c->text($t->label, 11, $c->theme->textMuted)->noWrap();
-};
-
-/** Paints a line across the plot at each tick of $y, and along it at each of $x. @param list<Tick> $x @param list<Tick> $y */
-$gridLines = function (Node $area, array $x, array $y, int $color): void {
-    $area->draw(function (Painter $p, array $r) use ($x, $y, $color): void {
-        foreach ($y as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $color); }
-        foreach ($x as $tick) { $p->line(Chart::x($r, $tick->at), $r[1], Chart::x($r, $tick->at), $r[1] + $r[3], 1, $color); }
-    });
-};
-
-/** The series' names by their colors. @param list<string> $names */
-$legend = function (Context $c, array $names): void {
-    $c->row(0, 14);
-      foreach ($names as $i => $name) {
-          $c->row(0, 6)->alignItems(Node::CENTER);
-            $c->box(10, 10, COLORS[$i])->radius(3);
-            $c->muted($name, 12);
-          $c->end();
-      }
-    $c->end();
-};
+/** The series' colors, by their names. */
+$styles = fn(array $names) => array_combine($names, array_map(fn(int $i) => Color::rgb(COLORS[$i]), array_keys($names)));
 
 /** A card: a titled panel. */
-$card = function (Context $c, string $title, Closure $body): void {
-    $t = $c->theme;
-    $c->column(16, 10, 1, $t->surface)->radius(10)->border(1, $t->border)->basis(320)->minWidth(0)->minHeight(0);
-      $c->text($title, 14, style: Font::BOLD);
-      $body();
-    $c->end();
+$card = fn(string $title, View ...$body) => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(Text($title)->font(Font::headline), ...$body)
+    ->padding(16)->frame(maxWidth: INF, alignment: Alignment::topLeading)->background(Color::gray->opacity(0.08))->cornerRadius(10)->border(Color::separator);
+
+// Bars of the months; the pointer chooses one, which the others dim for and which shows its value.
+$sales = fn() => $card('Sales',
+    HStack()(
+        Text(verbatim: $this->month !== null ? sprintf('%s: $%.1fk', $this->month, $this->sales[array_search($this->month, MONTHS, true)]) : 'Point at a bar to see its month.')->foregroundStyle(Color::secondary),
+        Spacer(),
+        Button('Shuffle', action: function () { foreach ($this->sales as $i => $_) { $this->sales[$i] = 10 + 110 * mt_rand() / mt_getrandmax(); } }),
+    ),
+    Chart(array_map(null, MONTHS, $this->sales))(fn(array $s) => BarMark(x: PlottableValue::value('Month', $s[0]), y: PlottableValue::value('Sales', $s[1]))
+        ->cornerRadius(3)->opacity($this->month !== null && $this->month !== $s[0] ? 0.35 : 1.0)
+        ->annotation(fn() => $this->month === $s[0] ? Text(sprintf('%.0f', $s[1]))->font(Font::caption)->bold() : null))
+        ->chartXSelection(value: $this->month)
+        ->chartYAxis(new AxisMarks(format: fn(float $v) => $v == 0 ? '$0' : sprintf('$%.0fk', $v)))
+        ->frame(height: 200),
+);
+
+// The last minute, a sample a second: the pointer, or the arrows once it has the focus, choose a second, which a rule and a point show.
+$live = function () use ($card) {
+    $i = $this->at === null ? null : count($this->samples) - 1 - ($this->now->getTimestamp() - $this->at->getTimestamp()); // the sample of the second chosen
+    if ($i !== null && !isset($this->samples[$i])) { $i = null; }
+    return $card('Live data',
+        Text(verbatim: $i !== null ? sprintf('%s: %.0f%%', $this->at->format('H:i:s'), 100 * $this->samples[$i]) : 'Point at the line, or focus it and use the arrows.')->foregroundStyle(Color::secondary),
+        Chart()(array_map(fn(int $k) => [
+            AreaMark(x: PlottableValue::value('Time', $this->timeOf($k)), y: PlottableValue::value('Load', $this->samples[$k]), stacking: MarkStackingMethod::unstacked)
+                ->foregroundStyle(Color::accentColor->opacity(0.12))->interpolationMethod(InterpolationMethod::monotone),
+            LineMark(x: PlottableValue::value('Time', $this->timeOf($k)), y: PlottableValue::value('Load', $this->samples[$k]))
+                ->foregroundStyle(Color::accentColor)->interpolationMethod(InterpolationMethod::monotone),
+        ], array_keys($this->samples)), $i !== null ? [
+            RuleMark(x: $this->at),
+            PointMark(x: $this->at, y: $this->samples[$i])->foregroundStyle(Color::accentColor)->symbolSize(100),
+        ] : null)
+            ->chartXSelection(value: $this->at)
+            ->chartYScale(domain: [0, 1])
+            ->chartYAxis(new AxisMarks(format: fn(float $v) => sprintf('%.0f%%', 100 * $v)))
+            ->frame(height: 200),
+    );
 };
 
-$sales = function (Context $c, Charts $ch) use (&$axisLabel, &$gridLines): void {
-    $t = $c->theme;
-    $c->row(0, 8)->alignItems(Node::CENTER);
-      $c->muted($ch->month >= 0 ? sprintf('%s: $%.1fk', MONTHS[$ch->month], $ch->sales[$ch->month]) : 'Click a bar to choose its month.');
-      $c->spacer();
-      if ($c->clicked($c->button('Shuffle'))) {
-          foreach ($ch->sales as $i => $_) { $ch->sales[$i] = 10 + 110 * mt_rand() / mt_getrandmax(); }
-      }
-    $c->end();
-    $x = (new Band(...MONTHS))->padding(0.3, 0.1);
-    [, $hi] = Chart::extent(...$ch->sales);
-    $y = (new Linear(0, $hi))->nice(4);
-    $y->format = fn(float $v) => $v == 0 ? '$0' : sprintf('$%.0fk', $v);
-    $ticks = $y->ticks(4);
-    $months = array_values(array_filter($x->ticks(), fn(Tick $tk) => (int)$tk->value % 2 === 0)); // every other month, so the labels keep apart
-    Chart::plot($c, new Axes(left: $ticks, bottom: $months, label: $axisLabel($c)), function (Node $area) use ($c, $ch, $x, $y, $ticks, $t, $gridLines): void {
-        $gridLines($area, [], $ticks, $t->border);
-        foreach ($ch->sales as $i => $v) {
-            $c->key("bar$i");
-            $bar = Chart::rect($c, $x->band($i), $y->span(0, $v))->radius(3)->background($t->accent, $ch->month >= 0 && $i !== $ch->month ? 0.35 : 1.0)
-                ->tooltip(sprintf('%s: $%.1fk', MONTHS[$i], $v))->label(MONTHS[$i])->cursor(\MyPHP\UI\Cursor::Pointer);
-            $c->transition($bar, new ElementTransition(0.35)); // bars grow and shrink to new values
-            if ($c->clicked($bar)) {
-                $ch->month = $ch->month === $i ? -1 : $i;
-            }
-        }
-        if (($i = $ch->month) >= 0) {
-            Chart::anchor($c, $x->at($i), $y->at($ch->sales[$i]), Node::CENTER, Node::END, function () use ($c, $ch, $i): void {
-                $c->text(sprintf('%.0f', $ch->sales[$i]), 11, style: Font::BOLD)->noWrap()->margin(0, 0, 4, 0);
-            });
-        }
-    })->label('Sales by month')->size(0, 200);
+// Visits of each source, a week a point, stacked as values or as shares of each week's.
+$stacked = fn() => $card('Visits by source',
+    Picker('Stacking', selection: $this->stacking)(Text('Values')->tag(0), Text('Shares')->tag(1))->pickerStyle(PickerStyle::segmented)->labelsHidden(),
+    Chart()(...array_merge(...array_map(fn(int $s) => array_map(fn(int $w) => AreaMark(
+        x: PlottableValue::value('Week', $w + 1), y: PlottableValue::value('Visits', VISITS[$s][$w]),
+        stacking: $this->stacking === 1 ? MarkStackingMethod::normalized : MarkStackingMethod::standard,
+    )->foregroundStyle(by: PlottableValue::value('Source', SOURCES[$s]))->interpolationMethod(InterpolationMethod::monotone)->opacity(0.8), array_keys(VISITS[$s])), array_keys(SOURCES))))
+        ->chartForegroundStyleScale($styles(SOURCES))
+        ->chartXScale(domain: [1, count(VISITS[0])])
+        ->chartXAxis(new AxisMarks(desiredCount: 6, format: fn(float $v) => sprintf('W%.0f', $v)))
+        ->frame(height: 200),
+);
+
+// Cars of three classes, by weight and fuel use.
+$scatter = fn() => $card('Weight and fuel use',
+    Chart()(...array_merge(...array_map(fn(int $k) => array_map(fn(array $car) => PointMark(x: PlottableValue::value('Weight', $car[0]), y: PlottableValue::value('Fuel use', $car[1]))
+        ->foregroundStyle(by: PlottableValue::value('Class', ['Small', 'Midsize', 'Large'][$k]))->opacity(0.8), $this->scatter[$k]), array_keys($this->scatter))))
+        ->chartForegroundStyleScale($styles(['Small', 'Midsize', 'Large']))
+        ->chartXAxis(new AxisMarks(desiredCount: 4, format: fn(float $v) => sprintf('%.1f t', $v / 1000)))
+        ->chartYAxis(new AxisMarks(format: fn(float $v) => sprintf('%.0f L', $v)))
+        ->frame(height: 200),
+);
+
+// A donut of the platforms' shares; the pointer chooses one, which grows and shows its share in the middle.
+$donut = function () use ($card, $styles) {
+    $chosen = $this->platformAt($this->angle);
+    return $card('Users by platform', HStack(spacing: 20)(
+        ZStack()(
+            Chart(array_keys(PLATFORMS))(fn(int $i) => SectorMark(angle: PlottableValue::value('Share', SHARES[$i]), innerRadius: MarkDimension::ratio(0.62),
+                outerRadius: MarkDimension::ratio($chosen === $i ? 1.0 : 0.95), angularInset: 1.5)->foregroundStyle(by: PlottableValue::value('Platform', PLATFORMS[$i])))
+                ->chartForegroundStyleScale($styles(PLATFORMS))->chartLegend(Visibility::hidden)->chartAngleSelection(value: $this->angle)
+                ->accessibilityLabel('Users by platform'),
+            VStack(spacing: 0)(
+                Text(verbatim: $chosen === null ? '4.2M' : sprintf('%.0f%%', SHARES[$chosen]))->font(Font::system(size: 24, weight: Weight::bold)),
+                Text(verbatim: $chosen === null ? 'users' : PLATFORMS[$chosen])->font(Font::caption)->foregroundStyle(Color::secondary),
+            )->allowsHitTesting(false),
+        )->frame(width: 140, height: 140), // with the list, within the narrowest card's 288 points
+        VStack(alignment: HorizontalAlignment::leading, spacing: 8)(Each(array_keys(PLATFORMS))(fn(int $i) => HStack(spacing: 8)(
+            RoundedRectangle(cornerRadius: 3)->fill(Color::rgb(COLORS[$i]))->frame(width: 10, height: 10),
+            Text(verbatim: PLATFORMS[$i]),
+            Spacer(minLength: 8),
+            Text(verbatim: sprintf('%.0f%%', SHARES[$i]))->foregroundStyle(Color::secondary),
+        )))->frame(width: 120),
+    ));
 };
 
-$live = function (Context $c, Charts $ch) use (&$axisLabel): void {
-    $t = $c->theme;
-    $n = count($ch->samples);
-    $end = new DateTimeImmutable('@' . time());
-    $x = new Time($end->modify('-59 seconds'), $end);
-    $y = new Linear(0, 1, format: fn(float $v) => sprintf('%.0f%%', 100 * $v));
-    [$xt, $yt] = [$x->ticks(4), $y->ticks(4)];
-    $at = fn(int $i): DateTimeImmutable => $end->modify(($i - $n + 1) . ' seconds');
-    $xs = $ys = [];
-    foreach ($ch->samples as $i => $v) { [$xs[], $ys[]] = [$x->at($at($i)), $y->at($v)]; }
-    $describe = fn(int $i) => sprintf('%s: %.0f%%', $at($i)->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('H:i:s'), 100 * $ch->samples[$i]);
-    $c->muted($ch->selected >= 0 && $ch->selected < $n ? $describe($ch->selected) : 'Point at the line, or focus it and use the arrows.');
-    Chart::plot($c, new Axes(left: $yt, bottom: $xt, label: $axisLabel($c)), function (Node $area) use ($c, $ch, $xs, $ys, $yt, $describe, $n, $t): void {
-        $area->draw(function (Painter $p, array $r) use ($xs, $ys, $yt, $t): void {
-            foreach ($yt as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $t->border); }
-            $p->fillPath(Chart::area($r, $xs, null, $ys, Curve::Monotone), $t->accent, 0.12);
-            $p->strokePath(Chart::line($r, $xs, $ys, Curve::Monotone), 2, $t->accent);
-        });
-        Chart::select($c, $area, $ch->selected, $xs, $describe);
-        if (($i = $ch->selected) >= 0 && $i < $n) {
-            Chart::ruleX($c, $xs[$i], 1)->background($t->textMuted);
-            Chart::point($c, $xs[$i], $ys[$i], 10, 10)->radius(5)->background($t->accent)->border(2, $t->background);
-        }
-    })->label('Live samples')->size(0, 200);
-};
-
-$stacked = function (Context $c, Charts $ch) use (&$axisLabel, &$legend): void {
-    $t = $c->theme;
-    $c->segmented(['Values', 'Shares'], $ch->stacking)->label('Stacking');
-    $how = $ch->stacking === 1 ? Stacking::Normalized : Stacking::Standard;
-    $stack = Chart::stack(VISITS, $how);
-    $hi = max(array_map(fn($s) => $s->hi, end($stack)));
-    $y = $how === Stacking::Normalized ? new Linear(0, 1, format: fn(float $v) => sprintf('%.0f%%', 100 * $v)) : (new Linear(0, $hi))->nice(4);
-    $weeks = count(VISITS[0]);
-    $x = new Linear(1, $weeks, format: fn(float $v) => sprintf('W%.0f', $v));
-    [$xt, $yt] = [$x->ticks(6), $y->ticks(4)];
-    $xs = array_map(fn(int $i) => $x->at($i + 1), range(0, $weeks - 1));
-    Chart::plot($c, new Axes(left: $yt, bottom: $xt, label: $axisLabel($c)), function (Node $area) use ($stack, $xs, $y, $yt, $t): void {
-        $area->draw(function (Painter $p, array $r) use ($stack, $xs, $y, $yt, $t): void {
-            foreach ($yt as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $t->border); }
-            foreach ($stack as $s => $series) {
-                $lo = array_map(fn($g) => $y->at($g->lo), $series);
-                $hi = array_map(fn($g) => $y->at($g->hi), $series);
-                $p->fillPath(Chart::area($r, $xs, $lo, $hi, Curve::Monotone), COLORS[$s], 0.75);
-                $p->strokePath(Chart::line($r, $xs, $hi, Curve::Monotone), 1.5, COLORS[$s]);
-            }
-        });
-    })->label('Visits by source')->size(0, 180);
-    $legend($c, SOURCES);
-};
-
-$scatter = function (Context $c, Charts $ch) use (&$legend, &$axisLabel, &$gridLines): void {
-    $t = $c->theme;
-    $legend($c, ['Small', 'Midsize', 'Large']);
-    $weights = $uses = [];
-    foreach ($ch->scatter as $class) { foreach ($class as [$w, $u]) { [$weights[], $uses[]] = [$w, $u]; } }
-    $x = (new Linear(...Chart::extent(...$weights)))->nice(4);
-    $y = (new Linear(...Chart::extent(...$uses)))->nice(4);
-    $x->format = fn(float $v) => sprintf('%.1f t', $v / 1000);
-    $y->format = fn(float $v) => sprintf('%.0f L', $v);
-    [$xt, $yt] = [$x->ticks(4), $y->ticks(4)];
-    Chart::plot($c, new Axes(left: $yt, bottom: $xt, label: $axisLabel($c)), function (Node $area) use ($c, $ch, $x, $y, $xt, $yt, $t, $gridLines): void {
-        $gridLines($area, $xt, $yt, $t->border);
-        foreach ($ch->scatter as $k => $class) {
-            foreach ($class as [$w, $u]) {
-                Chart::point($c, $x->at($w), $y->at($u), 9, 9)->radius(4.5)->background(COLORS[$k], 0.8)->border(1, COLORS[$k])
-                    ->tooltip(sprintf('%.0f kg, %.1f L/100 km', $w, $u));
-            }
-        }
-    })->label('Weight and fuel use of cars')->size(0, 200);
-};
-
-$donut = function (Context $c): void {
-    $t = $c->theme;
-    $slices = Chart::pie(SHARES, 0.025);
-    [$size, $inner, $outer] = [180.0, 56.0, 86.0];
-    $c->row(0, 28)->alignItems(Node::CENTER);
-      $ring = $c->column()->size($size, $size)->label('Users by platform')->alignItems(Node::CENTER)->justify(Node::CENTER);
-        $hover = null;
-        $rt = $c->runtime;
-        if ($rt !== null && $c->hovered($ring) && ($rr = $rt->rectOf($ring->id)) !== null) {
-            $hover = Chart::sliceAt($slices, $rt->input->mouseX - $rr[0] - $size / 2, $rt->input->mouseY - $rr[1] - $size / 2, $inner, $outer);
-        }
-        $ring->draw(function (Painter $p, array $r) use ($slices, $hover, $size, $inner, $outer): void {
-            foreach ($slices as $i => $s) {
-                $p->fillPath(Chart::sector($r[0] + $size / 2, $r[1] + $size / 2, $inner, $i === $hover ? $outer : $outer - 4, $s), COLORS[$i]);
-            }
-        });
-        $c->text($hover === null ? '4.2M' : sprintf('%.0f%%', SHARES[$hover]), 24, style: Font::BOLD);
-        $c->muted($hover === null ? 'users' : PLATFORMS[$hover], 12);
-      $c->end();
-      $c->column(0, 8);
-        foreach (PLATFORMS as $i => $name) {
-            $c->row(0, 8)->alignItems(Node::CENTER);
-              $c->box(10, 10, COLORS[$i])->radius(3);
-              $c->text($name, 13)->size(70, 0);
-              $c->muted(sprintf('%.0f%%', SHARES[$i]), 13);
-            $c->end();
-        }
-      $c->end();
-    $c->end();
-};
-
-/** The cards, a page of charts. */
-return function (Context $c) use (&$card, &$sales, &$live, &$stacked, &$scatter, &$donut): void {
-    $c->column(20, 16, 1, $c->theme->background)->scroll(new \MyPHP\UI\ScrollState());
-      $c->muted('UI\\Chart has scales, axes and marks without a look: the marks are nodes styled here, and lines, areas and slices paths these cards paint.');
-      $c->row(0, 16)->wrap($c->width - 40)->alignItems(Node::START);
-        $card($c, 'Sales', fn() => $sales($c, $this));
-        $card($c, 'Live data', fn() => $live($c, $this));
-        $card($c, 'Visits by source', fn() => $stacked($c, $this));
-        $card($c, 'Weight and fuel use', fn() => $scatter($c, $this));
-        $card($c, 'Users by platform', fn() => $donut($c));
-      $c->end();
-    $c->end();
-};
+/** The cards, a page of charts, as many side by side as fit. */
+return fn() => ScrollView()(VStack(alignment: HorizontalAlignment::leading, spacing: 16)(
+    Text('Swift Charts\' marks — BarMark, LineMark, AreaMark, PointMark, RuleMark, SectorMark — laid out on the scales the chart picks from their values.')->foregroundStyle(Color::secondary),
+    LazyVGrid(columns: [GridItem::adaptive(minimum: 320)], spacing: 16)($sales(), $live(), $stacked(), $scatter(), $donut()),
+)->padding(20));

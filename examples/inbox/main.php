@@ -7,14 +7,12 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Image, ListState, Selection};
+use MyPHP\UI\{Content, Image};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
-$state = (object)['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => '', 'mailbox' => 'inbox', 'favorites' => true, 'local' => true];
-$state->list->selected = -1; // rows can be chosen: click, Up/Down, Home/End; double click or Enter opens
-$state->list->selection = new Selection; // several: Cmd-click adds or takes out, Shift-click and Shift+arrows extend, Cmd+A chooses all
-$state->list->followEnd = true; // at the end, Compose (a new last row) keeps the end in view, as a chat does
+// chosen: the rows chosen, an array, so several: Cmd-click adds or takes out, Shift-click and Shift+arrows extend, Cmd+A chooses all
+$state = (object)['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'chosen' => [], 'last' => '', 'mailbox' => 'inbox'];
 // Avatars: a few system app icons (ICNS, decoded by ImageIO at 64 px), made once and kept. Apps whose
 // icon lives in Assets.car ship a tiny, fully transparent icns as a placeholder: those are skipped by size.
 $icons = array_filter(glob('/System/Applications/*.app/Contents/Resources/AppIcon.icns'), fn($p) => filesize($p) > 20000);

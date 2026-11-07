@@ -2,50 +2,51 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Node, Context, Font, Span};
-
-return function (Context $c): void {
-    $t = $c->theme; // light or dark after the system, accent from its settings
-    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
-    // Mailboxes: a sidebar, as Mail's; the arrows choose while it has the focus.
-    $side = $c->sidebar($this->mailbox, function () use ($c) {
-        $c->sidebarSection('Favorites', $this->favorites, function () use ($c) {
-            $c->sidebarItem('inbox', 'Inbox', '✉', fn() => $c->badge(number_format($this->rows)));
-            $c->sidebarItem('flagged', 'Flagged', '⚑');
-            $c->sidebarItem('drafts', 'Drafts', '✎');
-        });
-        $c->sidebarSection('On My Mac', $this->local, function () use ($c) {
-            $c->sidebarItem('archive', 'Archive', '▤');
-            $c->sidebarItem('trash', 'Trash', '✕');
-        });
-    }, 180);
-    if ($c->changed($side)) { $this->last = "mailbox {$this->mailbox}"; }
-    $c->column(0, 0, 1);
-      $c->row(12, 8, 0, $t->surface);
-        $c->richText([new Span('Inbox ', 20, Font::BOLD), new Span(number_format($this->rows) . ' messages', color: $t->textMuted),
-            new Span('  every third unread', style: Font::ITALIC, color: $t->textMuted)]);
-        if ($c->clicked($c->primaryButton('Compose'))) { $this->rows++; $this->last = "composed row {$this->rows}"; }
-        if ($c->clicked($c->button('Refresh'))) { $this->replied = []; $this->last = 'refreshed'; }
-        if ($c->clicked($c->button('Top'))) { $this->list->scrollTo(0); }           // glides there
-        if ($c->clicked($c->button('End'))) { $this->list->scrollTo($this->rows - 1); }
-        $c->muted($this->last);
-      $c->end();
-      if ($this->list->changed()) { $n = $this->list->selection->count(); $this->last = $n === 1 ? "chose row {$this->list->selected}" : "chose $n rows"; }
-      if ($this->list->submitted()) { $this->last = "opened row {$this->list->selected}"; }
-      $c->list($this->list, $this->rows, function (int $i) use ($c, $t) { // only the rows in view are built; each row's nodes are keyed by $i
-            $c->row(10, 12, 0, ($i & 1) ? $t->surface : $t->background);
-              $c->image($this->avatars[$i % count($this->avatars)], 36, 36, 8); // an image quad from the atlas
-              $c->column(0, 2, 1);
-                $unread = $i % 3 === 0 ? Font::BOLD : 0; // bold, as unread mail is
-                $c->row(0, 6); $c->text("Sender $i", 14, style: $unread); $c->text("主题 {$i}：Subject line number $i is here", 14, style: $unread); $c->end();
-                $c->muted("Preview of the message body, truncated to one line of text $i", 12);
-              $c->end();
-              $c->text(sprintf('%02d:%02d', $i % 24, ($i * 7) % 60), 12, $t->textMuted, Font::MONO);
-              $b = $c->button(isset($this->replied[$i]) ? 'Replied' : 'Reply');
-              if (isset($this->replied[$i])) { $b->color = $t->success; $b->fg = $t->accentText; $b->bordered = false; }
-              if ($c->clicked($b)) { $this->replied[$i] = true; $this->last = "replied to $i"; }
-            $c->end();
-      });
-    $c->end();
-    $c->end();
-};
+// Mailboxes in a sidebar, as Mail's, beside the messages: only the rows in view built, so it holds a million.
+return fn() => NavigationSplitView(
+    sidebar: ListView(selection: $this->mailbox)(
+        Section('Favorites')(
+            Label('Inbox', systemImage: 'tray')->badge($this->rows)->tag('inbox'),
+            Label('Flagged', systemImage: 'flag')->tag('flagged'),
+            Label('Drafts', systemImage: 'doc')->tag('drafts'),
+        ),
+        Section('On My Mac')(
+            Label('Archive', systemImage: 'archivebox')->tag('archive'),
+            Label('Trash', systemImage: 'trash')->tag('trash'),
+        ),
+    ),
+    detail: ScrollViewReader(fn(ScrollViewProxy $proxy) => VStack(spacing: 0)(
+        HStack(spacing: 8)(
+            Text('Inbox')->font(Font::title2)->bold(),
+            Text(verbatim: number_format($this->rows) . ' messages')->foregroundStyle(Color::secondary),
+            Text('every third unread')->italic()->foregroundStyle(Color::secondary),
+            Spacer(),
+            Button('Compose', action: function () use ($proxy) { $this->rows++; $this->last = "composed row {$this->rows}"; $proxy->scrollTo($this->rows - 1); })->buttonStyle(ButtonStyle::borderedProminent),
+            Button('Refresh', action: function () { $this->replied = []; $this->last = 'refreshed'; }),
+            Button('Top', action: fn() => $proxy->scrollTo(0, anchor: UnitPoint::top)), // glides there
+            Button('End', action: fn() => $proxy->scrollTo($this->rows - 1, anchor: UnitPoint::bottom)),
+            Text(verbatim: $this->last)->foregroundStyle(Color::secondary)->lineLimit(1),
+        )->padding(12),
+        Divider(),
+        ListView($this->rows, selection: $this->chosen)(fn(int $i) => HStack(spacing: 12)(
+            Image($this->avatars[$i % count($this->avatars)])->resizable()->frame(width: 36, height: 36)->cornerRadius(8),
+            VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+                HStack(spacing: 6)(
+                    Text(verbatim: "Sender $i"),
+                    Text(verbatim: "主题 {$i}：Subject line number $i is here"),
+                )->bold($i % 3 === 0), // bold, as unread mail is
+                Text(verbatim: "Preview of the message body, truncated to one line of text $i")->font(Font::caption)->foregroundStyle(Color::secondary),
+            )->lineLimit(1),
+            Spacer(),
+            Text(verbatim: sprintf('%02d:%02d', $i % 24, ($i * 7) % 60))->font(Font::caption)->monospaced()->foregroundStyle(Color::secondary),
+            isset($this->replied[$i])
+                ? Button('Replied')->buttonStyle(ButtonStyle::borderedProminent)->tint(Color::green)
+                : Button('Reply', action: function () use ($i) { $this->replied[$i] = true; $this->last = "replied to $i"; }),
+        ))
+            ->alternatingRowBackgrounds()
+            ->onChange(of: $this->chosen, action: fn() => $this->last = count($this->chosen) === 1 ? "chose row {$this->chosen[0]}" : 'chose ' . count($this->chosen) . ' rows')
+            ->contextMenu(menu: fn(array $rows) => [
+                Button(count($rows) === 1 ? 'Reply' : 'Reply to ' . count($rows), action: function () use ($rows) { foreach ($rows as $i) { $this->replied[$i] = true; } $this->last = 'replied to ' . implode(', ', $rows); }),
+            ], primaryAction: fn(array $rows) => $this->last = 'opened row ' . implode(', ', $rows)),
+    )),
+)->onChange(of: $this->mailbox, action: fn() => $this->last = "mailbox {$this->mailbox}");

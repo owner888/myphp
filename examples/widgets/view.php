@@ -3,139 +3,143 @@
 declare(strict_types=1);
 
 use MyPHP\App;
-use MyPHP\UI\{Context, Font, Menu, Node};
+use MyPHP\UI\Context;
 
-return function (Context $c): void {
-    $t = $c->theme;
-    $c->column(20, 14, 1);
-      $c->row(0, 10);
-        $c->text('Widgets', 20, style: Font::BOLD);
-        if ($c->changed($c->searchField($this->query, 180))) { $this->last = 'search ' . json_encode($this->query->text); }
-        $c->spacer(); $c->spinner(); $c->muted('working…');
-      $c->end();
-      $c->divider();
-      // A toolbar: toggles and buttons without a face until hovered.
-      $c->toolbar(function () use ($c) {
-          if ($c->changed($c->toggle($this->bold, 'Bold'))) { $this->last = 'bold ' . ($this->bold ? 'on' : 'off'); }
-          $c->toggle($this->italic, 'Italic');
-          $c->divider(true);
-          if ($c->clicked($c->button('Share'))) { $c->toast('Shared'); }
-          $c->menuButton('View', function (Menu $m) {
-              if ($m->item('Icons')->chosen()) { $this->last = 'icons'; }
-              if ($m->item('List')->chosen()) { $this->last = 'list'; }
-          });
-      });
-      $c->row(0, 16);
-        if ($c->changed($c->switch('Wi-Fi', $this->wifi))) { $this->last = 'Wi-Fi ' . ($this->wifi ? 'on' : 'off'); }
-        $c->badge($this->wifi ? 'connected' : 'off');
-        $c->spacer();
-        if ($c->changed($c->segmented(['List', 'Grid', 'Map'], $this->view))) { $this->last = 'view ' . $this->view; }
-      $c->end();
-      $c->divider();
-      if ($c->changed($c->tabs(['General', 'Advanced', 'About'], $this->tab))) { $this->last = 'tab ' . $this->tab; }
-      $c->key('tab' . $this->tab)->column(12, 10, 0, $t->surface)->radius($t->radius); // keyed by tab: each tab's controls keep their own state (hover, focus, locals) apart from the others'
-        if ($this->tab === 0) {
-            $c->row(0, 10); $c->text('Copies'); $c->text((string)$this->count); if ($c->changed($c->stepper($this->count, 1, 10))) { $this->last = "count {$this->count}"; } $c->end();
-            $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($this->scale, 0.5, 4, 0.25))) { $this->last = "scale {$this->scale}"; } $c->end();
-            $c->row(0, 10); $c->text('Disk'); $c->meter($this->count * 10, 0, 100, new \MyPHP\UI\MeterLevels(80, 95)); $c->muted("{$this->count}0 % used"); $c->end();
-            // Icons in the text's color at the font size, or a size and color of their own; avatars from names.
-            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Icons'); $c->icon($this->icons['check']); $c->icon($this->icons['star'], 20, $t->warning); $c->icon($this->icons['bell'], 28); $c->icon($this->icons['star'], 20)->rotate(45); $c->image($this->icons['palette'], 28, 28); $c->image($this->icons['palette'], 28, 28)->grayscale(); $c->avatar('Ada Lovelace'); $c->avatar('Grace Hopper'); $c->avatar('Linus'); $c->end();
-            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($this->fruit, FRUITS))) { $this->last = "fruit {$this->fruit}"; } $c->end();
-            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($this->city, CITIES, 'City'); if ($c->changed($ac)) { $this->last = "city {$this->city->text}"; } if ($c->submitted($ac)) { $this->last = "city {$this->city->text} ⏎"; } $c->end();
-            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('When'); if ($c->changed($c->dateInput($this->when))) { $this->last = 'date ' . $this->when->format('Y-m-d'); } if ($c->changed($c->timeInput($this->when))) { $this->last = 'time ' . $this->when->format('H:i'); } $c->end();
-            $c->row(0, 10)->alignItems(Node::START); $c->text('Tags'); if ($c->changed($c->tokenField($this->tags, TAGS))) { $this->last = 'tags ' . implode(', ', $this->tags); } $c->end();
-            $c->collapsible('More options', $this->more, function () use ($c) {
-                $c->muted('Shown while the section is open; the header toggles it, and it grows into view.');
-                $c->row(0, 8); $c->badge('new'); $c->badge('3'); $c->badge('beta'); $c->end();
-                // A check box over check boxes: mixed while some are checked; its click checks or clears them all.
-                if ($c->changed($c->checkboxGroup('Notifications', function () use ($c) { $c->checkbox('Mail', $this->mail); $c->checkbox('Calendar', $this->calendar); }))) { $this->last = 'notifications ' . (int)$this->mail . (int)$this->calendar; }
-            });
-        } elseif ($this->tab === 1) {
-            // A tree: the arrows open and close, Up/Down/Left/Right move the focus, a click chooses.
-            $c->tree(function () use ($c) {
-                $item = function (string $path, ?Closure $kids = null) use ($c, &$item) {
-                    $name = basename($path);
-                    if ($kids === null) { $leaf = null; $n = $c->treeItem($name, $leaf, null, $this->chosen === $path); }
-                    else { $this->open[$path] ??= $path === 'src'; $n = $c->treeItem($name, $this->open[$path], $kids, $this->chosen === $path); }
-                    if ($c->clicked($n)) { $this->chosen = $path; $this->last = "chose $path"; }
-                };
-                $item('src', function () use ($item) { $item('src/App.php'); $item('src/UI', function () use ($item) { $item('src/UI/Context.php'); $item('src/UI/Node.php'); }); });
-                $item('examples', function () use ($item) { $item('examples/widgets'); });
-                $item('README.md');
-            });
-            // A form: labels in a column of their own, right-aligned, level with their controls; a click on one focuses its control.
-            $c->form(function () use ($c) {
-                $c->field('Name', function () use ($c) { $c->input($this->name, 'Jane Doe', 0); }, 'Shown on receipts.', trim($this->name->text) === '' ? 'Required' : '');
-                $c->field('Size', function () use ($c) { $c->select(['Small', 'Medium', 'Large'], $this->size); });
-                $c->fieldset('Notifications', function () use ($c) {
-                    $c->field('Mail', function () use ($c) { if ($c->changed($c->checkbox('Send me mail', $this->notify))) { $this->last = 'notify ' . ($this->notify ? 'on' : 'off'); } });
-                });
-            });
-            // A list whose rows drag to another place (Cmd-click chooses several to drag together); the choice follows them by key.
-            $c->row(0, 10)->alignItems(Node::START); $c->text('Steps');
-              $c->column(0, 0, 0, $t->background)->size(200, 5 * 28 + 2)->radius($t->radius)->border();
-                $c->list($this->stepList, count($this->steps), function (int $i) use ($c, $t) { $c->row(0, 0)->size(0, 28)->padding(0, 10)->alignItems(Node::CENTER); $c->text($this->steps[$i]); $c->end(); });
-              $c->end();
-            $c->end();
-            // A calendar: a click or the arrows choose a day, Page Up and Page Down move by months.
-            $c->row(0, 10)->alignItems(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($this->when))) { $this->last = 'calendar ' . $this->when->format('Y-m-d'); } $c->end();
-        } else {
-            $c->richText([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
-            $crumbs = ['Macintosh HD', 'Users', 'developer', 'Documents', 'Widgets']; // a path: the items but the last are links
-            if ($c->changed($c->breadcrumbs(array_slice($crumbs, 0, $this->crumb + 1), $this->crumb))) { $this->last = 'went to ' . $crumbs[$this->crumb]; }
-            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Color'); if ($c->changed($c->colorWell($this->color, $this->alpha))) { $this->last = 'color ' . Context::hexOf($this->color, $this->alpha); } $c->muted(Context::hexOf($this->color, $this->alpha)); $c->end();
-            // The language the app shows: MyPHP's own strings (the search field, the find bar, the menus) and the date and time formats follow it.
-            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Language');
-              $langs = ['en' => 'English', 'zh-Hans' => '简体中文', 'zh-Hant' => '繁體中文']; $lang = array_search(App::locale(), array_keys($langs), true) ?: 0;
-              if ($c->changed($c->segmented(array_values($langs), $lang))) { App::setLocale(array_keys($langs)[$lang]); $this->last = 'language ' . App::locale(); }
-              $c->muted('region ' . (App::region()->locale ?: '—') . ', ' . App::region()->hourCycle . 'h');
-            $c->end();
-            $c->row(0, 10); $c->text('Rating'); if ($c->changed($c->rating($this->stars))) { $this->last = "stars {$this->stars}"; } $c->end();
-            $c->row(0, 10); $c->text('Range'); if ($c->changed($c->rangeSlider($this->low, $this->high, 0, 100, 5, 240))) { $this->last = sprintf('range %d–%d', $this->low, $this->high); } $c->muted(sprintf('%d–%d', $this->low, $this->high)); $c->end();
-            // An accordion: sections in a bordered box, Up and Down between their headers.
-            $c->accordion(function () use ($c) {
-                $c->accordionItem('Appearance', $this->acc[0], function () use ($c) { $c->muted('Theme, accent, text size.'); });
-                $c->accordionItem('Shortcuts', $this->acc[1], function () use ($c) { $c->muted('Cmd+N new, Cmd+S save.'); });
-                $c->accordionItem('About', $this->acc[2], function () use ($c) { $c->muted('The widgets example.'); });
-            });
-        }
-      $c->end();
-      $c->row(0, 8);
-        if ($c->clicked($c->primaryButton('Save'))) { $c->toast('Saved'); $this->last = 'saved'; }
-        if ($c->clicked($c->button('Delete…'))) { $this->asking = true; }
-        if ($c->clicked($c->button('Reset…'))) { $this->resetting = true; }
-        $c->menuButton('Sort by', function (Menu $m) {
-            foreach (['Name', 'Date'] as $by) {
-                if ($m->item($by)->checked($this->sort === $by)->chosen()) { $this->sort = $by; $this->last = 'sort by ' . strtolower($by); }
-            }
-        });
-        $anchor = $c->button('Options');
-        if ($c->clicked($anchor)) { $this->options = !$this->options; }
-      $c->end();
-      // A popover below the Options button: a press elsewhere closes it.
-      $c->popover($anchor, $this->options, function () use ($c) {
-          $c->column(8, 8);
-            $c->checkbox('Bold titles', $this->bold);
-            $c->muted('Sorted by ' . $this->sort, 11);
-          $c->end();
-      });
-      $c->spacer();
-      $c->divider();
-      $c->muted('last change: ' . $this->last, 12);
-    $c->end();
-    // A modal over it all: what is behind is inert until it closes.
-    $modal = $c->modal($this->asking, function () use ($c) {
-        $c->text('Delete the draft?', 15, style: Font::BOLD);
-        $c->muted("You can't undo this.");
-        $c->row(0, 8)->justify(Node::END);
-          if ($c->clicked($c->button('Cancel'))) { $this->asking = false; }
-          if ($c->clicked($c->primaryButton('Delete'))) { $this->asking = false; $c->toast('Draft deleted'); $this->last = 'deleted'; }
-        $c->end();
-    });
-    if ($modal !== null && $c->changed($modal)) { $this->last = 'dismissed'; }
-    // An alert: the last button is the default, Enter clicks it, Escape chooses none.
-    switch ($c->alertDialog($this->resetting, 'Reset all settings?', 'Every control goes back to how it started.', 'Cancel', 'Reset')) {
-        case 1: $this->last = 'reset'; $c->toast('Settings reset'); break;
-        case Context::ALERT_DISMISSED: $this->last = 'reset dismissed'; break;
+/** A label leading a control in a row. */
+$row = fn(string $title, View ...$views) => HStack(spacing: 10)(Text($title)->frame(width: 70, alignment: Alignment::leading), ...$views);
+
+/** A badge: a short text on a capsule. */
+$badge = fn(string $text) => Text(verbatim: $text)->font(Font::caption)->padding(Edge::horizontal, 8)->padding(Edge::vertical, 2)->background(Color::gray->opacity(0.18))->clipShape(Capsule());
+
+/** A file of the tree, chosen by a click; a folder, a disclosure group of $files. */
+$file = function (string $path, ?Closure $files = null) use (&$file): View {
+    if ($files === null) {
+        return Button(basename($path), action: fn() => $this->chosen = $path)->buttonStyle(ButtonStyle::plain)->fontWeight($this->chosen === $path ? Weight::semibold : Weight::regular)
+            ->foregroundStyle($this->chosen === $path ? Color::accentColor : Color::primary);
     }
+    $this->open[$path] ??= false;
+    return DisclosureGroup(basename($path), isExpanded: $this->open[$path])(VStack(alignment: HorizontalAlignment::leading, spacing: 4)(...$files()));
 };
+
+$general = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+    Stepper("Copies: {$this->count}", value: $this->count, in: [1, 10]),
+    Stepper(sprintf('Scale: %g', $this->scale), value: $this->scale, in: [0.5, 4], step: 0.25),
+    $row('Disk', Gauge(value: $this->count * 10, in: [0, 100])->frame(width: 160), Text(verbatim: "{$this->count}0 % used")->foregroundStyle(Color::secondary)),
+    // Icons in the text's color, or a size and color of their own; avatars from names.
+    $row('Icons',
+        Image($this->icons['check']), Image($this->icons['star'])->foregroundStyle(Color::orange), Image($this->icons['bell'])->frame(width: 28, height: 28),
+        Image($this->icons['star'])->rotationEffect(45), Image($this->icons['palette'])->resizable()->frame(width: 28, height: 28),
+        Image($this->icons['palette'])->resizable()->frame(width: 28, height: 28)->grayscale(1),
+        Avatar('Ada Lovelace'), Avatar('Grace Hopper'), Avatar('Linus'),
+    ),
+    ComboBox('Fruit', text: $this->fruit, items: FRUITS),
+    TextField('City', text: $this->city)->textInputSuggestions(CITIES),
+    DatePicker('When', selection: $this->when),
+    TokenField('Tags', tokens: $this->tags, suggestions: TAGS),
+    DisclosureGroup('More options', isExpanded: $this->more)(VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+        Text('Shown while the group is open; its header opens and closes it.')->foregroundStyle(Color::secondary),
+        HStack(spacing: 8)($badge('new'), $badge('3'), $badge('beta')),
+        // A toggle of toggles: mixed while some are on; switching it switches them all.
+        Toggle('Notifications', sources: [&$this->mail, &$this->calendar]),
+        VStack(alignment: HorizontalAlignment::leading, spacing: 6)(Toggle('Mail', isOn: $this->mail), Toggle('Calendar', isOn: $this->calendar))->padding(Edge::leading, 20),
+    )),
+);
+
+$advanced = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+    // A tree of disclosure groups: a click chooses a file.
+    VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+        $file('src', fn() => [$file('src/App.php'), $file('src/UI', fn() => [$file('src/UI/Context.php'), $file('src/UI/Node.php')])]),
+        $file('examples', fn() => [$file('examples/widgets')]),
+        $file('README.md'),
+    ),
+    GroupBox()(VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+        TextField('Name', text: $this->name, prompt: 'Jane Doe'),
+        Text(trim($this->name) === '' ? 'Required' : 'Shown on receipts.')->font(Font::caption)->foregroundStyle(trim($this->name) === '' ? Color::red : Color::secondary),
+        Picker('Size', selection: $this->size)(Text('Small')->tag(0), Text('Medium')->tag(1), Text('Large')->tag(2)),
+        Toggle('Send me mail', isOn: $this->notify),
+    )),
+    HStack(alignment: VerticalAlignment::top, spacing: 10)(
+        // Rows that drag to another place (Cmd-click chooses several to drag together); the choice follows them.
+        Text('Steps')->frame(width: 70, alignment: Alignment::leading),
+        ListView($this->steps, selection: $this->step)(fn(string $s) => Text($s))->onMove($this->move(...))->frame(width: 200, height: 5 * 28 + 2)->border(Color::separator)->cornerRadius(6),
+        DatePicker('Calendar', selection: $this->when, displayedComponents: [DatePickerComponents::date])->datePickerStyle(DatePickerStyle::graphical)->labelsHidden(),
+    ),
+);
+
+$language = new Binding(get: fn() => App::locale(), set: function (string $l) { App::setLocale($l); $this->last = "language $l"; });
+$about = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+    Text([Text('MyPHP ')->bold(), Text(verbatim: App::VERSION)->foregroundStyle(Color::secondary)]),
+    Breadcrumbs(array_slice(CRUMBS, 0, $this->crumb + 1), selection: $this->crumb),
+    HStack(spacing: 10)(ColorPicker('Color', selection: $this->color, supportsOpacity: true, opacity: $this->alpha), Text(verbatim: Context::hexOf($this->color, $this->alpha))->foregroundStyle(Color::secondary)),
+    // The language the app shows: MyPHP's own strings (the search field, the menus) and the date and time formats follow it.
+    HStack(spacing: 10)(
+        Picker('Language', selection: $language)(Each(LANGUAGES)(fn(string $name, string $code) => Text(verbatim: $name)->tag($code)))->pickerStyle(PickerStyle::segmented),
+        Text(verbatim: 'region ' . (App::region()->locale ?: '—') . ', ' . App::region()->hourCycle . 'h')->foregroundStyle(Color::secondary),
+    ),
+    Rating('Rating', value: $this->stars),
+    $row('Range', RangeSlider(lower: $this->low, upper: $this->high, in: [0, 100], step: 5)->frame(width: 240), Text(verbatim: sprintf('%d–%d', $this->low, $this->high))->foregroundStyle(Color::secondary)),
+    // An accordion: groups in a box, each opening by itself.
+    GroupBox()(VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+        DisclosureGroup('Appearance', isExpanded: $this->sections[0])(Text('Theme, accent, text size.')->foregroundStyle(Color::secondary)),
+        Divider(),
+        DisclosureGroup('Shortcuts', isExpanded: $this->sections[1])(Text('Cmd+N new, Cmd+S save.')->foregroundStyle(Color::secondary)),
+        Divider(),
+        DisclosureGroup('About', isExpanded: $this->sections[2])(Text('The widgets example.')->foregroundStyle(Color::secondary)),
+    )),
+);
+
+return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 14)(
+    HStack(spacing: 10)(
+        Text('Widgets')->font(Font::title2)->bold(),
+        SearchField(text: $this->query)->frame(width: 180),
+        Spacer(),
+        ProgressView(), Text('working…')->foregroundStyle(Color::secondary),
+    ),
+    Divider(),
+    // A toolbar: toggles and buttons without a face until hovered.
+    HStack(spacing: 4)(
+        Toggle('Bold', isOn: $this->bold)->toggleStyle(ToggleStyle::button),
+        Toggle('Italic', isOn: $this->italic)->toggleStyle(ToggleStyle::button),
+        Divider()->frame(height: 16),
+        Button('Share', action: fn() => $this->toast = 'Shared'),
+        Menu('View')(Button('Icons', action: fn() => $this->last = 'icons'), Button('List', action: fn() => $this->last = 'list')),
+    )->buttonStyle(ButtonStyle::borderless),
+    HStack(spacing: 16)(
+        Toggle('Wi-Fi', isOn: $this->wifi)->toggleStyle(ToggleStyle::switch),
+        $badge($this->wifi ? 'connected' : 'off'),
+        Spacer(),
+        Picker('View', selection: $this->view)(Text('List')->tag(0), Text('Grid')->tag(1), Text('Map')->tag(2))->pickerStyle(PickerStyle::segmented),
+    ),
+    Divider(),
+    TabView(selection: $this->tab)(
+        Tab('General', value: 0)($general()),
+        Tab('Advanced', value: 1)($advanced()),
+        Tab('About', value: 2)($about()),
+    ),
+    HStack(spacing: 8)(
+        Button('Save', action: function () { $this->toast = 'Saved'; $this->last = 'saved'; })->buttonStyle(ButtonStyle::borderedProminent),
+        Button('Delete…', action: fn() => $this->asking = true),
+        Button('Reset…', action: fn() => $this->resetting = true),
+        Menu('Sort by')(Picker('Sort by', selection: $this->sort)(Text('Name')->tag('Name'), Text('Date')->tag('Date'))),
+        // A popover below the Options button: a click elsewhere closes it.
+        Button('Options', action: fn() => $this->options = !$this->options)->popover(isPresented: $this->options, content: fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+            Toggle('Bold titles', isOn: $this->bold),
+            Text("Sorted by {$this->sort}")->font(Font::caption)->foregroundStyle(Color::secondary),
+        )->padding(12)),
+    ),
+    Spacer(),
+    Divider(),
+    Text(verbatim: 'last change: ' . $this->last)->font(Font::caption)->foregroundStyle(Color::secondary),
+)
+    ->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading)
+    ->onChange(of: $this->values(), action: fn(array $old, array $new) => $this->changed($old, $new))
+    ->toast($this->toast)
+    // An alert: Return chooses its default button, Escape cancels.
+    ->alert('Delete the draft?', isPresented: $this->asking, actions: [
+        Button('Cancel', role: ButtonRole::cancel, action: fn() => $this->last = 'dismissed'),
+        Button('Delete', role: ButtonRole::destructive, action: function () { $this->toast = 'Draft deleted'; $this->last = 'deleted'; }),
+    ], message: "You can't undo this.")
+    ->alert('Reset all settings?', isPresented: $this->resetting, actions: [
+        Button('Cancel', role: ButtonRole::cancel, action: fn() => $this->last = 'reset dismissed'),
+        Button('Reset', action: function () { $this->toast = 'Settings reset'; $this->last = 'reset'; }),
+    ], message: 'Every control goes back to how it started.');

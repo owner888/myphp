@@ -304,7 +304,8 @@ final class Window
             }
             if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $height / $z); }
             Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
-            Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
+            if ($this->native instanceof Platform\NativeTips) { $this->native->setToolTip($this->runtime->hoverTip()); } // the system's tips, as SwiftUI's help()
+            else { Painter::tooltip($root, $list, $text, App::theme(), $this->runtime); }
             Painter::endParts($this->runtime, $list);
         };
         $parts = false;

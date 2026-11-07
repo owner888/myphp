@@ -29,6 +29,7 @@ final class Presentation
             case 'alert':
                 $chosen = $c->alertDialog($this->shown, Localized::string($this->title, $env), Localized::string($this->message, $env), ...array_map(fn(Button $b) => Localized::string($b->title, $env), $this->actions));
                 if ($chosen >= 0) { $this->actions[$chosen]->run(); }
+                elseif ($chosen === \MyPHP\UI\Context::ALERT_DISMISSED) { foreach ($this->actions as $b) { if ($b->role === \ButtonRole::cancel) { $b->run(); break; } } } // Escape: its cancel button's action, as SwiftUI's
                 break;
             case 'confirm':
                 $chosen = $c->actionSheet($this->shown, Localized::string($this->title, $env), ...array_map(fn(Button $b) => ($b->role === \ButtonRole::destructive ? '!' : '') . Localized::string($b->title, $env), $this->actions));

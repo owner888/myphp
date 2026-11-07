@@ -6,8 +6,8 @@
 // Run: ./run.sh photos [folder]
 declare(strict_types=1);
 
-use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, GridState, Image};
+use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Screen, Window, WindowOptions};
+use MyPHP\UI\{Content, Image};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -32,10 +32,36 @@ final class Photos
     public bool $viewing = false;
     /** The selection whose neighbors were last asked for, so each frame of the viewer does not ask again. */
     public int $prefetched = -1;
-    public GridState $grid;
     public ?Window $window = null;
 
-    public function __construct() { $this->grid = new GridState; $this->grid->selects = true; $this->grid->label = fn(int $i) => basename($this->files[$i]); }
+    /** The sharpest display's pixels to a point: thumbnails are decoded for it, full images shown no larger than their pixels. */
+    public float $scale = 1.0;
+
+    /** Fits the images to the displays, once the app runs (Screen's). */
+    public function fitScreens(): void
+    {
+        foreach (Screen::displays() as $d) { $this->scale = max($this->scale, $d->scaleFactor); }
+        $this->thumbPixels = (int)(self::THUMB * $this->scale);
+    }
+
+    /** The thumbnail of $f, or null while it is wanted: those the grid shows are decoded, in order, off the main thread. */
+    public function thumbnail(string $f): ?Image
+    {
+        $img = $this->thumb($f);
+        if ($img === null && !in_array($f, $this->wanted, true)) { $this->wanted[] = $f; $this->decode(); }
+        return $img;
+    }
+
+    /** The full-size image shown, the thumbnail larger until it is decoded; its neighbors start decoding, so the arrows do not wait. */
+    public function shown(): ?Image
+    {
+        if ($this->prefetched !== $this->selected) {
+            $this->prefetched = $this->selected;
+            $this->trimFull();
+            foreach ([$this->selected - 1, $this->selected + 1] as $i) { if (isset($this->files[$i])) { $this->fullImage($i); } }
+        }
+        return $this->fullImage($this->selected) ?? $this->thumb($this->files[$this->selected]);
+    }
 
     public function open(string $path, ?string $select = null): void
     {
@@ -53,7 +79,6 @@ final class Photos
         $this->thumbs = []; $this->wanted = []; $this->full = []; $this->prefetched = -1;
         $this->selected = $select === null ? 0 : max(0, (int)array_search($select, $this->files, true));
         $this->viewing = $select !== null;
-        $this->grid->scrollTo(0);
         $this->window?->setTitle(basename($path));
         $this->window?->invalidate();
     }
@@ -138,6 +163,7 @@ App::setMenu(new Menu([
 ]));
 App::setName('Photos');
 App::whenReady(function () use ($p, $argv) {
+    $p->fitScreens();
     $p->window = new Window(new WindowOptions(title: 'Photos', width: 900, height: 640, stateKey: 'photos',
         content: Content::file(__DIR__ . '/view.php', $p)));
     $p->window->on('fileDrop', fn(FileDropEvent $e) => $p->open($e->paths[0]));

@@ -49,7 +49,7 @@ $h->shortcut('f', Key::COMMAND);
 check($f->finding, 'Cmd+F opens the find bar');
 $h->type('b');
 same(['b.txt'], $names(), 'the query filters the entries');
-$h->type('zz');
+$h->type('zz'); $h->frame(1); // the entries the query leaves read as it changed (onChange), shown in the frame after
 same([], $names(), 'no match: no entries');
 check($showing('0 items') !== null, 'and the status says');
 $h->escape();

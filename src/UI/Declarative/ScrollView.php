@@ -26,10 +26,19 @@ final class ScrollView extends View
         return $this;
     }
 
+    private bool $bottom = false;
+
+    /** Where it starts, and stays as its content grows: UnitPoint::bottom, a chat's, as SwiftUI's defaultScrollAnchor. */
+    public function defaultScrollAnchor(\UnitPoint $anchor): static { $this->bottom = $anchor === \UnitPoint::bottom; return $this; }
+
     protected function build(Context $c, Env $env): ?Node
     {
+        $only = count($this->content) === 1 ? $this->content[0] : null;
+        if ($only instanceof LazyVStack) { // what is lazy scrolls itself, only what shows built
+            return $only->scrolled($c, $env, $this->bottom);
+        }
         if ($this->axis === \Axis::horizontal) { // as SwiftUI's: across the room it is given, as high as what it shows
-            $state = $c->runtime?->local($c->upcomingId(), fn() => new ScrollState()) ?? new ScrollState();
+            $state = $c->runtime?->local($c->upcomingId(), fn() => new ScrollState(), ScrollState::class) ?? new ScrollState(); // of its type: another view built here before (an if's other branch) kept other state
             $n = $c->row(0, 8)->alignItems(Node::CENTER)->scroll($state, horizontal: true, vertical: false);
               View::renderAll($c, $env->along(Node::ROW), $this->content);
             $c->end();

@@ -10,8 +10,9 @@ final class Divider extends View
 {
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->divider($env->axis === Node::ROW);
-        $n->alignSelf(Node::STRETCH);
+        $vertical = $env->stackAxis === Node::ROW;
+        $n = $c->divider($vertical);
+        if ($vertical === ($env->axis === Node::ROW)) { $n->alignSelf(Node::STRETCH); } else { $n->grow = 1; } // across its container, or along it in a frame's box
         return $n;
     }
 }

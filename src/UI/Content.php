@@ -44,7 +44,9 @@ final class Content
             return;
         }
         require_once __DIR__ . '/Declarative/functions.php';
+        Declarative\Transaction::frame($c);
         $c->root->alignItems(Node::CENTER)->justify(Node::CENTER);
+        if ($c->vibrancy()) { $c->root->color = null; } // a window of a material: it shows through, a SwiftUI view having no background of its own
         Declarative\View::renderAll($c, Declarative\Env::root($c), $view());
     }
 
