@@ -777,6 +777,15 @@ void myphp_ios_open_url(const char *url) {
     });
 }
 
+// The app's appearance over the system's (Theme::setSource): the window's interface style, 0 the system's, 1 light,
+// 2 dark, so that UIKit's own views (the glass) follow it. On the main queue, after the frame: UIKit asserts when a
+// window's traits change from another thread or inside a Core Animation commit.
+void myphp_ios_set_interface_style(int style) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        g_window.overrideUserInterfaceStyle = (UIUserInterfaceStyle)style;
+    });
+}
+
 void myphp_ios_set_idle_timer_disabled(int disabled) {
     dispatch_async(dispatch_get_main_queue(), ^{
         [UIApplication sharedApplication].idleTimerDisabled = disabled ? YES : NO;

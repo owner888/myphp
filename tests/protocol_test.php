@@ -155,6 +155,7 @@ same(['go()', '<p>in phar</p>', 404], [$serve('GET', 'files://localhost/app.js')
 Protocol::unhandle('files');
 
 // The frontend: URLs without a scheme are its pages.
+App::setFrontend(null);
 same('myphp://localhost/settings?tab=1', Frontend::resolve('/settings?tab=1'), 'a path is the frontend\'s');
 same('myphp://localhost/index.html', Frontend::resolve('index.html'), 'relative too');
 same('https://example.com/', Frontend::resolve('https://example.com/'), 'a URL stays');

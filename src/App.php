@@ -26,8 +26,7 @@ final class App
     private static ?Menu $menu = null;
     private static ?Theme $theme = null;
     private static bool $themeFixed = false;
-    /** The appearance and the text size the app chose over the system's (setColorScheme, setTextScale), null to follow it. */
-    private static ?bool $darkChosen = null;
+    /** The text size the app chose over the system's (setTextScale), null to follow it. */
     private static ?float $textScaleChosen = null;
     /** The desktop's settings, once read until they change (preferences). */
     private static ?UI\Preferences $preferences = null;
@@ -493,14 +492,17 @@ final class App
     /**
      * Makes the app light ($dark false) or dark whatever the system's
      * appearance, or null to follow it again, as SwiftUI's
-     * preferredColorScheme: the platform's theme in that appearance (a
-     * phone's UIKit colors, the desktop's text size), not a fixed one.
+     * preferredColorScheme: Theme::setSource, so that the system's own
+     * views (an iPhone's glass, the Mac's controls) take it too, and the
+     * platform's theme in that appearance (a phone's UIKit colors, the
+     * desktop's text size), not a fixed one.
      */
     public static function setColorScheme(?bool $dark): void
     {
-        if (self::$darkChosen === $dark) { return; }
-        self::$darkChosen = $dark;
-        self::themeChanged();
+        $source = match ($dark) { true => ThemeSource::Dark, false => ThemeSource::Light, null => ThemeSource::System };
+        if (\MyPHP\Theme::source() === $source) { return; }
+        \MyPHP\Theme::setSource($source);
+        if (self::$initialized) { self::systemChanged(); }
     }
 
     /**
@@ -517,7 +519,7 @@ final class App
 
     private static function systemTheme(): Theme
     {
-        $dark = self::$darkChosen ?? self::backend()->theme()->isDark();
+        $dark = self::backend()->theme()->isDark(); // the source Theme::setSource chose, else the system's
         $p = self::preferences();
         if (self::$textScaleChosen !== null) { $p = new UI\Preferences($p->accent, $p->reduceMotion, $p->highContrast, self::$textScaleChosen); }
         if (self::isIOS() || self::isAndroid()) {

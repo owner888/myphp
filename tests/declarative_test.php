@@ -419,8 +419,8 @@ foreach ([\MyPHP\UI\Theme::light(), \MyPHP\UI\Theme::dark()] as $th) {
         && \Color::secondarySystemGroupedBackground->resolve($th) === $th->background && \Color::secondaryLabel->resolve($th) === $th->textMuted;
 }
 same([true, 0xf2f2f7, 0x1c1c1e], [$ok, \Color::systemGray6->resolve(\MyPHP\UI\Theme::light()), \Color::systemGray6->resolve(\MyPHP\UI\Theme::dark())], 'iOS\'s semantic colors in the light theme and the dark');
-$grouped = fn(bool $dark) => [\Color::systemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark)), \Color::secondarySystemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark))];
-same([[0xf2f2f7, 0xffffff], [0x000000, 0x1c1c1e]], [$grouped(false), $grouped(true)], 'a phone\'s grouped colors as iOS\'s: in the dark, dark gray sections on a black page');
+$grouped = fn(bool $dark) => [\Color::systemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark)), \Color::secondarySystemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark)), \Color::tertiarySystemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark))];
+same([[0xf2f2f7, 0xffffff, 0xf2f2f7], [0x000000, 0x1c1c1e, 0x2c2c2e]], [$grouped(false), $grouped(true)], 'a phone\'s grouped colors as iOS\'s: in the dark, dark gray sections on a black page, a lighter gray on them');
 
 // A plain TextField's text starts at the field, and a padding put around it moves it in (it was drawn 11 points left of it).
 $typed = '';
@@ -611,12 +611,12 @@ same([true, 'b', []], [$below !== [], $underApp->tab, array_keys(array_filter($u
 // the platform's theme in that appearance (a phone's stays UIKit's), its text DynamicTypeSize's times larger; null
 // follows the system again.
 $looks = new class { public ?\ColorScheme $scheme = \ColorScheme::dark; public ?\DynamicTypeSize $size = \DynamicTypeSize::xxLarge; };
-$chosen = fn() => [(new \ReflectionProperty(\MyPHP\App::class, 'darkChosen'))->getValue(), (new \ReflectionProperty(\MyPHP\App::class, 'textScaleChosen'))->getValue()];
+$chosen = fn() => [\MyPHP\Theme::source(), (new \ReflectionProperty(\MyPHP\App::class, 'textScaleChosen'))->getValue()];
 $h = new Headless(fn(Context $c) => Content::render(fn() => Text('Hi')->preferredColorScheme($looks->scheme)->dynamicTypeSize($looks->size), $c), 200, 100);
 $h->frame();
 $dark = $chosen();
 [$looks->scheme, $looks->size] = [null, null]; $h->frame();
-same([[true, 21 / 17], [null, null], 53 / 17], [$dark, $chosen(), \DynamicTypeSize::accessibility5->scale()], 'the app\'s appearance and text size, chosen and followed again');
+same([[\MyPHP\ThemeSource::Dark, 21 / 17], [\MyPHP\ThemeSource::System, null], 53 / 17], [$dark, $chosen(), \DynamicTypeSize::accessibility5->scale()], 'the app\'s appearance and text size, chosen and followed again');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);

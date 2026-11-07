@@ -7,13 +7,16 @@ return fn() => VStack(spacing: 16)(
     HStack(spacing: 8)(
         Button('−', action: fn() => $this->n--)
             ->keyboardShortcut(KeyEquivalent::downArrow, modifiers: [])
-            ->accessibilityLabel('Decrement'),
+            ->accessibilityLabel('Decrement')
+            ->id('decrement'),
         Button('Reset', action: fn() => $this->n = 0)
-            ->disabled($this->n === 0),
+            ->disabled($this->n === 0)
+            ->id('reset'),
         Button('+', action: fn() => $this->n++)
             ->keyboardShortcut(KeyEquivalent::upArrow, modifiers: [])
             ->buttonStyle(ButtonStyle::borderedProminent)
-            ->accessibilityLabel('Increment'),
+            ->accessibilityLabel('Increment')
+            ->id('increment'),
     ),
     Text('↑ and ↓ count too')->font(Font::caption)->foregroundStyle(Color::secondary),
 );

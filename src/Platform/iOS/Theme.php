@@ -11,9 +11,11 @@ final class Theme implements Platform\Theme
 {
     private \MyPHP\ThemeSource $source = \MyPHP\ThemeSource::System;
 
+    /** The app's appearance, the window's too (overrideUserInterfaceStyle), so that UIKit's own views, as its glass, follow it. */
     public function setSource(\MyPHP\ThemeSource $source): void
     {
         $this->source = $source;
+        iOS::ffi()->myphp_ios_set_interface_style(match ($source) { \MyPHP\ThemeSource::Light => 1, \MyPHP\ThemeSource::Dark => 2, \MyPHP\ThemeSource::System => 0 }); // UIUserInterfaceStyle, on the main queue (UIKit asserts otherwise)
     }
 
     public function isDark(): bool
