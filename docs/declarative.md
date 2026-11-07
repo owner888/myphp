@@ -76,6 +76,15 @@ return fn() => VStack(spacing: 12)(
 the framework): no `use` line, as SwiftUI needs no import beyond
 `SwiftUI`.
 
+The colors that follow the theme, light or dark, by iOS's names: SwiftUI's
+`Color::primary`, `::secondary`, `::accentColor`, `::background`,
+`::separator`; UIColor's (`Color(.secondarySystemBackground)` in SwiftUI)
+`::systemBackground`, `::secondarySystemBackground` (a field's or a card's
+surface), `::systemGroupedBackground`, `::secondarySystemGroupedBackground`,
+`::label`, `::secondaryLabel`, `::link`, and the grays `::systemGray` to
+`::systemGray6`; the system's `::red`, `::blue`… `Color::rgb(0x336699)` is one
+of the app's own.
+
 ## The views
 
 Layout: `VStack(alignment:, spacing:)`, `HStack(alignment:, spacing:)`,
@@ -94,8 +103,27 @@ Collections: `ListView`, `Each`, `Section(header:)`, `Form`, `Table`,
 Navigation: `NavigationStack(path:)( root )` with
 `->navigationDestination([pattern => page])`, `NavigationSplitView`,
 `TabView(selection:)( Tab(title, systemImage:, value:)( … ) )`.
-myphp's own, SwiftUI-shaped: `VideoPlayer`, `WebView`, `Chart`,
-`TextEditor` over rich text, `Terminal`, `CodeEditor`, `Markdown`.
+Charts, as Swift Charts': `Chart($data)(fn($item) => BarMark(x:, y:))`, or
+`Chart()(marks…)`, of `BarMark`, `LineMark`, `AreaMark(stacking:)`,
+`PointMark`, `RuleMark`, `SectorMark(angle:, innerRadius:, outerRadius:,
+angularInset:)`, `LinePlot(x: $xs, y: $ys)` (vectorized: tens of thousands of
+points a frame, the extremes of each pixel column painted), each position a `PlottableValue::value('Month', $m)` or a
+bare value; marks take `foregroundStyle(by:)`, `cornerRadius`, `opacity`,
+`interpolationMethod`, `lineStyle(new StrokeStyle(lineWidth:))`,
+`symbolSize`, `annotation(fn() => …)`; the chart `chartXSelection(value:)`,
+`chartAngleSelection(value:)`, `chartXScale(domain:)`, `chartYScale(domain:)`,
+`chartXAxis(new AxisMarks(…))`, `chartYAxis(…)`, `chartLegend(.hidden)`,
+`chartForegroundStyleScale([name => color])`. A string is a category, a
+date time, a number a linear scale; bars and areas start at 0 and stack;
+the y axis's labels are trailing.
+`TimelineView()(fn(TimelineViewContext $context) => …)` builds its view anew every
+frame, as SwiftUI's `TimelineView(.animation)`.
+myphp's own, SwiftUI-shaped: `VideoPlayer`, `WebView(page)`, `TextEditor`
+over rich text, `TerminalView`, `CodeEditor`, `Markdown`, `SearchField(text:)`.
+myphp's own controls AppKit has and SwiftUI has not: `ComboBox(title, text:,
+items:)`, `TokenField(title, tokens:, suggestions:)`, `Rating(title, value:)`,
+`RangeSlider(lower:, upper:, in:, step:)`, `Breadcrumbs(path, selection:)`,
+`Avatar(name)`; and the modifier `toast($message)`.
 
 ## The modifiers
 
@@ -110,7 +138,16 @@ actions:, message:)`, `confirmationDialog`, `popover(isPresented:)`,
 `contextMenu`, `toolbar`, `navigationTitle`, `searchable(text:)`,
 `refreshable`, `swipeActions`, `listStyle`, `buttonStyle`, `toggleStyle`,
 `pickerStyle`, `textFieldStyle`, `tint`, `animation(_, value:)`,
-`transition`, `matchedGeometryEffect`, `environment`.
+`transition`, `matchedGeometryEffect`, `environment`, `rotationEffect`,
+`grayscale`, `textInputSuggestions` (a TextField's), `onMove` (a
+ListView's), `tabViewStyle(.sidebarAdaptable)`. A Picker in a Menu shows its
+choices inline, the chosen one checked; `Toggle(title, sources: [&$a, &$b])`
+is mixed while some are on.
+
+`popover(isPresented:, arrowEdge:)` shows outside the window, as SwiftUI's on a
+Mac: in a flyout (`Window::flyout`, an NSPopover on macOS) next to the view, at
+its content's ideal size; give the content a `frame(width:)` to wrap long text.
+In a view of no window (a test's), it shows inside it.
 
 ## The engine
 

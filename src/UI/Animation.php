@@ -43,4 +43,46 @@ final class Animation
     {
         return new self(spring: new SpringOptions(SpringOptions::DEFAULT_DURATION, 0.3));
     }
+
+    /** SwiftUI's default animation, a smooth spring (withAnimation without one). */
+    public static function default(): self
+    {
+        return self::smooth();
+    }
+
+    /** A spring of $duration seconds (SwiftUI's perceptual duration) and $bounce, from 0 (none) to 1, as SwiftUI's spring(duration:bounce:). */
+    public static function spring(float $duration = SpringOptions::DEFAULT_DURATION, float $bounce = 0.0): self
+    {
+        return new self(spring: new SpringOptions($duration, $bounce));
+    }
+
+    /** Easing in and out over $duration seconds, along SwiftUI's curve (a cubic Bézier of 0.42, 0, 0.58, 1). */
+    public static function easeInOut(float $duration = 0.35): self
+    {
+        return new self($duration, Easing::cubicBezier(0.42, 0, 0.58, 1));
+    }
+
+    /** Easing in over $duration seconds, along SwiftUI's curve (0.42, 0, 1, 1). */
+    public static function easeIn(float $duration = 0.35): self
+    {
+        return new self($duration, Easing::cubicBezier(0.42, 0, 1, 1));
+    }
+
+    /** Easing out over $duration seconds, along SwiftUI's curve (0, 0, 0.58, 1). */
+    public static function easeOut(float $duration = 0.35): self
+    {
+        return new self($duration, Easing::cubicBezier(0, 0, 0.58, 1));
+    }
+
+    /** At an even pace over $duration seconds. */
+    public static function linear(float $duration = 0.35): self
+    {
+        return new self($duration, Easing::linear(...));
+    }
+
+    /** This animation, after $seconds, as SwiftUI's .delay(). */
+    public function delay(float $seconds): self
+    {
+        return new self($this->duration, $this->ease, $this->spring, $this->delay + $seconds);
+    }
 }

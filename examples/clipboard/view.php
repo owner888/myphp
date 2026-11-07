@@ -3,54 +3,39 @@
 declare(strict_types=1);
 
 use MyPHP\{Clipboard, ClipboardOptions};
-use MyPHP\Transfer\{Data, DropOptions, Format};
-use MyPHP\UI\{Context, Font};
+use MyPHP\Transfer\{Data, Drop, DropOptions, Format};
 
-return function (Context $c): void {
-    $t = $c->theme;
-    $c->column(20, 12, 1);
-      $c->text('Clipboard and drag data', 24, style: Font::BOLD);
-      $c->muted('Copy or drag the same note as text, HTML, or lazy JSON. Paste in another app to use its preferred representation.');
-      $c->input($this->title, 'Title', 0);
-      $c->textarea($this->body, '', 0, 90);
-      $c->row(0, 8);
-        if ($c->clicked($c->button('Copy note'))) {
+// One note copied, dragged and dropped as text, HTML or lazy JSON, through the clipboard and drag and drop.
+return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+    Text('Clipboard and drag data')->font(Font::system(size: 24, weight: Weight::bold)),
+    Text('Copy or drag the same note as text, HTML, or lazy JSON. Paste in another app to use its preferred representation.')->foregroundStyle(Color::secondary),
+    TextField('Title', text: $this->title),
+    TextEditor(text: $this->body)->frame(height: 90),
+    HStack(spacing: 8)(
+        Button('Copy note', action: function () {
             try {
                 Clipboard::write($this->data(), new ClipboardOptions(onRelease: function () { $this->releases++; $this->win?->invalidate(); }));
                 $this->status = 'Copied; JSON is produced only if requested';
-            } catch (\RuntimeException $e) {
-                $this->status = $e->getMessage();
-            }
-        }
-        if ($c->clicked($c->button('Paste'))) {
+            } catch (\RuntimeException $e) { $this->status = $e->getMessage(); }
+        }),
+        Button('Paste', action: function () {
             $preferred = Data::preferredFormat(Clipboard::formats(), NOTE_FORMAT, Format::TEXT, Format::FILE_LIST, Format::URI_LIST);
-            if ($preferred === null) {
-                $this->status = 'No supported clipboard format';
-            } else {
-                try { $this->receive(Clipboard::read($preferred)); } catch (\RuntimeException $e) { $this->status = $e->getMessage(); }
-            }
-        }
-        if ($c->clicked($c->button('Flush'))) {
+            if ($preferred === null) { $this->status = 'No supported clipboard format'; return; }
+            try { $this->receive(Clipboard::read($preferred)); } catch (\RuntimeException $e) { $this->status = $e->getMessage(); }
+        }),
+        Button('Flush', action: function () {
             try { Clipboard::flush(); $this->status = 'Clipboard persisted; provider resources released'; } catch (\RuntimeException $e) { $this->status = $e->getMessage(); }
-        }
-      $c->end();
-      $note = $c->column(16)->border(1, $t->border)->radius(8);
-        $c->text('Drag this note', style: Font::BOLD);
-      $c->end();
-      $c->dragDataFrom($note, $this->data(...));
-      $o = new DropOptions([NOTE_FORMAT, Format::TEXT, Format::FILE_LIST, Format::URI_LIST]);
-      $zone = $c->column(16)->border(1, $t->border)->radius(8);
-        $c->text('Drop notes, text, or files here');
-      $c->end();
-      if ($c->dataDragOver($zone, $o)) { $zone->border(2, $t->accent); }
-      if ($c->dropData($zone, $o, $drop)) { $this->receive($drop->data); }
-      $c->row(0, 8);
-        $c->input($this->path, 'Absolute file path', 0);
-        if ($c->clicked($c->button('Copy file'))) {
-            try { Clipboard::writeFiles($this->path->text); $this->status = 'Copied native file list'; } catch (\InvalidArgumentException | \RuntimeException $e) { $this->status = $e->getMessage(); }
-        }
-      $c->end();
-      $c->muted("JSON requests: {$this->providers} · Clipboard releases: {$this->releases}");
-      $c->text($this->status);
-    $c->end();
-};
+        }),
+    ),
+    Text('Drag this note')->bold()->padding(16)->border(Color::separator)->cornerRadius(8)->draggable($this->data(...)),
+    Text('Drop notes, text, or files here')->padding(16)->border($this->targeted ? Color::accentColor : Color::separator, width: $this->targeted ? 2 : 1)->cornerRadius(8)
+        ->dropDestination(new DropOptions([NOTE_FORMAT, Format::TEXT, Format::FILE_LIST, Format::URI_LIST]), action: fn(Drop $drop) => $this->receive($drop->data), isTargeted: fn(bool $over) => $this->targeted = $over),
+    HStack(spacing: 8)(
+        TextField('Absolute file path', text: $this->path),
+        Button('Copy file', action: function () {
+            try { Clipboard::writeFiles($this->path); $this->status = 'Copied native file list'; } catch (\InvalidArgumentException | \RuntimeException $e) { $this->status = $e->getMessage(); }
+        }),
+    ),
+    Text(verbatim: "JSON requests: {$this->providers} · Clipboard releases: {$this->releases}")->foregroundStyle(Color::secondary),
+    Text(verbatim: $this->status),
+)->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading);

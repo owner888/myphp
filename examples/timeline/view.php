@@ -2,44 +2,29 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Easing, Font, Node, Placement, TimelineOptions, Tween};
+$intro = Intro::timeline();
 
-return function (Context $c): void {
-    $t = $c->theme;
-    // The pointer held the scrubber: the playhead stays where it put it, and goes on from there when it is let go.
-    $o = new TimelineOptions(run: $this->run, paused: $this->paused, reverse: $this->reverse, progress: $this->held ? $this->scrub : null);
-    $c->column(24, 18, 1)->alignItems(Node::CENTER)->justify(Node::CENTER);
-      // One playhead for the whole intro, kept by the card.
-      $card = $c->key('card')->column(22, 10, 0, $t->surface)->size(300, 0)->radius(16);
-      $tl = $c->timeline($card, 'intro', $o);
-      $slide = $tl->tween(new Tween(-420, 0, 0.45));
-      $grow = $tl->tween(new Tween(0.9, 1, 0.45), Placement::withPrevious(0));
-      $fade = $tl->tween(new Tween(0, 1, 0.3, Easing::linear(...)), Placement::atTime(0.15));
-      $tl->label('rows'); // where the card lands, at 450 ms
-      $rows = [];
-      foreach (['Plan', 'Build', 'Ship'] as $i => $name) {
-          $rows[$name] = $tl->tween(new Tween(0, 1, 0.24, Easing::linear(...)), Placement::atLabel('rows', $i * 0.09));
-      }
-      $bounce = $tl->tween(new Tween(10, 0, 0.36, Easing::bounce(Easing::easeOut(...))), Placement::atTime(0.45));
-      $card->translate($slide, $bounce)->scale($grow, $grow);
-        $c->text('A timeline', 20, $t->text, Font::BOLD)->opacity($fade)->translate(0, (1 - $fade) * 12);
-        foreach ($rows as $name => $v) {
-            $c->row(0, 8)->opacity($v)->translate(0, (1 - $v) * 14);
-              $c->muted($name);
-            $c->end();
-        }
-      $c->end();
-      $c->row(0, 8);
-        if ($c->clicked($c->key('restart')->primaryButton('Restart'))) { $this->run++; }
-        if ($c->clicked($c->key('pause')->button('Pause')->disabled($this->paused))) { $this->paused = true; }
-        if ($c->clicked($c->key('play')->button('Play')->disabled(!$this->paused))) { $this->paused = false; }
-        if ($c->clicked($c->key('reverse')->button('Reverse'))) { $this->reverse = !$this->reverse; }
-      $c->end();
-      $c->row(0, 10);
-        $sl = $c->slider($this->scrub, 0, 1, 0)->grow(1);
-        $this->held = $c->dragging($sl);
-        if (!$this->held) { $this->scrub = $tl->progress(); }
-        $c->text(sprintf('%d / %d ms', round($tl->time() * 1000), round($tl->duration() * 1000)), 12, $t->textMuted)->size(96, 0);
-      $c->end();
-    $c->end();
-};
+// One playhead for the whole intro: a TimelineView moves it every frame while it plays, the card shows the timeline's value there.
+return fn() => TimelineView(paused: $this->paused || $this->held || ($this->reverse ? $this->time <= 0 : $this->time >= $intro->duration()))(function (TimelineViewContext $context) use ($intro) {
+    $this->advance($context->nanoseconds, $intro->duration());
+    $v = $intro->value(time: $this->time);
+    $scrub = new Binding(get: fn() => $this->time / $intro->duration(), set: fn(float $f) => $this->time = $f * $intro->duration());
+    return VStack(spacing: 18)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+            Text('A timeline')->font(Font::title2)->bold()->opacity($v['fade'])->offset(y: (1 - $v['fade']) * 12),
+            Each(['Plan', 'Build', 'Ship'])(fn(string $row) => Text($row)->foregroundStyle(Color::secondary)->opacity($v[$row])->offset(y: (1 - $v[$row]) * 14)),
+        )
+            ->padding(22)->frame(width: 300, alignment: Alignment::leading)->background(Color::gray->opacity(0.12))->cornerRadius(16)
+            ->scaleEffect($v['scale'])->offset(x: $v['x'], y: $v['y']),
+        HStack(spacing: 8)(
+            Button('Restart', action: function () { [$this->time, $this->reverse, $this->paused] = [0.0, false, false]; })->buttonStyle(ButtonStyle::borderedProminent),
+            Button('Pause', action: fn() => $this->paused = true)->disabled($this->paused),
+            Button('Play', action: fn() => $this->paused = false)->disabled(!$this->paused),
+            Button('Reverse', action: fn() => $this->reverse = !$this->reverse),
+        ),
+        HStack(spacing: 10)(
+            Slider(value: $scrub, onEditingChanged: fn(bool $editing) => $this->held = $editing),
+            Text(verbatim: sprintf('%d / %d ms', round($this->time * 1000), round($intro->duration() * 1000)))->font(Font::caption)->foregroundStyle(Color::secondary)->frame(width: 96, alignment: Alignment::leading),
+        )->frame(width: 360),
+    )->frame(maxWidth: INF, maxHeight: INF);
+});

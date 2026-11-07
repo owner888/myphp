@@ -11,7 +11,7 @@ final class Tab extends View
     /** @var list<mixed> */
     public array $content = [];
 
-    public function __construct(public readonly string $title, public readonly SVG $image, public readonly mixed $value) {}
+    public function __construct(public readonly string $title, public readonly ?SVG $image, public readonly mixed $value) {}
 
     public function __invoke(View|array|null ...$content): static
     {

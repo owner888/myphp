@@ -2,14 +2,14 @@
 // Markdown notes, the second real tool on MyPHP: notes are .md files in a
 // folder (~/Library/Application Support/Notes/notes, or the folder on the
 // command line); a list on the left, the editor in the middle, a live
-// preview on the right (Markdown::view). Edits save themselves half a second after you stop
+// preview on the right (Markdown()). Edits save themselves half a second after you stop
 // typing (Cmd+S saves now). Cmd+N makes a note, Cmd+Backspace deletes the
 // chosen one. The preview scrolls along with the editor.
 // Run: ./run.sh markdown-notes [folder]
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};
-use MyPHP\UI\{Content, ListState, ScrollState, TextState};
+use MyPHP\UI\Content;
 use MyPHP\UI\Markdown\{Markdown, Options};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
@@ -19,10 +19,14 @@ final class Notes
 {
     /** @var list<array{path: string, title: string, mtime: int}> newest first */
     public array $items = [];
-    public ListState $list;
-    public TextState $editor;
-    public ScrollState $preview;
+    /** The text of the open note, as the editor edits it. */
+    public string $text = '';
+    /** Where the preview scrolls to, following the editor; how far it scrolls. */
+    public ScrollPosition $preview;
+    public float $previewRange = 0;
     public ?string $open = null;
+    /** The note chosen in the list, opened as it is chosen. */
+    public ?string $chosen = null;
     private string $saved = '';
 
     /** The text as last written to the file. */
@@ -32,12 +36,8 @@ final class Notes
     }
     private int $edit = 0;
     public ?Window $window = null;
-    /** The editor scroll share the preview was last moved to. */
-    public float $followed = 0;
-    /** The panes' widths, as the dividers leave them. */
-    public float $listW = 220, $editorW = 380;
     /** The search: what is typed, and the items whose titles match it, as indexes into $items. */
-    public TextState $query;
+    public string $query = '';
     /** @var list<int> */
     public array $shown = [];
     public bool $previewing = true, $asking = false;
@@ -47,34 +47,28 @@ final class Notes
     public function __construct(public readonly string $dir)
     {
         is_dir($dir) || mkdir($dir, 0755, true) || throw new RuntimeException("cannot create $dir");
-        $this->list = new ListState();
-        $this->list->selected = -1;
-        $this->editor = new TextState();
-        $this->editor->multiline = true;
-        $this->preview = new ScrollState();
-        $this->query = new TextState();
+        $this->preview = new ScrollPosition();
         $this->md = new Options(loadImage: Markdown::fileImages($dir));
         $this->scan();
     }
 
-    /** The items the search shows, in order, with the list's choice on the open one. */
-    public function filter(): void
+    /** The items the search shows, in order. @return list<array{path: string, title: string, mtime: int}> */
+    public function shown(): array
     {
-        $q = trim($this->query->text);
-        $this->shown = [];
-        foreach ($this->items as $i => $it) {
-            if ($q === '' || stripos($it['title'], $q) !== false) { $this->shown[] = $i; }
-        }
-        $this->list->selected = -1;
-        foreach ($this->shown as $row => $i) {
-            if ($this->items[$i]['path'] === $this->open) { $this->list->selected = $row; }
-        }
+        $q = trim($this->query);
+        return array_values(array_filter($this->items, fn(array $it) => $q === '' || stripos($it['title'], $q) !== false));
+    }
+
+    /** The preview scrolled the same share of the way through as the editor, $f. */
+    public function follow(float $f): void
+    {
+        $this->preview->scrollTo(y: $f * $this->previewRange);
     }
 
     /** Words in the editor: runs between spaces, as mygo's notes count them. */
     public function words(): int
     {
-        return count(preg_split('/\s+/u', $this->editor->text, -1, PREG_SPLIT_NO_EMPTY));
+        return count(preg_split('/\s+/u', $this->text, -1, PREG_SPLIT_NO_EMPTY));
     }
 
     /** When the open note was last written (its file's time). */
@@ -99,12 +93,9 @@ final class Notes
     public function choose(string $path): void
     {
         $this->save();
-        $this->open = $path;
-        $this->saved = (string)file_get_contents($path);
-        $this->editor = new TextState($this->saved);
-        $this->editor->multiline = true;
-        $this->editor->setCursor(0);
-        $this->preview->y = 0;
+        $this->open = $this->chosen = $path;
+        $this->saved = $this->text = (string)file_get_contents($path);
+        $this->preview->scrollTo(y: 0);
         $this->scan(); // puts the selection on it
     }
 
@@ -120,26 +111,24 @@ final class Notes
     {
         if ($this->open === null) { return; }
         unlink($this->open);
-        $this->open = null;
-        $this->editor = new TextState();
-        $this->editor->multiline = true;
-        $this->saved = '';
+        $this->open = $this->chosen = null;
+        $this->text = $this->saved = '';
         $this->scan();
     }
 
     /** Writes the editor's text when it differs from the file. */
     public function save(): void
     {
-        if ($this->open === null || $this->editor->text === $this->saved) { return; }
-        file_put_contents($this->open, $this->editor->text);
-        $this->saved = $this->editor->text;
+        if ($this->open === null || $this->text === $this->saved) { return; }
+        file_put_contents($this->open, $this->text);
+        $this->saved = $this->text;
         $this->scan(); // the title or order may have changed
     }
 
-    /** Called each frame: a changed editor schedules a save half a second after the last change. */
+    /** An edit schedules a save half a second after the last change. */
     public function tick(): void
     {
-        if ($this->open === null || $this->editor->text === $this->saved) { return; }
+        if ($this->open === null || $this->text === $this->saved) { return; }
         $n = ++$this->edit;
         App::after(0.5, function () use ($n) { if ($n === $this->edit) { $this->save(); $this->window?->invalidate(); } });
     }

@@ -1,9 +1,8 @@
 <?php
-// Charts in native UI (mygo's gallery Charts page), built with UI\Chart:
-// scales, axes and marks without a look, the marks nodes styled here, and
-// lines, areas and slices paths these cards paint. A bar chart whose bars
-// grow to new values and choose a month; a live line whose points the
-// pointer and the arrows choose; stacked areas; a scatter plot; a donut.
+// Charts in native UI (mygo's gallery Charts page), as Swift Charts': a
+// bar chart whose month the pointer chooses; a live line whose points the
+// pointer and the arrows choose; stacked areas; a scatter plot; a donut
+// whose sector the pointer chooses.
 // Run: ./run.sh charts
 declare(strict_types=1);
 
@@ -29,15 +28,22 @@ final class Charts
 {
     /** @var list<float> */
     public array $sales = [];
-    public int $month = -1, $selected = -1, $stacking = 0;
+    /** The month and the second the pointer is on, and the share of the donut, null for none. */
+    public ?string $month = null;
+    public ?\DateTimeImmutable $at = null;
+    public ?float $angle = null;
+    public int $stacking = 0;
     /** @var list<float> the last minute of samples, one a second */
     public array $samples = [];
+    /** When the last sample was taken. */
+    public \DateTimeImmutable $now;
     /** @var list<list<array{0: float, 1: float}>> weight and fuel use, by class */
     public array $scatter = [[], [], []];
     public ?Window $window = null;
 
     public function __construct()
     {
+        $this->now = new \DateTimeImmutable('@' . time());
         mt_srand(12);
         foreach (MONTHS as $i => $_) {
             $this->sales[] = 40 + 50 * sin($i / 3.5) + 20 * mt_rand() / mt_getrandmax();
@@ -64,6 +70,22 @@ final class Charts
         $last = end($this->samples);
         $this->samples[] = max(0.05, min(0.95, ($last === false ? 0.5 : $last) + 0.12 * (mt_rand() / mt_getrandmax() - 0.5)));
         $this->samples = array_slice($this->samples, -60);
+        $this->now = new \DateTimeImmutable('@' . time());
+    }
+
+    /** When sample $i was taken, a second apart up to the last. */
+    public function timeOf(int $i): \DateTimeImmutable
+    {
+        return $this->now->modify(($i - count($this->samples) + 1) . ' seconds')->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+    }
+
+    /** The platform of the donut's sector at $angle along their shares' sum. */
+    public function platformAt(?float $angle): ?int
+    {
+        if ($angle === null) { return null; }
+        $sum = 0;
+        foreach (SHARES as $i => $v) { $sum += $v; if ($angle <= $sum) { return $i; } }
+        return null;
     }
 }
 

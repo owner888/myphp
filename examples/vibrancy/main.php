@@ -7,22 +7,21 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, SVG, ScrollState};
+use MyPHP\UI\{Content, SVG};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
-const TITLE_BAR_HEIGHT = 52; // the height of an inset title bar
-const SIDEBAR_WIDTH = 220;
 
 function icon(string $shapes): SVG
 {
     return SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">' . $shapes . '</svg>');
 }
 
-/** The materials the sidebar offers: [value of WindowOptions::$vibrancy, label, what it is for], by section. */
+/** The materials the sidebar offers: [value of WindowOptions::$vibrancy, label, what it is for], by section; made once, as its icons are parsed SVGs, whose trees are cycles to collect. */
 function sections(): array
 {
-    return [
+    static $sections = null;
+    return $sections ??= [
         ['Window areas', icon('<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M1.5 5.5h13"/>'), [
             ['sidebar', 'Sidebar', 'The background of sidebars, like this one.'],
             ['titlebar', 'Title bar', 'The background of title bars and toolbars.'],
@@ -50,20 +49,12 @@ final class Vibrancy
     public ?Window $win = null;
     /** The material chosen in the sidebar. */
     public string $chosen = 'sidebar';
-    /** The sidebar is hidden. */
-    public bool $collapsed = false;
+    /** Whether the sidebar shows. */
+    public NavigationSplitViewVisibility $visibility = NavigationSplitViewVisibility::all;
     /** The material shows behind the pane too. */
     public bool $seeThrough = false;
-    public ScrollState $scroll;
-    /** @var array<string, ?bool> the sections, open */
-    public array $open = [];
-    public SVG $sidebarIcon;
-
-    public function __construct()
-    {
-        $this->scroll = new ScrollState();
-        $this->sidebarIcon = icon('<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/>');
-    }
+    /** The window shows a material: macOS's. */
+    public bool $vibrant = PHP_OS_FAMILY === 'Darwin';
 
     /** @return array{string, string, string} */
     public function find(): array

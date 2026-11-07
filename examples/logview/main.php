@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, ListState, Node, TableColumn, TextState};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -22,29 +22,20 @@ final class Log
     public array $lines = [];
     private int $read = 0;
     private string $rest = '';
-    public TextState $filter;
+    public string $filter = '';
     /** The find bar (Cmd+F): open, its query, and which of the lines matching it is shown. */
     public bool $finding = false;
-    public TextState $find;
+    public string $find = '';
     public int $found = 0;
     private string $applied = '';
     /** @var list<int> indexes of the lines the filter shows */
     public array $shown = [];
-    public ListState $list;
-    /** @var list<TableColumn> */
-    public array $columns;
+    /** The line chosen, by its index. */
+    public ?int $chosen = null;
+    /** Counts the lists shown: a new one (a log opened, the filter changed) starts again from its end. */
+    public int $generation = 0;
     public ?Window $window = null;
     public array $counts = ['ERROR' => 0, 'WARN' => 0];
-
-    public function __construct()
-    {
-        $this->filter = new TextState();
-        $this->find = new TextState;
-        $this->list = new ListState();
-        $this->list->selected = -1;
-        $this->list->followEnd = true;
-        $this->columns = [new TableColumn('#', 72, align: Node::END), new TableColumn('Line')];
-    }
 
     public function open(string $path): void
     {
@@ -54,13 +45,9 @@ final class Log
         $this->rest = '';
         $this->shown = [];
         $this->counts = ['ERROR' => 0, 'WARN' => 0];
-        $this->list->row = 0;
-        $this->list->offset = 0;
-        $this->list->forgetHeights();
-        $this->list->selected = -1;
+        $this->chosen = null;
+        $this->generation++;
         $this->poll();
-        $this->list->count = count($this->shown);
-        $this->list->scrollToEnd();
         $this->window?->setTitle(basename($path) . ' — Logs');
     }
 
@@ -105,30 +92,33 @@ final class Log
         return $this->applied === '' || stripos($line, $this->applied) !== false;
     }
 
-    /** Applies the filter when it changed since the last frame. */
+    /** Applies the filter, changed. */
     public function refilter(): void
     {
-        if ($this->filter->text === $this->applied) {
+        if ($this->filter === $this->applied) {
             return;
         }
-        $this->applied = $this->filter->text;
+        $this->applied = $this->filter;
         $this->shown = [];
         foreach ($this->lines as $i => $line) {
             if ($this->matches($line)) {
                 $this->shown[] = $i;
             }
         }
-        $this->list->row = 0;
-        $this->list->offset = 0;
-        $this->list->selected = -1;
-        $this->list->count = count($this->shown); // end() goes by the count; the list sets it only when built
-        $this->list->scrollToEnd();
+        $this->chosen = null;
+        $this->generation++;
     }
 
     public function selectedLine(): ?string
     {
-        $i = $this->shown[$this->list->selected] ?? null;
-        return $i === null ? null : $this->lines[$i];
+        return $this->chosen === null ? null : $this->lines[$this->chosen];
+    }
+
+    /** The rows shown holding the find bar's query. @return list<int> */
+    public function hits(): array
+    {
+        if (!$this->finding || $this->find === '') { return []; }
+        return array_values(array_filter($this->shown, fn(int $i) => stripos($this->lines[$i], $this->find) !== false));
     }
 }
 

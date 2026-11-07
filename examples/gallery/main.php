@@ -205,6 +205,10 @@ final class GalleryCharts
     /** @var list<float> */
     public array $sales = [];
     public int $month = -1, $selected = -1, $stacking = 0;
+    /** The month and the second the pointer is on, and the share of the donut, null for none. */
+    public ?string $hoverMonth = null;
+    public ?DateTimeImmutable $at = null;
+    public ?float $angle = null;
     /** @var list<list<array{0: float, 1: float}>> a car's weight and fuel use, by class */
     public array $scatter = [[], [], []];
 
@@ -327,6 +331,12 @@ final class Gallery
     public Router $router;
     /** Lays the gallery out right to left, as an app in Arabic or Hebrew is. */
     public bool $rtl = false;
+    /** The text of the fields the declarative views bind: the search field, the city, the list's filter, the chat's draft. */
+    public string $searchText = '', $cityText = '', $filterText = '';
+    /** The toast showing, the crumb of the path clicked (-1 for none), and whether files are dragged over the drop well. */
+    public ?string $toast = null;
+    public int $crumb = -1;
+    public bool $filesTargeted = false;
     /** The language chosen on the Languages page, "" for the system's. */
     public string $language = '';
     public int $count = 0;

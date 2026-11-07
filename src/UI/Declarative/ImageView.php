@@ -29,6 +29,9 @@ final class ImageView extends View
             $img = Image::symbol($this->systemName, $size, $env->color?->rgb($env) ?? $env->theme->text);
             return $c->image($img, $size, $size);
         }
+        if ($this->image instanceof SVG && !$this->resizable) { // an icon, as a symbol: the font's size, the foreground color
+            return $c->icon($this->image, ($env->font?->size ?? $env->theme->fontSize) * 1.2, $env->color?->rgb($env) ?? $env->theme->text);
+        }
         $n = $c->image($this->image, 0, 0);
         if ($this->resizable) {
             [$w, $h] = [$n->fw, $n->fh];

@@ -1011,6 +1011,13 @@ final class Runtime
         if ($changed) { $this->pauseToasts(false); } // the toasts' time stops with the window in the background, from now
     }
 
+    /** The tip of the innermost node under the pointer, as a press left it ('' for none, or one of its own, which the view draws): what a window whose system shows tips gives it (Platform\NativeTips). */
+    public function hoverTip(): string
+    {
+        $h = $this->tipHover;
+        return $h === null || $h === $this->tipDismissed || isset($this->disabledIds[$h]) ? '' : ($this->tips[$h] ?? '');
+    }
+
     /** Hides the tip that shows until neither the pointer nor the focus is on its node. */
     public function dismissTip(): void
     {
@@ -1096,9 +1103,11 @@ final class Runtime
         return count($this->locals);
     }
 
-    public function local(int $id, Closure $make): mixed
+    public function local(int $id, Closure $make, ?string $class = null): mixed
     {
-        return $this->locals[$id] ??= $make();
+        $v = $this->locals[$id] ??= $make();
+        if ($class !== null && !$v instanceof $class) { $v = $this->locals[$id] = $make(); } // another kind of node was built at this id before (an if's other branch): its state is not this one's
+        return $v;
     }
 
     /**
@@ -2484,6 +2493,11 @@ final class Runtime
         foreach ($this->inputs as $id => $_) {
             $r = $this->rects[$id] ?? null;
             if ($r !== null && $this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) { $best = $id; $bestArea = $r[2] * $r[3]; }
+        }
+        if ($best !== null) { // a control over it, not inside it (a field over a canvas in a ZStack): the control's, as the topmost view takes the pointer
+            foreach ($this->focusables as $f) {
+                if ($f !== $best && isset($this->rects[$f]) && $this->under($f, $x, $y) && !$this->within($f, $best) && !$this->within($best, $f)) { return null; }
+            }
         }
         return $best;
     }

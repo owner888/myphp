@@ -2,119 +2,57 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\UI\{Context, Font, Node};
-use MyPHP\UI\Editor\{Buffer, Completion, CompletionKind, CompletionRequest, Diagnostic, DiffInline, DiffLayout, HoverRequest, Pos, Severity};
+use MyPHP\UI\Editor\{DiffInline, DiffLayout};
 
-$editorPage = function (Context $c, File $f) use (&$wordsOf, &$wordAt, &$todos): void {
-    $t = $c->theme;
+/** The editor of $f, and its status bar: where the caret is, the changes, the lines and the language. */
+$editorPage = function (File $f) {
     $st = $f->editor;
-    $st->onCompletion = function (CompletionRequest $r) use ($st, $wordsOf) {
-        $st->showCompletions($r->offset - strlen($r->prefix), $wordsOf($st->buffer, $r->prefix));
-    };
-    $st->onHover = function (HoverRequest $r) use ($st, $f, $wordAt) {
-        [$word, $start, $end] = $wordAt($st->buffer, $r->offset);
-        if ($word === '') { return; }
-        $n = substr_count((string)$st->buffer, $word);
-        $st->showHover($start, $end, sprintf('%s: %d occurrence%s in %s', $word, $n, $n === 1 ? '' : 's', $f->name));
-    };
-    $st->setDiagnostics($st->buffer->version(), $todos($st->buffer));
-    $ed = $st->view($c);
-    $ed->grow = 1;
-    if ($c->runtime !== null && $c->runtime->focus === null) { $c->runtime->focusOn($ed->id); } // AutoFocus
-    // The status bar.
     $pos = $st->cursorPos();
     $sels = count($st->selections());
-    $lang = $st->buffer->language()?->name ?? 'Plain Text';
-    $status = sprintf('Ln %d, Col %d', $pos->line + 1, $pos->col + 1);
-    if ($sels > 1) { $status .= sprintf(' · %d selections', $sels); }
     [$added, $deleted] = $f->diff->stats();
-    $c->divider();
-    $c->row(0, 16)->padding(4, 12);
-      $c->text($status, 12, $t->textMuted);
-      $c->text(sprintf('+%d −%d', $added, $deleted), 12, $t->textMuted);
-      $c->spacer();
-      $c->text(sprintf('%d lines · %s', $st->buffer->lineCount(), $lang), 12, $t->textMuted);
-    $c->end();
+    return VStack(spacing: 0)(
+        CodeEditor($st)->id($f->name)->defaultFocus() // each file's editor its own: it shows, its TODOs are found
+            ->onAppear($f->check(...))->onChange(of: $st->buffer->version(), action: $f->check(...)),
+        Divider(),
+        HStack(spacing: 16)(
+            Text(verbatim: sprintf('Ln %d, Col %d', $pos->line + 1, $pos->col + 1) . ($sels > 1 ? sprintf(' · %d selections', $sels) : '')),
+            Text(verbatim: sprintf('+%d −%d', $added, $deleted)),
+            Spacer(),
+            Text(verbatim: sprintf('%d lines · %s', $st->buffer->lineCount(), $st->buffer->language()?->name ?? 'Plain Text')),
+        )->font(Font::caption)->foregroundStyle(Color::secondary)->padding(Edge::horizontal, 12)->padding(Edge::vertical, 4),
+    );
 };
 
-$diffPage = function (Context $c, EditorApp $a, File $f): void {
+/** The changes of $f, split or unified, as the toolbar says. */
+$diffPage = function (File $f) {
     $d = $f->diff;
-    $d->layout = $a->layout === 1 ? DiffLayout::DiffUnified : DiffLayout::DiffSplit;
-    $d->inline = [DiffInline::DiffInlineWordAlt, DiffInline::DiffInlineChar, DiffInline::DiffInlineNone][$a->inline];
-    if ($d->hunks() === []) {
-        $c->column(0, 0, 1)->center();
-          $c->text('No changes', 18, null, Font::BOLD);
-          $c->text('Edit ' . $f->name . ' to see its changes here.', null, $c->theme->textMuted);
-        $c->end();
-        return;
-    }
-    $d->view($c)->grow = 1;
+    $d->layout = $this->layout === 1 ? DiffLayout::DiffUnified : DiffLayout::DiffSplit;
+    $d->inline = [DiffInline::DiffInlineWordAlt, DiffInline::DiffInlineChar, DiffInline::DiffInlineNone][$this->inline];
+    return $d->hunks() === []
+        ? VStack(spacing: 6)(
+            Text('No changes')->font(Font::title3)->bold(),
+            Text(verbatim: 'Edit ' . $f->name . ' to see its changes here.')->foregroundStyle(Color::secondary),
+        )->frame(maxWidth: INF, maxHeight: INF)
+        : DiffView($d);
 };
 
-/** Completes $prefix with the words of the buffer, and the keywords of its language, as editors do without a language server. @return list<Completion> */
-$wordsOf = function (Buffer $b, string $prefix): array {
-    $seen = []; $out = [];
-    foreach (preg_split('/[^\p{L}\p{Nd}_]+/u', (string)$b, -1, PREG_SPLIT_NO_EMPTY) as $w) {
-        if (strlen($w) < 3 || isset($seen[$w]) || $w === $prefix) { continue; }
-        $seen[$w] = true;
-        $out[] = new Completion($w, 'word', CompletionKind::CompletionText);
-    }
-    foreach (KEYWORDS[$b->language()?->name ?? ''] ?? [] as $k) {
-        if (!isset($seen[$k])) { $out[] = new Completion($k, 'keyword', CompletionKind::CompletionKeyword); }
-    }
-    usort($out, fn(Completion $x, Completion $y) => strcmp($x->label, $y->label));
-    return $out;
-};
-
-/** The word at $off: it, and where it starts and ends. @return array{0: string, 1: int, 2: int} */
-$wordAt = function (Buffer $b, int $off): array {
-    $p = $b->pos($off);
-    $line = $b->line($p->line);
-    $isWord = fn(string $c) => $c === '_' || ctype_alnum($c);
-    $a = $p->col; $z = $p->col;
-    while ($a > 0 && $isWord($line[$a - 1])) { $a--; }
-    while ($z < strlen($line) && $isWord($line[$z])) { $z++; }
-    $start = $off - ($p->col - $a);
-    return [substr($line, $a, $z - $a), $start, $start + $z - $a];
-};
-
-/** The TODO comments, as warnings. @return list<Diagnostic> */
-$todos = function (Buffer $b): array {
-    $out = [];
-    for ($i = 0; $i < $b->lineCount(); $i++) {
-        $line = $b->line($i);
-        if (($at = strpos($line, 'TODO')) !== false) {
-            $start = $b->offset(new Pos($i, $at));
-            $out[] = new Diagnostic($start, $start + strlen($line) - $at, Severity::SeverityWarning, trim(substr($line, $at)), 'todo');
-        }
-    }
-    return $out;
-};
-
-return function (Context $c) use (&$editorPage, &$diffPage): void {
-    $t = $c->theme;
+return function () use ($editorPage, $diffPage) {
     $f = $this->current();
-    $f->editor->softWrap = $this->wrap;
-    $f->diff->wrap = $this->wrap;
-    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
-      $c->column(0, 0, 0, $t->surface)->padding(12, 0);
-        $c->sidebar($this->selected, function () use ($c) {
-            foreach ($this->files as $f) { $c->sidebarItem($f->name, $f->name . ($f->editor->buffer->modified() ? ' •' : '')); }
-        }, 200)->grow = 1;
-      $c->end();
-      $c->column(0, 0, 1);
-        $c->row(0, 12)->padding(8, 12)->alignItems(Node::CENTER);
-          $c->segmented(['Editor', 'Changes'], $this->page);
-          if ($this->page === 1) {
-              $c->segmented(['Split', 'Unified'], $this->layout);
-              $c->select(['Words', 'Characters', 'Off'], $this->inline);
-          }
-          $c->spacer();
-          $c->text('Wrap', null, $t->textMuted);
-          $c->switch('', $this->wrap)->label('Soft wrap'); // named for assistive technology, as mygo's: the text before it shows
-        $c->end();
-        $c->divider();
-        if ($this->page === 0) { $editorPage($c, $f); } else { $diffPage($c, $this, $f); }
-      $c->end();
-    $c->end();
+    $f->editor->softWrap = $f->diff->wrap = $this->wrap;
+    return NavigationSplitView(
+        sidebar: ListView(selection: $this->selected)(
+            Each($this->files, id: 'name')(fn(File $f) => Text(verbatim: $f->name . ($f->editor->buffer->modified() ? ' •' : ''))->tag($f->name)),
+        ),
+        detail: VStack(spacing: 0)(
+            HStack(spacing: 12)(
+                Picker('Page', selection: $this->page)(Text('Editor')->tag(0), Text('Changes')->tag(1))->pickerStyle(PickerStyle::segmented),
+                $this->page === 1 ? Picker('Layout', selection: $this->layout)(Text('Split')->tag(0), Text('Unified')->tag(1))->pickerStyle(PickerStyle::segmented) : null,
+                $this->page === 1 ? Picker('Within lines', selection: $this->inline)(Text('Words')->tag(0), Text('Characters')->tag(1), Text('Off')->tag(2))->labelsHidden() : null,
+                Spacer(),
+                Toggle('Wrap', isOn: $this->wrap)->toggleStyle(ToggleStyle::switch)->accessibilityLabel('Soft wrap'),
+            )->padding(Edge::horizontal, 12)->padding(Edge::vertical, 8),
+            Divider(),
+            $this->page === 0 ? $editorPage($f) : $diffPage($f),
+        ),
+    );
 };

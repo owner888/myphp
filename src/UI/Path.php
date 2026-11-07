@@ -83,6 +83,32 @@ final class Path
     public function cubeTo(float $c1x, float $c1y, float $c2x, float $c2y, float $x, float $y): static { $this->cmds[] = [self::CUBE, $c1x, $c1y, $c2x, $c2y, $x, $y]; return $this; }
     public function close(): static { $this->cmds[] = [self::CLOSE, 0, 0, 0, 0, 0, 0]; return $this; }
 
+    /** The ellipse in the box ($x, $y, $w, $h), as SwiftUI's Path(ellipseIn:). */
+    public static function ellipse(float $x, float $y, float $w, float $h): self
+    {
+        [$rx, $ry] = [$w / 2, $h / 2]; [$cx, $cy] = [$x + $rx, $y + $ry];
+        [$kx, $ky] = [0.5522847498 * $rx, 0.5522847498 * $ry];
+        return (new self())->moveTo($cx + $rx, $cy)
+            ->cubeTo($cx + $rx, $cy + $ky, $cx + $kx, $cy + $ry, $cx, $cy + $ry)
+            ->cubeTo($cx - $kx, $cy + $ry, $cx - $rx, $cy + $ky, $cx - $rx, $cy)
+            ->cubeTo($cx - $rx, $cy - $ky, $cx - $kx, $cy - $ry, $cx, $cy - $ry)
+            ->cubeTo($cx + $kx, $cy - $ry, $cx + $rx, $cy - $ky, $cx + $rx, $cy)
+            ->close();
+    }
+
+    /** The box ($x, $y, $w, $h), its corners rounded by $radius, as SwiftUI's Path(rect:) and Path(roundedRect:cornerRadius:). */
+    public static function rect(float $x, float $y, float $w, float $h, float $radius = 0): self
+    {
+        $p = new self();
+        $r = max(0.0, min($radius, $w / 2, $h / 2));
+        if ($r == 0) { return $p->moveTo($x, $y)->lineTo($x + $w, $y)->lineTo($x + $w, $y + $h)->lineTo($x, $y + $h)->close(); }
+        $k = 0.5522847498 * $r;
+        return $p->moveTo($x + $r, $y)->lineTo($x + $w - $r, $y)->cubeTo($x + $w - $r + $k, $y, $x + $w, $y + $r - $k, $x + $w, $y + $r)
+            ->lineTo($x + $w, $y + $h - $r)->cubeTo($x + $w, $y + $h - $r + $k, $x + $w - $r + $k, $y + $h, $x + $w - $r, $y + $h)
+            ->lineTo($x + $r, $y + $h)->cubeTo($x + $r - $k, $y + $h, $x, $y + $h - $r + $k, $x, $y + $h - $r)
+            ->lineTo($x, $y + $r)->cubeTo($x, $y + $r - $k, $x + $r - $k, $y, $x + $r, $y)->close();
+    }
+
     /** A circle of radius $r around ($cx, $cy), as mygo's: four cubic arcs. */
     public function circle(float $cx, float $cy, float $r): static
     {

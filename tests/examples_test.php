@@ -38,10 +38,17 @@ same([1, 1], [$s->rowClicks, $s->deletes], 'automation: shown, Delete takes it')
 $t = new Headless($view, 520, 480);
 $t->frame();
 check(array_filter($t->texts(), fn($x) => str_ends_with($x, ' / 870 ms')) !== [], 'the intro lasts 870 ms: ' . json_encode($t->texts()));
+$t->frame(30);
+check($s->time > 0 && $t->byText('Plan') !== null, "the playhead moves as frames come: {$s->time}");
 $t->clickText('Pause'); $t->frame(); check($s->paused, 'Pause holds the intro');
+$at = $s->time; $t->frame(5); same($at, $s->time, 'paused, the playhead stays');
 $t->clickText('Play'); $t->frame(); check(!$s->paused, 'Play goes on');
 $t->clickText('Reverse'); $t->frame(); check($s->reverse, 'Reverse turns it around');
-$t->clickText('Restart'); $t->frame(); same(1, $s->run, 'Restart plays it again');
+$t->clickText('Restart'); $t->frame(); check(!$s->reverse && $s->time < 0.1, 'Restart plays it again from the start');
+$v = \MyPHP\Examples\Timeline\Intro::timeline()->value(time: 0.87);
+check(abs($v['x']) < 1e-6 && abs($v['scale'] - 1) < 1e-6 && abs($v['Ship'] - 1) < 1e-6, 'at its end, the card is in place and every row shows: ' . json_encode($v));
+$v = \MyPHP\Examples\Timeline\Intro::timeline()->value(time: 0.0);
+check($v['x'] == -420 && $v['fade'] == 0, 'at its start, the card is off to the left');
 
 // markdown-chat: a message sent, and without a window the reply whole.
 [$view, $s] = Headless::load('markdown-chat');
@@ -66,7 +73,7 @@ same(["A portable note\nShared clipboard and drag representations.", 0], [$d->re
 $s->receive($d);
 same([1, 'Received ' . \MyPHP\Examples\Clipboard\NOTE_FORMAT], [$s->providers, $s->status], 'received as JSON, made once asked for');
 $s->receive(\MyPHP\Transfer\Data::text('plain'));
-same('plain', $s->body->text, 'plain text becomes the body');
+same('plain', $s->body, 'plain text becomes the body');
 
 // text-input: the app's field takes typed text through the text services.
 [$view, $s] = Headless::load('text-input');
@@ -98,11 +105,11 @@ $s->apps = [new \MyPHP\InstalledApp('Visual Studio Code', 'com.microsoft.VSCode'
 $s->icons = array_fill_keys(array_map(fn($a) => $a->path, $s->apps), null); // no icons drawn here
 $t = new Headless($view, 680, 420);
 $t->frame();
-$s->query->text = 's'; $s->filter(); $t->frame();
+$s->query = 's'; $s->filter(); $t->frame();
 same(['Safari', 'Script Editor', 'Visual Studio Code'], array_map(fn($a) => $a->name, $s->results), 'what starts with s, then the rest that has it');
 $t->down(); $t->frame();
 same(1, $s->chosen(), 'Down chooses the next');
-$s->query->text = ''; $s->filter(); $t->frame();
+$s->query = ''; $s->filter(); $t->frame();
 $q = $t->byLabel('Search apps');
 same(22.0, $q->fontSize, 'the query in 22 points');
 $t->clickOn($q); $t->type('saf'); $t->frame();
@@ -127,32 +134,74 @@ $switches = []; $walk = function (Node $n) use (&$walk, &$switches) { if ($n->ki
 $t->clickOn($switches[0]); $t->frame(); // the switch labeled Focus mode, after the text that shows it: clickLabel() finds the first in the tree, as mygo's Tester.Click
 check($s->focus, 'the switch turns focus mode on');
 
-// flyout: the window's buttons, and the list of colors chosen from the keys and the mouse.
-Headless::load('flyout', '$a = new Flyouts');
-$a = new \MyPHP\Examples\Flyout\Flyouts();
-$t = new Headless(Headless::view('flyout', $a), 300, 240);
+// flyout: the window's buttons, the list of colors chosen in its popover (in the window, as a test has no window to show one outside), the note typed.
+[$view, $a] = Headless::load('flyout', 'App::whenReady');
+$t = new Headless($view, 300, 240);
 $t->frame();
-check($t->byText('Red ▾') !== null && $t->byText('No note') !== null, 'the color and the note at first');
-$t = new Headless(Headless::view('flyout', $a, 'list.php'), 180, 180);
-$t->frame();
-$t->down(); $t->down();
-same(2, $a->hover, 'Down moves along the list');
-$t->key(Key::UP, 'moveUp:');
-same(1, $a->hover, 'Up moves back');
-$t->hover(40, 6 + 4 * 28 + 14); $t->frame();
-same(4, $a->hover, 'the pointer moves the choice'); // choosing closes the flyout and redraws the window, which a headless test has not
+check($t->byText('Red') !== null && $t->byText('No note') !== null, 'the color and the note at first');
+$t->clickText('Red'); $t->frame();
+check($a->choosing && $t->byText('Purple') !== null, 'the button shows the colors');
+$t->clickText('Orange'); $t->frame();
+check($a->color === 1 && !$a->choosing && $t->byText('Purple') === null, 'a color chosen, the popover closes');
+$t->clickText('Edit note…'); $t->frame();
+$t->clickLabel('Note'); $t->type('Milk'); $t->frame(2);
+same('Milk', $a->note, 'the note typed in its popover');
 
 // vibrancy: a material chosen in the sidebar, and the sidebar hidden and shown.
 [$view, $s] = Headless::load('vibrancy');
-$t = new Headless($view, 880, 640);
+$t = new Headless(function (Context $c) use ($view) { $c->titleBar = ['height' => 52.0, 'left' => 78.0, 'right' => 0.0]; $view($c); }, 880, 640); // its title bar hidden, the window controls inset
 $t->frame();
 $t->clickText('Popover'); $t->frame();
 check($s->chosen === 'popover' && $t->byText("new WindowOptions(vibrancy: 'popover')  // or \$win->setVibrancy('popover')") !== null, "chose {$s->chosen}");
 $t->clickLabel('Hide Sidebar'); $t->frame();
-check($s->collapsed && $t->byLabel('Show Sidebar') !== null, 'Hide Sidebar hides it');
+check($s->visibility === \NavigationSplitViewVisibility::detailOnly && $t->byLabel('Show Sidebar') !== null, 'Hide Sidebar hides it');
 $t->clickLabel('Show Sidebar'); $t->frame();
-check(!$s->collapsed, 'and Show Sidebar shows it');
+check($s->visibility === \NavigationSplitViewVisibility::all, 'and Show Sidebar shows it');
 check($t->byText('This window shows no material here, so the sidebar draws a background of its own: materials show on macOS.') !== null, 'without a material, the pane says why');
+gc_collect_cycles(); gc_disable(); $t->frame(10); $cycles = gc_collect_cycles(); gc_enable();
+same(0, $cycles, 'its frames leave no cycles to collect: its sections, and their parsed icons, made once');
+
+// embed-webview: the tabs in the sidebar, the page shown under the toolbar, the menu and the zoom; its web views stand-ins of no native side.
+try { \MyPHP\UI\Image::symbol('globe', 16, 0); $symbols = true; } catch (\FFI\Exception) { $symbols = false; } // the system's symbols: on Linux, GTK's icon theme
+if (!$symbols) { echo "  embed-webview skipped: the system's symbols need GTK\n"; } else {
+[$view, $s] = Headless::load('embed-webview');
+$stub = static function (): object { // a page of no native side: what each method returns empty
+    $i = new \ReflectionClass(\MyPHP\Platform\Page::class);
+    $body = '';
+    foreach ($i->getMethods() as $m) {
+        $ps = implode(', ', array_map(fn(\ReflectionParameter $p) => ($p->getType() ? $p->getType() . ' ' : '') . ($p->isPassedByReference() ? '&' : '') . ($p->isVariadic() ? '...' : '') . '$' . $p->getName() . ($p->isOptional() && !$p->isVariadic() ? ' = null' : ''), $m->getParameters()));
+        $ps = preg_replace('/(^|, )([^?$&.][^ ]* )(\$\w+ = null)/', '$1?$2$3', $ps); // a default of null makes its type nullable
+        $t = $m->getReturnType();
+        $ret = $t === null ? '' : ': ' . $t;
+        $v = match (true) { $t === null, (string)$t === 'void' => '', $t->allowsNull() => 'return null;', (string)$t === 'bool' => 'return false;', (string)$t === 'int' => 'return 0;', (string)$t === 'float' => 'return 0.0;', (string)$t === 'string' => "return '';", (string)$t === 'array' => 'return [];', default => 'throw new \LogicException();' };
+        $body .= ($m->isStatic() ? 'public static' : 'public') . " function {$m->getName()}($ps)$ret { $v }\n";
+    }
+    return eval("return new class implements \\MyPHP\\Platform\\Page { $body };");
+};
+$web = static function () use ($stub): \MyPHP\WebView {
+    $page = (new \ReflectionClass(\MyPHP\Page::class))->newInstanceWithoutConstructor();
+    $native = $stub();
+    (fn() => $this->web = $native)->call($page);
+    $v = (new \ReflectionClass(\MyPHP\WebView::class))->newInstanceWithoutConstructor();
+    (fn() => $this->page = $page)->call($v);
+    return $v;
+};
+$s->tabs = [new \MyPHP\Examples\EmbedWebview\Tab('notes', 'Notes', $web()), new \MyPHP\Examples\EmbedWebview\Tab('web', 'example.com', $web())];
+$t = new Headless(function (Context $c) use ($view) { $c->titleBar = ['height' => 52.0, 'left' => 78.0, 'right' => 0.0]; $view($c); }, 1000, 680);
+$t->frame(); $t->paint();
+check(count($t->rt->webPlaces) === 1 && $t->rt->webPlaces[0]['frame'][1] >= 52, 'the page shown, under the title bar: ' . json_encode($t->rt->webPlaces));
+check($t->byLabel('Back') !== null && $t->byLabel('Reload') !== null && $t->byText('0 likes') !== null && $t->byText('♥ 0') !== null, 'the toolbar and the badge: ' . json_encode($t->texts()));
+$t->clickText('example.com'); $t->frame();
+check($s->tab === 'web' && $t->byText('example.com') !== null, "chose the tab {$s->tab}");
+$s->alert = true; $t->frame(); // as the menu's Show an alert, a menu of the system's
+check($t->byText('Alerts show over the page too') !== null, 'the alert shows');
+$t->clickText('OK'); $t->frame();
+same(false, $s->alert, 'OK closes it');
+$s->dialog = true; $t->frame(2);
+check($t->byText('A sheet over the page') !== null, 'the sheet shows');
+$t->clickText('Done'); $t->frame(2);
+check(!$s->dialog && $t->byText('A sheet over the page') === null, 'Done closes it');
+}
 
 // todo: the store, and its event in the TypeScript client.
 Headless::load('todo', 'function openWindow');
@@ -180,7 +229,7 @@ $t->rt->clock = function () use (&$clock) { return $clock; };
 $t->frame();
 $t->clickText('Basic Cannon'); $t->frame(3);
 check($s->inAir() === 100 && $t->byText('100 in the air') !== null, $s->inAir() . ' pieces after Basic Cannon');
-check($s->bursts[0]->launched !== 0, 'the burst heads off');
+check($s->bursts[0]->launched, 'the burst heads off');
 $clock += (int)(200 / 60 * 1e9) + 1000;
 $t->frame();
 same(0, count($s->bursts), 'the bursts go once they faded');
@@ -367,25 +416,11 @@ check($g->w->time == $before && $g->frozen && !$g->sounding, 'without the keyboa
 
 // gallery: the sidebar and the toolbar navigate the router, and the sidebar's choice follows the history; a row's star and the breadcrumb; the list's choice derived from the filter; the counter; the Languages page in English and in Chinese.
 Headless::load('gallery');
-$G = fn(string $path = '/overview') => new \MyPHP\Examples\Gallery\Gallery($path);
-$H = fn(object $g) => Headless::helpers('gallery', $g); // the view's parts, bound to that state
+$G = function (string $path = '/overview'): object { $g = new \MyPHP\Examples\Gallery\Gallery($path); $g->router->transition = \MyPHP\UI\Router::NONE; return $g; };
 $g = $G();
-$g->router->transition = \MyPHP\UI\Router::NONE;
-$h = $H($g);
-$t = new Headless(function (\MyPHP\UI\Context $c) use ($g, $h) {
-    $c->row(0, 0, 1)->fill()->alignItems(\MyPHP\UI\Node::STRETCH);
-      $h['sidebar']($c);
-      $c->column(0, 0, 1);
-        $h['toolbar']($c);
-        $g->router->view($c, function (\MyPHP\UI\Route $r) use ($c) {
-            $r->title(\MyPHP\Examples\Gallery\pageOf($r->path()));
-            $c->text('Page: ' . $r->path());
-        });
-      $c->end();
-    $c->end();
-}, 980, 720);
+$t = new Headless(Headless::view('gallery', $g), 1100, 800);
 $t->frame();
-$at = function (string $want) use ($g, $t): bool { $t->frame(); return $g->router->path() === $want && $t->byText("Page: $want") !== null; };
+$at = function (string $want) use ($g, $t): bool { $t->frame(); return $g->router->path() === $want; };
 $ok = true;
 foreach (\MyPHP\Examples\Gallery\PAGES as $p) {
     $t->clickOn($t->byLabel($p) ?? $t->byText($p)); $t->frame();
@@ -405,29 +440,22 @@ check($at('/text'), 'the history moves the sidebar\'s choice');
 $t->down(); $t->frame();
 check($at('/rich-text'), 'from which Down goes on');
 $g->router->push('/list/42'); $t->frame(2);
+$t->clickOn($t->byLabel('List')); $t->frame();
 $t->down(); $t->frame();
 check($at('/charts'), 'a row of the list is the List page\'s, in the sidebar');
 
 $g = $G('/list/42');
-$g->router->transition = \MyPHP\UI\Router::NONE;
-$h = $H($g);
-$t = new Headless(function (\MyPHP\UI\Context $c) use ($h, $g) {
-    $c->column(0, 0, 1)->fill();
-      $h['toolbar']($c);
-      $g->router->view($c, function (\MyPHP\UI\Route $r) use ($c, $h) { if ($r->match('/list/{row}')) { $h['listRow']($c, $r); } });
-    $c->end();
-}, 600, 400);
+$t = new Headless(Headless::view('gallery', $g), 1100, 800);
 $t->frame();
 foreach ([true, false] as $want) {
     $t->clickText('Starred'); $t->frame();
     same($want, $g->starred[42] ?? false, 'the row\'s star');
 }
-$t->clickText('List'); $t->frame();
+$t->clickOn($t->byText('List', $t->byLabel('Path'))); $t->frame(); // the breadcrumb's, not the sidebar's
 same('/list', $g->router->path(), 'the breadcrumb goes back to the list');
 
 $g = $G('/list');
-$list = $H($g)['list'];
-$t = new Headless(function (\MyPHP\UI\Context $c) use ($list) { $c->scroll(0, 0, 1)->fill(); $list($c); $c->end(); }, 980, 720);
+$t = new Headless(Headless::view('gallery', $g), 1100, 900);
 $t->frame(2);
 $t->clickText('Row 2'); $t->frame();
 same(2, $g->picked, 'a click picks a row');
@@ -440,7 +468,7 @@ $t->enter(); $t->frame();
 same('/list/99', $g->router->path(), 'Enter opens it');
 
 $g = $G();
-$t = new Headless($H($g)['overview'], 980, 720);
+$t = new Headless(Headless::view('gallery', $g), 1100, 800);
 $t->frame();
 $ok = true;
 foreach ([['Increment', '1'], ['Increment', '2'], ['−', '1']] as [$click, $want]) { $t->clickText($click); $t->frame(); $ok = $ok && $t->byText($want) !== null; }
@@ -451,7 +479,7 @@ $g->now = new \DateTimeImmutable('2026-01-05 13:07:00', new \DateTimeZone('UTC')
 $g->meeting = new \DateTimeImmutable('2026-01-05 09:30:00', new \DateTimeZone('UTC'));
 $saved = \MyPHP\App::locale(); // without an app, the zero region: the formats are the language's, and Chinese's 24 hours show no AM/PM segment
 \MyPHP\App::setLanguages(...\MyPHP\Examples\Gallery\GALLERY_LANGUAGES); // as the gallery declares them
-$t = new Headless($H($g)['languages'], 980, 1400);
+$t = new Headless(Headless::view('gallery', $g), 1100, 2400);
 $t->frame();
 $missing = array_filter(['1,234,567.891', 'Monday, January 5, 2026', '1:07 PM', 'January 2026', '简体中文 (zh-Hans)', 'Pseudo right to left (ar-XB)', '12,34,567.891'], fn($s) => $t->byText($s) === null);
 same([], array_values($missing), 'the Languages page in English');
@@ -479,6 +507,220 @@ $md = $n->document()->text()->markdown();
 check(str_contains($md, '# Shopping') && str_contains($md, '- milk'), "its Markdown: $md");
 check($t->byText('Shopping') !== null, 'the sidebar shows it: ' . json_encode($t->texts()));
 
+// inbox: mailboxes with a badge, rows chosen by a click and Cmd-click, opened by a double click, the End button scrolling.
+try { \MyPHP\UI\Image::symbol('doc', 16, 0); $symbols = true; } catch (\FFI\Exception) { $symbols = false; } // the system's symbols: on Linux, GTK's icon theme
+if (!$symbols) { echo "  inbox skipped: the system's symbols need GTK\n"; } else {
+[, $s] = Headless::load('inbox', '// Avatars:', ['1000']); // its avatars are macOS's app icons
+$s->avatars = [\MyPHP\UI\Image::fromPixels(4, 4, str_repeat("\x80\x80\x80\xff", 16))];
+$t = new Headless(Headless::view('inbox', $s), 900, 640);
+$t->frame(2);
+check($t->byText('1,000') !== null && $t->byText('Sender 0') !== null, 'the badge and the first rows: ' . json_encode(array_slice($t->texts(), 0, 30)));
+$t->clickOn($t->byText('Sender 2')); $t->frame(2);
+same([[2], 'chose row 2'], [$s->chosen, $s->last], 'a click chooses a row');
+$t->clickOn($t->byText('Sender 4'), Key::COMMAND); $t->frame(2);
+same([2, 4], (sort($s->chosen) ? $s->chosen : []), 'Cmd-click adds one');
+$t->clickOn($t->byText('Sender 4')); $t->frame(2); $t->clickOn($t->byText('Sender 4'), 0, 2); $t->frame(2);
+same('opened row 4', $s->last, 'a double click is the primary action');
+$s->chosen = [7]; $t->frame(2);
+$t->key(Key::RETURN, 'insertNewline:'); $t->frame(2);
+same('opened row 7', $s->last, 'the choice the app set is the list\'s, Return its primary action');
+[$x, $y] = $t->middle($t->byText('Sender 9')); $t->rightClick($x, $y); $t->frame();
+same(['Reply'], $t->menuLabels(), 'a right click on a row not chosen: its menu');
+check($t->chooseMenuItem('Reply'), 'chosen'); $t->frame(2);
+same([true, 'replied to 9'], [isset($s->replied[9]), $s->last], 'the menu acts on that row');
+$t->clickText('End'); $t->frame(40);
+check($t->byText('Sender 999') !== null, 'End scrolls to the last row');
+$t->clickText('Flagged'); $t->frame(2);
+same(['flagged', 'mailbox flagged'], [$s->mailbox, $s->last], 'the sidebar chooses a mailbox');
+}
+
+// transfer: the wells take text and files dropped from other apps, lit while one is over them.
+[$view, $s] = Headless::load('transfer');
+$t = new Headless($view, 600, 560);
+$t->frame(2);
+check($t->byText('Drop here') !== null && $t->byText('Write the spec') !== null && $t->byText('Ship v0.78') !== null, 'the note, the wells and the cards: ' . json_encode($t->texts()));
+[$x, $y] = $t->middle($t->byText('Drop here'));
+$text = \MyPHP\Transfer\Data::text('dropped words');
+$d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer($text->formats(), \MyPHP\Transfer\Operation::COPY));
+check($t->dataOver($x, $y, $d), 'the text well takes text'); $t->frame(2);
+check($s->over === 'text' && $t->byText('Drop to take it') !== null, 'and is lit');
+$d->data = $text;
+check($t->dataDrop($x, $y, $d), 'its drop'); $t->frame(2);
+same(['dropped words', ''], [$s->dropped, $s->over], 'what was dropped shows, the well no longer lit');
+[$x, $y] = $t->middle($t->byText('Drop files from the Finder'));
+$files = \MyPHP\Transfer\Data::files(__FILE__);
+$d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer($files->formats(), \MyPHP\Transfer\Operation::COPY));
+check($t->dataOver($x, $y, $d), 'the files well takes files'); $d->data = $files;
+check($t->dataDrop($x, $y, $d), 'their drop'); $t->frame(2);
+check($t->byText(basename(__FILE__)) !== null, 'the file dropped shows');
+
+// richtext: the toolbar formats the paragraph the caret is in, the editor keeping the focus.
+[$view, $s] = Headless::load('richtext');
+$t = new Headless($view, 820, 640);
+$t->frame(2);
+check($t->byText('Body') !== null && $t->byText('Undo') !== null, 'the toolbar: ' . json_encode(array_slice($t->texts(), 0, 30)));
+$was = $s->formatting()->paragraph->heading;
+$t->clickText($was === 3 ? 'H2' : 'H3'); $t->frame(2);
+same($was === 3 ? 2 : 3, $s->formatting()->paragraph->heading, 'a heading button sets the paragraph\'s');
+$t->clickText('Undo'); $t->frame(2);
+same($was, $s->formatting()->paragraph->heading, 'Undo takes it back');
+
+// logview: a log's lines in a table from its end, the filter, the find bar choosing each line holding the query.
+[$view, $s] = Headless::load('logview');
+$log = tempnam(sys_get_temp_dir(), 'log');
+file_put_contents($log, implode("\n", array_map(fn(int $i) => $i % 50 === 7 ? "line $i ERROR disk full" : ($i % 30 === 3 ? "line $i WARN slow" : "line $i ok"), range(0, 499))) . "\n");
+$s->open($log);
+$t = new Headless($view, 960, 600);
+$t->frame(3);
+check($t->byText('line 499 ok') !== null && $t->byText('line 0 ok') === null, 'from its end: ' . json_encode(array_slice($t->texts(), -6)));
+same([500, 10, 17], [count($s->lines), $s->counts['ERROR'], $s->counts['WARN']], 'the lines and the levels counted');
+$t->clickOn($t->byLabel('Filter lines (type to search)')); $t->type('ERROR'); $t->frame(3);
+same(10, count($s->shown), 'the filter leaves the errors');
+check($t->byText('line 457 ') !== null || in_array('line 457 ', $t->texts(), true) || str_contains(json_encode($t->texts()), 'line 457'), 'and shows them: ' . json_encode(array_slice($t->texts(), -8)));
+$t->key(ord('f'), 'f', Key::COMMAND, 'f'); $t->frame(2);
+check($s->finding, 'Cmd+F opens the find bar');
+$t->type('disk'); $t->frame(3);
+same([0, 7], [$s->found, $s->chosen], 'the first line holding it chosen');
+$t->key(Key::RETURN, 'insertNewline:'); $t->frame(3);
+same([1, 57], [$s->found, $s->chosen], 'Return goes to the next');
+@unlink($log);
+
+// http: the history a sortable table, the request chosen showing its response, JSON colored line by line.
+[$view, $s] = Headless::load('http');
+$mk = function (int $id, string $url, ?int $status, float $time) {
+    $r = ['id' => $id, 'method' => 'GET', 'url' => $url, 'status' => $status, 'time' => $time, 'headers' => "HTTP/1.1 $status OK\r\ncontent-type: application/json", 'body' => '{"a":1,"b":"x"}', 'error' => '', 'at' => 0, 'lines' => []];
+    $r['lines'] = \MyPHP\Examples\Http\lines($r);
+    return $r;
+};
+$s->history = [$mk(1, 'https://b.example/one', 200, 0.3), $mk(2, 'https://a.example/two', 404, 0.1)];
+$t = new Headless($view, 1000, 680);
+$t->frame(2);
+check($t->byText('Send a request (Cmd+Enter); responses show here.') !== null && $t->byText('b.example/one') !== null, 'the history, nothing chosen: ' . json_encode($t->texts()));
+$t->clickText('a.example/two'); $t->frame(2);
+same(2, $s->chosen, 'a click chooses a request by its id');
+check($t->byText('404') !== null && $t->byText('    "b": "x"') !== null, 'its response, the JSON pretty-printed: ' . json_encode(array_slice($t->texts(), -16)));
+$t->clickText('URL'); $t->frame(2);
+same(['url', ['a.example/two', 'b.example/one'], 2], [$s->sortOrder?->column, array_map(fn($r) => preg_replace('#^https?://#', '', $r['url']), $s->history), $s->chosen], 'the URL header sorts by it, the choice kept');
+
+// files: a folder's entries as icons and as a sortable table, chosen, opened, found.
+$dir = sys_get_temp_dir() . '/myphp-files-' . getmypid();
+@mkdir("$dir/sub/inner", 0700, true);
+file_put_contents("$dir/b.txt", str_repeat('x', 3000)); file_put_contents("$dir/a.txt", 'a');
+[, $s] = Headless::load('files', '$files = new Files');
+$s = new \MyPHP\Examples\Files\Files($dir);
+$t = new Headless(Headless::view('files', $s), 960, 640);
+$t->frame(2);
+check($t->byText('a.txt') !== null && $t->byText('sub') !== null && $t->byText('3 items') !== null, 'the icons and the count: ' . json_encode($t->texts()));
+$t->clickText('b.txt'); $t->frame(2);
+same([realpath($dir) . '/b.txt'], $s->chosen, 'a click chooses');
+check($t->byText('1 of 3 chosen') !== null, 'the status says so');
+$t->clickText('List'); $t->frame(2);
+$t->clickText('Size'); $t->frame(2);
+same(['sub', 'a.txt', 'b.txt'], array_column($s->entries, 'name'), 'the Size header sorts, folders first');
+$t->clickOn($t->byText('sub')); $t->frame(2); $t->clickOn($t->byText('sub'), 0, 2); $t->frame(2);
+same(realpath($dir) . '/sub', $s->path, 'a double click opens a folder');
+$t->key(Key::DELETE, 'deleteBackward:'); $t->frame(2);
+same(realpath($dir), $s->path, 'Backspace goes up');
+$t->key(ord('f'), 'f', Key::COMMAND, 'f'); $t->type('a.'); $t->frame(3);
+same(['a.txt'], array_column($s->entries, 'name'), 'the find bar filters the entries');
+@unlink("$dir/a.txt"); @unlink("$dir/b.txt"); @rmdir("$dir/sub/inner"); @rmdir("$dir/sub"); @rmdir($dir);
+
+// markdown-notes: notes in a list the search filters, one opened as it is chosen, the preview following the editor's scroll.
+$dir = sys_get_temp_dir() . '/myphp-mdn-' . getmypid(); @mkdir($dir);
+file_put_contents("$dir/a.md", "# Alpha\n\n" . str_repeat("line\n\n", 80)); touch("$dir/a.md", time() - 100);
+file_put_contents("$dir/b.md", "# Beta\n\nhello **world**\n");
+Headless::load('markdown-notes', '$confirmDelete');
+$s = new \MyPHP\Examples\MarkdownNotes\Notes($dir);
+$s->choose($s->items[0]['path']);
+$t = new Headless(Headless::view('markdown-notes', $s), 1100, 680);
+$t->paints = true; // the editor's scroll is the painter's
+$t->frame(3);
+check($t->byText('hello world') !== null && $t->byText('saved') !== null, 'the newest note, previewed: ' . json_encode($t->texts()));
+$t->clickText('Alpha'); $t->frame(3);
+same(['a.md', '# Alpha'], [basename((string)$s->open), substr($s->text, 0, 7)], 'a note chosen opens');
+$editor = null; $preview = null;
+$walk = function (Node $n) use (&$walk, &$editor, &$preview) { if ($n->kind === Node::TEXTAREA) { $editor = $n; } if ($n->scroll instanceof \MyPHP\UI\ScrollState && !$n->scroll instanceof \MyPHP\UI\ListState) { $preview = $n; } foreach ($n->kids as $k) { $walk($k); } };
+$walk($t->root); $walk = null;
+[$x, $y] = $t->middle($editor);
+for ($i = 0; $i < 10; $i++) { $t->wheel($x, $y, 0, -300); }
+$t->frame(5);
+check($editor->edit->scrollFraction > 0.9 && $preview->scroll->y > 0.9 * $s->previewRange && $s->previewRange > 0, 'the preview follows the editor to its end: ' . json_encode([$editor->edit->scrollFraction, $preview->scroll->y, $s->previewRange]));
+$t->clickOn($t->byLabel('Search')); $t->type('bet'); $t->frame(3);
+same(['Beta'], array_column($s->shown(), 'title'), 'the search filters the notes');
+array_map('unlink', glob("$dir/*.md")); @rmdir($dir);
+
+// code-editor: the files in a sidebar, the editor's status, TODOs as warnings as they are typed, the changes page.
+[$view, $s] = Headless::load('code-editor', 'App::setMenu');
+$t = new Headless($view, 1200, 800);
+$t->frame(3);
+check($t->byText('server.go') !== null && $t->byText('Ln 1, Col 1') !== null && $t->byText('+0 −0') !== null, 'the files and the status: ' . json_encode($t->texts()));
+$before = count($s->current()->editor->diagnostics());
+$t->type('// TODO x'); $t->frame(3);
+same([$before + 1, 'Ln 1, Col 10'], [count($s->current()->editor->diagnostics()), $t->texts()[array_search('+1 −1', $t->texts(), true) - 1] ?? null], 'a TODO typed is a warning; the caret moved, a line changed');
+check($t->byText('Greeter.php •') !== null, 'the file marked modified');
+$t->clickText('Changes'); $t->frame(3);
+check($t->byText('Unified') !== null && $t->byText('No changes') === null, 'its changes, as a diff');
+$t->clickText('server.go'); $t->frame(3);
+check($t->byText('No changes') !== null, 'another file, unchanged');
+
+// photos: a folder's photos in a grid, chosen through a Binding of the index, one shown with Space, the arrows, Escape back.
+$dir = sys_get_temp_dir() . '/myphp-photos-' . getmypid(); @mkdir($dir);
+foreach (['a', 'b', 'c'] as $n) { touch("$dir/$n.png"); }
+Headless::load('photos', '$p = new Photos');
+$p = new \MyPHP\Examples\Photos\Photos(); $p->open($dir);
+foreach ($p->files as $f) { $p->thumbs[$f] = $p->full[$f] = \MyPHP\UI\Image::fromPixels(4, 3, str_repeat("\x80\x80\x80\xff", 12)); }
+$p->loading = array_fill_keys($p->files, true); // none decoded here: CoreImage's
+$t = new Headless(Headless::view('photos', $p), 900, 640);
+$t->frame(3);
+$cell = null; $walk = function (Node $n) use (&$walk, &$cell) { if ($n->tooltip === 'b.png') { $cell = $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($t->root); $walk = null;
+$t->clickOn($cell); $t->frame(2);
+same(1, $p->selected, 'a click chooses, through the binding of the index');
+$t->key(Key::SPACE, ' ', 0, ' '); $t->frame(2);
+check($p->viewing && $t->byText('2 / 3 · 0 KB') !== null, 'Space shows it: ' . json_encode($t->texts()));
+$t->key(Key::RIGHT, 'moveRight:'); $t->frame(2);
+check($t->byText('c.png') !== null, 'Right goes to the next');
+$t->key(Key::ESCAPE, 'cancelOperation:'); $t->frame(2);
+same([false, 2], [$p->viewing, $p->selected], 'Escape back to the grid, on it');
+array_map('unlink', glob("$dir/*.png")); @rmdir($dir);
+
+// shaders: every frame, the waves, the rainbow, the frost drawn by their shaders in Canvases, and the wavy text through its DistortionEffect.
+[$view, $s] = Headless::load('shaders', 'App::setName');
+$t = new Headless($view, 720, 900);
+$t->frame(2);
+$list = $t->paint();
+$codes = array_map(fn(array $d) => $d[0], $list->shaders);
+check(in_array($s->waves->code, $codes, true) && in_array($s->rainbow->code, $codes, true) && in_array($s->frost->code, $codes, true), 'shaders: the waves, the rainbow and the frost drawn: ' . count($codes));
+check($t->byText('Wavy text')?->effect !== null, 'shaders: the wavy text through its effect');
+
+// drag (DragGesture, withAnimation, matchedGeometryEffect): the card dragged stays where it is let go; the puck thrown rests at a stop; a word dropped in the basket.
+[$view, $s] = Headless::load('drag', 'App::setName');
+$t = new Headless($view, 640, 720);
+$t->frame(2);
+[$x, $y] = $t->middle($t->byText('Drag me'));
+$t->press($x, $y); $t->drag($x + 20, $y + 10); $t->drag($x + 40, $y + 30); $t->frame();
+check($s->holding && $s->card->width == 40 && $s->card->height == 30 && $t->byText('Dragging…') !== null, 'the card follows the pointer: ' . json_encode([$s->card, $s->holding]));
+$t->release($x + 40, $y + 30); $t->frame();
+check(!$s->holding && $s->cardX == 40 && $s->cardY == 30, 'let go, it stays there: ' . json_encode([$s->cardX, $s->cardY]));
+$find = function (\MyPHP\UI\Node $n) use (&$find, $t): ?\MyPHP\UI\Node { if (abs($n->w - 48) < 0.5 && abs($n->h - 48) < 0.5) { return $n; } foreach ($n->kids as $k) { if (($f = $find($k)) !== null) { return $f; } } return null; };
+$puck = $find($t->root);
+check($puck !== null, 'the puck');
+[$px, $py] = $t->middle($puck);
+$t->press($px, $py); $t->drag($px + 60, $py); $t->frame();
+same(60.0, $s->puckDrag, 'the puck follows the pointer along its track');
+$t->release($px + 60, $py); $t->frame(30);
+check(in_array($s->puck, [0.0, 206.0, 412.0], true) && $s->puckDrag == 0, "let go, it rests at a stop: {$s->puck}");
+[$wx, $wy] = $t->middle($t->byText('pear'));
+[$bx, $by] = $t->middle($t->byText('Drop words here'));
+$t->hover($wx, $wy); $t->press($wx, $wy); $t->drag($wx + 20, $wy); // a native drag, as the system carries it: the word to this app's targets
+same('pear', $t->dataDrag['local'] ?? null, 'the chip drags its word');
+$d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer([\MyPHP\Transfer\Format::TEXT], \MyPHP\Transfer\Operation::COPY));
+$d->local = 'pear';
+check($t->dataOver($bx, $by, $d) && $s->targeted, 'over the basket, it lights up');
+$t->dataDrop($bx, $by, $d); $t->finishDataDrag(new \MyPHP\Transfer\Result($d->operation)); $t->release($bx, $by); $t->frame(3);
+check(in_array('pear', $s->basket, true) && !in_array('pear', $s->words, true), 'a word dropped in the basket: ' . json_encode([$s->words, $s->basket]));
+$t->clickText('pear'); $t->frame(3);
+check(in_array('pear', $s->words, true), 'a click takes it back');
+
 // drag-drop: a note dropped on the other window's zone joins its notes; a URL is reported.
 [, $s] = Headless::load('drag-drop');
 $right = $s->panes[1];
@@ -491,6 +733,8 @@ $note = new \MyPHP\Transfer\Data(new \MyPHP\Transfer\Item(
     \MyPHP\Transfer\Representation::bytes('application/vnd.myphp.example-note+json', '{"ID":1,"Title":"A note from Left"}')));
 $d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer($note->formats(), \MyPHP\Transfer\Operation::COPY | \MyPHP\Transfer\Operation::MOVE, \MyPHP\Transfer\Operation::MOVE));
 check($t->dataOver($x, $y, $d), 'the zone takes a note');
+$t->frame();
+check($right->targeted, 'isTargeted as a note is over the zone');
 $d->data = $note;
 check($t->dataDrop($x, $y, $d), 'and its drop');
 $t->frame();
@@ -561,7 +805,24 @@ $t->click(300, 10); $t->frame(); check($sideOpen, 'press on the title bar keeps 
 $t->press(700, 110); $t->drag(400, 110); $t->release(400, 110); $t->frame(); check($sideOpen, 'a slider let go over the picture keeps it');
 $t->click(300, 200); $t->frame(); check(!$sideOpen, 'press on the picture closes it');
 
-// chart-streaming: three waveforms, a few points per pixel column, a capsule each segment; path and raw as strokePath strokes them.
+// charts (Swift Charts' marks): the axes the scales pick, the bars the pointer chooses a month of, the stacking switched, the donut's sector chosen.
+[$view, $s] = Headless::load('charts', 'App::whenReady');
+$t = new Headless($view, 1080, 1100);
+$t->frame(2);
+check($t->byText('$120k') !== null && $t->byText('Jan') !== null && $t->byText('W2') !== null && $t->byText('0.5 t') !== null && $t->byText('Search') !== null, 'charts: the axes and the legend: ' . json_encode(array_slice($t->texts(), 0, 40)));
+$bar = $t->byLabel('Month: Mar, Sales: ' . rtrim(rtrim(sprintf('%.4f', $s->sales[2]), '0'), '.'));
+check($bar !== null, 'charts: a bar named by its values');
+[$bx, $by] = $t->middle($bar); $t->hover($bx, $by); $t->frame(2);
+same('Mar', $s->month, 'charts: the pointer over a bar chooses its month');
+check($t->byText(sprintf('Mar: $%.1fk', $s->sales[2])) !== null && $t->byText(sprintf('%.0f', $s->sales[2])) !== null, 'charts: its value over it, and above the chart');
+$t->clickText('Shares'); $t->frame(2);
+check($s->stacking === 1 && $t->byText('100%') !== null, 'charts: the areas stacked as shares');
+[$cx, $cy] = $t->middle($t->byText('4.2M')); // the donut's middle
+$t->hover($cx + 60, $cy - 20); $t->frame(2); // right of twelve o'clock: the first sector
+same(0, $s->platformAt($s->angle), 'charts: the pointer chooses a sector');
+check($t->byText('46%') !== null && $t->byText('macOS') !== null, 'charts: its share in the middle');
+
+// chart-streaming: three LinePlots of 15,000 samples, a few points per pixel column, a capsule each segment.
 [$view, $s] = Headless::load('chart-streaming');
 $csKinds = function (\Closure $view): array {
     $t = new Headless($view, 1000, 600);
@@ -582,12 +843,7 @@ $csKinds = function (\Closure $view): array {
 [$kinds, $t] = $csKinds($view);
 $lines = array_map(fn(array $k) => $k[9] ?? 0, $kinds);
 check(count($lines) === 3 && min($lines) > 100 && max($lines) < 2 * 1000 + 3, 'chart-streaming: three lines of capsules, a few a column: ' . json_encode($lines));
-check($t->byLabel('Three live waveforms') !== null, 'chart-streaming: the plot named');
-foreach (['path', 'raw'] as $mode) {
-    $w = new \MyPHP\Examples\ChartStreaming\Waveform($mode);
-    [$kinds] = $csKinds(Headless::view('chart-streaming', $w));
-    check(count($kinds) === 3 && array_filter($kinds, fn(array $k) => isset($k[9])) === [], "chart-streaming $mode: stroked paths, no capsules");
-}
+check($t->byLabel('Three live waveforms') !== null && $t->byText('-10s') !== null && $t->byText('0s') !== null, 'chart-streaming: the chart named, its axis in seconds: ' . json_encode($t->texts()));
 
 // wind (mygo's TestGrid): the grid's cells are 6.5 DIPs wide, in whole pixels, twice as high, centered on the pane and overhanging it; a pane too small has none.
 [$view, $s] = Headless::load('wind');
@@ -740,7 +996,7 @@ $a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
 $t = new Headless(Headless::view('chat-glow', $a), 860, 700);
 $t->frame();
 $t->type('Hello there'); $t->enter();
-check(count($a->messages) === 2 && $a->messages[0]->text === 'Hello there' && $a->input->text === '', 'chat-glow: Return sends the question');
+check(count($a->messages) === 2 && $a->messages[0]->text === 'Hello there' && $a->input === '', 'chat-glow: Return sends the question');
 $t->escape();
 check(!$a->busy && $a->messages[1]->shown === 1 && $a->messages[1]->words[0] === 'Stopped.', 'chat-glow: Escape stops the reply');
 // TestSplitWords: splitWords keeps the spaces and line breaks, which joined give the text back.
@@ -770,7 +1026,7 @@ $cgEnd = function () use (&$t, &$a): array {
     return [$r, $t->rect($t->byLabel('Message'))[1] - \MyPHP\Examples\ChatGlow\RING_PADDING - 6 - 12];
 };
 [$r, $limit] = $cgEnd();
-check($a->list->atEnd && $r[3] > 0 && $r[1] + $r[3] <= $limit, 'chat-glow: the end of the conversation in view: ' . json_encode([$r, $limit]));
+check($r[3] > 0 && $r[1] + $r[3] <= $limit, 'chat-glow: the end of the conversation in view: ' . json_encode([$r, $limit]));
 check($r[3] >= 3 * \MyPHP\Examples\ChatGlow\REPLY_SIZE, "chat-glow: the last reply shows all of its lines, $r[3] DIPs");
 // TestStops: the edge glow's stops lie in order around the window, and move to new places every SHUFFLE_EVERY seconds, easing there over SHUFFLE_TIME.
 $n = 0;

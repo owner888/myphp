@@ -18,7 +18,7 @@ use RuntimeException;
  * players' pictures, the system materials, the layer under the
  * materials). It tells the core window ($w) what happens to it.
  */
-final class Window implements Platform\Window
+final class Window implements Platform\Window, Platform\NativeTips
 {
     private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15, OCCLUSION_VISIBLE = 1 << 1;
     private const NONACTIVATING = 1 << 7; // NSWindowStyleMaskNonactivatingPanel
@@ -469,6 +469,16 @@ final class Window implements Platform\Window
         ObjC::msg('v:', $this->ns, 'close');
     }
 
+    private string $toolTip = '';
+
+    /** The view's tool tip, which AppKit shows as the pointer rests on it: changed as the pointer goes from a node with one to another. */
+    public function setToolTip(string $tip): void
+    {
+        if ($tip === $this->toolTip || $this->view === null) { return; }
+        $this->toolTip = $tip;
+        ObjC::msg('v:p', $this->view, 'setToolTip:', $tip === '' ? null : ObjC::str($tip));
+    }
+
     public function setTitle(string $title): void
     {
         ObjC::msg('v:p', $this->ns, 'setTitle:', ObjC::str($title));
@@ -829,11 +839,14 @@ final class Window implements Platform\Window
         if ($this->trafficLights !== null) { // where layoutTrafficLights puts them, which may not have run yet
             [$px, $py] = $this->trafficLights;
             $c = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'frame');
-            return ['height' => round($c->h + 2 * $py), 'left' => ceil($px + $z->x - $c->x + $z->w), 'right' => 0.0];
+            return ['height' => round($c->h + 2 * $py), 'left' => ceil($px + $z->x - $c->x + $z->w), 'right' => 0.0, 'controls' => $py + $c->h / 2];
         }
         $frame = ObjC::msg('r:', $this->ns, 'frame');
         $content = ObjC::msg('r:', $this->ns, 'contentLayoutRect');
-        return ['height' => round($frame->h - $content->y - $content->h), 'left' => ceil($z->x + $z->w), 'right' => 0.0];
+        $height = round($frame->h - $content->y - $content->h);
+        $c = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'frame'); // in the title bar's view, from its bottom
+        $bar = ObjC::msg('r:', ObjC::msg('p:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'superview'), 'frame');
+        return ['height' => $height, 'left' => ceil($z->x + $z->w), 'right' => 0.0, 'controls' => $bar->h - $c->y - $c->h / 2]; // controls: the window controls' middle, from the top, which the title bar may be taller than
     }
 
     /**

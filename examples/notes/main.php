@@ -8,8 +8,8 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
-use MyPHP\UI\{Content, TextState};
-use MyPHP\UI\RichText\{Document, Paragraph, ParagraphStyle, Text};
+use MyPHP\UI\{Content, Painter, Span};
+use MyPHP\UI\RichText\{Attachment, Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text};
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -50,19 +50,15 @@ final class Notes
     public int $next = 0;
     /** The popover asking for a link's URL. */
     public bool $linkOpen = false;
-    public TextState $linkURL;
+    public string $linkURL = '';
     /** Where the notes are saved, '' for nowhere. */
     public string $path = '';
-    /** Nothing was saved: the first frame makes the welcome note, whose chip it measures. */
+    /** Nothing was saved: the welcome note is the first. */
     public bool $welcome = false;
-
-    public function __construct()
-    {
-        $this->linkURL = new TextState();
-    }
 
     public function current(): Note
     {
+        if ($this->welcome) { $this->welcome = false; $this->notes = [new Note(++$this->next, welcome(), new DateTimeImmutable())]; }
         foreach ($this->notes as $n) {
             if ((string)$n->id === $this->selected) { return $n; }
         }
@@ -83,11 +79,11 @@ final class Notes
     /** Asks for the URL of a link over the selection. */
     public function openLink(Document $doc): void
     {
-        $this->linkURL = new TextState($doc->formatting()->link);
+        $this->linkURL = $doc->formatting()->link;
         $this->linkOpen = true;
     }
 
-    /** Reads the saved notes, or leaves the welcome note to the first frame. */
+    /** Reads the saved notes, or shows the welcome note. */
     public function load(string $dir): void
     {
         $this->path = "$dir/MyPHP Notes/notes.json";
@@ -113,6 +109,36 @@ final class Notes
         if (!is_dir(dirname($this->path))) { @mkdir(dirname($this->path), 0755, true); }
         @file_put_contents($this->path, json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
+}
+
+/** An attachment drawn as a chip with a file's name, as wide as the name in the editor's font. */
+function fileChip(string $name): Attachment
+{
+    return new Attachment(name: $name, bounds: fn(Closure $measure) => [$measure($name, 12) + 28, 20, 4], draw: function (Painter $p, array $r) use ($name): void {
+        $t = $p->theme();
+        $p->fill($r, $t->accent, $r[3] / 2, 0.12);
+        $p->fill([$r[0] + 8, $r[1] + 6, 7, 8], $t->accent, 1.5);
+        [, $lh] = $p->measureText(0, new Span($name, 12));
+        $p->richText($r[0] + 20, $r[1] + ($r[3] - $lh) / 2, 0, new Span($name, 12, color: $t->accent));
+    });
+}
+
+/** The first note. */
+function welcome(): Text
+{
+    $code = new Attributes(code: true);
+    return Text::of(
+        new Paragraph(new ParagraphStyle(heading: 1), [new Run('Welcome to Notes')]),
+        new Paragraph(runs: [new Run('Write with '), new Run('bold', new Attributes(weight: 700)), new Run(', '), new Run('italic', new Attributes(italic: true)), new Run(', '),
+            new Run('links', new Attributes(link: 'https://github.com/owner888/myphp')), new Run(' and lists, from the toolbar, the Format menu or the keyboard.')]),
+        new Paragraph(new ParagraphStyle(heading: 2), [new Run('Try')]),
+        new Paragraph(new ParagraphStyle(list: ListKind::Tasks, checked: true), [new Run('Open this note')]),
+        new Paragraph(new ParagraphStyle(list: ListKind::Tasks), [new Run('Type '), new Run('- ', $code), new Run(' to start a list, '), new Run('# ', $code), new Run(' for a heading')]),
+        new Paragraph(new ParagraphStyle(list: ListKind::Tasks), [new Run('Copy the note as Markdown')]),
+        new Paragraph(runs: [new Run('Attachments sit in the line, as '),
+            new Run(Text::OBJECT_REPLACEMENT, new Attributes(attachment: fileChip('itinerary.pdf'))),
+            new Run(' does.')]),
+    );
 }
 
 $s = new Notes();

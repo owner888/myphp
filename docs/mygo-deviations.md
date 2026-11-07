@@ -246,6 +246,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `[0xRRGGBB, alpha]` pairs; a span's background has its own
     opacity (`Span::$backgroundAlpha`), and borders take the color alone.
   - Why: myphp's colors are ints.
+## Tool tips
+
+On macOS a node's tip (`tooltip()`, SwiftUI's `help()`) is the system's:
+the window gives AppKit the tip of the node under the pointer
+(`Platform\NativeTips`, the view's `toolTip`), which shows it at the
+pointer, after its own delay, in the system's look, as SwiftUI's do, where
+mygo draws a tip of its own, centered over its node. A tip a view builds
+itself (`Context::tooltipBase`) is still drawn, and so are all tips on the
+other platforms; a tip of the keyboard focus shows on those alone.
+
 ## Scrolling
 
 - **ListState and GridState methods** (v0.84)
