@@ -704,6 +704,18 @@ $goingDown = $sheetTop();
 $settle();
 same([true, true, null], [$up !== null, $goingDown !== null && $goingDown > $up, $sheetTop()], 'a sheet closed goes down, then is gone');
 
+// A phone's tabs and their page make no cycle of references frame after frame (the tab bar's fade held the tabs'
+// node, which held the page holding the fade: thousands of cycles in ten seconds, MemoryWatch warned).
+$cycleApp = new class { public string $tab = 'a'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $cycleApp->tab)(
+    Tab('A', systemImage: 'gearshape', value: 'a')(Form()(Section()(Text('Row')))->navigationTitle('Page')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$h->frame(3); gc_collect_cycles(); $was = gc_status()['collected'];
+for ($i = 0; $i < 20; $i++) { $h->frame(); }
+gc_collect_cycles();
+same(0, gc_status()['collected'] - $was, 'a phone\'s tabs make no cycle each frame');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);
