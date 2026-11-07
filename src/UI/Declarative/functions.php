@@ -448,6 +448,25 @@ function Tab(string $title, ?SVG $image = null, mixed $value = null, ?string $sy
 
 /** How a TabView shows its tabs, as SwiftUI's TabViewStyle. */
 enum TabViewStyle { case automatic; case sidebarAdaptable; }
+/** A height a sheet comes to rest at, as SwiftUI's PresentationDetent: medium, half the window; large, all of it but its top; a fraction of it; a height. */
+final class PresentationDetent
+{
+    private function __construct(private readonly string $kind, private readonly float $value) {}
+
+    public static function medium(): self { return new self('fraction', 0.5); }
+    public static function large(): self { return new self('fraction', 1.0); }
+    public static function fraction(float $f): self { return new self('fraction', $f); }
+    public static function height(float $points): self { return new self('height', $points); }
+
+    /** @internal its height in points, of a sheet whose largest is $large */
+    public function points(float $large): float
+    {
+        return $this->kind === 'fraction' ? $large * $this->value : $this->value;
+    }
+}
+
+/** When a phone's tab bar shrinks to the chosen tab as the page scrolls, as SwiftUI's on iOS 26: automatic is never on an iPhone. */
+enum TabBarMinimizeBehavior { case automatic; case onScrollDown; case onScrollUp; case never; }
 
 /** SwiftUI's NavigationBarItem.TitleDisplayMode. */
 enum TitleDisplayMode { case automatic; case inline; case large; }

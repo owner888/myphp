@@ -27,6 +27,11 @@ final class TabView extends View
     /** How the tabs show: automatic, across the top on a desktop; sidebarAdaptable, a sidebar there, as SwiftUI's. */
     public function tabViewStyle(\TabViewStyle $style): static { $this->style = $style; return $this; }
 
+    private \TabBarMinimizeBehavior $minimize = \TabBarMinimizeBehavior::automatic;
+
+    /** Whether a phone's tab bar shrinks to the chosen tab as the page scrolls down (onScrollDown) or up, as iOS 26's; a tap on it, or the page back at its top, brings it back. */
+    public function tabBarMinimizeBehavior(\TabBarMinimizeBehavior $behavior): static { $this->minimize = $behavior; return $this; }
+
     public function __construct(mixed &$selection)
     {
         $this->selection = &$selection;
@@ -46,12 +51,13 @@ final class TabView extends View
         if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
         $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env)], $this->tabs);
         $backdrop = (object)['color' => null];
+        $minimize = match ($this->minimize) { \TabBarMinimizeBehavior::onScrollDown => 1, \TabBarMinimizeBehavior::onScrollUp => -1, default => 0 };
         $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {
             $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
             $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
               View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [self::stacked($this->tabs[$i]->content)]);
             $c->end();
-        });
+        }, $minimize);
         if ($backdrop->color !== null) { $n->background($backdrop->color); } // the floating tab bar over the page's color, as iOS's
         $this->selection = $this->tabs[$index]->value ?? $this->selection;
         return $n;

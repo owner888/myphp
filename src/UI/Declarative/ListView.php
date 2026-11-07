@@ -112,6 +112,7 @@ final class ListView extends View
         $title = $top === 1 ? Localized::string($env->title ?? '', $env) : '';
         $inset = !$this->selects && $this->move === null ? $c->takeBottomInset() : 0.0; // a bar floating over the page's bottom: a last row of its height, the rows scrolling under it
         $foot = $inset > 0 ? 1 : 0;
+        if ($inset > 0) { $c->insetScroll = $state; } // the tab bar follows it
         $itemId = $idOf;
         if ($top + $foot > 0) { $idOf = static fn(int $i): int|string|null => match (true) { $i < $top => "\0largeTitle", $i - $top >= $count => "\0bottomInset", default => $itemId($i - $top) }; }
         if ($this->selects) { self::bind($state, $count, $idOf, $this->selection); }

@@ -407,6 +407,18 @@ abstract class View
     /** The buttons at the trailing end of the navigation bar while this page shows, as SwiftUI's .toolbar { … }. */
     public function toolbar(View|array|null ...$items): static { $this->sets['toolbar'] = $items; $this->wraps[] = ['toolbar', $items]; return $this; }
 
+    /** @internal the heights the sheet this view is the content of comes to rest at (presentationDetents) @var list<\PresentationDetent> */
+    public array $sheetDetents = [];
+
+    /**
+     * The heights the sheet this view is the content of comes to rest at,
+     * as SwiftUI's presentationDetents: [PresentationDetent::medium(),
+     * PresentationDetent::large()] opens it at half the window, a drag
+     * taking it to the whole and back, down past the smallest closing it.
+     * @param list<\PresentationDetent> $detents
+     */
+    public function presentationDetents(array $detents): static { $this->sheetDetents = $detents; return $this; }
+
     /** A sheet rising from the bottom while $isPresented, of the view $content returns; a tap outside, Escape or Back closes it. */
     public function sheet(bool &$isPresented, Closure $content): static
     {

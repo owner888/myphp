@@ -36,10 +36,14 @@ trait ContextMobile
      * $index, told the placement too, and builds its own navigationBar and
      * safeArea inside (tabView takes the safe area's top itself when the
      * tabs are across the top). Fills what holds it; changed() reports a
-     * tab chosen. tabsPlacement() tells the placement alone.
+     * tab chosen. tabsPlacement() tells the placement alone. With
+     * $minimize 1 the phone's bar shrinks to the chosen tab as the page
+     * scrolls down (-1: up), as iOS 26's tabBarMinimizeBehavior; a tap
+     * on it, the page scrolling the other way or back at its top, brings
+     * it back.
      * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items @param Closure(int, string): void $content
      */
-    public function tabView(array $items, int &$index, Closure $content): Node
+    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0): Node
     {
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
@@ -51,9 +55,20 @@ trait ContextMobile
               $this->safeArea[2] = 0.0; // the tabBar takes the bottom safe area
               $was = $this->bottomInset;
               $this->bottomInset = $inset; // the page's first scroll takes it as room after its content
+              $this->insetScroll = null;
               $page = $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
                 $content($index, $where);
               $this->end();
+              $small = $this->runtime?->local($n->id, fn() => (object)['y' => null, 'small' => false, 'tab' => $index]) ?? (object)['y' => null, 'small' => false, 'tab' => $index];
+              if ($small->tab !== $index) { [$small->y, $small->small, $small->tab] = [null, false, $index]; } // another tab's page: its own scroll
+              if ($minimize !== 0 && $this->insetScroll !== null) { // the page's scroll: down (or up) by more than a few points shrinks the bar, the other way or its top brings it back
+                  $y = $this->insetScroll->extent()[0];
+                  if ($small->y !== null && abs($y - $small->y) > 4) { $small->small = ($y - $small->y) * $minimize > 0 && $y > 20; }
+                  if ($y <= 0) { $small->small = false; }
+                  $small->y = $y;
+              } else {
+                  $small->small = false;
+              }
               if ($this->bottomInset > 0) { $page->padding(0, 0, $inset, 0); } // no scroll took it: the page above the bar
               else { // iOS 26's scroll edge: what scrolls under the bar fades into the page's color there, not sharp through its glass
                   $page->drawOver(static function (Painter $p, array $r) use ($n, $inset): void {
@@ -63,7 +78,8 @@ trait ContextMobile
               }
               $this->bottomInset = $was;
               $this->safeArea[2] = $bottom;
-              $bar = $this->tabBar($items, $index);
+              $bar = $this->tabBar($items, $index, $this->animate($n, 'tabsSmall', $small->small ? 1 : 0, 0.25), $expand);
+              if ($expand) { $small->small = false; $this->runtime?->changed(); } // a tap on the shrunk bar
               $bar->absolute()->bottom(0)->start(0)->end(0);
               $bar->floats = true; // a tap on it is its, not the page's under it
               if ($bar->changed) { $n->changed = true; }
@@ -136,31 +152,38 @@ trait ContextMobile
      * changed() reports. The band it floats in is clear, so the page shows
      * around it. Build it last in a column that fills the window, the
      * page's content growing above it (a Router's view); tabBarInset() is
-     * the height the band takes. Not mygo's.
+     * the height the band takes. $small, from 0 to 1, shrinks it to the
+     * chosen tab alone, a capsule at its start (iOS 26's minimized bar);
+     * a tap on that sets $expand. Not mygo's.
      * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items an icon (an SVG, or a function of the color drawing one), and a label
      */
-    public function tabBar(array $items, int &$index): Node
+    public function tabBar(array $items, int &$index, float $small = 0.0, ?bool &$expand = null): Node
     {
+        $expand = false;
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
         $bottom = max($this->safeArea[2], 8.0);
-        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->padding(8, 16, $bottom, 16)->justify(Node::CENTER)->alignItems(Node::STRETCH)
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->padding(8, 16, $bottom, 16)->justify($small > 0 ? Node::START : Node::CENTER)->alignItems(Node::STRETCH)
             ->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
+          $full = max($this->width - 32, 64.0);
           $pill = $this->row(4, 0, 1)->size(0, 56)->radius(28)->alignItems(Node::STRETCH)->systemMaterial('glass');
+          if ($small > 0) { $pill->maxWidth($full + (64 - $full) * $small); } // narrowing to the chosen tab's 64
             if (!($this->runtime?->systemMaterials ?? true)) { // myphp's own glass (Android): frosted as iOS 26's bar is, what passes under it a haze, not bent text
                 $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72;
             }
             foreach ($items as $i => [$svg, $label]) {
                 $on = $i === $index;
+                if ($small >= 0.5 && !$on) { continue; } // shrunk: the chosen tab alone
                 $color = $on ? $t->accent : $t->textMuted;
                 $tab = $this->column(0, 2, 1)->basis(0)->radius(24)->alignItems(Node::CENTER)->justify(Node::CENTER)->focusable()->role(Role::TAB)->label($label);
                 if ($on) { $tab->background($t->text, 0.08); } // the chosen tab's capsule, a shade of the text over the glass
                 $tab->on = $on; $tab->checked($on);
                   if ($svg instanceof SVG) { $this->icon($svg, 24, $color); }
                   elseif ($svg instanceof Closure) { $this->image($svg($color), 24, 24)->role(Role::NONE); } // an SF Symbol's, drawn in the tab's color
-                  $this->text($label, 10, $color)->singleLine()->fontWeight($on ? 600 : 500);
+                  if ($small < 0.5) { $this->text($label, 10, $color)->singleLine()->fontWeight($on ? 600 : 500); }
                 $this->end();
-                if ($this->clicked($tab) && !$on) {
+                if ($small >= 0.5 && $this->clicked($tab)) { $expand = true; } // the shrunk bar, tapped: whole again
+                elseif ($this->clicked($tab) && !$on) {
                     $index = $i;
                     $n->changed = true;
                 }
@@ -232,9 +255,15 @@ trait ContextMobile
      * and 10 points, its top corners rounded 10, a grabber over the
      * content, which is padded 16 and keeps out of the safe area's bottom.
      * What is behind it is inert. A tap outside or Escape sets $open
-     * false, which dismissed() reports. Not mygo's.
+     * false, which dismissed() reports. With $detents, heights in points
+     * (UISheetPresentationController's detents, SwiftUI's
+     * presentationDetents), the panel is as high as the largest, shows as
+     * high as the smallest at first, and a drag moves it between them,
+     * coming to rest at the nearest where the throw carries it; dragged
+     * down past the smallest it goes, as a tap outside does. Not mygo's.
+     * @param list<float> $detents
      */
-    public function sheet(bool &$open, Closure $fn): ?Node
+    public function sheet(bool &$open, Closure $fn, array $detents = []): ?Node
     {
         if (!$open) {
             return null;
@@ -242,10 +271,23 @@ trait ContextMobile
         $t = $this->theme;
         $rt = $this->runtime;
         $back = $panel = null;
-        $this->overlay(function () use (&$back, &$panel, $t, $rt, $fn): void {
+        $gone = false;
+        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents): void {
             $back = $this->key('sheet')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->block();
             $back->alpha = 0.4;
-              $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($this->height - $this->windowSafeArea[0] - 10)->role(Role::DIALOG);
+              $large = $this->height - $this->windowSafeArea[0] - 10;
+              $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($large)->role(Role::DIALOG);
+              if ($detents !== []) { // as high as the largest, moved down to show the others: the offset of each its height short of the largest
+                  $heights = array_values(array_unique(array_map(fn(float $h) => min(max($h, 0.0), $large), $detents)));
+                  sort($heights);
+                  $top = $heights[count($heights) - 1];
+                  $panel->minHeight($top)->maxHeight($top);
+                  $kept = $rt?->local($back->id, fn() => (object)['offset' => [0.0, $top - $heights[0]]]) ?? (object)['offset' => [0.0, $top - $heights[0]]];
+                  $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);
+                  $stops[] = [0.0, $top]; // below the window: gone
+                  $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
+                  $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $this->dragOffset($panel)[1] >= $top - 2; // let go toward below the window, and there: gone
+              }
               $h = $rt?->rectOf($panel->id)[3] ?? 0.0;
               $p = $this->animate($panel, 'rise', 1, 0.35);
               $panel->translate(0, (1 - $p) * $h); // rises from below the window
@@ -259,7 +301,7 @@ trait ContextMobile
               $this->end();
             $this->end();
         });
-        if ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) {
+        if ($gone || $this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // dragged away, Escape, or a tap outside
             $open = false;
             $back->dismissed = true;
         }

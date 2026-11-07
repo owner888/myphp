@@ -79,6 +79,9 @@ final class Context
     /** How far a bar floating over the page covers its bottom (a phone's tabBar), which the page's first scroll takes as room after its content, scrolling under the bar as iOS's do (takeBottomInset); what no scroll takes, the page keeps out of. Not mygo's. */
     public float $bottomInset = 0.0;
 
+    /** The scroll that took the bottom inset (a page's under a tab bar), which the bar follows to shrink as it scrolls. @internal */
+    public ?Scrollable $insetScroll = null;
+
     /** The bottom inset for the scroll being built, which takes it: the next one gets none. @internal */
     public function takeBottomInset(): float
     {
@@ -4329,7 +4332,19 @@ final class Context
         $n = $phone
             ? $this->row(2, 2, 0, 0x767680)->radius($t->segmentedHeight / 2)->minHeight($t->segmentedHeight)
             : $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->radius($t->radius)->border(1, $t->border);
-        if ($phone) { $n->bgAlpha = $t->dark ? 0.24 : 0.12; }
+        if ($phone) {
+            $n->bgAlpha = $t->dark ? 0.24 : 0.12;
+            $chosen = $index;
+            $n->drawOver(static function (Painter $p, array $r, Node $track) use ($chosen): void { // UISegmentedControl's dividers: a hairline between two segments neither chosen, 40% of the track's height
+                $segs = $track->kids;
+                $hair = 1 / max($p->scale(), 1.0);
+                for ($i = 1, $count = count($segs); $i < $count; $i++) {
+                    if ($i === $chosen || $i - 1 === $chosen) { continue; }
+                    $x = ($segs[$i - 1]->x + $segs[$i - 1]->w + $segs[$i]->x) / 2;
+                    $p->fill([$x - $hair / 2, $r[1] + $r[3] * 0.3, $hair, $r[3] * 0.4], 0x8e8e93, 0, 0.45);
+                }
+            });
+        }
         $n->alignItems(Node::STRETCH)->shrink(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP);
           foreach ($options as $i => $label) {
               $chosen = $phone ? ($t->dark ? 0x636366 : 0xffffff) : $t->surfacePressed;

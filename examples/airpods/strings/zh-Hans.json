@@ -124,5 +124,8 @@
   "Extra Extra Large": "超大",
   "Larger Accessibility Size": "辅助功能大字",
   "Largest Accessibility Size": "辅助功能最大字",
-  "Language": "语言"
+  "Language": "语言",
+  "Sent to the AirPods": "发送给 AirPods",
+  "Received from the AirPods": "从 AirPods 收到",
+  "BLE broadcast": "BLE 广播"
 }

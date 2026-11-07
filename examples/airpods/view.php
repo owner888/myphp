@@ -173,17 +173,29 @@ $connection = function (bool $connected) use ($check, $tr) {
 /** The frames sent and received, newest last, only those in view built. */
 $packets = fn() => ListView(count($this->packets))(function (int $i) {
         $p = $this->packets[$i];
-        return HStack(alignment: VerticalAlignment::top, spacing: 10)(
+        return Button(action: function () use ($i) { $this->packetShown = $i; $this->packetOpen = true; }, label: HStack(alignment: VerticalAlignment::top, spacing: 10)(
             Text(verbatim: $p['dir'])->font(Font::caption)->bold()->monospaced()
                 ->foregroundStyle($p['dir'] === 'TX' ? Color::accentColor : ($p['dir'] === 'RX' ? Color::green : Color::orange))->frame(width: 28, alignment: Alignment::leading),
             VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
                 Text(verbatim: $p['summary'])->lineLimit(1),
                 Text(verbatim: $p['hex'])->font(Font::caption)->monospaced()->foregroundStyle(Color::secondary)->lineLimit(1),
             ),
-        );
+        ))->buttonStyle(ButtonStyle::plain); // a tap opens the frame's sheet
     })->listStyle(ListStyle::plain)
     ->navigationTitle('Packet Log')
     ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', ['count' => count($this->packets)])->foregroundStyle(Color::secondary));
+
+/** A frame of the log, whole, in a sheet at half the window that a drag takes to the whole (presentationDetents). */
+$packetSheet = function () {
+    $p = $this->packets[$this->packetShown] ?? null;
+    if ($p === null) { return Text('None'); }
+    return VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+        Text(verbatim: $p['summary'])->font(Font::headline),
+        Text(match ($p['dir']) { 'TX' => 'Sent to the AirPods', 'RX' => 'Received from the AirPods', 'BLE' => 'BLE broadcast', default => 'System' })->foregroundStyle(Color::secondary),
+        Text(verbatim: $p['hex'])->font(Font::body)->monospaced(),
+        Spacer(),
+    )->frame(maxWidth: INF, alignment: Alignment::leading)->presentationDetents([PresentationDetent::medium(), PresentationDetent::large()]);
+};
 
 /** The sheet the case's lid opening brings up, as an iPhone's: the batteries, how to pair, and connecting. */
 $lidSheet = function (bool $connected) use ($batteries, $tr) {
@@ -225,7 +237,7 @@ $preferences = fn() => Form()(
     ),
 )->navigationTitle('Settings');
 
-return function () use ($settings, $connection, $packets, $lidSheet, $preferences) {
+return function () use ($settings, $connection, $packets, $lidSheet, $preferences, $packetSheet) {
     $this->pollTransport();
     $connected = $this->transport->isConnected();
     return TabView(selection: $this->page)(
@@ -233,8 +245,9 @@ return function () use ($settings, $connection, $packets, $lidSheet, $preference
         Tab('Connection', systemImage: 'antenna.radiowaves.left.and.right', value: 'Connection')($connection($connected)),
         Tab('Packet Log', systemImage: 'list.bullet.rectangle', value: 'Packets')($packets())->badge(count($this->packets)),
         Tab('Settings', systemImage: 'gearshape', value: 'Settings')($preferences()),
-    )->tabViewStyle(TabViewStyle::sidebarAdaptable)->sheet(isPresented: $this->popupOpen, content: fn() => $lidSheet($connected))
+    )->tabViewStyle(TabViewStyle::sidebarAdaptable)->tabBarMinimizeBehavior(TabBarMinimizeBehavior::onScrollDown)->sheet(isPresented: $this->popupOpen, content: fn() => $lidSheet($connected))
         ->onChange(of: $this->popupOpen, action: function ($old, $open) { if (!$open) { $this->popupDismissed = true; } })
+        ->sheet(isPresented: $this->packetOpen, content: $packetSheet)
         ->preferredColorScheme(match ($this->appearance) { 'light' => ColorScheme::light, 'dark' => ColorScheme::dark, default => null })
         ->dynamicTypeSize($this->textSize === 'system' ? null : constant(DynamicTypeSize::class . '::' . $this->textSize))
         ->environment(locale: $this->lang !== '' ? $this->lang : null);

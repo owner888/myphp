@@ -653,6 +653,47 @@ $stacked = function (float $scale) use ($axApp): bool {
 };
 same([false, true], [$stacked(1.0), $stacked(40 / 17)], 'a form row\'s title over its control at the accessibility sizes');
 
+// tabBarMinimizeBehavior(.onScrollDown), as iOS 26's: the page scrolled down shrinks the phone's tab bar to the chosen
+// tab, a tap on it brings the bar back; without it the bar stays whole.
+$minApp = new class { public string $tab = 'a'; };
+$tabsShown = function (\TabBarMinimizeBehavior $b, bool $tapBack = false) use ($minApp): array {
+    $h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $minApp->tab)(
+        Tab('Alpha', systemImage: 'gearshape', value: 'a')(Form()(Section()(...array_map(fn(int $i) => Text("Row $i"), range(0, 40))))->navigationTitle('Long')),
+        Tab('Beta', systemImage: 'list.bullet', value: 'b')(Text('B')),
+    )->tabViewStyle(\TabViewStyle::sidebarAdaptable)->tabBarMinimizeBehavior($b), $c), 393, 852);
+    $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+    $h->frame(3);
+    for ($k = 0; $k < 4; $k++) { $h->wheel(196, 400, 0, -200); $h->frame(2); }
+    $h->frame(30); usleep(300_000); $h->frame(3); // the bar's 0.25 s to shrink
+    $shown = [$h->byLabel('Alpha') !== null, $h->byLabel('Beta') !== null];
+    if ($tapBack) { $h->clickOn($h->byLabel('Alpha')); $h->frame(3); usleep(300_000); $h->frame(3); $shown = [$h->byLabel('Alpha') !== null, $h->byLabel('Beta') !== null]; }
+    return $shown;
+};
+same([[true, false], [true, true], [true, true]], [$tabsShown(\TabBarMinimizeBehavior::onScrollDown), $tabsShown(\TabBarMinimizeBehavior::onScrollDown, true), $tabsShown(\TabBarMinimizeBehavior::automatic)],
+    'the tab bar shrunk to the chosen tab as the page scrolls down, whole again on a tap, whole without the behavior');
+
+// presentationDetents([.medium, .large]), as SwiftUI's: the sheet opens at half the window, a drag up takes it to the
+// whole, a drag down past the smallest closes it.
+$detentApp = new class { public bool $open = true; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => Text('Page')->sheet(isPresented: $detentApp->open, content: fn() => Text('Sheet body')
+    ->presentationDetents([\PresentationDetent::medium(), \PresentationDetent::large()])), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$dialogOf = function (Node $n) use (&$dialogOf): ?Node { if ($n->role === \MyPHP\UI\Role::DIALOG) { return $n; } foreach ($n->kids as $k) { if (($f = $dialogOf($k)) !== null) { return $f; } } return null; };
+$worlds = new \ReflectionProperty(\MyPHP\UI\Runtime::class, 'worlds');
+$sheetTop = function () use ($h, $dialogOf, $worlds): ?float { // where it shows, moved by its drag
+    $d = $dialogOf($h->root);
+    if ($d === null) { return null; }
+    $r = $h->rt->rectOf($d->id); $w = $worlds->getValue($h->rt)[$d->id] ?? null;
+    return $w !== null ? $w->bounds(...$r)[1] : $r[1];
+};
+$settle = function () use ($h): void { $h->frame(3); usleep(500_000); $h->frame(5); };
+$settle();
+$atMedium = $sheetTop();
+$h->press(196, $atMedium + 10); for ($y = $atMedium + 10; $y > 100; $y -= 40) { $h->drag(196, $y); } $h->release(196, 100); $settle();
+$atLarge = $sheetTop();
+$h->press(196, $atLarge + 10); for ($y = $atLarge + 10; $y < 840; $y += 60) { $h->drag(196, $y); } $h->release(196, 840); $settle(); $settle();
+same([true, true, false], [abs($atMedium - 852 / 2) < 20, $atLarge < 20, $detentApp->open], 'a sheet at half the window, dragged to the whole, dragged down and gone');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);
