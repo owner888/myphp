@@ -52,6 +52,10 @@ final class Toggle extends View
         };
         if ($this->isOn !== $was) { $this->binding?->set($this->isOn); }
         if ($env->disabled) { $n->disabled(); }
+        if ($env->formRow && $n->kind === Node::SWITCH) { // a form's row, as SwiftUI's: the title leading, the switch at the row's end
+            $n->reverse = true;
+            View::takeRoom($n, $env->axis, View::FLEX_X);
+        }
         return $n;
     }
 

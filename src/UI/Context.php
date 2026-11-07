@@ -4314,15 +4314,21 @@ final class Context
         $t = $this->theme;
         $index = max(0, min($index, count($options) - 1));
         // The track, a radio group the arrows choose in: the surface inside its border, as wide as it is given (mygo's).
-        $n = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->radius($t->radius)->border(1, $t->border)->alignItems(Node::STRETCH)->shrink(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP);
-        if ($t->segmentedHeight > 0) { $n->minHeight($t->segmentedHeight); } // UISegmentedControl's 32 points on a phone
+        $phone = $t->segmentedHeight > 0; // UISegmentedControl: 32 high, a see-through gray track of no border rounded 9, the chosen segment raised in white (the dark's gray), its text 13 points, semibold chosen
+        $n = $phone
+            ? $this->row(2, 2, 0, 0x767680)->radius(9)->minHeight($t->segmentedHeight)
+            : $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->radius($t->radius)->border(1, $t->border);
+        if ($phone) { $n->bgAlpha = $t->dark ? 0.24 : 0.12; }
+        $n->alignItems(Node::STRETCH)->shrink(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP);
           foreach ($options as $i => $label) {
-              $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->radius(max($t->radius - $t->space(0.5), 0))->focusable()->center();
+              $chosen = $phone ? ($t->dark ? 0x636366 : 0xffffff) : $t->surfacePressed;
+              $seg = $this->column(0, 0, 0, $i === $index ? $chosen : null)->padding($phone ? 0 : $t->space(1), $t->space(3))->radius($phone ? 7 : max($t->radius - $t->space(0.5), 0))->focusable()->center();
               $seg->on = $i === $index; // Tab enters the group at the one chosen
               $seg->role(Role::RADIO)->checked($seg->on); $seg->segment = true;
-              if ($seg->on) { $seg->shadow(0, 1, 2, 0, 0x000000, 0.12); } // raised
-              if ($i !== $index && $this->hovered($seg)) { $seg->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
-                $this->text($label, $t->fontSize, $t->text)->singleLine();
+              if ($seg->on) { $phone ? $seg->shadow(0, 3, 8, 0, 0x000000, 0.12) : $seg->shadow(0, 1, 2, 0, 0x000000, 0.12); } // raised
+              if ($i !== $index && $this->hovered($seg) && !$phone) { $seg->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
+                $l = $this->text($label, $phone ? 13.0 * $t->fontSize / 17.0 : $t->fontSize, $t->text)->singleLine();
+                if ($phone && $seg->on) { $l->fontWeight(600); }
               $this->end();
               if ($this->clicked($seg) && $i !== $index) {
                   $index = $i;

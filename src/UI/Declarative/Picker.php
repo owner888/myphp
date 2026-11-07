@@ -58,12 +58,25 @@ final class Picker extends View
         return [$labels, $values];
     }
 
-    /** The pop-up button $n as a phone's form shows one: no face or border, the choice muted at the end of the row. */
+    /**
+     * The pop-up button $n as a phone's form shows one, UIKit's menu button in a cell: no face or border, no height of
+     * its own (the row's 44), the choice in the secondary label's color and chevron.up.chevron.down after it.
+     */
     private static function plain(\MyPHP\UI\Node $n, Env $env): void
     {
         $n->bordered = false; $n->color = null; $n->borderWidth = 0.0;
-        $n->padding(0)->minWidth(0);
-        foreach ($n->kids as $k) { if ($k->kind === \MyPHP\UI\Node::TEXT) { $k->fg = $env->theme->textMuted; } }
+        $n->padding(0)->minWidth(0)->minHeight(0);
+        $n->gap = 6;
+        foreach ($n->kids as $k) {
+            if ($k->kind === \MyPHP\UI\Node::TEXT) { $k->fg = $env->theme->textMuted; continue; }
+            $k->draw(static function (\MyPHP\UI\Painter $p, array $r): void { // up over down, as the symbol
+                [$x, $y, $w] = $r; $c = $p->theme()->textMuted; $l = $p->displayList(); $h = $w * 0.32;
+                $l->line($x + $w * 0.2, $y + $h + $w * 0.05, $x + $w * 0.5, $y + $w * 0.05, $c, 1.0, 1.5);
+                $l->line($x + $w * 0.5, $y + $w * 0.05, $x + $w * 0.8, $y + $h + $w * 0.05, $c, 1.0, 1.5);
+                $l->line($x + $w * 0.2, $y + $w * 0.95 - $h, $x + $w * 0.5, $y + $w * 0.95, $c, 1.0, 1.5);
+                $l->line($x + $w * 0.5, $y + $w * 0.95, $x + $w * 0.8, $y + $w * 0.95 - $h, $c, 1.0, 1.5);
+            });
+        }
     }
 
     protected function build(Context $c, Env $env): ?Node

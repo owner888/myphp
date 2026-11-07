@@ -8575,6 +8575,16 @@ changed, which no hot reload can take.
   baseline, so each layout of the same text moved them again. CoreText's
   and Pango's engines shape anew each time. Rule: a cache of glyphs gives
   copies (`copied()`); layout owns the glyphs it is given.
+- A phone's Form did not look like iOS's (airpods on Android): switches
+  before their titles and blue, segments white in a border with the chosen
+  one gray, a picker's row 55 high, a thick separator, a small title in a
+  white bar over the gray page. Cause: the declarative controls drew the
+  engine's desktop controls in the phone's colors. Rule: what SwiftUI
+  draws on iOS, the phone theme draws on iOS and Android alike, the font
+  aside: a form's Toggle leads with its title (`reverse`), on in
+  systemGreen; segments as UISegmentedControl's; rows 44 high; separators
+  a hairline; a stack's title large (`automatic`); the bars clear over
+  the page's color (`Env::backdrop`).
 
 ## Open items
 
