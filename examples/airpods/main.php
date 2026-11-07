@@ -128,6 +128,9 @@ final class AirPodsApp
     public string $page = 'AirPods';
     /** The app's appearance (system, light, dark), its text size (a key of TEXT_SIZES) and its language ('' for the system's), as its Settings tab chooses them. */
     public string $appearance = 'system', $textSize = 'system', $lang = '';
+    /** The frame of the log its sheet shows, and whether it shows. */
+    public int $packetShown = 0;
+    public bool $packetOpen = false;
     /** @var list<array{dir: string, summary: string, hex: string}> */
     public array $packets = [];
     private ?string $lastBleRaw = null;

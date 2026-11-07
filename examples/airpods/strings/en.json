@@ -124,5 +124,8 @@
   "Extra Extra Large": "Extra Extra Large",
   "Larger Accessibility Size": "Larger Accessibility Size",
   "Largest Accessibility Size": "Largest Accessibility Size",
-  "Language": "Language"
+  "Language": "Language",
+  "Sent to the AirPods": "Sent to the AirPods",
+  "Received from the AirPods": "Received from the AirPods",
+  "BLE broadcast": "BLE broadcast"
 }

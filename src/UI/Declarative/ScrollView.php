@@ -86,6 +86,7 @@ final class ScrollView extends View
         $n->grow = max($n->grow, 1);
         if ($background !== null) { $n->background($background); }
         if ($background !== null && $env->backdrop !== null) { $env->backdrop->color ??= $background; } // the page's: the bars around it over it
+        if ($inset > 0 && $n->scroll !== null) { $c->insetScroll = $n->scroll; } // the tab bar follows it
         return $n;
     }
 }

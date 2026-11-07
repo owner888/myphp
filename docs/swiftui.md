@@ -169,6 +169,8 @@ $view = function (Context $c) {
 | `LinearGradient(...)` | `->gradient($from, $to, $angle)`, `->linearGradient(new LinearGradient(…))` |
 | `preferredColorScheme(.dark)` | the same in a declarative view, or `App::setColorScheme(true)` (null follows the system): the platform's theme in that appearance; `$c->themed(Theme::dark())` for a part. |
 | `dynamicTypeSize(.xxLarge)` | the same in a declarative view, or `App::setTextScale(DynamicTypeSize::xxLarge->scale())` (null follows the system's text size). |
+| `tabBarMinimizeBehavior(.onScrollDown)` | the same on a `TabView`: a phone's tab bar shrinks to the chosen tab as the page scrolls down, a tap brings it back (iOS 26's). |
+| `.presentationDetents([.medium, .large])` | the same on a sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]`, `::fraction(0.3)`, `::height(200)`; a drag moves the sheet between them, down past the smallest closes it. |
 
 Take colors from `$c->theme` rather than literals: the theme switches with
 the system's appearance, accent, contrast and text size (see
