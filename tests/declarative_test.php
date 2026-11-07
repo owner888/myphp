@@ -590,6 +590,21 @@ $h2 = $pageOf(fn() => VStack()(Spacer(), Text('At the bottom')));
 same([852.0, 72.0, true], [$under[1] + $under[3], $last[3], $h2->rect($h2->byText('At the bottom'))[1] + 16 <= 852 - 72],
     'the page scrolls under the floating tab bar, its end above it; a page without a scroll above the bar');
 
+// A tap on the floating tab bar is the bar's, not that of the row the page scrolled under it.
+$underApp = new class { public string $tab = 'a'; public array $on = []; };
+$underApp->on = array_fill(0, 30, false);
+$h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $underApp->tab)(
+    Tab('A', systemImage: 'gearshape', value: 'a')(Form()(Section()(...array_map(fn(int $i) => Toggle("Switch $i", isOn: $underApp->on[$i]), range(0, 29))))->navigationTitle('Many')),
+    Tab('B', systemImage: 'list.bullet', value: 'b')(Text('Page B')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$h->frame(3);
+$tabB = $h->byLabel('B');
+[$x, $y] = $h->middle($tabB);
+$below = array_values(array_filter(range(0, 29), function (int $i) use ($h, $y): bool { $r = $h->rect($h->byLabel("Switch $i")); return $y >= $r[1] && $y < $r[1] + $r[3]; }));
+$h->clickOn($tabB); $h->frame(3);
+same([true, 'b', []], [$below !== [], $underApp->tab, array_keys(array_filter($underApp->on))], 'a tap on the tab bar chooses its tab, the switch under it untouched');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

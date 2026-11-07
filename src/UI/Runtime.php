@@ -2153,7 +2153,7 @@ final class Runtime
         if ($n->dragsWindow) {
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
-        if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1 && !$n->passThrough && !$hidden) { // placed at the root: over what was built before it
+        if ($n->absolute && $parent !== null && ($this->order[$parent->id] === 1 || $n->floats) && !$n->passThrough && !$hidden) { // placed at the root, or floating: over what was built before it
             $this->overlays[] = [$this->counter, $bx, $by, $bw, $bh]; // as it shows, through its transform
         }
         if ($n->blocks || ($n->absolute && $parent !== null && $this->order[$parent->id] === 1)) {

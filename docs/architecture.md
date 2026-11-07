@@ -8592,6 +8592,11 @@ changed, which no hot reload can take.
   scroll edge) rather than being cut at it. A phone's tab bar floats over
   the page: the page's first scroll takes its height as room after its
   content (`Context::$bottomInset`), a page that takes none keeps above it.
+- A tap on the floating tab bar did not change tabs on the phone: a row the
+  page scrolled under the bar took it (airpods' Connection, a switch
+  there). Cause: a click goes to the first node built that is under it,
+  and only an absolute node at the root was over what was built before
+  it. Rule: a node floating over the page sets `Node::$floats`.
 
 ## Open items
 

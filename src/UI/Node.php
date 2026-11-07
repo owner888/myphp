@@ -42,6 +42,8 @@ final class Node
     public bool $focused = false;
     /** Makes what was built before this node inert to the pointer and the keys while it shows (a modal's backdrop). */
     public bool $blocks = false;
+    /** An absolute node floating over what was built before it, which takes the pointer there, as one placed at the root does (a phone's tab bar over the page). Not mygo's. */
+    public bool $floats = false;
     /** For a field: room kept clear of the text at its left and right, beyond the usual inset (a search field's glass and clear button). */
     public float $insetL = 0, $insetR = 0;
     /** A focus group's orientation: the arrows that move the focus inside it (HORIZONTAL, VERTICAL or both); 0 for no group. And whether moving the focus chooses the member (a radio group's, a tab list's). */
