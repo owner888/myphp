@@ -58,6 +58,14 @@ final class Picker extends View
         return [$labels, $values];
     }
 
+    /** The pop-up button $n as a phone's form shows one: no face or border, the choice muted at the end of the row. */
+    private static function plain(\MyPHP\UI\Node $n, Env $env): void
+    {
+        $n->bordered = false; $n->color = null; $n->borderWidth = 0.0;
+        $n->padding(0)->minWidth(0);
+        foreach ($n->kids as $k) { if ($k->kind === \MyPHP\UI\Node::TEXT) { $k->fg = $env->theme->textMuted; } }
+    }
+
     protected function build(Context $c, Env $env): ?Node
     {
         [$labels, $values] = $this->choices($env);
@@ -72,6 +80,8 @@ final class Picker extends View
                 $found = array_search($this->selection, $values, true);
                 $index = $found === false ? -1 : $found;
                 $n = $style === \PickerStyle::segmented ? $c->segmented($labels, $index) : $c->select($labels, $index);
+                if ($style !== \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { self::plain($n, $env); } // a phone's form: the choice in the muted text and its arrows, as UIKit's menu button in a cell
+                if ($style === \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { $n->grow = 1; foreach ($n->kids as $k) { $k->basis(0)->grow = 1; } } // across its row, its segments sharing it, as UIKit's in a cell
                 if ($index >= 0 && $index !== $found) { $this->selection = $values[$index]; }
             }
             $n->label(Localized::string($this->title, $env));

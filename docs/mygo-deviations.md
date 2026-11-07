@@ -2758,6 +2758,25 @@ other platforms; a tip of the keyboard focus shows on those alone.
     `librsvg` to the PKGBUILD's): the symbolic icons are SVGs, which
     GdkPixbuf reads only with librsvg's loader.
 
+## The system's symbols on Android
+
+- **Image::symbol on Android** (myphp's: mygo draws no system icons)
+  - myphp: Android has no icons to ask for by name, so the SF Symbol names
+    (`Label(systemImage:)`, `Tab(systemImage:)`, `Image(systemName:)`, the
+    core's) draw as Google's Material Symbols, Android's own icons:
+    `Android\MaterialSymbols` holds the outlined icons, 24 at weight 400,
+    filled where the SF name is, as paths (`NAMES` maps the SF names,
+    those of `Linux\Symbols::NAMES` and more, `ICONS` the paths), which
+    `Android\Symbols` draws with myphp's SVG renderer in the color asked.
+    SF Symbols' weight is not drawn; an icon is a square of the size.
+  - A name of no mapping draws as a transparent square of its size, told
+    once in the log (warn, "android"), as on Linux.
+  - Their license is Apache 2.0 (`src/Platform/Android/MaterialSymbols.LICENSE`):
+    they are Google's, from github.com/google/material-design-icons.
+  - Why: Android's design is Material; an SF Symbol would not be Android's,
+    and a gap would leave the tabs and sidebars of the declarative views
+    without their icons.
+
 ## System materials off macOS (Linux, step 4)
 
 - **Node::systemMaterial where the system has none**

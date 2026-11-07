@@ -88,7 +88,7 @@ final class AndroidTextEngine implements Engine
 
         $cacheKey = "{$font->id}:" . ($rtl ? '1:' : '0:') . $text;
         if (isset($this->shapeCache[$cacheKey])) {
-            return $this->shapeCache[$cacheKey];
+            return self::copied($this->shapeCache[$cacheKey]);
         }
         if (count($this->shapeCache) > 2048) {
             $this->shapeCache = array_slice($this->shapeCache, -1024, null, true);
@@ -107,7 +107,7 @@ final class AndroidTextEngine implements Engine
                 $pen += $adv;
             }
             $run = ['font' => $font, 'start' => 0, 'end' => count($runes), 'glyphs' => $glyphs];
-            return $this->shapeCache[$cacheKey] = [['start' => 0, 'end' => count($runes), 'runs' => [$run]]];
+            return self::copied($this->shapeCache[$cacheKey] = [['start' => 0, 'end' => count($runes), 'runs' => [$run]]]);
         }
 
         $count = min((int)$buf[3], intdiv($n - 4, 3));
@@ -130,8 +130,24 @@ final class AndroidTextEngine implements Engine
             'glyphs' => $glyphs,
         ];
 
-        return $this->shapeCache[$cacheKey] = [
+        return self::copied($this->shapeCache[$cacheKey] = [
             ['start' => 0, 'end' => count($runes), 'runs' => [$run]],
-        ];
+        ]);
+    }
+
+    /**
+     * The lines of the cache with glyphs of their own: Text\System lays a line out by moving its glyphs (onto its
+     * baseline, from its start), so that the cache's, given again, would be moved again, the text sinking a baseline
+     * at each layout (the tab bar's labels went from 8 to 16 points down). CoreText's and Pango's shape anew each time.
+     * @param list<array{start: int, end: int, runs: list<array{glyphs: list<Glyph>}>}> $lines
+     */
+    private static function copied(array $lines): array
+    {
+        foreach ($lines as &$line) {
+            foreach ($line['runs'] as &$run) { $run['glyphs'] = array_map(static fn(Glyph $g) => clone $g, $run['glyphs']); }
+            unset($run);
+        }
+        unset($line);
+        return $lines;
     }
 }

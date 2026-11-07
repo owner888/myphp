@@ -48,11 +48,24 @@ final class TabView extends View
         $n = $c->tabView($items, $index, function (int $i) use ($c, $env): void {
             $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
             $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
-              View::renderAll($c, $env->along(Node::COLUMN), $this->tabs[$i]->content);
+              View::renderAll($c, $env->along(Node::COLUMN), [self::stacked($this->tabs[$i]->content)]);
             $c->end();
         });
         $this->selection = $this->tabs[$index]->value ?? $this->selection;
         return $n;
+    }
+
+    /**
+     * A tab's views as a page of a phone's or a tablet's tabs: in a NavigationStack, unless they are one, as a
+     * SwiftUI app puts each tab's — its bar out of the status bar's way, its navigationTitle in it — so that a tab
+     * written once for every screen (its title in the window's title bar on the desktop) has its bar there too.
+     * @param list<mixed> $content
+     */
+    private static function stacked(array $content): View
+    {
+        $views = array_values(array_filter($content, fn($v) => $v !== null));
+        if (count($views) === 1 && $views[0] instanceof NavigationStack) { return $views[0]; }
+        return (new NavigationStack())(...$views);
     }
 
     /** The tabs as a NavigationSplitView, as sidebarAdaptable's where there is room: a Label of each in the sidebar, choosing it, beside its views. */

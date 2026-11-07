@@ -47,6 +47,8 @@ final class Symbols implements Platform\Symbols
         'speaker.slash.fill' => ['audio-volume-muted'], 'speaker.wave.1.fill' => ['audio-volume-low'], 'speaker.wave.2.fill' => ['audio-volume-medium'],
         'speaker.wave.3' => ['audio-volume-high'], 'speaker.wave.3.fill' => ['audio-volume-high'], 'speaker.plus' => ['audio-volume-overamplified'],
         'hifispeaker.and.homepod' => ['audio-speakers'], 'waveform' => ['audio-x-generic'], 'music.note' => ['audio-x-generic'], 'music.note.list' => ['audio-x-generic'],
+        'archivebox' => ['package-x-generic'], 'checkmark' => ['object-select'], 'flag' => ['flag', 'emblem-important'],
+        'sidebar.left' => ['sidebar-show', 'view-dual'], 'tray' => ['mail-folder-inbox', 'mail-inbox'],
         'airpods' => ['audio-headphones', 'audio-headset'], 'headphones' => ['audio-headphones', 'audio-headset'],
         'antenna.radiowaves.left.and.right' => ['bluetooth-active', 'bluetooth', 'network-wireless'],
         'microphone.dynamic.on.stand' => ['audio-input-microphone'], 'music.microphone' => ['audio-input-microphone'], 'music.mic' => ['audio-input-microphone'],
