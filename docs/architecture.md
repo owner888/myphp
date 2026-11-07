@@ -8638,6 +8638,13 @@ changed, which no hot reload can take.
   width (Context::$swipedRow); a press on a node that only clicks goes to
   the draggable around it once it moves far (Runtime::$pressDraggable),
   whose axes a phone's window then follows.
+- A long press on a row with a contextMenu did nothing on a phone. Causes:
+  the long press sent a double click (to select a word), never the right
+  click a contextMenu opens on; and the phones' popupMenu shows nothing
+  (iOS) or throws (Android). Rule: a long press over a contextMenu is a
+  right click (`Runtime::hasContextMenuAt`), and on touch the menu is the
+  view's own, built over the window (`Runtime::$touchMenu`,
+  `Context::touchMenu`), destructive items in red (`MenuItem::destructive`).
 
 ## Open items
 

@@ -464,7 +464,14 @@ final class Window implements Platform\Window
                     if ($this->touchActive && !$this->touchIsScrolling && $this->longPressId === $pressId) {
                         $this->touchLongPressed = true;
                         $input = $this->w->input;
-                        if ($input !== null) {
+                        if ($input !== null && $this->w->runtime?->hasContextMenuAt($ptX, $ptY)) { // a node with a menu: it opens on the long press, which is no tap
+                            $this->w->runtime->cancelTouchPress();
+                            $this->w->runtime->haptic('medium');
+                            $input->mouse($ptX, $ptY);
+                            $input->push(['down', $ptX, $ptY, 1, 1, 0, $time]);
+                            $input->push(['up', $ptX, $ptY, 1, 1, 0, $time]);
+                            $this->requestFrame();
+                        } elseif ($input !== null) {
                             $input->mouse($ptX, $ptY);
                             // Word select on long press
                             $input->push(['down', $ptX, $ptY, 0, 2, 0, $time]);
