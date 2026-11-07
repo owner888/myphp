@@ -730,6 +730,12 @@ for ($k = 0; $k < 5; $k++) { usleep(100_000); $h->frame(2); }
 $h->clickText('Row 1'); $h->frame(2);
 same(['delete 0', 'tap 1'], $swiped->getArrayCopy(), 'a list\'s row of a button swiped through runs its first action; a tap on another is its button\'s');
 
+// Their content at the row's start whatever its width, as a list's rows (centered, rows of shorter text stood in from it).
+$h = new Headless(fn(Context $c) => Content::render(fn() => ListView(['Short', 'A much longer row'])(fn(string $t) => Button(action: fn() => null, label: Text(verbatim: $t))
+    ->buttonStyle(\ButtonStyle::plain)->swipeActions(Button('Delete', action: fn() => null)))->listStyle(\ListStyle::plain), $c), 393, 600);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
+same($h->rect($h->byText('A much longer row'))[0], $h->rect($h->byText('Short'))[0], 'a swiped row\'s content at its start');
+
 // confirmationDialog's cancel-role Button is the action sheet's own Cancel, below, not one more choice; its action runs as it closes.
 $confirmApp = new class { public bool $asked = true; public array $ran = []; };
 $h = new Headless(fn(Context $c) => Content::render(fn() => Text('Page')->confirmationDialog('Clear?', isPresented: $confirmApp->asked, actions: [
@@ -740,6 +746,27 @@ $h->rt->touch = true; $h->frame(2);
 $cancels = count(array_filter($h->texts(), fn($t) => $t === 'Cancel'));
 $h->clickText('Cancel'); $h->frame(2);
 same([1, ['cancel'], false], [$cancels, $confirmApp->ran, $confirmApp->asked], 'one Cancel, its action run as it closes the sheet');
+
+// A long press on a row with a contextMenu on a phone opens the view's own menu (Context::touchMenu), as UIKit's: a tap on
+// an item runs it and closes the menu; a tap beside closes it, nothing chosen.
+$menuRan = new \ArrayObject();
+$h = new Headless(function (Context $c) use ($menuRan) {
+    Content::render(fn() => ListView(2)(fn(int $i) => Text("Row $i")->contextMenu(
+        Button('Copy Hex', action: fn() => $menuRan->append("copy $i")),
+        Button('Delete', role: \ButtonRole::destructive, action: fn() => $menuRan->append("delete $i")),
+    ))->listStyle(\ListStyle::plain), $c);
+    $c->touchMenu();
+}, 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$h->rt->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen) use ($h): void { $h->rt->touchMenu = ['items' => $items, 'x' => $x, 'y' => $y, 'chosen' => $chosen]; };
+$h->frame(2);
+[$x, $y] = $h->middle($h->byText('Row 1'));
+$h->rightClick($x, $y); $h->frame(2);
+$shown = in_array('Copy Hex', $h->texts(), true);
+$h->clickText('Delete'); $h->frame(3);
+$h->rightClick($x, $y); $h->frame(2);
+$h->click(20, 800); $h->frame(3);
+same([true, ['delete 1'], false, null], [$shown, $menuRan->getArrayCopy(), in_array('Copy Hex', $h->texts(), true), $h->rt->touchMenu], 'a phone\'s context menu: shown, an item chosen, a tap beside closes it');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);

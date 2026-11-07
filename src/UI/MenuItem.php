@@ -23,6 +23,13 @@ final class MenuItem
         return $this;
     }
 
+    /** Shows the item as one that destroys (in red on a phone, as UIMenu's destructive attribute; SwiftUI's Button role .destructive). */
+    public function destructive(bool $on = true): static
+    {
+        if ($this->p !== null && $on) { $this->p->role = 'destructive'; }
+        return $this;
+    }
+
     /** Shows a check mark by the item when $on is true, as for a setting that choosing the item toggles. */
     public function checked(bool $on): static
     {

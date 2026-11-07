@@ -248,7 +248,14 @@ final class Window implements Platform\Window
                 App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
                     if ($this->touchActive && !$this->touchIsScrolling && $this->longPressId === $pressId) {
                         $input = $this->w->input;
-                        if ($input !== null) {
+                        if ($input !== null && $this->w->runtime?->hasContextMenuAt($ptX, $ptY)) { // a node with a menu: it opens, as UIKit's context menu on a long press, and the press is no tap
+                            $this->w->runtime->cancelTouchPress();
+                            $this->w->runtime->haptic('medium');
+                            $input->mouse($ptX, $ptY);
+                            $input->push(['down', $ptX, $ptY, 1, 1, 0, $time]);
+                            $input->push(['up', $ptX, $ptY, 1, 1, 0, $time]);
+                            $this->requestFrame();
+                        } elseif ($input !== null) {
                             $input->mouse($ptX, $ptY);
                             $input->push(['down', $ptX, $ptY, 0, 2, 0, $time]);
                             $this->requestFrame();

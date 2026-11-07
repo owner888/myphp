@@ -47,6 +47,9 @@ trait RuntimeMenu
      */
     public Closure $popupMenu;
 
+    /** @internal a phone's context menu while it shows, which Context::touchMenu builds over the view: its items (MyPHP\MenuItem), where (window points), and what takes the choice (-1: none) */
+    public ?array $touchMenu = null;
+
     private function initMenus(): void
     {
         $this->popupMenu = fn(array $items, float $x, float $y, bool $rtl, Closure $chosen) => null;
@@ -196,6 +199,13 @@ trait RuntimeMenu
      * the focus, and the caret unless the press is in its selection; in
      * selectable text, a press in the selection keeps it (mygo's menuPress).
      */
+    /** Whether a press at ($x, $y) would open a context menu the app gave (contextMenu), not a field's: a long press on a touch screen opens it (the phones' Windows). */
+    public function hasContextMenuAt(float $x, float $y): bool
+    {
+        $s = $this->menuTarget($this->menuChain($x, $y));
+        return $s !== 0 && (($this->menuNodes[$s] ?? 0) & 1) !== 0; // a menu of the app's, not a field's or a text's own (a long press there selects a word)
+    }
+
     private function menuPress(float $x, float $y): bool
     {
         $s = $this->menuTarget($this->menuChain($x, $y));

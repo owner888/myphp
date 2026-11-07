@@ -117,6 +117,11 @@ final class Window
             $this->runtime->readClipboardData = fn(string ...$formats): Data => $formats === [] ? new Data : App::backend()->clipboard()->readData($formats);
             $this->runtime->clipboardFormats = fn() => App::backend()->clipboard()->formats();
             $this->runtime->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen): void {
+                if ($this->runtime->touch) { // a phone's: the view builds it (Context::touchMenu), as UIKit's context menu over a dimmed window
+                    $this->runtime->touchMenu = ['items' => $items, 'x' => $x / $this->runtime->frameZoom, 'y' => $y / $this->runtime->frameZoom, 'chosen' => $chosen];
+                    $this->invalidate();
+                    return;
+                }
                 $wire = function (array $items) use (&$wire, $chosen): void { // each item reports its place
                     foreach ($items as $it) {
                         if ($it->type === MenuItem::SEPARATOR || $it->type === MenuItem::HEADER) { continue; }
@@ -273,6 +278,7 @@ final class Window
                     ($content->view)($c);
                 }
                 $c->toasts(); // over everything the view built
+                $c->touchMenu(); // a phone's context menu, over that too
                 if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $w, $h); $in->lap(0); } // beside the content
                 $this->frameStats?->lap(UI\FrameStats::BUILD);
                 Layout::layout($c, $w, $h);

@@ -246,7 +246,7 @@ trait ContextMobile
           }
           $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::END);
             if ($trailing !== null) {
-                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER);
+                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER)->shrink(0); // as wide as its items, each on one line ("13 frames" did not wrap in UIKit's bar either)
                   $trailing();
                 $this->end();
             }
@@ -330,6 +330,72 @@ trait ContextMobile
             $back->dismissed = true;
         }
         return $back;
+    }
+
+    /**
+     * A phone's context menu (Runtime::$touchMenu, what a long press on a
+     * node with a contextMenu opens), as UIKit's: over the dimmed window, a
+     * rounded list of its items 250 wide by where the finger pressed,
+     * below it or above where there is no room; an item 44 high, a
+     * destructive one in the danger color, a disabled one muted, a checked
+     * one marked; a group's line a wider gap. A tap on an item chooses it,
+     * a tap beside closes it. Build it last, over the view (Window does).
+     * Not mygo's.
+     */
+    public function touchMenu(): void
+    {
+        $rt = $this->runtime;
+        $m = $rt?->touchMenu;
+        if ($m === null) {
+            return;
+        }
+        $t = $this->theme;
+        $items = array_values(array_filter($m['items'], static fn(\MyPHP\MenuItem $it) => !$it->hidden));
+        $high = 0.0;
+        foreach ($items as $it) { $high += match ($it->type) { \MyPHP\MenuItem::SEPARATOR => 8.0, \MyPHP\MenuItem::HEADER => 30.0, default => 44.0 }; }
+        $w = min(250.0, $this->width - 32);
+        $x = max(16.0, min($m['x'] - 24, $this->width - 16 - $w));
+        $y = $m['y'] + 12;
+        if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = max($this->windowSafeArea[0] + 16, $m['y'] - 12 - $high); } // no room below: above the finger
+        $chosen = null;
+        $back = $panel = null;
+        $this->overlay(function () use (&$chosen, &$back, &$panel, $items, $t, $w, $x, $y): void {
+            $back = $this->key('touchMenu')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->block();
+            $back->alpha = 0.15;
+              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(14)->clip()->shadow(0, 8, 30, 0, 0x000000, 0.25)->role(Role::MENU);
+                $last = null;
+                foreach ($items as $it) {
+                    if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a wider gap, as UIKit's
+                        $this->box(0, 8, $t->dark ? 0x1c1c1e : 0xe5e5ea)->alignSelf(Node::STRETCH)->shrink(0);
+                        $last = null;
+                        continue;
+                    }
+                    if ($it->type === \MyPHP\MenuItem::HEADER) {
+                        $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 16, 4, 16)->singleLine();
+                        $last = null;
+                        continue;
+                    }
+                    $off = $it->disabled || $it->submenu !== [];
+                    $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
+                    if ($last !== null) { $row->borderWidth(1 / max($this->scale, 1.0), 0, 0, 0)->borderColor($t->border); } // a hairline between two items of a group
+                    if (!$off && $this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }
+                      $this->text($it->label, $t->fontSize, $off ? $t->textMuted : ($it->role === 'destructive' ? $t->danger : $t->text))->singleLine()->grow(1)->shrink(1)->minWidth(0);
+                      if ($it->checked) { $this->text('✓', $t->fontSize, $t->accent)->shrink(0); }
+                    $this->end();
+                    if (!$off && $this->clicked($row)) { $chosen = (int)$it->id; }
+                    $last = $row;
+                }
+              $this->end();
+            $this->end();
+        });
+        if ($chosen !== null) { // chosen: it closes, the choice reaching the item in the next frame (chosen())
+            $rt->touchMenu = null;
+            ($m['chosen'])($chosen);
+            $rt->changed();
+        } elseif ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // a tap beside, Escape, Back: closed, nothing chosen
+            $rt->touchMenu = null;
+            $rt->changed();
+        }
     }
 
     /**
@@ -539,7 +605,7 @@ trait ContextMobile
         $sign = $rtl ? 1.0 : -1.0; // the content moves toward the start
         $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->clip();
         $this->swipedRow = $n;
-          $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its
+          $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->alignItems(Node::START)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its; its content at the start, as a row's
             $content();
           $this->end();
           $offset = $rt?->dragRecs[$inner->id]->own ?? [0.0, 0.0]; // where the row rests, kept with its drag record between frames
