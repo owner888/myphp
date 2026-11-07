@@ -477,6 +477,7 @@ abstract class View
             $node = null;
             $row = $c->swipeActions($chosen, function () use ($c, $env, &$node): void { $node = $this->renderBox($c, $env); }, ...$labels);
             if ($chosen >= 0) { $this->swipe[$chosen]->run(); }
+            if ($c->swipedRow !== null) { self::takeRoom($c->swipedRow, $env->axis, self::FLEX_X); } // across the row it is in (a list's), where a finger swipes it, as UIKit's cell
             $node ??= $row;
         } else {
             $node = $this->renderBox($c, $env);

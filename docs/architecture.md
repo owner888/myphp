@@ -8631,6 +8631,14 @@ changed, which no hot reload can take.
   each frame. Rule: a callback a node keeps holds no node above it nor
   the Context; it takes the node it is given, or a WeakReference.
 
+- A list's row did not swipe (swipeActions), nor did a row that is a
+  Button. Causes: in a row along a stack the swipe's row was as wide as
+  its text, and a press on a button inside a draggable stayed the
+  button's, the move a scroll. Rule: the swipe's row takes the row's
+  width (Context::$swipedRow); a press on a node that only clicks goes to
+  the draggable around it once it moves far (Runtime::$pressDraggable),
+  whose axes a phone's window then follows.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

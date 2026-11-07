@@ -716,6 +716,31 @@ for ($i = 0; $i < 20; $i++) { $h->frame(); }
 gc_collect_cycles();
 same(0, gc_status()['collected'] - $was, 'a phone\'s tabs make no cycle each frame');
 
+// A row of a list swiped toward the start, as a Mail's: across the row, a button in it too (the press goes to the row
+// once it moves), a full swipe running the first action rather than the button's tap.
+$swiped = new \ArrayObject();
+$h = new Headless(fn(Context $c) => Content::render(fn() => ListView(3)(fn(int $i) => Button(action: fn() => $swiped->append("tap $i"), label: Text("Row $i"))
+    ->buttonStyle(\ButtonStyle::plain)->swipeActions(Button('Delete', role: \ButtonRole::destructive, action: fn() => $swiped->append("delete $i"))))->listStyle(\ListStyle::plain), $c), 393, 600);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
+[, $y] = $h->middle($h->byText('Row 0'));
+$h->hover(300, $y); $h->press(300, $y);
+foreach ([290, 270, 250, 230, 210, 190, 170, 150, 130, 110, 90, 70] as $px) { usleep(15_000); $h->drag($px, $y); }
+usleep(100_000); $h->release(70, $y);
+for ($k = 0; $k < 5; $k++) { usleep(100_000); $h->frame(2); }
+$h->clickText('Row 1'); $h->frame(2);
+same(['delete 0', 'tap 1'], $swiped->getArrayCopy(), 'a list\'s row of a button swiped through runs its first action; a tap on another is its button\'s');
+
+// confirmationDialog's cancel-role Button is the action sheet's own Cancel, below, not one more choice; its action runs as it closes.
+$confirmApp = new class { public bool $asked = true; public array $ran = []; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => Text('Page')->confirmationDialog('Clear?', isPresented: $confirmApp->asked, actions: [
+    Button('Clear Log', role: \ButtonRole::destructive, action: function () use ($confirmApp) { $confirmApp->ran[] = 'clear'; }),
+    Button('Cancel', role: \ButtonRole::cancel, action: function () use ($confirmApp) { $confirmApp->ran[] = 'cancel'; }),
+]), $c), 393, 852);
+$h->rt->touch = true; $h->frame(2);
+$cancels = count(array_filter($h->texts(), fn($t) => $t === 'Cancel'));
+$h->clickText('Cancel'); $h->frame(2);
+same([1, ['cancel'], false], [$cancels, $confirmApp->ran, $confirmApp->asked], 'one Cancel, its action run as it closes the sheet');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

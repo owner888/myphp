@@ -384,6 +384,30 @@ final class Strings
     {
         return self::in(\MyPHP\I18n::locale())->Language();
     }
+
+    /**
+     * Says "Delete" in the language the app shows.
+     */
+    public static function Delete(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Delete();
+    }
+
+    /**
+     * Says "Clear" in the language the app shows.
+     */
+    public static function Clear(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Clear();
+    }
+
+    /**
+     * Says "Cancel" in the language the app shows.
+     */
+    public static function Cancel(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Cancel();
+    }
 }
 
 /** The messages of Strings in one language. */
@@ -757,6 +781,30 @@ final class StringsMessages
     public function Language(): string
     {
         return Strings::$catalog->format($this->locale, 'Language', []);
+    }
+
+    /**
+     * Says "Delete" in the language of these messages.
+     */
+    public function Delete(): string
+    {
+        return Strings::$catalog->format($this->locale, 'Delete', []);
+    }
+
+    /**
+     * Says "Clear" in the language of these messages.
+     */
+    public function Clear(): string
+    {
+        return Strings::$catalog->format($this->locale, 'Clear', []);
+    }
+
+    /**
+     * Says "Cancel" in the language of these messages.
+     */
+    public function Cancel(): string
+    {
+        return Strings::$catalog->format($this->locale, 'Cancel', []);
     }
 }
 
