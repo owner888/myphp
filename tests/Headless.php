@@ -105,7 +105,7 @@ final class Headless
         if (self::$symbolsChecked) { return; }
         self::$symbolsChecked = true;
         $backend = \MyPHP\App::backend();
-        try { $backend->symbols()->draw('gearshape', 16, 0, 0, 1); } catch (\FFI\Exception) {
+        try { $backend->symbols()->draw('gearshape', 16, 0, 0, 1); } catch (\Throwable) {
             (new \ReflectionProperty($backend, 'symbols'))->setValue($backend, new StandInSymbols());
         }
     }
