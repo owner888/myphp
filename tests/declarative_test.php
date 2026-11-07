@@ -531,12 +531,14 @@ $parentOf = function (Node $of, ?Node $in = null) use (&$parentOf, $h): ?Node {
     return null;
 };
 $rowOf = fn(Node $n) => $h->rect($parentOf($n))[3];
-$switch = $h->byLabel('Awareness');
+$switchIn = function (Node $n, string $label) use (&$switchIn): ?Node { if ($n->kind === Node::SWITCH && $n->label === $label) { return $n; } foreach ($n->kids as $k) { if (($f = $switchIn($k, $label)) !== null) { return $f; } } return null; };
+$switch = $switchIn($h->root, 'Awareness');
 $track = $h->byLabel('Mode');
 $chosen = array_values(array_filter($track->kids, fn(Node $k) => $k->on))[0];
 $bar = $h->root->kids[0]->kids[0]->kids[0]->kids[0];
-same([[52.0, 52.0, 52.0, 52.0], [true, false], true, $h->rect($parentOf($switch))[2] - 32, [0x767680, 0.12, 0xffffff], true, 0xf2f2f7, 0xf2f2f7],
-    [array_map($rowOf, [$track, $switch, $parentOf($parentOf($h->byText('Default'))), $h->byText('Plain')]), [$h->byText('Noise') !== null, $h->byText('NOISE') !== null], $switch->reverse, $h->rect($switch)[2], [$track->color, $track->bgAlpha, $chosen->color],
+$row = $h->rect($parentOf($parentOf($switch)));
+same([[52.0, 52.0, 52.0, 52.0], [true, false], $row[0] + $row[2] - 16, [0x767680, 0.12, 0xffffff], true, 0xf2f2f7, 0xf2f2f7],
+    [array_map($rowOf, [$track, $parentOf($switch), $parentOf($parentOf($h->byText('Default'))), $h->byText('Plain')]), [$h->byText('Noise') !== null, $h->byText('NOISE') !== null], $h->rect($switch)[0] + $h->rect($switch)[2], [$track->color, $track->bgAlpha, $chosen->color],
      count(array_filter($h->texts(), fn($t) => $t === 'Settings page')) === 2, $bar->color, $h->root->kids[0]->color],
     'a phone\'s form as iOS 26\'s: rows 52 high, the header as written, the switch at the end, the segments\' track, a large title, the page\'s gray behind the bars');
 
@@ -630,7 +632,8 @@ $played = function (bool $touch) use ($hapticApp): array {
     )), $c), 393, 600);
     $h->rt->touch = $touch;
     $h->frame(2);
-    $h->clickOn($h->byLabel('Switch')); $h->frame(2);
+    $sw = null; $walk = function (Node $n) use (&$walk, &$sw): void { if ($n->kind === Node::SWITCH) { $sw = $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->root);
+    $h->clickOn($sw); $h->frame(2); // the switch: its title, as UIKit's, takes no tap
     $h->clickText('On'); $h->frame(2);
     $h->clickText('On'); $h->frame(2);
     $h->clickText('Default'); $h->frame(2); // the menu's button, showing its choice

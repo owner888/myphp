@@ -94,7 +94,7 @@ final class Picker extends View
                 $index = $found === false ? -1 : $found;
                 $n = $style === \PickerStyle::segmented ? $c->segmented($labels, $index) : $c->select($labels, $index);
                 if ($style !== \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { self::plain($n, $env); } // a phone's form: the choice in the muted text and its arrows, as UIKit's menu button in a cell
-                if ($style === \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { $n->grow = 1; foreach ($n->kids as $k) { $k->basis(0)->grow = 1; } } // across its row, its segments sharing it, as UIKit's in a cell
+                if ($style === \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { $n->grow = 1; $n->shrink(1)->minWidth(0); foreach ($n->kids as $k) { $k->basis(0)->grow = 1; } } // across its row, its segments sharing it, as UIKit's in a cell
                 if ($index >= 0 && $index !== $found) { $this->selection = $values[$index]; }
             }
             $n->label(Localized::string($this->title, $env));

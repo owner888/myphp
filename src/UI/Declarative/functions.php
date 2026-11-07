@@ -186,6 +186,25 @@ enum DynamicTypeSize
             self::accessibility1 => 28, self::accessibility2 => 33, self::accessibility3 => 40, self::accessibility4 => 47, self::accessibility5 => 53,
         } / 17;
     }
+
+    /** Whether it is one of the accessibility sizes, where a row of views is better a column (SwiftUI's isAccessibilitySize). */
+    public function isAccessibilitySize(): bool
+    {
+        return $this->scale() >= 28 / 17;
+    }
+
+    /**
+     * The size the app's text is at, as SwiftUI's @Environment(\.dynamicTypeSize): the system's, or the one
+     * dynamicTypeSize() chose, the nearest of the cases. A view lays itself out by it at the accessibility sizes:
+     * DynamicTypeSize::current()->isAccessibilitySize() ? VStack()(…) : HStack()(…).
+     */
+    public static function current(): self
+    {
+        $scale = MyPHP\App::theme()->textScale();
+        $best = self::large;
+        foreach (self::cases() as $c) { if (abs($c->scale() - $scale) < abs($best->scale() - $scale)) { $best = $c; } }
+        return $best;
+    }
 }
 
 /** What an onKeyPress action did: took the key (handled), or left it to the view (ignored). */

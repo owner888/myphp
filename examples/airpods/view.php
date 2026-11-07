@@ -33,12 +33,14 @@ $check = fn(string $name, bool $ok, string $no = 'No') => HStack()( // $tr, capt
 /** A pod's or the case's battery: its charge as a bar, where it is and whether it charges. */
 $battery = fn(string $name, ?int $level, string $status, string $placement) => VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
     Text($name)->font(Font::caption)->foregroundStyle(Color::secondary),
-    Text(verbatim: $level === null ? '--' : $level . '%')->font(Font::system(size: 22, weight: Weight::semibold)),
+    Text(verbatim: $level === null ? '--' : $level . '%')->font(Font::title2)->fontWeight(Weight::semibold), // a text style: larger as the text is
     ProgressView(value: ($level ?? 0) / 100)->tint($level !== null && $level <= 20 ? Color::red : Color::green),
     Text(verbatim: $tr($placement) . ' · ' . $tr($status))->font(Font::caption)->foregroundStyle(Color::secondary)->lineLimit(1),
 )->padding(12)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::tertiarySystemGroupedBackground)->cornerRadius(10);
 
-$batteries = fn() => HStack(spacing: 10)(
+// At the accessibility text sizes the batteries go one under the other, as an iPhone app's do (SwiftUI's
+// dynamicTypeSize.isAccessibilitySize): three side by side would show little more than ellipses.
+$batteries = fn() => (DynamicTypeSize::current()->isAccessibilitySize() ? VStack(spacing: 10) : HStack(spacing: 10))(
     $battery('Left', $this->leftBattery, AirPodsApp::statusLabel($this->leftStatus), AirPodsApp::earLabel($this->primaryEar)),
     $battery('Right', $this->rightBattery, AirPodsApp::statusLabel($this->rightStatus), AirPodsApp::earLabel($this->secondaryEar)),
     $battery('Case', $this->caseBattery, AirPodsApp::statusLabel($this->caseStatus), $this->lidOpen ? 'Lid open' : 'Lid closed'),
@@ -69,7 +71,7 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status,
     $off = !$connected; // the settings, not the AirPods' name and batteries, wait for the connection
     return Form()(
         Section()(
-            HStack(alignment: VerticalAlignment::top)(
+            (DynamicTypeSize::current()->isAccessibilitySize() ? VStack(alignment: HorizontalAlignment::leading, spacing: 8) : HStack(alignment: VerticalAlignment::top))( // the status under the name at the accessibility sizes
                 VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
                     Text(verbatim: $this->deviceName)->font(Font::title2)->bold(),
                     Text('{model} · Firmware {firmware}', ['model' => $this->modelNumber, 'firmware' => $this->firmware])->font(Font::subheadline)->foregroundStyle(Color::secondary),

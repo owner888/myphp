@@ -479,6 +479,17 @@ final class Headless
         return null;
     }
 
+    /** A click on the switch titled $label, which must be there: a form's switch takes a tap, its title none, as UIKit's and AppKit's. */
+    public function clickSwitch(string $label): Node
+    {
+        $find = function (Node $n) use (&$find, $label): ?Node {
+            if ($n->kind === Node::SWITCH && $n->label === $label) { return $n; }
+            foreach ($n->kids as $k) { if (($f = $find($k)) !== null) { return $f; } }
+            return null;
+        };
+        return $this->clickOn(($this->root !== null ? $find($this->root) : null) ?? throw new \RuntimeException("no switch $label"));
+    }
+
     /** A click in the middle of the node showing $text, which must be there. */
     public function clickText(string $text): Node
     {
