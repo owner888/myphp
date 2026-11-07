@@ -28,7 +28,8 @@ trait ContextMobile
      * The tabs of an app, placed as Apple places them (SwiftUI's TabView
      * with the sidebarAdaptable style): a tab bar across the bottom on a
      * phone — a touch screen of compact width or height, under 600 by 500
-     * points — the tabs across the top, as iPadOS's, on a tablet held
+     * points — floating over the page, whose first scroll takes its height
+     * as room after its content ($bottomInset) and so goes on under it; the tabs across the top, as iPadOS's, on a tablet held
      * upright, and a sidebar on a tablet on its side and on the desktop.
      * $items are [icon, label] pairs, an icon an SVG or a function of the
      * color drawing one (an SF Symbol's); $content builds the page of tab
@@ -43,15 +44,21 @@ trait ContextMobile
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
         $where = $this->tabsPlacement();
-        if ($where === self::TABS_BOTTOM) {
+        if ($where === self::TABS_BOTTOM) { // the bar floats over the page, as iOS 26's: the page's scroll goes on under it
             $bottom = $this->safeArea[2];
+            $inset = $this->tabBarInset();
             $n = $this->column(0, 0, 1)->fill();
-              $this->safeArea[2] = 0.0; // the tabBar takes the bottom safe area below the page
-              $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
+              $this->safeArea[2] = 0.0; // the tabBar takes the bottom safe area
+              $was = $this->bottomInset;
+              $this->bottomInset = $inset; // the page's first scroll takes it as room after its content
+              $page = $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
                 $content($index, $where);
               $this->end();
+              if ($this->bottomInset > 0) { $page->padding(0, 0, $inset, 0); } // no scroll took it: the page above the bar
+              $this->bottomInset = $was;
               $this->safeArea[2] = $bottom;
               $bar = $this->tabBar($items, $index);
+              $bar->absolute()->bottom(0)->start(0)->end(0);
               if ($bar->changed) { $n->changed = true; }
             $this->end();
             return $n;

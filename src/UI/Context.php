@@ -76,6 +76,16 @@ final class Context
     public array $titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
     /** The safe area on the mobile platforms: how far from the window's top, right, bottom and left edges the system's bars, the cutout and the home indicator reach (zeros on the desktop); safeArea() keeps content out of it, a tabBar or navigationBar extends into it. Not mygo's. */
     public array $safeArea = [0.0, 0.0, 0.0, 0.0];
+    /** How far a bar floating over the page covers its bottom (a phone's tabBar), which the page's first scroll takes as room after its content, scrolling under the bar as iOS's do (takeBottomInset); what no scroll takes, the page keeps out of. Not mygo's. */
+    public float $bottomInset = 0.0;
+
+    /** The bottom inset for the scroll being built, which takes it: the next one gets none. @internal */
+    public function takeBottomInset(): float
+    {
+        $v = $this->bottomInset;
+        $this->bottomInset = 0.0;
+        return $v;
+    }
     /** The window's safe area as the system gives it, which $safeArea starts as each frame: a navigationBar or tabView takes its edge off $safeArea for what it builds below, while an overlay (sheet, actionSheet) keeps out of the window's own. Not mygo's. */
     public array $windowSafeArea = [0.0, 0.0, 0.0, 0.0];
     /** How high the software keyboard stands over the window's bottom edge; 0 while hidden, and on the desktop. Not mygo's. */
