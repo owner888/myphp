@@ -49,6 +49,7 @@ enum Color
     // iOS's semantic colors (UIColor's, Color(.secondarySystemBackground) in SwiftUI), following the theme, light or dark:
     // the backgrounds, a surface over them (a field's, a card's), those of grouped lists, the text, links.
     case systemBackground; case secondarySystemBackground; case systemGroupedBackground; case secondarySystemGroupedBackground;
+    case tertiarySystemBackground; case tertiarySystemGroupedBackground;
     case label; case secondaryLabel; case link;
     // iOS's grays, from systemGray to the lightest, systemGray6 (in the dark the darkest), as Apple gives them.
     case systemGray; case systemGray2; case systemGray3; case systemGray4; case systemGray5; case systemGray6;
@@ -75,6 +76,9 @@ enum Color
             self::primary => $t->text, self::secondary => $t->textMuted, self::accentColor => $t->accent, self::background => $t->background, self::separator => $t->border,
             self::systemBackground => $t->background, self::secondarySystemBackground => $t->surface,
             self::systemGroupedBackground => $t->groupBackground ?? $t->surface, self::secondarySystemGroupedBackground => $t->groupSurface ?? $t->background, // a grouped list's page and its sections, as the theme has them: a phone's in the dark the black page and its dark gray sections, as iOS's
+            // what sits on those (a tile in a section): iOS's third level, the gray in the light, a lighter gray in the dark; the desktop's background and surface
+            self::tertiarySystemBackground => $t->groupSurface !== null ? ($d ? 0x2c2c2e : 0xffffff) : $t->background,
+            self::tertiarySystemGroupedBackground => $t->groupSurface !== null ? ($d ? 0x2c2c2e : 0xf2f2f7) : $t->surface,
             self::label => $t->text, self::secondaryLabel => $t->textMuted, self::link => $t->accent,
             self::systemGray => 0x8e8e93, self::systemGray2 => $d ? 0x636366 : 0xaeaeb2, self::systemGray3 => $d ? 0x48484a : 0xc7c7cc,
             self::systemGray4 => $d ? 0x3a3a3c : 0xd1d1d6, self::systemGray5 => $d ? 0x2c2c2e : 0xe5e5ea, self::systemGray6 => $d ? 0x1c1c1e : 0xf2f2f7,

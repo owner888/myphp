@@ -36,7 +36,7 @@ $battery = fn(string $name, ?int $level, string $status, string $placement) => V
     Text(verbatim: $level === null ? '--' : $level . '%')->font(Font::system(size: 22, weight: Weight::semibold)),
     ProgressView(value: ($level ?? 0) / 100)->tint($level !== null && $level <= 20 ? Color::red : Color::green),
     Text(verbatim: $tr($placement) . ' · ' . $tr($status))->font(Font::caption)->foregroundStyle(Color::secondary)->lineLimit(1),
-)->padding(12)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::secondarySystemBackground)->cornerRadius(10);
+)->padding(12)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::tertiarySystemGroupedBackground)->cornerRadius(10);
 
 $batteries = fn() => HStack(spacing: 10)(
     $battery('Left', $this->leftBattery, AirPodsApp::statusLabel($this->leftStatus), AirPodsApp::earLabel($this->primaryEar)),
@@ -48,7 +48,7 @@ $batteries = fn() => HStack(spacing: 10)(
 $status = fn(bool $connected) => HStack(spacing: 6)(
     Circle()->fill($connected ? Color::green : Color::secondary)->frame(width: 8, height: 8),
     Text($connected ? 'Connected' : 'Not connected')->font(Font::caption),
-)->padding(Edge::vertical, 4)->padding(Edge::horizontal, 10)->background(Color::secondarySystemBackground)->clipShape(Capsule());
+)->padding(Edge::vertical, 4)->padding(Edge::horizontal, 10)->background(Color::tertiarySystemGroupedBackground)->clipShape(Capsule());
 
 /** The AirPods: their name and batteries, then their settings, each sent as it changes (AACP 0x0009 and 0x0017). */
 $settings = function (bool $connected) use ($sent, $choice, $batteries, $status, $tr) {

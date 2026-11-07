@@ -57,6 +57,7 @@ final class iOS
             void myphp_ios_free_string(char *s);
             void myphp_ios_open_url(const char *url);
             void myphp_ios_set_idle_timer_disabled(int disabled);
+            void myphp_ios_set_interface_style(int style);
             int myphp_ios_symbol_exists(const char *name);
             int myphp_ios_draw_symbol(const char *name, float size, float weight, int rgb, float scale, int *out_w, int *out_h, uint8_t *out, int max_bytes);
             void myphp_ios_show_notification(const char *title, const char *body, const char *identifier);

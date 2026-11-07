@@ -81,6 +81,8 @@ The colors that follow the theme, light or dark, by iOS's names: SwiftUI's
 `::separator`; UIColor's (`Color(.secondarySystemBackground)` in SwiftUI)
 `::systemBackground`, `::secondarySystemBackground` (a field's or a card's
 surface), `::systemGroupedBackground`, `::secondarySystemGroupedBackground`,
+`::tertiarySystemBackground`, `::tertiarySystemGroupedBackground` (a tile in a
+section: seen on the section in the dark too),
 `::label`, `::secondaryLabel`, `::link`, and the grays `::systemGray` to
 `::systemGray6`; the system's `::red`, `::blue`… `Color::rgb(0x336699)` is one
 of the app's own.
