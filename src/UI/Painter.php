@@ -1600,12 +1600,18 @@ final class Painter
         [$tw, $th] = $t->switchWidth > 0 ? [$t->switchWidth, $t->switchHeight] : [$t->space(9), $t->space(5)]; // UISwitch's track on a phone (Context::switch)
         $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
-        $sx = $n->rtl ? $n->x + $n->w - $tw : $n->x; // right to left: the switch at the right, on toward the left
+        $end = $n->rtl !== $n->reverse; // the switch at the right: right to left (on toward the left), or after its title (a form's row)
+        $sx = $end ? $n->x + $n->w - $tw : $n->x;
         $hovered = $rt?->hovered($n->id) ?? false;
         $pressed = ($rt?->isTouchFlashing($n->id) ?? false) || ($hovered && ($rt?->input->mouseDown ?? false));
-        $offColor = Theme::mix($t->border, $t->text, $pressed ? 0.28 : 0.15);
-        $onColor = $pressed ? $t->accentPressed : $t->accent;
-        $list->rect($sx, $y, $tw, $th, Theme::mix($offColor, $onColor, $n->fraction), 1.0, $th / 2);
+        if ($t->switchWidth > 0) { // UISwitch: off, systemFill (gray, see-through); on, systemGreen
+            $list->rect($sx, $y, $tw, $th, 0x787880, ($t->dark ? 0.32 : 0.16) * (1.0 - $n->fraction) + ($pressed ? 0.08 : 0.0), $th / 2);
+            if ($n->fraction > 0) { $list->rect($sx, $y, $tw, $th, $t->success, $n->fraction, $th / 2); }
+        } else {
+            $offColor = Theme::mix($t->border, $t->text, $pressed ? 0.28 : 0.15);
+            $onColor = $pressed ? $t->accentPressed : $t->accent;
+            $list->rect($sx, $y, $tw, $th, Theme::mix($offColor, $onColor, $n->fraction), 1.0, $th / 2);
+        }
         $stretch = $pressed ? $t->space(0.75) : 0.0;
         $kw = $d + $stretch;
         $kx = $n->rtl
@@ -1617,7 +1623,8 @@ final class Painter
             self::paintFocusRing($list, $sx, $y, $tw, $th, $th / 2, $t);
         }
         [$lw, $lh] = $text->measure($n->text, $n->fontSize);
-        $text->paint($list, $n->text, $n->fontSize, $n->rtl ? $sx - $t->space(2) - $lw : $n->x + $tw + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+        $lx = match (true) { $n->reverse => $n->rtl ? $n->x + $n->w - $lw : $n->x, $n->rtl => $sx - $t->space(2) - $lw, default => $n->x + $tw + $t->space(2) }; // after its title, the title at the row's start
+        $text->paint($list, $n->text, $n->fontSize, $lx, $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
     /**

@@ -83,6 +83,7 @@ final class ScrollView extends View
         $n->alignSelf(Node::STRETCH);
         $n->grow = max($n->grow, 1);
         if ($background !== null) { $n->background($background); }
+        if ($background !== null && $env->backdrop !== null) { $env->backdrop->color ??= $background; } // the page's: the bars around it over it
         return $n;
     }
 }

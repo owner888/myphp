@@ -52,13 +52,14 @@ final class NavigationStack extends View
         $entry = $this->router->entry();
         $large = $entry->largeTitle ?? null;
         $n = $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
+        $backdrop = (object)['color' => null];
           $toolbar = $entry->toolbar ?? null;
           $c->navigationBar($this->router->title(), $this->router,
               $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless]), $toolbar); },
               $large);
-          $c->safeArea(function () use ($c, $env): void {
-              $this->router->view($c, function (Route $r) use ($c, $env): void {
-                  $e = $env->with(['route' => $r, 'stack' => $this, 'title' => null, 'titleMode' => null, 'toolbar' => null]);
+          $c->safeArea(function () use ($c, $env, $backdrop): void {
+              $this->router->view($c, function (Route $r) use ($c, $env, $backdrop): void {
+                  $e = $env->with(['route' => $r, 'stack' => $this, 'title' => null, 'titleMode' => null, 'toolbar' => null, 'backdrop' => $backdrop]);
                   $r->entry->barSeen = [];
                   View::renderAll($c, $e->along(Node::COLUMN), [$this->page($c, $r)]);
                   foreach (['toolbar', 'largeTitle'] as $k) { // what the page no longer puts in the bar goes from it
@@ -67,6 +68,10 @@ final class NavigationStack extends View
               });
           });
         $c->end();
+        if ($backdrop->color !== null && ($c->runtime?->touch ?? false)) { // a phone's bar is clear: the page's color behind it, up to the window's top
+            $n->background($backdrop->color);
+            if ($env->backdrop !== null) { $env->backdrop->color ??= $backdrop->color; }
+        }
         $n->grow = max($n->grow, 1); // it takes the room it is given, along the stack it is in and across it
         return $n;
     }
@@ -118,8 +123,12 @@ final class NavigationStack extends View
     /** The ScrollState of the large title of the page $env is on, which its ScrollView or ListView scrolls by; null unless the page asks for one. @internal */
     public function largeTitle(Context $c, Env $env): ?ScrollState
     {
-        if ($env->route === null || $env->titleMode !== \TitleDisplayMode::large) { return null; }
+        // automatic: large on a phone, as SwiftUI's stack on iOS; inline on the desktop, where macOS has none
+        $mode = $env->titleMode ?? \TitleDisplayMode::automatic;
+        $large = $mode === \TitleDisplayMode::large || ($mode === \TitleDisplayMode::automatic && ($c->runtime?->touch ?? false) && ($env->title ?? '') !== '');
+        if ($env->route === null || !$large) { return null; }
         $entry = $env->route->entry;
+        if (isset($entry->barSeen['largeTitle'])) { return null; } // the page's first scroll has it, not one inside it
         $entry->barSeen['largeTitle'] = true;
         if ($entry->largeTitle === null) {
             $entry->largeTitle = $entry->largeScroll ??= new ScrollState();

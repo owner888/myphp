@@ -45,12 +45,14 @@ final class TabView extends View
         if ($this->style === \TabViewStyle::automatic && !($c->runtime?->touch ?? false)) { return $this->desktop($c, $env, $index); }
         if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
         $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env)], $this->tabs);
-        $n = $c->tabView($items, $index, function (int $i) use ($c, $env): void {
+        $backdrop = (object)['color' => null];
+        $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {
             $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
             $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
-              View::renderAll($c, $env->along(Node::COLUMN), [self::stacked($this->tabs[$i]->content)]);
+              View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [self::stacked($this->tabs[$i]->content)]);
             $c->end();
         });
+        if ($backdrop->color !== null) { $n->background($backdrop->color); } // the floating tab bar over the page's color, as iOS's
         $this->selection = $this->tabs[$index]->value ?? $this->selection;
         return $n;
     }
