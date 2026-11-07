@@ -99,7 +99,40 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private FrameLayout mRootLayout;
     private static final Map<Integer, WebView> sWebViews = new HashMap<>();
     private static final Paint sTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
-    private static final Map<Integer, Font> sGlyphFontCache = new HashMap<>();
+    // The font each glyph was shaped in, by its style and id: Roboto is one variable font, so a glyph's id is the same in
+    // every weight, and the weight is the font's (its 'wght' axis), not the id's.
+    private static final Map<Long, Font> sGlyphFontCache = new HashMap<>();
+    private static final Map<String, Font> sWeightedFonts = new HashMap<>();
+
+    private static long glyphKey(int style, int glyphId) {
+        return ((long) style << 32) | (glyphId & 0xffffffffL);
+    }
+
+    /** style: bit 0 bold, bit 1 italic, the weight (100-900) from bit 2 on; 0 for none given, which bold says. */
+    private static int weightOf(int style) {
+        int weight = style >> 2;
+        return weight >= 100 ? Math.min(weight, 900) : ((style & 1) != 0 ? 700 : 400);
+    }
+
+    /** $font drawn in the style's weight: a variable font's 'wght' axis set, as the shaper used it. */
+    private static Font weighted(Font font, int style) {
+        int weight = weightOf(style);
+        if (weight == 400) {
+            return font;
+        }
+        String key = weight + ":" + System.identityHashCode(font);
+        Font f = sWeightedFonts.get(key);
+        if (f == null) {
+            try {
+                f = new Font.Builder(font).setFontVariationSettings("'wght' " + weight).build();
+            } catch (java.io.IOException e) {
+                Log.e("MyPHP", "Weight " + weight + " of a font failed: " + e);
+                throw new RuntimeException("Weight " + weight + " of a font failed: " + e, e);
+            }
+            sWeightedFonts.put(key, f);
+        }
+        return f;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -405,16 +438,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             return new float[]{0f, 0f, 0f, 0f};
         }
 
-        int tfStyle = Typeface.NORMAL;
-        if ((style & 1) != 0 && (style & 2) != 0) {
-            tfStyle = Typeface.BOLD_ITALIC;
-        } else if ((style & 1) != 0) {
-            tfStyle = Typeface.BOLD;
-        } else if ((style & 2) != 0) {
-            tfStyle = Typeface.ITALIC;
-        }
-
-        sTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, tfStyle));
+        sTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, weightOf(style), (style & 2) != 0)); // the weight asked, 600 (semibold) too
         sTextPaint.setTextSize(textSize);
 
         PositionedGlyphs glyphs = TextRunShaper.shapeTextRun(
@@ -437,7 +461,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             int gid = glyphs.getGlyphId(i);
             Font font = glyphs.getFont(i);
             if (font != null) {
-                sGlyphFontCache.put(gid, font);
+                sGlyphFontCache.put(glyphKey(style, gid), weighted(font, style));
             }
             result[4 + i * 3] = (float) gid;
             result[4 + i * 3 + 1] = glyphs.getGlyphX(i);
@@ -449,7 +473,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
 
     // Glyph rasterization via Canvas.drawGlyphs into ALPHA_8 Bitmap
     public static synchronized byte[] rasterizeGlyph(int glyphId, float textSize, int style, int[] outMetrics) {
-        Font font = sGlyphFontCache.get(glyphId);
+        Font font = sGlyphFontCache.get(glyphKey(style, glyphId));
         if (font == null) {
             outMetrics[0] = 0;
             outMetrics[1] = 0;

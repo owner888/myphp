@@ -636,6 +636,7 @@ final class Runtime
                         break; // a selection starts: the paragraph pressed has the focus
                     }
                     $this->presses[] = [$e[1], $e[2]];
+                    if ($this->touchMode) { $this->touchPressAt = hrtime(true) / 1e9; } // its pressed look waits (touchSettling)
                     $this->pressMods = ($e[5] ?? 0) & Key::MODIFIERS;
                     $this->pressAt($e[1], $e[2]);
                     if ($e[4] >= 2 && $this->focus !== null && isset($this->fields[$this->focus])) {
@@ -3458,6 +3459,20 @@ final class Runtime
         return true;
     }
 
+    /** When the finger went down (seconds), and how long what it pressed waits to look pressed: a finger that sets off to scroll within it presses nothing that shows, as UIScrollView's delaysContentTouches. Not mygo's. */
+    private float $touchPressAt = 0.0;
+    private const TOUCH_PRESS_DELAY = 0.1;
+
+    /** Whether the finger is down too short a while for what it presses to look pressed (hovered() and the touch flash say no meanwhile); asks for the frame where it will. */
+    private function touchSettling(): bool
+    {
+        if (!$this->touchMode || !$this->input->mouseDown) { return false; }
+        $left = self::TOUCH_PRESS_DELAY - (hrtime(true) / 1e9 - $this->touchPressAt);
+        if ($left <= 0) { return false; }
+        $this->after($left);
+        return true;
+    }
+
     /** @var array<int, float> node id => monotonic timestamp (seconds) until which a touch tap keeps its visual flash highlight */
     public array $touchFlash = [];
     /** True when the pointer is driven by a touch screen (Android / iOS), where scrollbars show only during active scrolling rather than on tap hover. */
@@ -3471,7 +3486,7 @@ final class Runtime
 
     public function isTouchFlashing(int $id): bool
     {
-        if (!isset($this->touchFlash[$id])) {
+        if (!isset($this->touchFlash[$id]) || $this->touchSettling()) {
             return false;
         }
         if (hrtime(true) / 1e9 >= $this->touchFlash[$id]) {
@@ -3550,7 +3565,7 @@ final class Runtime
 
     public function hovered(int $id): bool
     {
-        if (!$this->input->mouseInside || !$this->under($id, $this->input->mouseX, $this->input->mouseY)) {
+        if (!$this->input->mouseInside || $this->touchSettling() || !$this->under($id, $this->input->mouseX, $this->input->mouseY)) {
             return false;
         }
         $p = $this->input->mouseDown && ($this->pointerPress['down'] ?? false) ? ($this->pointerPress['id'] ?? null) : null;
