@@ -97,12 +97,9 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
                 HeadGestureDetector::SHAKE_NO => sprintf('Shake No (%d)', $this->gestures->shakeCount),
                 default => 'None',
             }),
-            HStack(spacing: 8)(
-                Button($this->headTrackingActive ? 'Stop Head Tracking' : 'Start Head Tracking', action: fn() => $this->setHeadTracking(!$this->headTrackingActive)),
-                Spacer(),
-                Button('Simulate Nod', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::NOD_YES)),
-                Button('Simulate Shake', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::SHAKE_NO)),
-            ),
+            Button($this->headTrackingActive ? 'Stop Head Tracking' : 'Start Head Tracking', action: fn() => $this->setHeadTracking(!$this->headTrackingActive)),
+            Button('Simulate Nod', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::NOD_YES)),
+            Button('Simulate Shake', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::SHAKE_NO)),
         )->disabled($off),
         Section(header: 'Name')(
             HStack(spacing: 8)(
@@ -141,16 +138,13 @@ $connection = function (bool $connected) use ($check) {
         ),
         Section(header: 'Pairing')(
             LabeledContent('Address', $this->macAddress !== '' ? $this->macAddress : '--'),
-            HStack()(
-                Button('Pair AirPods 4', action: function () { $this->popupOpen = true; $this->popupDismissed = false; }),
-                Spacer(),
-                Button($this->lidOpen ? 'Close Case Lid' : 'Open Case Lid', action: function () {
-                    $this->sim->lidOpen = !$this->sim->lidOpen;
-                    $this->lidOpen = $this->sim->lidOpen;
-                    $this->popupOpen = $this->lidOpen;
-                    $this->popupDismissed = !$this->lidOpen;
-                }),
-            ),
+            Button('Pair AirPods 4', action: function () { $this->popupOpen = true; $this->popupDismissed = false; }),
+            Button($this->lidOpen ? 'Close Case Lid' : 'Open Case Lid', action: function () {
+                $this->sim->lidOpen = !$this->sim->lidOpen;
+                $this->lidOpen = $this->sim->lidOpen;
+                $this->popupOpen = $this->lidOpen;
+                $this->popupDismissed = !$this->lidOpen;
+            }),
             $this->androidBt !== null ? Toggle('Use the AirPods 4 Simulator', isOn: $simulated)->toggleStyle(ToggleStyle::switch) : null,
             $this->useSimulator ? Toggle('Simulate Pre-QPR3 Fluoride Block', isOn: $blocked)->toggleStyle(ToggleStyle::switch) : null,
         ),
@@ -162,11 +156,8 @@ $connection = function (bool $connected) use ($check) {
             LabeledContent('Identity key', $this->irk !== null ? ($this->rpaVerified ? 'Received · address verified' : 'Received') : '--'),
             LabeledContent('Encryption key', $this->encKey !== null ? 'Received' : '--'),
             Toggle('Take Over When This Phone Plays', isOn: $this->autoTakeoverEnabled)->toggleStyle(ToggleStyle::switch),
-            HStack()(
-                Button('Take Over from iPhone', action: fn() => $this->onLocalAudioStarted())->buttonStyle(ButtonStyle::borderedProminent),
-                Spacer(),
-                Button('Hand Back to iPhone', action: fn() => $this->handBackToPeer())->disabled(!$connected),
-            ),
+            Button('Take Over from iPhone', action: fn() => $this->onLocalAudioStarted()),
+            Button('Hand Back to iPhone', action: fn() => $this->handBackToPeer())->disabled(!$connected),
         ),
     )->navigationTitle('Connection');
 };

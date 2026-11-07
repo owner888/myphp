@@ -72,8 +72,28 @@ final class NavigationStack extends View
             $n->background($backdrop->color);
             if ($env->backdrop !== null) { $env->backdrop->color ??= $backdrop->color; }
         }
+        if ($c->runtime?->touch ?? false) { $n->drawOver(self::scrollEdge(...)); }
         $n->grow = max($n->grow, 1); // it takes the room it is given, along the stack it is in and across it
         return $n;
+    }
+
+    /**
+     * iOS 26's scroll edge under a phone's bar: what the page scrolled up fades into the page's color over the 20
+     * points below the bar, rather than being cut at its edge; at rest, the page's top shows whole.
+     */
+    private static function scrollEdge(\MyPHP\UI\Painter $p, array $r, Node $n): void
+    {
+        $bar = $n->kids[0] ?? null;
+        if ($bar === null) { return; }
+        $queue = array_slice($n->kids, 1);
+        $scrolled = 0.0;
+        while ($queue !== []) { // the page's first scroll down
+            $k = array_shift($queue);
+            if ($k->scroll !== null && $k->scrollY) { $scrolled = $k->scroll->extent()[0]; break; }
+            array_push($queue, ...$k->kids);
+        }
+        if ($scrolled <= 0) { return; }
+        $p->displayList()->gradient($r[0], $bar->y + $bar->h, $r[2], 20, $n->color ?? $p->theme()->background, min(1.0, $scrolled / 20), 0.0);
     }
 
     /** The view of the page $r shows: the root's at "/", else the destination of the first pattern it matches. */

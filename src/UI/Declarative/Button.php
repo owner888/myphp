@@ -10,7 +10,7 @@ use MyPHP\UI\{Context, Node};
  * Button, as SwiftUI's: a title, or a label view (Label, Image…), and the
  * action a click or tap runs — or Return, Space, its keyboardShortcut —
  * in the environment's buttonStyle: automatic (bordered on the desktop, a
- * capsule on a phone), borderedProminent (filled with the tint), bordered,
+ * capsule on a phone, its title in the tint in a phone's form row), borderedProminent (filled with the tint), bordered,
  * borderless and plain (its label alone). A destructive role is red.
  */
 final class Button extends View
@@ -25,6 +25,7 @@ final class Button extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $style = $env->buttonStyle ?? \ButtonStyle::automatic;
+        if ($style === \ButtonStyle::automatic && $env->formRow && ($c->runtime?->touch ?? false)) { $style = \ButtonStyle::borderless; } // in a phone's form row, as SwiftUI's on iOS: its title in the tint, no face
         if ($this->label !== null) {
             $t = $env->theme;
             $prominent = $style === \ButtonStyle::borderedProminent;

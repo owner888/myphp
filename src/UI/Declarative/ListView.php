@@ -116,7 +116,7 @@ final class ListView extends View
             $v = $row($items === null ? $i : $items[$i], $keys === null ? $i : $keys[$i]);
             if ($v === null) { return; }
             if ($v instanceof View) { $v->identity ??= $items === null && !$this->id instanceof Closure ? $i : $idOf($i); }
-            $r = self::row($c, $rowEnv, $v, $env->listStyle !== \ListStyle::plain);
+            $r = self::row($c, $rowEnv, $v, $env->listStyle !== \ListStyle::plain || ($c->runtime?->touch ?? false)); // separated, but in a Mac's plain list
             if ($r === null) { return; }
             if ($env->alternatingRows && $i & 1) { $r->background($env->theme->surface); }
             if ($menu !== null) {
@@ -197,7 +197,7 @@ final class ListView extends View
             $n = $c->cell(Localized::string($v->title, $env));
             if ($n !== null && $c->clicked($n)) { $v->run(); }
             if ($v->role !== \ButtonRole::destructive) { $n->kids[0]?->textColor($env->tint?->rgb($env) ?? $env->theme->accent); } else { $n->kids[0]?->textColor($env->theme->danger); }
-        } elseif ($env->listStyle === \ListStyle::plain) { // a macOS list's row: its content's height, rounded
+        } elseif ($env->listStyle === \ListStyle::plain && !($c->runtime?->touch ?? false)) { // a macOS list's row: its content's height, rounded (a phone's plain list's rows are UIKit's cells, as a grouped one's)
             $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->padding(6, 10)->radius(8)->alignItems(Node::CENTER);
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false]), is_array($v) ? $v : [$v]);
             $c->end();
@@ -210,7 +210,9 @@ final class ListView extends View
                 if ($k->kind === Node::SWITCH || $k->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(6, 16); break; }
             }
         }
-        if ($separator && $n !== null) { $n->borderWidth(0, 0, 0.5, 0)->borderColor($env->theme->border); } // UIKit's separator, a hairline
+        if ($separator && $n !== null) { // UIKit's separator: a hairline under the row from 16 in to its end
+            $n->drawOver(static fn(\MyPHP\UI\Painter $p, array $r) => $p->fill([$r[0] + 16, $r[1] + $r[3] - 0.5, $r[2] - 16, 0.5], $p->theme()->border));
+        }
         return $n;
     }
 
