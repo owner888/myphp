@@ -687,12 +687,14 @@ $sheetTop = function () use ($h, $dialogOf, $worlds): ?float { // where it shows
     return $w !== null ? $w->bounds(...$r)[1] : $r[1];
 };
 $settle = function () use ($h): void { $h->frame(3); usleep(500_000); $h->frame(5); };
+$h->frame(2);
+$rising = $sheetTop(); // shown now: below its place, rising (it showed at its place at once)
 $settle();
 $atMedium = $sheetTop();
 $h->press(196, $atMedium + 10); for ($y = $atMedium + 10; $y > 100; $y -= 40) { $h->drag(196, $y); } $h->release(196, 100); $settle();
 $atLarge = $sheetTop();
 $h->press(196, $atLarge + 10); for ($y = $atLarge + 10; $y < 840; $y += 60) { $h->drag(196, $y); } $h->release(196, 840); $settle(); $settle();
-same([true, true, false], [abs($atMedium - 852 / 2) < 20, $atLarge < 20, $detentApp->open], 'a sheet at half the window, dragged to the whole, dragged down and gone');
+same([true, true, true, false], [$rising > $atMedium + 100, abs($atMedium - 852 / 2) < 20, $atLarge < 20, $detentApp->open], 'a sheet rising from below to half the window, dragged to the whole, dragged down and gone');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
