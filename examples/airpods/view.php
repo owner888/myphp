@@ -6,7 +6,13 @@ use MyPHP\Examples\Airpods\{AacpProtocol, HeadGestureDetector, L2capProbeResult}
 
 // AirPods 4 as the Mac's System Settings shows them: tabs of the AirPods' settings, the connection to them and the
 // packets they send and receive — a sidebar on the desktop and a tablet on its side, tabs across the top of a tablet held
-// upright, the tab bar of a phone; the sheet an iPhone shows as the case's lid opens.
+// upright, the tab bar of a phone; the sheet an iPhone shows as the case's lid opens. Its text in English or Chinese
+// (strings/, as SwiftUI's String Catalog), the language, the appearance and the text size chosen in its Settings tab.
+
+/** The language the app shows: the one chosen in Settings, else the system's. */
+$locale = fn() => $this->lang !== '' ? $this->lang : \MyPHP\I18n::locale();
+/** $key said in that language, for what shows a string as it is (a LabeledContent's value), as SwiftUI's String(localized:). */
+$tr = fn(string $key, array $args = []) => \MyPHP\Catalog::say($locale(), $key, $args) ?? ($args === [] ? $key : \MyPHP\Message::parse($key)->format($locale(), $args));
 
 /** A setting sent to the AirPods as the user changes it: what the app reads back from them sets it without sending it again. */
 $sent = fn(string $field, int $id, Closure $data, string $label) => new Binding(
@@ -15,13 +21,13 @@ $sent = fn(string $field, int $id, Closure $data, string $label) => new Binding(
 );
 
 /** A choice among $names as a row of the form: its label, a pop-up button. */
-$choice = fn(string $label, array $names, Binding &$selection) => Picker($label, selection: $selection)(Each($names)(fn(string $n, int $i) => Text(verbatim: $n)->tag($i)));
+$choice = fn(string $label, array $names, Binding &$selection) => Picker($label, selection: $selection)(Each($names)(fn(string $n, int $i) => Text($n)->tag($i)));
 
 /** A row stating how a check went: its name, and a check mark or a cross. */
-$check = fn(string $name, bool $ok, string $no = 'No') => HStack()(
+$check = fn(string $name, bool $ok, string $no = 'No') => HStack()( // $tr, captured by the arrow function
     Text($name),
     Spacer(),
-    Text(verbatim: $ok ? '✓ OK' : '✕ ' . $no)->foregroundStyle($ok ? Color::green : Color::red),
+    Text(verbatim: $ok ? '✓ ' . $tr('OK') : '✕ ' . $tr($no))->foregroundStyle($ok ? Color::green : Color::red),
 );
 
 /** A pod's or the case's battery: its charge as a bar, where it is and whether it charges. */
@@ -29,7 +35,7 @@ $battery = fn(string $name, ?int $level, string $status, string $placement) => V
     Text($name)->font(Font::caption)->foregroundStyle(Color::secondary),
     Text(verbatim: $level === null ? '--' : $level . '%')->font(Font::system(size: 22, weight: Weight::semibold)),
     ProgressView(value: ($level ?? 0) / 100)->tint($level !== null && $level <= 20 ? Color::red : Color::green),
-    Text(verbatim: $placement . ' · ' . $status)->font(Font::caption)->foregroundStyle(Color::secondary)->lineLimit(1),
+    Text(verbatim: $tr($placement) . ' · ' . $tr($status))->font(Font::caption)->foregroundStyle(Color::secondary)->lineLimit(1),
 )->padding(12)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::secondarySystemBackground)->cornerRadius(10);
 
 $batteries = fn() => HStack(spacing: 10)(
@@ -45,7 +51,7 @@ $status = fn(bool $connected) => HStack(spacing: 6)(
 )->padding(Edge::vertical, 4)->padding(Edge::horizontal, 10)->background(Color::secondarySystemBackground)->clipShape(Capsule());
 
 /** The AirPods: their name and batteries, then their settings, each sent as it changes (AACP 0x0009 and 0x0017). */
-$settings = function (bool $connected) use ($sent, $choice, $batteries, $status) {
+$settings = function (bool $connected) use ($sent, $choice, $batteries, $status, $tr) {
     $onOff = fn(bool $on) => $on ? 0x01 : 0x02;
     $same = fn(int $v) => $v;
     $b = [
@@ -66,7 +72,7 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
             HStack(alignment: VerticalAlignment::top)(
                 VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
                     Text(verbatim: $this->deviceName)->font(Font::title2)->bold(),
-                    Text(verbatim: $this->modelNumber . ' · Firmware ' . $this->firmware)->font(Font::subheadline)->foregroundStyle(Color::secondary),
+                    Text('{model} · Firmware {firmware}', ['model' => $this->modelNumber, 'firmware' => $this->firmware])->font(Font::subheadline)->foregroundStyle(Color::secondary),
                 ),
                 Spacer(),
                 $status($connected),
@@ -74,7 +80,7 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
             $batteries(),
         ),
         Section(header: 'Noise Control', footer: 'AACP 0x0009, setting 0x0D.')(
-            Picker('Noise Control', selection: $b['listening'])(Each(AirPodsApp::LISTENING_MODES)(fn(string $n, int $i) => Text(verbatim: $n)->tag($i)))
+            Picker('Noise Control', selection: $b['listening'])(Each(AirPodsApp::LISTENING_MODES)(fn(string $n, int $i) => Text($n)->tag($i)))
                 ->pickerStyle(PickerStyle::segmented)->labelsHidden(),
         )->disabled($off),
         Section(header: 'General', footer: 'Settings 0x28, 0x0A, 0x20 and 0x35.')(
@@ -93,9 +99,9 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
         )->disabled($off),
         Section(header: 'Head Gestures', footer: 'Nod to answer, shake to decline: the head-tracking stream, AACP 0x0017.')(
             LabeledContent('Last gesture', match ($last) {
-                HeadGestureDetector::NOD_YES => sprintf('Nod Yes (%d)', $this->gestures->nodCount),
-                HeadGestureDetector::SHAKE_NO => sprintf('Shake No (%d)', $this->gestures->shakeCount),
-                default => 'None',
+                HeadGestureDetector::NOD_YES => $tr('Nod Yes ({count})', ['count' => $this->gestures->nodCount]),
+                HeadGestureDetector::SHAKE_NO => $tr('Shake No ({count})', ['count' => $this->gestures->shakeCount]),
+                default => $tr('None'),
             }),
             Button($this->headTrackingActive ? 'Stop Head Tracking' : 'Start Head Tracking', action: fn() => $this->setHeadTracking(!$this->headTrackingActive)),
             Button('Simulate Nod', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::NOD_YES)),
@@ -111,7 +117,7 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status)
 };
 
 /** How the phone reaches the AirPods: its stack opening L2CAP 0x1001, pairing, and handing the audio over to and from an iPhone. */
-$connection = function (bool $connected) use ($check) {
+$connection = function (bool $connected) use ($check, $tr) {
     $p = $this->probe;
     $simulated = new Binding(get: fn() => $this->useSimulator, set: fn(bool $on) => $this->setSimulatorMode($on));
     $blocked = new Binding(get: fn() => $this->sim->simulateStackBlocked, set: function (bool $on) { $this->sim->simulateStackBlocked = $on; $this->runProbe(); });
@@ -120,7 +126,7 @@ $connection = function (bool $connected) use ($check) {
     foreach ($this->connectedDevices as $dev) { $dev['info1'] > 0 ? $active[] = "{$dev['type']} ({$dev['mac']})" : $standby[] = "{$dev['type']} ({$dev['mac']})"; }
     return Form()(
         Section(header: 'L2CAP Stack Probe', footer: $p->detail)(
-            Text(verbatim: match ($p->verdict) {
+            Text(match ($p->verdict) {
                 L2capProbeResult::VERDICT_NATIVE_READY => 'Android 16 QPR3+ Ready (Rootless L2CAP OK)',
                 L2capProbeResult::VERDICT_STACK_BLOCKED => 'Fluoride Blocked 0x1001 (Root Patch Needed)',
                 L2capProbeResult::VERDICT_BLE_ONLY => 'BLE 0x004C Only',
@@ -149,12 +155,12 @@ $connection = function (bool $connected) use ($check) {
             $this->useSimulator ? Toggle('Simulate Pre-QPR3 Fluoride Block', isOn: $blocked)->toggleStyle(ToggleStyle::switch) : null,
         ),
         Section(header: 'iPhone Handoff', footer: 'Apple\'s vendor ID 0x004C; the keys of opcode 0x0031 tell the AirPods\' private addresses and decrypt their batteries.')(
-            LabeledContent('Vendor ID', $apple ? '0x004C (Apple)' : ($this->vendorId ?: 'Default')),
-            LabeledContent('Audio owner', $this->ownsConnection ? 'This phone' : ($this->audioSourceMac !== '' ? 'iPhone (' . $this->audioSourceMac . ')' : 'Idle')),
-            LabeledContent('Multipoint', $active !== [] ? sprintf('%d of 2: %s', count($active), implode(', ', $active)) : '1 of 2: this phone'),
+            LabeledContent('Vendor ID', $apple ? $tr('0x004C (Apple)') : ($this->vendorId ?: $tr('Default'))),
+            LabeledContent('Audio owner', $this->ownsConnection ? $tr('This phone') : ($this->audioSourceMac !== '' ? $tr('iPhone ({address})', ['address' => $this->audioSourceMac]) : $tr('Idle'))),
+            LabeledContent('Multipoint', $active !== [] ? $tr('{count} of 2: {devices}', ['count' => count($active), 'devices' => implode(', ', $active)]) : $tr('1 of 2: this phone')),
             $standby !== [] ? LabeledContent('Standby', implode(', ', $standby)) : null,
-            LabeledContent('Identity key', $this->irk !== null ? ($this->rpaVerified ? 'Received · address verified' : 'Received') : '--'),
-            LabeledContent('Encryption key', $this->encKey !== null ? 'Received' : '--'),
+            LabeledContent('Identity key', $this->irk !== null ? $tr($this->rpaVerified ? 'Received · address verified' : 'Received') : '--'),
+            LabeledContent('Encryption key', $this->encKey !== null ? $tr('Received') : '--'),
             Toggle('Take Over When This Phone Plays', isOn: $this->autoTakeoverEnabled)->toggleStyle(ToggleStyle::switch),
             Button('Take Over from iPhone', action: fn() => $this->onLocalAudioStarted()),
             Button('Hand Back to iPhone', action: fn() => $this->handBackToPeer())->disabled(!$connected),
@@ -175,10 +181,10 @@ $packets = fn() => ListView(count($this->packets))(function (int $i) {
         );
     })->listStyle(ListStyle::plain)
     ->navigationTitle('Packet Log')
-    ->toolbar(Text(verbatim: count($this->packets) . ' frames')->foregroundStyle(Color::secondary));
+    ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', ['count' => count($this->packets)])->foregroundStyle(Color::secondary));
 
 /** The sheet the case's lid opening brings up, as an iPhone's: the batteries, how to pair, and connecting. */
-$lidSheet = function (bool $connected) use ($batteries) {
+$lidSheet = function (bool $connected) use ($batteries, $tr) {
     $pairing = !$this->isBonded && !$this->useSimulator;
     return VStack(spacing: 16)(
         VStack(spacing: 4)(
@@ -190,8 +196,8 @@ $lidSheet = function (bool $connected) use ($batteries) {
             ? VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
                 Text('First-time pairing')->font(Font::headline),
                 Each(['Open the case near this phone.', 'Hold the case\'s button until its light flashes white.', 'Click Connect & Pair.'])(
-                    fn(string $step, int $i) => Text(verbatim: ($i + 1) . '. ' . $step)->foregroundStyle(Color::secondary)),
-                $this->pairState !== 'idle' ? Text(verbatim: 'Status: ' . $this->pairState)->font(Font::caption)->monospaced()->foregroundStyle(Color::orange) : null,
+                    fn(string $step, int $i) => Text(verbatim: ($i + 1) . '. ' . $tr($step))->foregroundStyle(Color::secondary)),
+                $this->pairState !== 'idle' ? Text('Status: {state}', ['state' => $this->pairState])->font(Font::caption)->monospaced()->foregroundStyle(Color::orange) : null,
             )->frame(maxWidth: INF, alignment: Alignment::leading)
             : Text($connected ? 'Connected over L2CAP 0x1001' : 'Paired · ready to connect')->foregroundStyle($connected ? Color::green : Color::secondary),
         HStack(spacing: 10)(
@@ -203,13 +209,31 @@ $lidSheet = function (bool $connected) use ($batteries) {
     )->padding(24)->frame(width: 420);
 };
 
-return function () use ($settings, $connection, $packets, $lidSheet) {
+/** The app's own settings, as an iPhone app's Settings tab: its appearance, its text size and its language. */
+$preferences = fn() => Form()(
+    Section(header: 'Appearance')(
+        Picker('Appearance', selection: $this->appearance)(Text('System')->tag('system'), Text('Light')->tag('light'), Text('Dark')->tag('dark'))
+            ->pickerStyle(PickerStyle::segmented)->labelsHidden(),
+    ),
+    Section(header: 'Text Size', footer: 'The size of the app\'s text, as the system\'s Text Size sets it for every app.')(
+        Picker('Text Size', selection: $this->textSize)(Each(AirPodsApp::TEXT_SIZES)(fn(string $label, string $size) => Text($label)->tag($size))),
+    ),
+    Section(header: 'Language')(
+        Picker('Language', selection: $this->lang)(Text('System')->tag(''), Text(verbatim: 'English')->tag('en'), Text(verbatim: '简体中文')->tag('zh-Hans')), // each language in its own words
+    ),
+)->navigationTitle('Settings');
+
+return function () use ($settings, $connection, $packets, $lidSheet, $preferences) {
     $this->pollTransport();
     $connected = $this->transport->isConnected();
     return TabView(selection: $this->page)(
         Tab('AirPods 4', systemImage: 'airpods', value: 'AirPods')($settings($connected)),
         Tab('Connection', systemImage: 'antenna.radiowaves.left.and.right', value: 'Connection')($connection($connected)),
         Tab('Packet Log', systemImage: 'list.bullet.rectangle', value: 'Packets')($packets())->badge(count($this->packets)),
+        Tab('Settings', systemImage: 'gearshape', value: 'Settings')($preferences()),
     )->tabViewStyle(TabViewStyle::sidebarAdaptable)->sheet(isPresented: $this->popupOpen, content: fn() => $lidSheet($connected))
-        ->onChange(of: $this->popupOpen, action: function ($old, $open) { if (!$open) { $this->popupDismissed = true; } });
+        ->onChange(of: $this->popupOpen, action: function ($old, $open) { if (!$open) { $this->popupDismissed = true; } })
+        ->preferredColorScheme(match ($this->appearance) { 'light' => ColorScheme::light, 'dark' => ColorScheme::dark, default => null })
+        ->dynamicTypeSize($this->textSize === 'system' ? null : constant(DynamicTypeSize::class . '::' . $this->textSize))
+        ->environment(locale: $this->lang !== '' ? $this->lang : null);
 };

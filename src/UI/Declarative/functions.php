@@ -168,6 +168,22 @@ enum TextSelectability { case enabled; case disabled; }
 /** The appearance an app asks for with preferredColorScheme(); null follows the system. */
 enum ColorScheme { case light; case dark; }
 
+/** SwiftUI's DynamicTypeSize, iOS's text sizes: large the usual, the accessibility sizes past xxxLarge. */
+enum DynamicTypeSize
+{
+    case xSmall; case small; case medium; case large; case xLarge; case xxLarge; case xxxLarge;
+    case accessibility1; case accessibility2; case accessibility3; case accessibility4; case accessibility5;
+
+    /** How much larger than usual (large) text is at this size: iOS's body size at it over 17. */
+    public function scale(): float
+    {
+        return match ($this) {
+            self::xSmall => 14, self::small => 15, self::medium => 16, self::large => 17, self::xLarge => 19, self::xxLarge => 21, self::xxxLarge => 23,
+            self::accessibility1 => 28, self::accessibility2 => 33, self::accessibility3 => 40, self::accessibility4 => 47, self::accessibility5 => 53,
+        } / 17;
+    }
+}
+
 /** What an onKeyPress action did: took the key (handled), or left it to the view (ignored). */
 enum KeyPressResult { case handled; case ignored; }
 

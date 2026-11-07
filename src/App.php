@@ -26,6 +26,9 @@ final class App
     private static ?Menu $menu = null;
     private static ?Theme $theme = null;
     private static bool $themeFixed = false;
+    /** The appearance and the text size the app chose over the system's (setColorScheme, setTextScale), null to follow it. */
+    private static ?bool $darkChosen = null;
+    private static ?float $textScaleChosen = null;
     /** The desktop's settings, once read until they change (preferences). */
     private static ?UI\Preferences $preferences = null;
     /** Whether the backend initialized the app, which runs from then on. */
@@ -487,15 +490,42 @@ final class App
         self::themeChanged();
     }
 
+    /**
+     * Makes the app light ($dark false) or dark whatever the system's
+     * appearance, or null to follow it again, as SwiftUI's
+     * preferredColorScheme: the platform's theme in that appearance (a
+     * phone's UIKit colors, the desktop's text size), not a fixed one.
+     */
+    public static function setColorScheme(?bool $dark): void
+    {
+        if (self::$darkChosen === $dark) { return; }
+        self::$darkChosen = $dark;
+        self::themeChanged();
+    }
+
+    /**
+     * Makes the app's text $scale times its usual size whatever the
+     * system's text size, or null to follow it again, as SwiftUI's
+     * dynamicTypeSize (DynamicTypeSize::scale).
+     */
+    public static function setTextScale(?float $scale): void
+    {
+        if (self::$textScaleChosen === $scale) { return; }
+        self::$textScaleChosen = $scale;
+        self::themeChanged();
+    }
+
     private static function systemTheme(): Theme
     {
-        $dark = self::backend()->theme()->isDark();
+        $dark = self::$darkChosen ?? self::backend()->theme()->isDark();
+        $p = self::preferences();
+        if (self::$textScaleChosen !== null) { $p = new UI\Preferences($p->accent, $p->reduceMotion, $p->highContrast, self::$textScaleChosen); }
         if (self::isIOS() || self::isAndroid()) {
-            return Theme::phone($dark)->follow(self::preferences()); // UIKit's colors, sizes and 17-point text, the one design on both
+            return Theme::phone($dark)->follow($p); // UIKit's colors, sizes and 17-point text, the one design on both
         }
         $t = $dark ? Theme::dark() : Theme::light();
         $t->fontSize = $t->baseFontSize = Theme::defaultFontSize(); // the platform's text size (13 on macOS, 14 on Linux), which the settings scale
-        return $t->follow(self::preferences());
+        return $t->follow($p);
     }
 
     /** @internal the appearance or the desktop's settings changed (mygo's ThemeChanged): what was read of them is forgotten, the theme and the windows follow, then Theme's listeners hear it */
