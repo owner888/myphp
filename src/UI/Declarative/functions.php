@@ -73,7 +73,8 @@ enum Color
         $d = $t->dark;
         return match ($this) {
             self::primary => $t->text, self::secondary => $t->textMuted, self::accentColor => $t->accent, self::background => $t->background, self::separator => $t->border,
-            self::systemBackground, self::secondarySystemGroupedBackground => $t->background, self::secondarySystemBackground, self::systemGroupedBackground => $t->surface, // a grouped list's background is the surface, its rows the background, as iOS's
+            self::systemBackground => $t->background, self::secondarySystemBackground => $t->surface,
+            self::systemGroupedBackground => $t->groupBackground ?? $t->surface, self::secondarySystemGroupedBackground => $t->groupSurface ?? $t->background, // a grouped list's page and its sections, as the theme has them: a phone's in the dark the black page and its dark gray sections, as iOS's
             self::label => $t->text, self::secondaryLabel => $t->textMuted, self::link => $t->accent,
             self::systemGray => 0x8e8e93, self::systemGray2 => $d ? 0x636366 : 0xaeaeb2, self::systemGray3 => $d ? 0x48484a : 0xc7c7cc,
             self::systemGray4 => $d ? 0x3a3a3c : 0xd1d1d6, self::systemGray5 => $d ? 0x2c2c2e : 0xe5e5ea, self::systemGray6 => $d ? 0x1c1c1e : 0xf2f2f7,
