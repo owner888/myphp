@@ -8,9 +8,14 @@ use MyPHP\UI\{Context, Node};
 /**
  * TabView, as SwiftUI's: its Tabs, the one whose value $selection is
  * shown, chosen in a tab bar across the bottom on a phone and a tablet, as
- * tabs across the top on a Mac (automatic); with tabViewStyle(.sidebarAdaptable),
- * tabs across the top on a tablet held upright, a sidebar otherwise. Each
- * tab keeps its NavigationStack's history as another shows.
+ * tabs across the top on a Mac (automatic). With
+ * tabViewStyle(.sidebarAdaptable), one view for every screen, as SwiftUI's
+ * on iOS 18 and macOS 15: the tab bar across the bottom on a phone, tabs
+ * across the top on a tablet held upright, and on a tablet on its side and
+ * on the desktop a NavigationSplitView of the tabs — the sidebar of their
+ * titles, icons and badges, which its button hides, beside the chosen
+ * one's views, their navigationTitle and toolbar in the window's title bar.
+ * Each tab keeps its NavigationStack's history as another shows.
  */
 final class TabView extends View
 {
@@ -38,7 +43,8 @@ final class TabView extends View
         $index = 0;
         foreach ($this->tabs as $i => $t) { if ($t->value === $this->selection) { $index = $i; } }
         if ($this->style === \TabViewStyle::automatic && !($c->runtime?->touch ?? false)) { return $this->desktop($c, $env, $index); }
-        $items = array_map(fn(Tab $t) => [$t->image, Localized::string($t->title, $env)], $this->tabs);
+        if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
+        $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env)], $this->tabs);
         $n = $c->tabView($items, $index, function (int $i) use ($c, $env): void {
             $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
             $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
@@ -46,6 +52,23 @@ final class TabView extends View
             $c->end();
         });
         $this->selection = $this->tabs[$index]->value ?? $this->selection;
+        return $n;
+    }
+
+    /** The tabs as a NavigationSplitView, as sidebarAdaptable's where there is room: a Label of each in the sidebar, choosing it, beside its views. */
+    private function split(Context $c, Env $env): ?Node
+    {
+        $chosen = new Binding(get: fn() => $this->selection, set: function ($v) { $this->selection = $v; });
+        $sidebar = new ListView(null, null, $chosen, true);
+        $sidebar(...array_map(fn(Tab $t) => (new Label($t->title, $t->systemImage, $t->image))->badge($t->badgeValue)->tag($t->value), $this->tabs));
+        $shown = null;
+        foreach ($this->tabs as $t) { if ($t->value === $this->selection) { $shown = $t; } }
+        $shown ??= $this->tabs[0] ?? null;
+        $kept = $c->runtime?->local($c->upcomingId(), fn() => new class { public \NavigationSplitViewVisibility $sidebar = \NavigationSplitViewVisibility::all; }); // whether the sidebar shows, its button's
+        $visibility = $kept === null ? \NavigationSplitViewVisibility::all : $kept->sidebar;
+        $split = new NavigationSplitView($sidebar, $shown === null ? [] : (count($shown->content) === 1 && $shown->content[0] instanceof View ? $shown->content[0] : $shown->content), $visibility, true);
+        $n = $split->render($c, $env);
+        if ($kept !== null) { $kept->sidebar = $visibility; }
         return $n;
     }
 

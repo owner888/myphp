@@ -1249,7 +1249,9 @@ it restarts whenever the focused field's text or selection changes, the
 painter asks `caretVisible()`, and `Window` schedules the next toggle
 with `View::wake` (`performSelector:withObject:afterDelay:`, cancelling
 the previous request) — no timer runs while nothing blinks, and after 30
-seconds at rest the caret stays on and the frames stop, as in mygo.
+seconds at rest the caret asks for no more frames, stopping on; in the
+frames something else asks for (an animation under it) it blinks on, as in
+mygo and on the Mac.
 
 ## System integration
 
@@ -8549,6 +8551,19 @@ changed, which no hot reload can take.
   cancels the inset of a field without a padding of its own; given one
   (`padding(.vertical, 8)`), the inset is not added but was still taken.
   Rule: a bare field has a padding of 0, not a negative inset.
+- chat-glow's caret stopped blinking after 30 seconds at rest, though the
+  orb went on animating. Cause: `Runtime::caretVisible` kept the caret on
+  past `BLINK_FOR`, where mygo only stops asking for frames. Rule: the
+  caret's phase alone shows it; at rest `nextBlink` asks for one frame more
+  if it is off, so that it stops on.
+- A LabeledContent in a Form on the Mac drew its text a size larger than
+  the form's other rows, a section's header in a phone's capitals. Cause:
+  the declarative views on the desktop reach `ContextMobile`'s builders
+  (`cell`, `section`, `swipeActions`…), which wrote UIKit's sizes as
+  numbers (17, 13, 20, 34). Rule: a builder's text takes the theme's size
+  (`$t->fontSize`) or a text style (`preferredFont(Font::FOOTNOTE)`), which
+  is iOS's on a phone, the Mac's on the desktop, and scales with the
+  system's text size; a number only for what only iOS has (the large title).
 - A view file importing `MyPHP\UI\Font as Face` (the engine's styles beside
   SwiftUI's `Font`) had `Font::system` resolve in the example's namespace in
   the tests. Cause: `Headless::declarativeUses` read `Font` in the use line

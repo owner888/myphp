@@ -30,7 +30,7 @@ final class Backend implements Platform\Backend
     private ?Hotkeys $hotkeys = null;
     private ?NowPlaying $nowPlaying = null;
     private ?Media $media = null;
-    private ?Symbols $symbols = null;
+    private ?Platform\Symbols $symbols = null;
     private bool $running = false;
     private bool $signaled = false;
     /** Whether SIGINT or SIGTERM asked the app to quit already. */

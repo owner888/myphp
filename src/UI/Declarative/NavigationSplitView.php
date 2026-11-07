@@ -66,7 +66,7 @@ final class NavigationSplitView extends View
             if ($inset) { // the title bar's room: the detail's navigationTitle, left of the window controls when the sidebar hides
                 $c->row()->size(0, $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, $bar['right'] + 20, 0, 20 + (1 - $shown) * ($this->hasVisibility ? $closed + $button + 12 - 20 : $bar['left'])) // right of the button as the sidebar hides
                   ->dragWindow();
-                  if ($title !== null) { $c->text(Localized::string($title, $env), 15, style: \MyPHP\UI\Font::BOLD)->singleLine(); }
+                  if ($title !== null) { $c->text(Localized::string($title, $env), $env->theme->fontSize)->preferredFont(\MyPHP\UI\Font::TITLE3)->fontWeight(700)->singleLine(); } // a toolbar's title, 15 bold on the Mac
                   if ($items !== null) { $c->spacer(); $c->toolbar($items); }
                 $c->end();
                 $c->divider();

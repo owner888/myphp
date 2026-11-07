@@ -438,3 +438,59 @@ $h = new Headless(fn(Context $c) => Content::render(fn() => Canvas(function (\Gr
 $h->frame(2); $h->paint();
 $m = $seen['mask'] ?? [];
 same([17.0, 17.0, 17.0], [$m[4] ?? null, $m[5] ?? null, -1.0 - ($m[6] ?? 0)], 'the circle\'s mask rounds 17, half its 34');
+
+// The caret blinks for as long as frames come, after it has rested 30 s too (chat-glow's orb animating under it), and
+// stops on: rested and off, it asks for one frame more; rested and on, for none (mygo's, and the Mac's).
+$blinkStart = new \ReflectionProperty(\MyPHP\UI\Runtime::class, 'blinkStart');
+$blinkSeen = new \ReflectionProperty(\MyPHP\UI\Runtime::class, 'blinkSeen');
+$h = new Headless(fn(Context $c) => null, 100, 100);
+$blinkSeen->setValue($h->rt, ['a field']);
+$now = hrtime(true) / 1e9;
+$blinkStart->setValue($h->rt, $now - 31.75); // rested, in the off half of its blink
+[$off, $oneMore] = [$h->rt->caretVisible(), $h->rt->nextBlink()];
+$blinkStart->setValue($h->rt, $now - 31.25); // rested, in the on half
+[$on, $none] = [$h->rt->caretVisible(), $h->rt->nextBlink()];
+same([false, true, true, null], [$off, $oneMore !== null && $oneMore <= 0.26, $on, $none], 'rested, the caret still blinks in the frames that come, and stops asking once on');
+
+// A LabeledContent in a Form on the desktop: its text the size of the form's other rows', not a phone's 17, and 44 high as they are.
+$h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section(header: 'S')(LabeledContent('Address', 'AA:BB'), Text('Plain row'))), $c), 400, 300);
+$h->frame(2);
+[$label, $value, $plain] = [$h->byText('Address'), $h->byText('AA:BB'), $h->byText('Plain row')];
+same([$plain->fontSize, $plain->fontSize, 44.0], [$label->fontSize, $value->fontSize, $h->rect($h->byLabel('Address, AA:BB'))[3]], 'a LabeledContent\'s text as the form\'s other rows\'');
+
+// A Form's section on the desktop, as the Mac's grouped forms: its header the headline style, as written, not a phone's
+// capitals; its footer the subheadline style.
+$h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section(header: 'Noise Control', footer: 'Sent as it changes.')(Text('Row'))), $c), 400, 300);
+$h->frame(2);
+[$head, $foot] = [$h->byText('Noise Control'), $h->byText('Sent as it changes.')];
+same([true, 13.0, 700, 11.0], [$head !== null && $h->byText('NOISE CONTROL') === null, $head?->fontSize, $head?->textStyle()->weight, $foot?->fontSize], 'a section\'s header and footer on the desktop');
+
+// A Form's first section without a header: as much room above its group as at its sides.
+$h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(Text('First row')->accessibilityLabel('first'))), $c), 400, 300);
+$h->frame(2);
+$row = $h->rect($h->byLabel('first'));
+same(16.0 + 16.0, $row[0], 'the group 16 in from the side, its row 16 in from the group');
+check($row[1] >= 16.0, 'and 16 below the top at least: ' . json_encode($row));
+
+// TabView(.sidebarAdaptable), one view for every screen: a sidebar on the desktop and a tablet on its side (a
+// NavigationSplitView of the tabs), tabs across the top of a tablet held upright, the tab bar across the bottom of a
+// phone; each chooses the tab, its badge in the sidebar.
+$tabsApp = new class { public string $page = 'a'; };
+$tabs = fn() => TabView(selection: $tabsApp->page)(
+    Tab('Alpha', systemImage: 'gearshape', value: 'a')(Text('Page A')),
+    Tab('Beta', systemImage: 'list.bullet', value: 'b')(Text('Page B'))->badge(7),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable);
+$where = [];
+foreach (['desktop' => [false, 900, 600], 'phone' => [true, 390, 844], 'tablet upright' => [true, 820, 1180], 'tablet on its side' => [true, 1180, 820]] as $name => [$touch, $w, $hgt]) {
+    $tabsApp->page = 'a';
+    $h = new Headless(fn(Context $c) => Content::render($tabs, $c), $w, $hgt);
+    $h->rt->touch = $touch;
+    $h->frame(3);
+    $beta = $h->byText('Beta') ?? $h->byLabel('Beta');
+    $r = $h->rect($beta);
+    $where[$name] = $r[1] > $hgt / 2 ? 'bottom' : ($r[0] < 100 ? 'side' : 'top');
+    $h->clickOn($beta); $h->frame(3);
+    $where[$name] .= $tabsApp->page === 'b' && $h->byText('Page B') !== null ? ', chosen' : ', not chosen';
+    if ($name === 'desktop') { $where['badge'] = $h->byText('7') !== null; }
+}
+same(['desktop' => 'side, chosen', 'badge' => true, 'phone' => 'bottom, chosen', 'tablet upright' => 'top, chosen', 'tablet on its side' => 'side, chosen'], $where, 'sidebarAdaptable on each screen');

@@ -1134,11 +1134,11 @@ $t->clickText('Ideas'); $t->frame(3);
 same('/notes/2', $s->path->path(), 'router: a NavigationLink beside the sidebar goes to its note');
 $t->clickText('Settings'); $t->frame(3);
 $t->clickText('Account'); $t->frame(3);
-check($t->byText('ACCOUNT') !== null, 'router: a link of the settings goes deeper');
+check($t->byLabel('Your name') !== null && $t->byText('Version') === null, 'router: a link of the settings goes deeper'); // the Account section, its name's field
 $t->clickLabel('Your name'); $t->type('Ada'); $t->frame();
 same('Ada', $s->name, 'router: the TextField writes the name');
 $t->clickLabel('Back'); $t->frame(3);
-check($t->byText('GENERAL') !== null, 'router: Back comes back to General');
+check($t->byText('Version') !== null && $t->byLabel('Your name') === null, 'router: Back comes back to General');
 
 // form (the declarative views): the fields write the Profile, Return in a field submits, Return in the message field
 // sends it and Shift+Return breaks its line, the controls write their values, the card and Clear act.

@@ -82,44 +82,53 @@ same(HeadGestureDetector::NONE, $det->push(15, 700), 'first yaw peak');
 same(HeadGestureDetector::NONE, $det->push(-10, -710), 'first yaw reversal');
 same(HeadGestureDetector::SHAKE_NO, $det->push(20, 680), 'second yaw reversal triggers SHAKE_NO');
 
-// 4. Headless UI test of examples/airpods/main.php
+// 4. Headless UI test of examples/airpods: the sidebar's three pages, the settings sent as they change, the lid's sheet.
 [$view, $s] = Headless::load('airpods');
 $t = new Headless($view, 980, 640);
 $t->frame();
-
-check($t->byText('Android 16 QPR3+ Ready (Rootless L2CAP OK)') !== null, 'Step 1 probe shows rootless L2CAP ready on startup');
 check($t->byText('92%') !== null && $t->byText('88%') !== null && $t->byText('76%') !== null, 'AirPods 4 Left/Right/Case batteries rendered');
+check($t->byText('Connected') !== null, 'the settings page shows the AirPods connected');
 
-// Toggle pre-QPR3 Fluoride stack block simulation
+// A setting the user changes is sent as AACP 0x0009; one the AirPods report is shown, not sent back.
+$sent = count($s->packets);
+$t->clickText('Pause Media When Falling Asleep');
+$t->frame();
+check($s->sleepDetectionEnabled && count($s->packets) > $sent, 'Sleep detection toggled on and sent via AACP 0x0009');
+$sent = count($s->packets);
+$s->earDetectionEnabled = false; // as a report from the AirPods sets it
+$t->frame(2);
+same($sent, count($s->packets), 'a setting the AirPods report is not sent back to them');
+
+// Head gestures, at the end of the settings page: it scrolls to them.
+for ($i = 0; $i < 30; $i++) { $t->wheel(500, 300, 0, -100); }
+$t->frame(40);
+$nod = $t->byText('Simulate Nod');
+check($nod !== null && $t->rect($nod)[1] + $t->rect($nod)[3] <= 640, 'the settings page scrolls to its head gestures');
+$t->clickText('Simulate Nod');
+$t->frame();
+same(HeadGestureDetector::NOD_YES, $s->gestures->lastGesture, 'Nod (Yes) head gesture recognized from 0x0017 stream');
+check($t->byText('Nod Yes (1)') !== null, 'UI displays Nod Yes count');
+$t->clickText('Simulate Shake');
+$t->frame();
+same(HeadGestureDetector::SHAKE_NO, $s->gestures->lastGesture, 'Shake (No) head gesture recognized from 0x0017 stream');
+check($t->byText('Shake No (1)') !== null, 'UI displays Shake No count');
+
+// The Connection page: the probe, the simulated Fluoride block, the lid's sheet, the handoff.
+$t->clickText('Connection');
+$t->frame(2);
+same('Connection', $s->page, 'the sidebar goes to the Connection page');
+check($t->byText('Android 16 QPR3+ Ready (Rootless L2CAP OK)') !== null, 'Step 1 probe shows rootless L2CAP ready on startup');
 $t->clickText('Simulate Pre-QPR3 Fluoride Block');
 $t->frame();
 same(L2capProbeResult::VERDICT_STACK_BLOCKED, $s->probe->verdict, 'UI switches to Fluoride blocked verdict');
 check($t->byText('Fluoride Blocked 0x1001 (Root Patch Needed)') !== null, 'blocked verdict badge shown');
-
-// Restore rootless L2CAP ready mode
 $t->clickText('Simulate Pre-QPR3 Fluoride Block');
 $t->frame();
 same(L2capProbeResult::VERDICT_NATIVE_READY, $s->probe->verdict, 're-probed back to native ready');
 
-// Toggle AirPods 4 Sleep Detection and Head Gestures from the UI
-$t->clickText('Pause Media When Falling Asleep (0x35)');
-$t->frame();
-check($s->sleepDetectionEnabled, 'Sleep detection toggled on via AACP 0x0009');
-
-$t->clickText('Simulate Nod (Yes)');
-$t->frame();
-same(HeadGestureDetector::NOD_YES, $s->gestures->lastGesture, 'Nod (Yes) head gesture recognized from 0x0017 stream');
-check($t->byText('Last: Nod Yes (1)') !== null, 'UI displays Nod Yes count');
-
-$t->clickText('Simulate Shake (No)');
-$t->frame();
-same(HeadGestureDetector::SHAKE_NO, $s->gestures->lastGesture, 'Shake (No) head gesture recognized from 0x0017 stream');
-check($t->byText('Last: Shake No (1)') !== null, 'UI displays Shake No count');
-
-// Open-lid / Pairing Modal Popup test
 $t->clickText('Pair AirPods 4');
 $t->frame();
-check($s->popupOpen && $t->byText('Connected over L2CAP 0x1001 (AACP Active)') !== null, 'Open-lid pairing modal popup opens');
+check($s->popupOpen && $t->byText('Connected over L2CAP 0x1001') !== null, 'Open-lid pairing modal popup opens');
 $t->clickText('Done');
 $t->frame();
 check(!$s->popupOpen && $s->popupDismissed, 'Done closes the open-lid modal');
@@ -128,14 +137,29 @@ check(!$s->popupOpen && $s->popupDismissed, 'Done closes the open-lid modal');
 same(2, count($s->connectedDevices), '2 simultaneous Multipoint devices (Xiaomi 14U + iPhone) decoded from Opcode 0x002E');
 same('F0:D1:A9:11:22:33', $s->peerMac(), 'peer iPhone MAC detected');
 check(!$s->ownsConnection && $s->audioSourceMac === 'F0:D1:A9:11:22:33', 'iPhone initially owns audio source');
-
+for ($i = 0; $i < 30; $i++) { $t->wheel(500, 300, 0, -100); }
+$t->frame(40);
 $t->clickText('Take Over from iPhone');
 $t->frame();
 check($s->ownsConnection && $s->audioSourceMac === 'AA:BB:CC:14:04:01', 'Take Over from iPhone claims ownership and switches audio source to Xiaomi 14U');
-
 $t->clickText('Hand Back to iPhone');
 $t->frame();
 check(!$s->ownsConnection && $s->audioSourceMac === 'F0:D1:A9:11:22:33', 'Hand Back to iPhone releases ownership back to iPhone');
+
+// The Packet Log page: the frames sent and received.
+$t->clickText('Packet Log');
+$t->frame(2);
+check($t->byText(count($s->packets) . ' frames') !== null && $t->byText($s->packets[0]['summary']) !== null, 'the Packet Log page lists the frames');
+
+// On a phone the three pages are tabs across the bottom, as the app's are on the Xiaomi.
+[$view, $s] = Headless::load('airpods');
+$t = new Headless($view, 393, 852);
+$t->rt->touch = true;
+$t->frame(2);
+$tab = $t->byLabel('Connection');
+check($tab !== null && $t->rect($tab)[1] > 700, 'on a phone the pages are tabs across the bottom');
+$t->clickOn($tab); $t->frame(2);
+same('Connection', $s->page, 'and a tab chooses its page');
 
 // 5. Opcode 0x0031 Proximity Keys (IRK + ENC_KEY) & 3-Device Rotation Auto-Takeover
 check($s->irk !== null && strlen($s->irk) === 16 && $s->encKey !== null && strlen($s->encKey) === 16, 'IRK and ENC_KEY received from Opcode 0x0031');

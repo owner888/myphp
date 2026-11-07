@@ -30,12 +30,13 @@ trait ContextMobile
      * phone — a touch screen of compact width or height, under 600 by 500
      * points — the tabs across the top, as iPadOS's, on a tablet held
      * upright, and a sidebar on a tablet on its side and on the desktop.
-     * $items are [SVG icon, label] pairs; $content builds the page of tab
+     * $items are [icon, label] pairs, an icon an SVG or a function of the
+     * color drawing one (an SF Symbol's); $content builds the page of tab
      * $index, told the placement too, and builds its own navigationBar and
      * safeArea inside (tabView takes the safe area's top itself when the
      * tabs are across the top). Fills what holds it; changed() reports a
      * tab chosen. tabsPlacement() tells the placement alone.
-     * @param list<array{0: SVG, 1: string}> $items @param Closure(int, string): void $content
+     * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items @param Closure(int, string): void $content
      */
     public function tabView(array $items, int &$index, Closure $content): Node
     {
@@ -122,7 +123,7 @@ trait ContextMobile
      * around it. Build it last in a column that fills the window, the
      * page's content growing above it (a Router's view); tabBarInset() is
      * the height the band takes. Not mygo's.
-     * @param list<array{0: SVG, 1: string}> $items
+     * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items an icon (an SVG, or a function of the color drawing one), and a label
      */
     public function tabBar(array $items, int &$index): Node
     {
@@ -138,7 +139,8 @@ trait ContextMobile
                 $tab = $this->column(0, 2, 1)->basis(0)->radius(24)->alignItems(Node::CENTER)->justify(Node::CENTER)->focusable()->role(Role::TAB)->label($label);
                 if ($on) { $tab->background($t->text, 0.08); } // the chosen tab's capsule, a shade of the text over the glass
                 $tab->on = $on; $tab->checked($on);
-                  $this->icon($svg, 24, $color);
+                  if ($svg instanceof SVG) { $this->icon($svg, 24, $color); }
+                  elseif ($svg instanceof Closure) { $this->image($svg($color), 24, 24)->role(Role::NONE); } // an SF Symbol's, drawn in the tab's color
                   $this->text($label, 10, $color)->singleLine()->fontWeight($on ? 600 : 500);
                 $this->end();
                 if ($this->clicked($tab) && !$on) {
@@ -276,7 +278,7 @@ trait ContextMobile
                 $group = $this->column(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->radius(13)->clip();
                   if ($title !== '') {
                       $this->column(0, 0)->alignSelf(Node::STRETCH)->padding(20, 16)->alignItems(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
-                        $this->text($title, 13, $t->textMuted)->fontWeight(500);
+                        $this->text($title, $t->fontSize, $t->textMuted)->preferredFont(Font::FOOTNOTE)->fontWeight(500);
                       $this->end();
                   }
                   foreach ($actions as $i => $label) {
@@ -285,14 +287,14 @@ trait ContextMobile
                       $row = $this->column(0, 0)->alignSelf(Node::STRETCH)->size(0, 57)->center()->focusable()->role(Role::MENU_ITEM)->label($label);
                       if ($i < count($actions) - 1) { $row->borderWidth(0, 0, 1, 0)->borderColor($t->border); }
                       if ($this->hovered($row) && ($rt?->input->mouseDown ?? false)) { $row->color = $t->surfacePressed; }
-                        $this->text($label, 20, $destructive ? $t->danger : $t->accent)->singleLine();
+                        $this->text($label, $t->fontSize, $destructive ? $t->danger : $t->accent)->preferredFont(Font::TITLE3)->singleLine();
                       $this->end();
                       if ($this->clicked($row)) { $chosen = $i; }
                   }
                 $this->end();
                 $cancel = $this->column(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->radius(13)->size(0, 57)->center()->focusable()->role(Role::BUTTON);
                 if ($this->hovered($cancel) && ($rt?->input->mouseDown ?? false)) { $cancel->color = $t->surfacePressed; }
-                  $this->text($this->texts()->get('cancel'), 20, $t->accent)->fontWeight(600)->singleLine();
+                  $this->text($this->texts()->get('cancel'), $t->fontSize, $t->accent)->preferredFont(Font::TITLE3)->fontWeight(600)->singleLine();
                 $this->end();
               $this->end();
             $this->end();
@@ -357,7 +359,7 @@ trait ContextMobile
     {
         $t = $this->theme;
         $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->size(0, 52)->padding(0, 16)->alignItems(Node::END)->role(Role::HEADING);
-          $this->text($title, 34, $t->text)->fontWeight(700)->singleLine()->shrink(1);
+          $this->text($title, Font::preferred(Font::LARGE_TITLE, true, $t->textScale())[0], $t->text)->fontWeight(700)->singleLine()->shrink(1); // UIKit's large title, 34 bold, which only iOS has
         $this->end();
         return $n;
     }
@@ -382,11 +384,14 @@ trait ContextMobile
     /**
      * A section of an inset grouped list, as UITableView's insetGrouped
      * style (Settings) and SwiftUI's Section in a List or Form: $header in
-     * 13-point capitals, muted; the rows $rows builds in a group of the
-     * theme's surface, its corners rounded 10, inset 16 from the sides,
-     * a hairline between each two rows starting 16 in, as UITableView's
-     * separators; $footer below in 13 points, muted. The header and the
-     * footer sit 16 in from the group's edge. Stretches across its
+     * the footnote style's capitals, muted, on a phone, the headline style
+     * on the desktop; the rows $rows builds in a group of the theme's
+     * surface, its corners rounded 10, inset 16 from the sides, a hairline
+     * between each two rows starting 16 in, as UITableView's separators;
+     * $footer below, muted, in the footnote style on a phone, the
+     * subheadline style on the desktop. The header and the footer sit 16 in
+     * from the group's edge; a section without a header keeps 16 above its
+     * group, as at its sides. Stretches across its
      * parent; build sections one under the other in a scroll(). cell()
      * builds a row of UIKit's. Not mygo's.
      * @param Closure(): void $rows
@@ -394,10 +399,11 @@ trait ContextMobile
     public function section(string $header, Closure $rows, string $footer = ''): Node
     {
         $t = $this->theme;
-        $n = $this->column(0, 0)->alignSelf(Node::STRETCH)->padding(0, 16)->role(Role::GROUP);
+        $n = $this->column(0, 0)->alignSelf(Node::STRETCH)->padding($header === '' ? 16 : 0, 16, 0, 16)->role(Role::GROUP); // without a header, as much room above its group as at its sides
         if ($header !== '') { $n->label($header); }
-          if ($header !== '') {
-              $this->text(mb_strtoupper($header, 'UTF-8'), 13, $t->textMuted)->padding(16, 16, 7, 16)->role(Role::HEADING);
+          if ($header !== '') { // iOS's: in capitals, the footnote style, muted; the Mac's: the headline style, as System Settings' groups
+              $touch = $this->runtime?->touch ?? false;
+              $this->text($touch ? mb_strtoupper($header, 'UTF-8') : $header, $t->fontSize, $touch ? $t->textMuted : $t->text)->preferredFont($touch ? Font::FOOTNOTE : Font::HEADLINE)->padding(16, 16, 7, 16)->role(Role::HEADING);
           }
           $group = $this->column(0, 0, 0, $t->groupSurface ?? $t->surface)->alignSelf(Node::STRETCH)->radius(10)->clip();
             $rows();
@@ -410,7 +416,7 @@ trait ContextMobile
               }
           });
           if ($footer !== '') {
-              $this->text($footer, 13, $t->textMuted)->padding(7, 16, 16, 16);
+              $this->text($footer, $t->fontSize, $t->textMuted)->preferredFont(($this->runtime?->touch ?? false) ? Font::FOOTNOTE : Font::SUBHEADLINE)->padding(7, 16, 16, 16);
           }
         $this->end();
         return $n;
@@ -464,7 +470,7 @@ trait ContextMobile
                   $bg = $destructive ? $t->danger : $t->textMuted;
                   $b = $this->column(0, 0, 0, $bg)->size($widths[$i], 0)->shrink(0)->center()->focusable()->role(Role::BUTTON)->label($label);
                   if ($this->hovered($b) && ($rt?->input->mouseDown ?? false)) { $b->color = Theme::mix($bg, 0x000000, 0.15); }
-                    $this->text($label, 17, (Theme::luminance($bg) & 255) > 165 ? $t->text : 0xffffff)->singleLine(); // white on the gray and the red, as UIKit's
+                    $this->text($label, $t->fontSize, (Theme::luminance($bg) & 255) > 165 ? $t->text : 0xffffff)->singleLine(); // white on the gray and the red, as UIKit's; the theme's text, 17 on a phone
                   $this->end();
                   $buttons[$i] = $b;
               }
@@ -487,10 +493,10 @@ trait ContextMobile
 
     /**
      * A row of an inset grouped list, as UITableViewCell with the value1
-     * style and SwiftUI's LabeledContent: $title in 17 points at the start,
-     * $detail in 17 points muted at the end, and with $disclosure a
-     * chevron after it, as a row that opens a page; 44 points high at
-     * least, padded 16 at the sides. Takes the focus and reports clicked();
+     * style and SwiftUI's LabeledContent: $title in the theme's text at the
+     * start, $detail muted at the end, and with $disclosure a chevron after
+     * it, as a row that opens a page; 44 points high at least, as the
+     * list's other rows, padded 16 at the sides. Takes the focus and reports clicked();
      * pressed, it fills with the theme's pressed surface. Build it in a
      * section(). Not mygo's.
      */
@@ -498,11 +504,11 @@ trait ContextMobile
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($detail === '' ? $title : "$title, $detail");
+        $n = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::BUTTON)->label($detail === '' ? $title : "$title, $detail"); // 44 high, as a grouped list's other rows; its text the theme's: a phone's 17, the desktop's as its other rows'
         if ($this->hovered($n) && ($rt?->input->mouseDown ?? false)) { $n->color = $t->surfacePressed; }
-          $this->text($title, 17, $t->text)->singleLine()->grow(1);
+          $this->text($title, $t->fontSize, $t->text)->singleLine()->grow(1);
           if ($detail !== '') {
-              $this->text($detail, 17, $t->textMuted)->singleLine()->shrink(0);
+              $this->text($detail, $t->fontSize, $t->textMuted)->singleLine()->shrink(0);
           }
           if ($disclosure) {
               $a = $this->box(8, 20, 0)->shrink(0); $a->color = null;

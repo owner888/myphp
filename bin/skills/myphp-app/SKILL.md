@@ -159,6 +159,21 @@ App::run();
 Start a project with `myphp init -template native <dir>` (from the
 framework's `bin/myphp`): it makes this shape, `app.php` and `view.php`.
 
+## Navigation for every screen
+
+An app of a few top-level pages is one `TabView` with
+`->tabViewStyle(TabViewStyle::sidebarAdaptable)`, each page a
+`Tab(title, systemImage:, value:)`: the framework shows it as a sidebar
+(a `NavigationSplitView`) on the desktop and on a tablet on its side,
+tabs across the top of a tablet held upright, and the tab bar across the
+bottom of a phone (`docs/declarative.md`, "One app, every screen"). Do not
+test for the platform or the window's size to switch between a sidebar and
+tabs yourself; do not use `NavigationSplitView` for an app's pages, which
+on a phone would keep a desktop's sidebar — it is for a sidebar of the
+app's data on the desktop. Give the window
+`titleBarStyle: 'hiddenInset', vibrancy: 'sidebar'` for the Mac's look, and
+each page its `navigationTitle`. `examples/airpods` is the model.
+
 ## Rules of the view
 
 - The view runs for every frame, maybe several times for one event. It

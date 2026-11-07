@@ -12,6 +12,17 @@ use MyPHP\UI\{AccessTree, Context, DisplayList, Image, Input, Key, Layout, Node,
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_with($c, 'MyPHP\\Tests\\') && (require __DIR__ . '/../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'));
 
+/** The system's icons where there are none to draw (Linux without GTK): each a clear square of its size, so that a view of SF Symbols builds as it would. */
+final class StandInSymbols implements \MyPHP\Platform\Symbols
+{
+    public function exists(string $name): bool { return true; }
+    public function draw(string $name, float $size, float $weight, int $rgb, float $scale): array
+    {
+        $px = max(1, (int)round($size * $scale));
+        return [$px, $px, str_repeat("\0", $px * $px * 4)];
+    }
+}
+
 /** A text engine of 7 × 16 cells: a glyph quad a character, images one atlas pixel, the scale 1. */
 final class Metrics implements TextPainter
 {
@@ -86,9 +97,23 @@ final class Headless
     private ?DisplayList $list = null;
     private Closure $view;
 
+    private static bool $symbolsChecked = false;
+
+    /** The system's symbols, or stand-ins where it has none to draw (a Linux without GTK's icon theme): the tests of views using Image(systemName:) run there too. */
+    private static function symbolsOrStandIns(): void
+    {
+        if (self::$symbolsChecked) { return; }
+        self::$symbolsChecked = true;
+        $backend = \MyPHP\App::backend();
+        try { $backend->symbols()->draw('gearshape', 16, 0, 0, 1); } catch (\FFI\Exception) {
+            (new \ReflectionProperty($backend, 'symbols'))->setValue($backend, new StandInSymbols());
+        }
+    }
+
     /** $view builds the UI with the Context given; $w and $h are the window's size. */
     public function __construct(Closure $view, public float $w = 600, public float $h = 400)
     {
+        self::symbolsOrStandIns();
         $this->metrics = new Metrics;
         $this->input = new Input;
         $this->input->mouseInside = true;

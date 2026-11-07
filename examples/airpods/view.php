@@ -2,372 +2,225 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\Examples\Airpods\{AacpProtocol, HeadGestureDetector, L2capProbeResult, };
-use MyPHP\UI\{Context, Font, Node};
+use MyPHP\Examples\Airpods\{AacpProtocol, HeadGestureDetector, L2capProbeResult};
 
-$openLidModal = function (Context $c, AirPodsApp $s, bool $connected) use (&$podCard): void {
-    $t = $c->theme;
-    $open = $s->popupOpen;
-    if ($c->changed($c->modal($open, function () use ($c, $s, $t, $connected, $podCard) {
-        $c->column(20, 14, 0, $t->surface)->size(min(360.0, $c->width - 32.0), 0)->radius(16)->border(1, $t->border);
-          $c->column(0, 4)->alignItems(Node::CENTER);
-            $c->text($s->deviceName, 20, style: Font::BOLD);
-            $sub = $s->modelNumber . ($s->bleRssi > -100 ? sprintf(' · RSSI %d dBm', $s->bleRssi) : '');
-            $c->muted($sub, 12);
-          $c->end();
+// AirPods 4 as the Mac's System Settings shows them: tabs of the AirPods' settings, the connection to them and the
+// packets they send and receive — a sidebar on the desktop and a tablet on its side, tabs across the top of a tablet held
+// upright, the tab bar of a phone; the sheet an iPhone shows as the case's lid opens.
 
-          $c->row(0, 8)->alignItems(Node::STRETCH);
-            $podCard($c, 'Left', $s->leftBattery, AirPodsApp::statusLabel($s->leftStatus), AirPodsApp::earLabel($s->primaryEar));
-            $podCard($c, 'Right', $s->rightBattery, AirPodsApp::statusLabel($s->rightStatus), AirPodsApp::earLabel($s->secondaryEar));
-            $podCard($c, 'Case', $s->caseBattery, AirPodsApp::statusLabel($s->caseStatus), $s->lidOpen ? 'Open' : 'Closed');
-          $c->end();
+/** A setting sent to the AirPods as the user changes it: what the app reads back from them sets it without sending it again. */
+$sent = fn(string $field, int $id, Closure $data, string $label) => new Binding(
+    get: fn() => $this->$field,
+    set: function ($v) use ($field, $id, $data, $label) { $this->$field = $v; $this->sendControl($id, $data($v), 0, $label); },
+);
 
-          if (!$s->isBonded && !$s->useSimulator) {
-              $c->column(8, 4, 0, $t->background)->radius(8);
-                $c->text('First-Time Pairing (iOS Proximity Flow)', 12, $t->accent, Font::BOLD);
-                $c->text('1. Open your AirPods 4 case lid near Xiaomi 14 Ultra.', 11, $t->textMuted);
-                $c->text('2. Double-tap the front of the case until the white LED flashes.', 11, $t->textMuted);
-                $c->text('3. Tap "Connect & Pair" below to bond & open L2CAP 0x1001.', 11, $t->textMuted);
-                if ($s->pairState !== 'idle') {
-                    $c->text('Status: ' . $s->pairState, 11, $t->warning, Font::MONO);
-                }
-              $c->end();
-          } else {
-              $statusLine = $connected
-                  ? 'Connected over L2CAP 0x1001 (AACP Active)'
-                  : 'Bonded (' . $s->macAddress . ') · Ready for L2CAP 0x1001';
-              $c->text($statusLine, 12, $connected ? $t->success : $t->accent, Font::BOLD);
-          }
+/** A choice among $names as a row of the form: its label, a pop-up button. */
+$choice = fn(string $label, array $names, Binding &$selection) => Picker($label, selection: $selection)(Each($names)(fn(string $n, int $i) => Text(verbatim: $n)->tag($i)));
 
-          $c->row(0, 10);
-            if (!$s->isBonded && !$s->useSimulator) {
-                $pairLabel = str_starts_with($s->pairState, 'searching') ? 'Searching AirPods 4…' : 'Connect & Pair';
-                if ($c->clicked($c->key('modal-pair')->primaryButton($pairLabel))) {
-                    $s->startPairing();
-                }
-            } elseif (!$connected) {
-                if ($c->clicked($c->key('modal-conn')->primaryButton('Connect L2CAP 0x1001'))) {
-                    $s->runProbe();
-                }
-            }
-            $c->spacer();
-            if ($c->clicked($c->key('modal-done')->button('Done'))) {
-                $s->popupOpen = false;
-                $s->popupDismissed = true;
-            }
-          $c->end();
-        $c->end();
-    }))) {
-        $s->popupOpen = $open;
-        if (!$open) {
-            $s->popupDismissed = true;
-        }
-    }
+/** A row stating how a check went: its name, and a check mark or a cross. */
+$check = fn(string $name, bool $ok, string $no = 'No') => HStack()(
+    Text($name),
+    Spacer(),
+    Text(verbatim: $ok ? '✓ OK' : '✕ ' . $no)->foregroundStyle($ok ? Color::green : Color::red),
+);
+
+/** A pod's or the case's battery: its charge as a bar, where it is and whether it charges. */
+$battery = fn(string $name, ?int $level, string $status, string $placement) => VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
+    Text($name)->font(Font::caption)->foregroundStyle(Color::secondary),
+    Text(verbatim: $level === null ? '--' : $level . '%')->font(Font::system(size: 22, weight: Weight::semibold)),
+    ProgressView(value: ($level ?? 0) / 100)->tint($level !== null && $level <= 20 ? Color::red : Color::green),
+    Text(verbatim: $placement . ' · ' . $status)->font(Font::caption)->foregroundStyle(Color::secondary)->lineLimit(1),
+)->padding(12)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::secondarySystemBackground)->cornerRadius(10);
+
+$batteries = fn() => HStack(spacing: 10)(
+    $battery('Left', $this->leftBattery, AirPodsApp::statusLabel($this->leftStatus), AirPodsApp::earLabel($this->primaryEar)),
+    $battery('Right', $this->rightBattery, AirPodsApp::statusLabel($this->rightStatus), AirPodsApp::earLabel($this->secondaryEar)),
+    $battery('Case', $this->caseBattery, AirPodsApp::statusLabel($this->caseStatus), $this->lidOpen ? 'Lid open' : 'Lid closed'),
+);
+
+/** Connected, or not: a dot and a word in a capsule. */
+$status = fn(bool $connected) => HStack(spacing: 6)(
+    Circle()->fill($connected ? Color::green : Color::secondary)->frame(width: 8, height: 8),
+    Text($connected ? 'Connected' : 'Not connected')->font(Font::caption),
+)->padding(Edge::vertical, 4)->padding(Edge::horizontal, 10)->background(Color::secondarySystemBackground)->clipShape(Capsule());
+
+/** The AirPods: their name and batteries, then their settings, each sent as it changes (AACP 0x0009 and 0x0017). */
+$settings = function (bool $connected) use ($sent, $choice, $batteries, $status) {
+    $onOff = fn(bool $on) => $on ? 0x01 : 0x02;
+    $same = fn(int $v) => $v;
+    $b = [
+        'listening' => $sent('listeningMode', AacpProtocol::CMD_LISTENING_MODE, fn(int $v) => $v + 1, 'Listening Mode'),
+        'conversation' => $sent('conversationalAwareness', AacpProtocol::CMD_CONVERSATION_DETECT, $onOff, 'Conversational Awareness'),
+        'ear' => $sent('earDetectionEnabled', AacpProtocol::CMD_EAR_DETECTION, $onOff, 'Ear Detection'),
+        'connect' => $sent('autoConnectEnabled', AacpProtocol::CMD_CONNECT_AUTOMATICALLY, $onOff, 'Connect Automatically'),
+        'sleep' => $sent('sleepDetectionEnabled', AacpProtocol::CMD_SLEEP_DETECTION, $onOff, 'Sleep Detection'),
+        'mic' => $sent('micMode', AacpProtocol::CMD_MIC_MODE, $same, 'Mic Mode'),
+        'call' => $sent('endCallMode', AacpProtocol::CMD_CALL_MANAGEMENT, fn(int $v) => $v === 0 ? 0x01 : 0x02, 'Call Management'),
+        'speed' => $sent('pressSpeed', AacpProtocol::CMD_DOUBLE_CLICK_INTERVAL, $same, 'Press Speed'),
+        'hold' => $sent('holdDuration', AacpProtocol::CMD_CLICK_HOLD_INTERVAL, $same, 'Hold Duration'),
+    ];
+    $last = $this->gestures->lastGesture;
+    return Form()(
+        Section()(
+            HStack(alignment: VerticalAlignment::top)(
+                VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                    Text(verbatim: $this->deviceName)->font(Font::title2)->bold(),
+                    Text(verbatim: $this->modelNumber . ' · Firmware ' . $this->firmware)->font(Font::subheadline)->foregroundStyle(Color::secondary),
+                ),
+                Spacer(),
+                $status($connected),
+            ),
+            $batteries(),
+        ),
+        Section(header: 'Noise Control', footer: 'AACP 0x0009, setting 0x0D.')(
+            Picker('Noise Control', selection: $b['listening'])(Each(AirPodsApp::LISTENING_MODES)(fn(string $n, int $i) => Text(verbatim: $n)->tag($i)))
+                ->pickerStyle(PickerStyle::segmented)->labelsHidden(),
+        ),
+        Section(header: 'General', footer: 'Settings 0x28, 0x0A, 0x20 and 0x35.')(
+            Toggle('Conversational Awareness', isOn: $b['conversation'])->toggleStyle(ToggleStyle::switch),
+            Toggle('Automatic Ear Detection', isOn: $b['ear'])->toggleStyle(ToggleStyle::switch),
+            Toggle('Connect Automatically', isOn: $b['connect'])->toggleStyle(ToggleStyle::switch),
+            Toggle('Pause Media When Falling Asleep', isOn: $b['sleep'])->toggleStyle(ToggleStyle::switch),
+        ),
+        Section(header: 'Press and Hold', footer: 'Settings 0x17 and 0x18.')(
+            $choice('Press Speed', AirPodsApp::SPEED_MODES, $b['speed']),
+            $choice('Press and Hold Duration', AirPodsApp::HOLD_MODES, $b['hold']),
+        ),
+        Section(header: 'Calls and Microphone', footer: 'Settings 0x24 and 0x01.')(
+            $choice('End Call', AirPodsApp::CALL_END_MODES, $b['call']),
+            $choice('Microphone', AirPodsApp::MIC_MODES, $b['mic']),
+        ),
+        Section(header: 'Head Gestures', footer: 'Nod to answer, shake to decline: the head-tracking stream, AACP 0x0017.')(
+            LabeledContent('Last gesture', match ($last) {
+                HeadGestureDetector::NOD_YES => sprintf('Nod Yes (%d)', $this->gestures->nodCount),
+                HeadGestureDetector::SHAKE_NO => sprintf('Shake No (%d)', $this->gestures->shakeCount),
+                default => 'None',
+            }),
+            HStack(spacing: 8)(
+                Button($this->headTrackingActive ? 'Stop Head Tracking' : 'Start Head Tracking', action: fn() => $this->setHeadTracking(!$this->headTrackingActive)),
+                Spacer(),
+                Button('Simulate Nod', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::NOD_YES)),
+                Button('Simulate Shake', action: fn() => $this->triggerSimulatedGesture(HeadGestureDetector::SHAKE_NO)),
+            ),
+        ),
+        Section(header: 'Name')(
+            HStack(spacing: 8)(
+                TextField('Name', text: $this->renameText)->labelsHidden(),
+                Button('Rename', action: fn() => $this->rename($this->renameText))->disabled(trim($this->renameText) === '' || $this->renameText === $this->deviceName),
+            ),
+        ),
+    )->disabled(!$connected)->navigationTitle('AirPods 4');
 };
 
-$controlsCard = function (Context $c, AirPodsApp $s, bool $connected): void {
-    $t = $c->theme;
-    $c->column(12, 10, 1, $t->surface)->radius(8)->border(1, $t->border);
-      $c->text('AirPods 4 Controls (AACP 0x0009 / 0x0017)', 14, style: Font::BOLD);
-
-      $c->column(0, 4);
-        $c->muted('Noise Control (0x0D)', 12);
-        $nc = $s->listeningMode;
-        if ($c->changed($c->key('ctrl-nc')->segmented(AirPodsApp::LISTENING_MODES, $nc)->disabled(!$connected))) {
-            $s->listeningMode = $nc;
-            $s->sendControl(AacpProtocol::CMD_LISTENING_MODE, $nc + 1, 0, 'Listening Mode');
-        }
-      $c->end();
-
-      $conv = $s->conversationalAwareness;
-      if ($c->changed($c->key('ctrl-conv')->switch('Conversational Awareness (0x28)', $conv)->disabled(!$connected))) {
-          $s->conversationalAwareness = $conv;
-          $s->sendControl(AacpProtocol::CMD_CONVERSATION_DETECT, $conv ? 0x01 : 0x02, 0, 'Conversational Awareness');
-      }
-
-      $earDet = $s->earDetectionEnabled;
-      if ($c->changed($c->key('ctrl-ear')->switch('Automatic Ear Detection (0x0A)', $earDet)->disabled(!$connected))) {
-          $s->earDetectionEnabled = $earDet;
-          $s->sendControl(AacpProtocol::CMD_EAR_DETECTION, $earDet ? 0x01 : 0x02, 0, 'Ear Detection');
-      }
-
-      $autoConn = $s->autoConnectEnabled;
-      if ($c->changed($c->key('ctrl-autoconn')->switch('Connect Automatically (0x20)', $autoConn)->disabled(!$connected))) {
-          $s->autoConnectEnabled = $autoConn;
-          $s->sendControl(AacpProtocol::CMD_CONNECT_AUTOMATICALLY, $autoConn ? 0x01 : 0x02, 0, 'Connect Automatically');
-      }
-
-      $sleepDet = $s->sleepDetectionEnabled;
-      if ($c->changed($c->key('ctrl-sleep')->switch('Pause Media When Falling Asleep (0x35)', $sleepDet)->disabled(!$connected))) {
-          $s->sleepDetectionEnabled = $sleepDet;
-          $s->sendControl(AacpProtocol::CMD_SLEEP_DETECTION, $sleepDet ? 0x01 : 0x02, 0, 'Sleep Detection');
-      }
-
-      $c->row(0, 8);
-        $c->muted('Microphone (0x01)', 12);
-        $c->spacer();
-        $mic = $s->micMode;
-        if ($c->changed($c->key('ctrl-mic')->segmented(AirPodsApp::MIC_MODES, $mic)->disabled(!$connected))) {
-            $s->micMode = $mic;
-            $s->sendControl(AacpProtocol::CMD_MIC_MODE, $mic, 0, 'Mic Mode');
-        }
-      $c->end();
-
-      $c->row(0, 8);
-        $c->muted('End Call (0x24)', 12);
-        $c->spacer();
-        $callEnd = $s->endCallMode;
-        if ($c->changed($c->key('ctrl-call')->segmented(AirPodsApp::CALL_END_MODES, $callEnd)->disabled(!$connected))) {
-            $s->endCallMode = $callEnd;
-            $s->sendControl(AacpProtocol::CMD_CALL_MANAGEMENT, $callEnd === 0 ? 0x01 : 0x02, 0, 'Call Management');
-        }
-      $c->end();
-
-      $c->row(0, 8);
-        $c->muted('Press Speed (0x17)', 12);
-        $c->spacer();
-        $speed = $s->pressSpeed;
-        if ($c->changed($c->key('ctrl-speed')->segmented(AirPodsApp::SPEED_MODES, $speed)->disabled(!$connected))) {
-            $s->pressSpeed = $speed;
-            $s->sendControl(AacpProtocol::CMD_DOUBLE_CLICK_INTERVAL, $speed, 0, 'Press Speed');
-        }
-      $c->end();
-
-      $c->row(0, 8);
-        $c->muted('Hold Duration (0x18)', 12);
-        $c->spacer();
-        $hold = $s->holdDuration;
-        if ($c->changed($c->key('ctrl-hold')->segmented(AirPodsApp::HOLD_MODES, $hold)->disabled(!$connected))) {
-            $s->holdDuration = $hold;
-            $s->sendControl(AacpProtocol::CMD_CLICK_HOLD_INTERVAL, $hold, 0, 'Hold Duration');
-        }
-      $c->end();
-
-      $c->divider();
-
-      // H2 Head Gestures section
-      $c->row(0, 8);
-        $c->text('H2 Head Gestures (0x0017)', 13, style: Font::BOLD);
-        $c->spacer();
-        $gestureLabel = match ($s->gestures->lastGesture) {
-            HeadGestureDetector::NOD_YES => sprintf('Last: Nod Yes (%d)', $s->gestures->nodCount),
-            HeadGestureDetector::SHAKE_NO => sprintf('Last: Shake No (%d)', $s->gestures->shakeCount),
-            default => 'Last: --',
-        };
-        $c->text($gestureLabel, 12, $s->gestures->lastGesture !== '' ? $t->accent : $t->textMuted, Font::BOLD);
-      $c->end();
-
-      $c->row(0, 8);
-        if ($c->clicked($c->key('btn-imu')->button($s->headTrackingActive ? 'Stop IMU' : 'Start IMU')->disabled(!$connected))) {
-            $s->setHeadTracking(!$s->headTrackingActive);
-        }
-        if ($c->clicked($c->key('btn-nod')->button('Simulate Nod (Yes)')->disabled(!$connected))) {
-            $s->triggerSimulatedGesture(HeadGestureDetector::NOD_YES);
-        }
-      $c->end();
-      $c->row(0, 8);
-        if ($c->clicked($c->key('btn-shake')->button('Simulate Shake (No)')->disabled(!$connected))) {
-            $s->triggerSimulatedGesture(HeadGestureDetector::SHAKE_NO);
-        }
-      $c->end();
-    $c->end();
+/** How the phone reaches the AirPods: its stack opening L2CAP 0x1001, pairing, and handing the audio over to and from an iPhone. */
+$connection = function (bool $connected) use ($check) {
+    $p = $this->probe;
+    $simulated = new Binding(get: fn() => $this->useSimulator, set: fn(bool $on) => $this->setSimulatorMode($on));
+    $blocked = new Binding(get: fn() => $this->sim->simulateStackBlocked, set: function (bool $on) { $this->sim->simulateStackBlocked = $on; $this->runProbe(); });
+    $apple = strcasecmp($this->vendorId, '0x004C') === 0 || $this->vendorId === '76';
+    [$active, $standby] = [[], []];
+    foreach ($this->connectedDevices as $dev) { $dev['info1'] > 0 ? $active[] = "{$dev['type']} ({$dev['mac']})" : $standby[] = "{$dev['type']} ({$dev['mac']})"; }
+    return Form()(
+        Section(header: 'L2CAP Stack Probe', footer: $p->detail)(
+            HStack()(
+                Text(verbatim: match ($p->verdict) {
+                    L2capProbeResult::VERDICT_NATIVE_READY => 'Android 16 QPR3+ Ready (Rootless L2CAP OK)',
+                    L2capProbeResult::VERDICT_STACK_BLOCKED => 'Fluoride Blocked 0x1001 (Root Patch Needed)',
+                    L2capProbeResult::VERDICT_BLE_ONLY => 'BLE 0x004C Only',
+                    default => 'Untested',
+                })->font(Font::headline)->foregroundStyle(match ($p->verdict) {
+                    L2capProbeResult::VERDICT_NATIVE_READY => Color::green,
+                    L2capProbeResult::VERDICT_STACK_BLOCKED => Color::orange,
+                    default => Color::secondary,
+                }),
+                Spacer(),
+                Button('Probe Again', action: fn() => $this->runProbe()),
+            ),
+            $check('BLE beacon 0x004C', $p->bleBeaconSeen),
+            $check('L2CAP socket 0x1001', $p->l2capSocketOpened, 'Blocked'),
+            $check('AACP handshake', $p->handshakeAcked, 'No ACK'),
+            $p->ctorSignature !== '' ? LabeledContent('JNI constructor', $p->ctorSignature) : null,
+        ),
+        Section(header: 'Pairing')(
+            LabeledContent('Address', $this->macAddress !== '' ? $this->macAddress : '--'),
+            HStack()(
+                Button('Pair AirPods 4', action: function () { $this->popupOpen = true; $this->popupDismissed = false; }),
+                Spacer(),
+                Button($this->lidOpen ? 'Close Case Lid' : 'Open Case Lid', action: function () {
+                    $this->sim->lidOpen = !$this->sim->lidOpen;
+                    $this->lidOpen = $this->sim->lidOpen;
+                    $this->popupOpen = $this->lidOpen;
+                    $this->popupDismissed = !$this->lidOpen;
+                }),
+            ),
+            $this->androidBt !== null ? Toggle('Use the AirPods 4 Simulator', isOn: $simulated)->toggleStyle(ToggleStyle::switch) : null,
+            $this->useSimulator ? Toggle('Simulate Pre-QPR3 Fluoride Block', isOn: $blocked)->toggleStyle(ToggleStyle::switch) : null,
+        ),
+        Section(header: 'iPhone Handoff', footer: 'Apple\'s vendor ID 0x004C; the keys of opcode 0x0031 tell the AirPods\' private addresses and decrypt their batteries.')(
+            LabeledContent('Vendor ID', $apple ? '0x004C (Apple)' : ($this->vendorId ?: 'Default')),
+            LabeledContent('Audio owner', $this->ownsConnection ? 'This phone' : ($this->audioSourceMac !== '' ? 'iPhone (' . $this->audioSourceMac . ')' : 'Idle')),
+            LabeledContent('Multipoint', $active !== [] ? sprintf('%d of 2: %s', count($active), implode(', ', $active)) : '1 of 2: this phone'),
+            $standby !== [] ? LabeledContent('Standby', implode(', ', $standby)) : null,
+            LabeledContent('Identity key', $this->irk !== null ? ($this->rpaVerified ? 'Received · address verified' : 'Received') : '--'),
+            LabeledContent('Encryption key', $this->encKey !== null ? 'Received' : '--'),
+            Toggle('Take Over When This Phone Plays', isOn: $this->autoTakeoverEnabled)->toggleStyle(ToggleStyle::switch),
+            HStack()(
+                Button('Take Over from iPhone', action: fn() => $this->onLocalAudioStarted())->buttonStyle(ButtonStyle::borderedProminent),
+                Spacer(),
+                Button('Hand Back to iPhone', action: fn() => $this->handBackToPeer())->disabled(!$connected),
+            ),
+        ),
+    )->navigationTitle('Connection');
 };
 
-$packetLogCard = function (Context $c, AirPodsApp $s): void {
-    $t = $c->theme;
-    $c->column(12, 8, 1, $t->surface)->minHeight(220)->radius(8)->border(1, $t->border);
-      $c->row(0, 8);
-        $c->text('AACP / BLE Packet Log', 14, style: Font::BOLD);
-        $c->spacer();
-        $c->muted(count($s->packets) . ' frames', 12);
-      $c->end();
+/** The frames sent and received, newest last, only those in view built. */
+$packets = fn() => ListView(count($this->packets))(function (int $i) {
+        $p = $this->packets[$i];
+        return HStack(alignment: VerticalAlignment::top, spacing: 10)(
+            Text(verbatim: $p['dir'])->font(Font::caption)->bold()->monospaced()
+                ->foregroundStyle($p['dir'] === 'TX' ? Color::accentColor : ($p['dir'] === 'RX' ? Color::green : Color::orange))->frame(width: 28, alignment: Alignment::leading),
+            VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+                Text(verbatim: $p['summary'])->lineLimit(1),
+                Text(verbatim: $p['hex'])->font(Font::caption)->monospaced()->foregroundStyle(Color::secondary)->lineLimit(1),
+            ),
+        );
+    })->listStyle(ListStyle::plain)
+    ->navigationTitle('Packet Log')
+    ->toolbar(Text(verbatim: count($this->packets) . ' frames')->foregroundStyle(Color::secondary));
 
-      $c->list($s->packetList, count($s->packets), function (int $i) use ($c, $t, $s) {
-          $p = $s->packets[$i];
-          $dirColor = $p['dir'] === 'TX' ? $t->accent : ($p['dir'] === 'RX' ? $t->success : $t->warning);
-          $c->column(4, 2);
-            $c->row(0, 6);
-              $c->text($p['dir'], 11, $dirColor, Font::BOLD | Font::MONO);
-              $c->text($p['summary'], 12, $t->text)->singleLine();
-            $c->end();
-            $c->text($p['hex'], 10, $t->textMuted, Font::MONO)->singleLine();
-          $c->end();
-      });
-    $c->end();
+/** The sheet the case's lid opening brings up, as an iPhone's: the batteries, how to pair, and connecting. */
+$lidSheet = function (bool $connected) use ($batteries) {
+    $pairing = !$this->isBonded && !$this->useSimulator;
+    return VStack(spacing: 16)(
+        VStack(spacing: 4)(
+            Text(verbatim: $this->deviceName)->font(Font::title2)->bold(),
+            Text(verbatim: $this->modelNumber . ($this->bleRssi > -100 ? sprintf(' · %d dBm', $this->bleRssi) : ''))->font(Font::subheadline)->foregroundStyle(Color::secondary),
+        ),
+        $batteries(),
+        $pairing
+            ? VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                Text('First-time pairing')->font(Font::headline),
+                Each(['Open the case near this phone.', 'Hold the case\'s button until its light flashes white.', 'Click Connect & Pair.'])(
+                    fn(string $step, int $i) => Text(verbatim: ($i + 1) . '. ' . $step)->foregroundStyle(Color::secondary)),
+                $this->pairState !== 'idle' ? Text(verbatim: 'Status: ' . $this->pairState)->font(Font::caption)->monospaced()->foregroundStyle(Color::orange) : null,
+            )->frame(maxWidth: INF, alignment: Alignment::leading)
+            : Text($connected ? 'Connected over L2CAP 0x1001' : 'Paired · ready to connect')->foregroundStyle($connected ? Color::green : Color::secondary),
+        HStack(spacing: 10)(
+            Spacer(),
+            Button('Done', action: function () { $this->popupOpen = false; $this->popupDismissed = true; }),
+            $pairing ? Button(str_starts_with($this->pairState, 'searching') ? 'Searching…' : 'Connect & Pair', action: fn() => $this->startPairing())->buttonStyle(ButtonStyle::borderedProminent) : null,
+            !$pairing && !$connected ? Button('Connect', action: fn() => $this->runProbe())->buttonStyle(ButtonStyle::borderedProminent) : null,
+        ),
+    )->padding(24)->frame(width: 420);
 };
 
-$podCard = function (Context $c, string $title, ?int $battery, string $status, string $placement): void {
-    $t = $c->theme;
-    $c->column(10, 4, 1, $t->surface)->basis(0)->radius(8)->border(1, $t->border);
-      $c->muted($title, 11);
-      $c->text($battery === null ? '--' : $battery . '%', 20, style: Font::BOLD);
-      $c->text($placement . ' · ' . $status, 10, $t->textMuted)->singleLine();
-    $c->end();
-};
-
-return function (Context $c) use (&$podCard, &$controlsCard, &$packetLogCard, &$openLidModal): void {
+return function () use ($settings, $connection, $packets, $lidSheet) {
     $this->pollTransport();
-    $t = $c->theme;
     $connected = $this->transport->isConnected();
-    $compact = $c->width < 680;
-
-    $root = $c->column(12, 10, 1, $t->background);
-    if ($compact) {
-        $root->scroll($this->pageScroll);
-    }
-
-      // 1. Top Header + Xiaomi 14 Ultra L2CAP 0x1001 Stack Probe Card
-      $c->column(12, 8, 0, $t->surface)->radius(8)->border(1, $t->border);
-        $c->text('Step 1 · Xiaomi 14 Ultra L2CAP 0x1001 Stack Probe', 14, style: Font::BOLD);
-        $verdictText = match ($this->probe->verdict) {
-            L2capProbeResult::VERDICT_NATIVE_READY => 'Android 16 QPR3+ Ready (Rootless L2CAP OK)',
-            L2capProbeResult::VERDICT_STACK_BLOCKED => 'Fluoride Blocked 0x1001 (Root Patch Needed)',
-            L2capProbeResult::VERDICT_BLE_ONLY => 'BLE 0x004C Only',
-            default => 'Untested',
-        };
-        $verdictColor = match ($this->probe->verdict) {
-            L2capProbeResult::VERDICT_NATIVE_READY => $t->success,
-            L2capProbeResult::VERDICT_STACK_BLOCKED => $t->warning,
-            default => $t->textMuted,
-        };
-        $c->text($verdictText, 12, $verdictColor, Font::BOLD);
-
-        $c->text($this->probe->detail, 12, $t->textMuted);
-        if ($this->probe->ctorSignature !== '') {
-            $ctorText = $compact && strlen($this->probe->ctorSignature) > 36
-                ? substr($this->probe->ctorSignature, 0, 36) . '…'
-                : $this->probe->ctorSignature;
-            $c->text('JNI Ctor: ' . $ctorText, 11, $t->accent, Font::MONO);
-        }
-
-        $c->row(0, 10);
-          $c->text('1. BLE 0x004C: ' . ($this->probe->bleBeaconSeen ? 'OK' : 'No'), 11, $this->probe->bleBeaconSeen ? $t->success : $t->textMuted, Font::MONO);
-          $c->text('2. L2CAP 0x1001: ' . ($this->probe->l2capSocketOpened ? 'OK' : 'Blocked'), 11, $this->probe->l2capSocketOpened ? $t->success : $t->danger, Font::MONO);
-          $c->text('3. Handshake: ' . ($this->probe->handshakeAcked ? 'OK' : 'No ACK'), 11, $this->probe->handshakeAcked ? $t->success : $t->danger, Font::MONO);
-        $c->end();
-
-        $c->row(0, 8);
-          if ($c->clicked($c->key('run-probe')->primaryButton('Probe L2CAP 0x1001'))) {
-              $this->runProbe();
-          }
-          if ($c->clicked($c->key('open-pair-sheet')->button('Pair AirPods 4'))) {
-              $this->popupOpen = true;
-              $this->popupDismissed = false;
-          }
-        $c->end();
-        if ($this->androidBt !== null) {
-            $simOn = $this->useSimulator;
-            if ($c->changed($c->key('use-sim')->checkbox('Use AirPods 4 Simulator', $simOn))) {
-                $this->setSimulatorMode($simOn);
-            }
-        }
-        if ($this->useSimulator) {
-            $blockSim = $this->sim->simulateStackBlocked;
-            if ($c->changed($c->key('sim-block')->checkbox('Simulate Pre-QPR3 Fluoride Block', $blockSim))) {
-                $this->sim->simulateStackBlocked = $blockSim;
-                $this->runProbe();
-            }
-        }
-      $c->end();
-
-      // 1b. Apple VendorID (0x004C) & iPhone Seamless Handoff (TiPi / Smart Routing) Card
-      $c->column(12, 8, 0, $t->surface)->radius(8)->border(1, $t->border);
-        $c->text('Step 2 · iPhone Seamless Handoff (TiPi · 0x004C)', 14, style: Font::BOLD);
-        $isAppleDid = strcasecmp($this->vendorId, '0x004C') === 0 || $this->vendorId === '76';
-        $c->row(0, 12);
-          $c->text($isAppleDid ? 'DID: 0x004C (Apple)' : 'DID: ' . ($this->vendorId ?: 'Default'), 12, $isAppleDid ? $t->success : $t->warning, Font::BOLD | Font::MONO);
-          $audioOwnerLabel = $this->ownsConnection
-              ? 'Audio Owner: Xiaomi 14U'
-              : ($this->audioSourceMac !== '' ? 'Audio Owner: Peer (' . $this->audioSourceMac . ')' : 'Audio Owner: Idle');
-          $c->text($audioOwnerLabel, 12, $this->ownsConnection ? $t->success : $t->accent, Font::MONO);
-        $c->end();
-
-        $activeSlots = [];
-        $evictedSlots = [];
-        foreach ($this->connectedDevices as $dev) {
-            $tag = $dev['type'] . ' (' . $dev['mac'] . ')';
-            if ($dev['info1'] > 0) {
-                $activeSlots[] = $tag;
-            } else {
-                $evictedSlots[] = $tag;
-            }
-        }
-        $c->text(
-            $activeSlots !== []
-                ? sprintf('Active Multipoint (%d/2): %s', count($activeSlots), implode(' + ', $activeSlots))
-                : 'Active Multipoint (1/2): Xiaomi 14U',
-            11,
-            $t->textMuted,
-        );
-        if ($evictedSlots !== []) {
-            $c->text('Standby Slot #3 (Auto-rotates on play): ' . implode(', ', $evictedSlots), 11, $t->warning);
-        }
-
-        $keysText = sprintf(
-            'Magic Keys (0x0031): IRK=%s · ENC_KEY=%s%s',
-            $this->irk !== null ? 'OK (16B)' : '--',
-            $this->encKey !== null ? 'OK (16B)' : '--',
-            $this->rpaVerified ? ' · RPA Verified' : ($this->bleConnState !== '' ? ' · BLE:' . $this->bleConnState : ''),
-        );
-        $c->text($keysText, 11, $this->irk !== null ? $t->success : $t->textMuted, Font::MONO);
-
-        $autoTake = $this->autoTakeoverEnabled;
-        if ($c->changed($c->key('ctrl-autotake')->switch('Auto-Takeover on Phone Play (2 & 3-Device)', $autoTake))) {
-            $this->autoTakeoverEnabled = $autoTake;
-        }
-
-        $c->row(0, 8);
-          if ($c->clicked($c->key('btn-takeover')->primaryButton('Take Over from iPhone'))) {
-              $this->onLocalAudioStarted();
-          }
-          if ($c->clicked($c->key('btn-handback')->button('Hand Back to iPhone')->disabled(!$connected))) {
-              $this->handBackToPeer();
-          }
-        $c->end();
-      $c->end();
-
-      // 2. Device Overview + Battery & Ear Detection Cards
-      $c->column(12, 8, 0, $t->surface)->radius(8)->border(1, $t->border);
-        $c->row(0, 8);
-          $c->text($this->deviceName, 16, style: Font::BOLD);
-          $c->spacer();
-          $c->text($this->lidOpen ? 'Case Lid Open' : 'Case Lid Closed', 12, $this->lidOpen ? $t->accent : $t->textMuted);
-        $c->end();
-        $c->muted($this->modelNumber . ' · FW ' . $this->firmware, 12);
-        $c->row(0, 8);
-          $c->input($this->renameInput, 'AirPods Name', 160);
-          if ($c->clicked($c->key('btn-rename')->button('Rename')->disabled(!$connected))) {
-              $this->rename($this->renameInput->text);
-          }
-          if ($c->clicked($c->key('btn-lid')->button($this->lidOpen ? 'Close Lid' : 'Open Lid'))) {
-              $this->sim->lidOpen = !$this->sim->lidOpen;
-              $this->lidOpen = $this->sim->lidOpen;
-              $this->popupOpen = $this->lidOpen;
-              $this->popupDismissed = !$this->lidOpen;
-          }
-        $c->end();
-      $c->end();
-
-      $c->row(0, 8)->alignItems(Node::STRETCH);
-        $podCard($c, 'Left Pod', $this->leftBattery, AirPodsApp::statusLabel($this->leftStatus), AirPodsApp::earLabel($this->primaryEar));
-        $podCard($c, 'Right Pod', $this->rightBattery, AirPodsApp::statusLabel($this->rightStatus), AirPodsApp::earLabel($this->secondaryEar));
-        $podCard($c, 'Case', $this->caseBattery, AirPodsApp::statusLabel($this->caseStatus), $this->lidOpen ? 'Lid Open' : 'Lid Closed');
-      $c->end();
-
-      // 3. AirPods 4 Controls (AACP Opcode 0x0009 & 0x0017) + Live Packet Inspector
-      if ($compact) {
-          $controlsCard($c, $this, $connected);
-          $packetLogCard($c, $this);
-      } else {
-          $c->row(0, 12, 1)->alignItems(Node::STRETCH);
-            $controlsCard($c, $this, $connected);
-            $packetLogCard($c, $this);
-          $c->end();
-      }
-
-      if ($this->popupOpen) {
-          $openLidModal($c, $this, $connected);
-      }
-
-    $c->end();
+    return TabView(selection: $this->page)(
+        Tab('AirPods 4', systemImage: 'airpods', value: 'AirPods')($settings($connected)),
+        Tab('Connection', systemImage: 'antenna.radiowaves.left.and.right', value: 'Connection')($connection($connected)),
+        Tab('Packet Log', systemImage: 'list.bullet.rectangle', value: 'Packets')($packets())->badge(count($this->packets)),
+    )->tabViewStyle(TabViewStyle::sidebarAdaptable)->sheet(isPresented: $this->popupOpen, content: fn() => $lidSheet($connected))
+        ->onChange(of: $this->popupOpen, action: function ($old, $open) { if (!$open) { $this->popupDismissed = true; } });
 };
