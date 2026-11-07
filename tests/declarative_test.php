@@ -419,6 +419,8 @@ foreach ([\MyPHP\UI\Theme::light(), \MyPHP\UI\Theme::dark()] as $th) {
         && \Color::secondarySystemGroupedBackground->resolve($th) === $th->background && \Color::secondaryLabel->resolve($th) === $th->textMuted;
 }
 same([true, 0xf2f2f7, 0x1c1c1e], [$ok, \Color::systemGray6->resolve(\MyPHP\UI\Theme::light()), \Color::systemGray6->resolve(\MyPHP\UI\Theme::dark())], 'iOS\'s semantic colors in the light theme and the dark');
+$grouped = fn(bool $dark) => [\Color::systemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark)), \Color::secondarySystemGroupedBackground->resolve(\MyPHP\UI\Theme::phone($dark))];
+same([[0xf2f2f7, 0xffffff], [0x000000, 0x1c1c1e]], [$grouped(false), $grouped(true)], 'a phone\'s grouped colors as iOS\'s: in the dark, dark gray sections on a black page');
 
 // A plain TextField's text starts at the field, and a padding put around it moves it in (it was drawn 11 points left of it).
 $typed = '';
