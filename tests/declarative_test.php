@@ -696,6 +696,14 @@ $atLarge = $sheetTop();
 $h->press(196, $atLarge + 10); for ($y = $atLarge + 10; $y < 840; $y += 60) { $h->drag(196, $y); } $h->release(196, 840); $settle(); $settle();
 same([true, true, true, false], [$rising > $atMedium + 100, abs($atMedium - 852 / 2) < 20, $atLarge < 20, $detentApp->open], 'a sheet rising from below to half the window, dragged to the whole, dragged down and gone');
 
+// Closed by the app (a Done button), it goes back down below the window, then is gone; the page takes taps meanwhile.
+$detentApp->open = true; $settle(); $settle();
+$up = $sheetTop();
+$detentApp->open = false; $h->frame(); usleep(100_000); $h->frame();
+$goingDown = $sheetTop();
+$settle();
+same([true, true, null], [$up !== null, $goingDown !== null && $goingDown > $up, $sheetTop()], 'a sheet closed goes down, then is gone');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

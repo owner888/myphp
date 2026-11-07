@@ -199,7 +199,7 @@ $t->clickText('OK'); $t->frame();
 same(false, $s->alert, 'OK closes it');
 $s->dialog = true; $t->frame(2);
 check($t->byText('A sheet over the page') !== null, 'the sheet shows');
-$t->clickText('Done'); $t->frame(2);
+$t->clickText('Done'); $t->frame(2); usleep(400_000); $t->frame(3); // it goes down first
 check(!$s->dialog && $t->byText('A sheet over the page') === null, 'Done closes it');
 \MyPHP\App::setFrontend(null);
 }
