@@ -147,6 +147,9 @@ trait ContextMobile
         $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->padding(8, 16, $bottom, 16)->justify(Node::CENTER)->alignItems(Node::STRETCH)
             ->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
           $pill = $this->row(4, 0, 1)->size(0, 56)->radius(28)->alignItems(Node::STRETCH)->systemMaterial('glass');
+            if (!($this->runtime?->systemMaterials ?? true)) { // myphp's own glass (Android): frosted as iOS 26's bar is, what passes under it a haze, not bent text
+                $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72;
+            }
             foreach ($items as $i => [$svg, $label]) {
                 $on = $i === $index;
                 $color = $on ? $t->accent : $t->textMuted;
@@ -428,7 +431,8 @@ trait ContextMobile
               $rows = array_values(array_filter($group->kids, static fn(Node $k): bool => !$k->absolute));
               for ($i = 0, $last = count($rows) - 1; $i < $last; $i++) {
                   $k = $rows[$i];
-                  $p->fill([$r[0] + 16, $k->y + $k->h - 0.5, $r[2] - ($touch ? 32 : 16), $touch ? 0.5 : 1.0], $p->theme()->border);
+                  $hair = $touch ? 1 / max($p->scale(), 1.0) : 1.0; // a phone's: one pixel, as UIKit's separators on every screen
+                  $p->fill([$r[0] + 16, $k->y + $k->h - $hair, $r[2] - ($touch ? 32 : 16), $hair], $p->theme()->border);
               }
           });
           if ($footer !== '') {
