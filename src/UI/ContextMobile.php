@@ -288,9 +288,11 @@ trait ContextMobile
                   $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
                   $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $this->dragOffset($panel)[1] >= $top - 2; // let go toward below the window, and there: gone
               }
-              $h = $rt?->rectOf($panel->id)[3] ?? 0.0;
+              $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
+              if ($rt !== null && !isset($rt->motions[$panel->id]['rise'])) { $this->jump($panel, 'rise', 0.0); } // shown now: from below the window, not at its place
               $p = $this->animate($panel, 'rise', 1, 0.35);
               $panel->translate(0, (1 - $p) * $h); // rises from below the window
+              $back->alpha = 0.4 * $p; // the window dims as it rises
               $panel->draw(static fn(Painter $pt, array $r) => $pt->fill([$r[0], $r[1], $r[2], $r[3] + 10], $pt->theme()->background, 10)); // its bottom corners below the window
                 $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                   $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber

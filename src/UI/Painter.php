@@ -701,7 +701,7 @@ final class Painter
             $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
             return;
         }
-        if ($n->systemMaterial !== null && $rt !== null && $rt->overLayer && !$rt->paintingOver) { // the system draws the material over this view, the node and what it holds paint in the view over it (iOS)
+        if ($n->systemMaterial !== null && $rt !== null && $rt->overLayer && !$rt->paintingOver && $rt->reachable($n->id)) { // the system draws the material over this view, the node and what it holds paint in the view over it (iOS); under a modal (a sheet), which the system's views would cover, it paints in place, myphp's glass
             $rt->overPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
             return;
         }
@@ -1146,7 +1146,9 @@ final class Painter
                 if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
             }
         }
-        if (($n->webView !== null || $n->movie !== null || $n->systemMaterial !== null) && $rt !== null) {
+        if ($n->systemMaterial !== null && $rt !== null && $rt->overLayer && !$rt->paintingOver && !$rt->reachable($n->id)) { // under a modal: myphp's glass in place of the system's, which would show over the modal
+            (new \MyPHP\Plugins\Glass\Glass())->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
+        } elseif (($n->webView !== null || $n->movie !== null || $n->systemMaterial !== null) && $rt !== null) {
             self::nativeHole($n, $list, $text, $radii, $rt);
         }
         if ($n->selected) { // filled with the accent, as mygo's Selected; its text in accentText (Context::list)
