@@ -195,7 +195,7 @@ check($rd[0] > $rt[0] + $rt[2] && $rd[0] + $rd[2] < 390.0 - 16.0 - 16.0, 'the de
 $h->clickText('Language');
 same(1, $opened, 'a tap on the cell reports clicked()');
 
-// swipeActions: the content dragged toward the start uncovers the actions at its end; let go past half their width it stays open, a tap on an action reports its index and closes it; a full swipe performs the first; a tap on the open row closes it.
+// swipeActions: the content dragged toward the start uncovers the actions at its end; let go past half their width it stays open, a tap on an action reports its index and closes it; a flick opens it; a full swipe performs the first; a tap on the open row closes it.
 $action = -1; $chosen = []; $swipe = null; $taps = 0; $now = 0;
 $h = poseTester(function (Context $c) use (&$action, &$chosen, &$swipe, &$taps): void {
     $c->column(0, 0, 1)->fill();
@@ -209,14 +209,13 @@ $h = poseTester(function (Context $c) use (&$action, &$chosen, &$swipe, &$taps):
 $h->rt->touch = true;
 check($h->byText('Delete') === null, 'closed, no action shows');
 $rec = $h->rt->dragRecs[$swipe->id];
-$total = -$rec->bounds[0] - 48; // the bounds reach 48 past the buttons, the full swipe
-check($total >= 148.0, "two actions, 74 points at least each: $total");
 // a slow drag of 100 points to the left, let go: past half the buttons' width, it rests open
 $h->hover(300, 20); $h->press(300, 20);
 foreach ([290, 270, 250, 230, 210, 200] as $x) { $now += 10_000_000; $h->drag($x, 20); }
 $now += 200_000_000; $h->release(200, 20);
 $now += 2_000_000_000; $h->frame();
-same(-$total, $rec->own[0], 'let go 100 points in, the row rests open at the buttons\' width');
+$total = -$rec->own[0];
+check($total >= 148.0 && $total < 195.0, "let go 100 points in, the row rests open at the buttons' width, two actions 74 points at least each: $total");
 check($taps === 0, 'the swipe was no tap');
 $del = $h->byText('Delete'); $flag = $h->byText('Flag');
 check($del !== null && $flag !== null, 'open, both actions show: ' . json_encode($h->texts()));
@@ -227,11 +226,18 @@ same([1], $chosen, 'a tap on Delete reports its index');
 $now += 2_000_000_000; $h->frame();
 same(0.0, $rec->own[0], 'and the row closes');
 check($h->byText('Delete') === null, 'closed again, the actions are gone');
-// a full swipe: 48 points past the buttons, let go, performs the first action
+// a quick flick of 40 points, half a button: its throw carries past the row's half, yet it only opens, the full swipe being where the finger let go (as UIKit's)
+$h->hover(300, 20); $h->press(300, 20);
+foreach ([290, 275, 260] as $x) { $now += 8_000_000; $h->drag($x, 20); }
+$now += 8_000_000; $h->release(260, 20);
+$now += 2_000_000_000; $h->frame();
+same([[1], -$total], [$chosen, $rec->own[0]], 'a flick opens the row, no action performed');
+$h->click(100, 20); $now += 2_000_000_000; $h->frame();
+// a full swipe: past half the row, let go, performs the first action
 $h->hover(380, 20); $h->press(380, 20);
 foreach ([370, 340, 300, 260, 220, 180, 150] as $x) { $now += 10_000_000; $h->drag($x, 20); }
 $now += 200_000_000; $h->release(150, 20);
-same([1, 0], $chosen, 'swiped 230 points, past the buttons by more than 48, the first action is performed');
+same([1, 0], $chosen, 'swiped 230 points, past half the row, the first action is performed');
 $now += 2_000_000_000; $h->frame();
 same(0.0, $rec->own[0], 'and the row is closed again');
 // a tap on a closed row is the row's click
