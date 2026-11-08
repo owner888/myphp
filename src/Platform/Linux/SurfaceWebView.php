@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Platform\Linux;
 
+use FFI\CData;
 use MyPHP\Platform;
 
 /**
@@ -17,6 +18,8 @@ final class SurfaceWebView implements Platform\WebView
     private bool $closed = false;
     /** @var ?array{0: float, 1: float, 2: float, 3: float} where it shows, in the content's points, null while hidden */
     public ?array $clip = null;
+    /** @internal the ATK object whose child the page's accessible is (Access::graft), null for none */
+    public ?CData $accessParent = null;
 
     public function __construct(private readonly Window $host, private readonly WebView $page, bool $scrollToContainer, bool $transparent)
     {
@@ -49,6 +52,9 @@ final class SurfaceWebView implements Platform\WebView
         $f->gtk_widget_set_no_show_all($web, 1); // hidden until placed
         $f->gtk_layout_put($host->webLayer(), $web, 0, 0);
     }
+
+    /** @internal the widget of the page, whose accessible Access puts in the content's tree */
+    public function widget(): CData { return $this->page->web; }
 
     public function focus(): void
     {
