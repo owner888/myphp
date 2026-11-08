@@ -55,7 +55,7 @@ final class NavigationStack extends View
         $backdrop = (object)['color' => null];
           $toolbar = $entry->toolbar ?? null;
           $c->navigationBar($this->router->title(), $this->router,
-              $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless]), $toolbar); },
+              $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); },
               $large);
           $c->safeArea(function () use ($c, $env, $backdrop): void {
               $this->router->view($c, function (Route $r) use ($c, $env, $backdrop): void {

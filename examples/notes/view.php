@@ -37,8 +37,6 @@ $toolbar = function (Document $doc) use ($format) {
         $format('☐', 'Checklist (⇧⌘L)', $f->paragraph->list === ListKind::Tasks, fn() => $doc->toggleList(ListKind::Tasks)),
         $format('❝', 'Quote', $f->paragraph->quote, $doc->toggleQuote(...)),
         $format('{}', 'Code block', $f->paragraph->codeBlock, $doc->toggleCodeBlock(...)),
-        Divider()->frame(height: 20),
-        Button('Copy Markdown', action: fn() => Clipboard::writeText($doc->text()->markdown())),
         Spacer(),
     );
 };
@@ -65,6 +63,7 @@ return function () use ($toolbar, $row) {
             Text(verbatim: sprintf('%d words · edited %s', $words, $n->updated->format('M j, H:i')))->font(Font::caption)->foregroundStyle(Color::secondary),
         )->padding(Edge::vertical, 12)->padding(Edge::horizontal, 20)
             ->toolbar(
+                Button('Copy Markdown', systemImage: 'doc.on.doc', action: fn() => Clipboard::writeText($doc->text()->markdown())),
                 Button('New', systemImage: 'square.and.pencil', action: $this->add(...))->keyboardShortcut('n')->accessibilityLabel('New note'),
                 Button('Delete…', systemImage: 'trash', action: fn() => $this->asking = true)->keyboardShortcut(KeyEquivalent::delete)->accessibilityLabel('Delete note'),
             ),

@@ -40,6 +40,9 @@ final class Button extends View
                 $n->padding($t->space(1.5), $t->space(3.5))->radius($t->radius);
                 $n->color = $prominent ? $t->accent : ($c->hovered($n) ? $t->surfaceHover : $t->surface);
                 $n->bordered = !$prominent;
+            } elseif ($env->labelStyle === \LabelStyle::iconOnly) { // an icon of a toolbar: room around it to click, a face while hovered, as AppKit's toolbar items
+                $n->padding($t->space(1.5), $t->space(2))->radius($t->radius);
+                if ($c->hovered($n)) { $n->color = $t->surfaceHover; }
             }
             $this->label->render($c, $prominent ? $env->along(Node::ROW)->with(['color' => new ColorValue(null, $t->accentText)]) : $env->along(Node::ROW));
             $c->end();
@@ -54,7 +57,7 @@ final class Button extends View
         }
         if ($style === \ButtonStyle::borderless || $style === \ButtonStyle::plain) {
             $n->bordered = false;
-            $n->color = null;
+            if (!($this->label !== null && $env->labelStyle === \LabelStyle::iconOnly && $c->hovered($n))) { $n->color = null; }
             $n->fg = $style === \ButtonStyle::plain ? ($env->color?->rgb($env) ?? $env->theme->text) : ($env->tint?->rgb($env) ?? $env->theme->accent);
         } elseif ($style === \ButtonStyle::borderedProminent && $env->tint !== null) {
             $n->color = $env->tint->rgb($env);

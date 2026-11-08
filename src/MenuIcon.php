@@ -54,6 +54,32 @@ final class MenuIcon
     }
 
     /**
+     * The icon of the system's symbol $name (an SF Symbol's name, as Image::symbol draws it), as a desktop's menu shows
+     * a SwiftUI Button's systemImage: a template on macOS, which tints it, in the theme's text elsewhere, where the
+     * menu draws the image as it is; null for a name the system has no symbol of. Not mygo's.
+     */
+    public static function symbol(string $name): ?self
+    {
+        $symbols = \MyPHP\App::backend()->symbols();
+        if (!$symbols->exists($name)) {
+            return null;
+        }
+        $mac = PHP_OS_FAMILY === 'Darwin';
+        [$w, $h, $rgba] = $symbols->draw($name, self::SIZE, 0.0, $mac ? 0x000000 : \MyPHP\App::theme()->text, 2.0);
+        $raw = '';
+        for ($y = 0, $stride = $w * 4; $y < $h; $y++) { // straight alpha, as a PNG has it, of the premultiplied pixels
+            $row = substr($rgba, $y * $stride, $stride);
+            for ($x = 0; $x < $stride; $x += 4) {
+                $a = ord($row[$x + 3]);
+                if ($a > 0 && $a < 255) { for ($k = 0; $k < 3; $k++) { $row[$x + $k] = chr(min(255, intdiv(ord($row[$x + $k]) * 255, $a))); } }
+            }
+            $raw .= "\0" . $row;
+        }
+        $chunk = fn(string $type, string $data): string => pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+        return self::of("\x89PNG\r\n\x1a\n" . $chunk('IHDR', pack('NNCCCCC', $w, $h, 8, 6, 0, 0, 0)) . $chunk('IDAT', \MyPHP\Native\Zlib::deflate($raw, 15, 6)) . $chunk('IEND', ''), $mac);
+    }
+
+    /**
      * @internal what $make made of the icon the first time it was asked (mygo's
      * Native): a backend's decoding of it, kept for as long as the icon is,
      * $free called with it as the icon goes; null for an image that cannot

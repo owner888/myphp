@@ -161,6 +161,7 @@ final class MaterialSymbols
         'pause.circle.fill' => 'pause_circle.fill',
         'pause.fill' => 'pause.fill',
         'pencil' => 'edit',
+        'square.and.pencil' => 'edit',
         'pencil.slash' => 'edit_off',
         'person.crop.circle' => 'account_circle',
         'person.crop.circle.fill' => 'account_circle.fill',
