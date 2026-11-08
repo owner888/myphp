@@ -34,7 +34,8 @@ App::whenReady(function () use ($s) {
         for ($i = 0; $i < $a->atk_object_get_n_accessible_children($acc); $i++) {
             $o = $a->atk_object_ref_accessible_child($acc, $i);
             $st = $a->atk_object_ref_state_set($o);
-            $e = ['role' => $a->atk_role_get_name($a->atk_object_get_role($o)), 'name' => (string)$a->atk_object_get_name($o), 'index' => $a->atk_object_get_index_in_parent($o),
+            $role = $a->atk_role_get_name($a->atk_object_get_role($o)); // ATK_ROLE_PUSH_BUTTON's name: "push button", "button" in at-spi2-core's ATK of late
+            $e = ['role' => $role === 'button' ? 'push button' : $role, 'name' => (string)$a->atk_object_get_name($o), 'index' => $a->atk_object_get_index_in_parent($o),
                 'checked' => (bool)$a->atk_state_set_contains_state($st, $a->atk_state_type_for_name('checked')),
                 'editable' => (bool)$a->atk_state_set_contains_state($st, $a->atk_state_type_for_name('editable'))];
             if ($e['role'] === 'push button') { $e['action'] = $a->atk_action_get_name($o, 0); }
