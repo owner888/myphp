@@ -194,7 +194,9 @@ $view = fn() => Form()(
 myphp's own controls AppKit has and SwiftUI has not, SwiftUI-shaped:
 `ComboBox(title, text:, items:)`, `TokenField(title, tokens:,
 suggestions:)`, `Rating(title, value:)`, `RangeSlider(lower:, upper:,
-in:)`, `Breadcrumbs(path, selection:)`, `Avatar(name)`, `SearchField(text:)`;
+in:)`, `Breadcrumbs(path, selection:)`, `Avatar(name)`, `SearchField(text:)`,
+`NumberField(title, value:, in:)`, `DecimalField(title, value:, in:, step:)`,
+`EditableText(text:)`;
 and the views of what the framework does: `VideoPlayer`, `WebView`,
 `TerminalView`, `CodeEditor`, `DiffView`, `Markdown`, `SpriteView`.
 
