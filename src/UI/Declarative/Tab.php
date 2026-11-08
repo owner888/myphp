@@ -8,8 +8,9 @@ use MyPHP\UI\{Context, Node, SVG};
 /**
  * A tab of a TabView, as SwiftUI's Tab(_:systemImage:value:) and Tab(_:image:value:): its title, its icon (an SF
  * Symbol's name or an SVG), the value TabView's selection takes for it, its content; badge() a count or a word by its
- * title, in the sidebar. With role: .search, the app's search (Tab(value:role:)): apart at the end of a phone's tab
- * bar, titled Search and shown by a magnifying glass unless it says otherwise.
+ * title, in the sidebar. With role: .search, the app's search (Tab(value:role:)): titled Search and shown by a
+ * magnifying glass unless it says otherwise, in the bar with the others, as iOS 27's; with role: .prominent, apart at
+ * the end of a phone's tab bar, a circle of glass (iOS 27's TabRole.prominent, iOS 26's search tab).
  */
 final class Tab extends View
 {

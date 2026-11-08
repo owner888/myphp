@@ -467,8 +467,8 @@ final class PresentationDetent
 
 /** When a phone's tab bar shrinks to the chosen tab as the page scrolls, as SwiftUI's on iOS 26: automatic is never on an iPhone. */
 enum TabBarMinimizeBehavior { case automatic; case onScrollDown; case onScrollUp; case never; }
-/** What a Tab is, as SwiftUI's TabRole: search, the tab of the app's search, apart at the end of a phone's tab bar (iOS 26's), titled Search and shown by a magnifying glass unless it says otherwise. */
-enum TabRole { case search; }
+/** What a Tab is, as SwiftUI's TabRole: search, the tab of the app's search, titled Search and shown by a magnifying glass unless it says otherwise, in the tab bar with the others (iOS 27's); prominent, a tab apart at the end of a phone's tab bar, a circle of glass (iOS 27's, what search was in iOS 26). */
+enum TabRole { case search; case prominent; }
 
 /** SwiftUI's NavigationBarItem.TitleDisplayMode. */
 enum TitleDisplayMode { case automatic; case inline; case large; }
