@@ -765,7 +765,15 @@ function check(bool $cond, string $what): void
 {
     global $checks, $failures;
     $checks++;
-    if (!$cond) { $failures[] = $what; echo "  FAIL: $what\n"; }
+    if (!$cond) { $failures[] = $what; echo "  FAIL: $what\n"; annotate($what); }
+}
+
+/** A failure also as a GitHub Actions error, which the run's summary and its API show without its log. */
+function annotate(string $what): void
+{
+    if (getenv('GITHUB_ACTIONS') !== 'true') { return; }
+    $test = isset($GLOBALS['name']) && is_string($GLOBALS['name']) ? "{$GLOBALS['name']}: " : '';
+    echo '::error::' . strtr(mb_strcut($test . $what, 0, 2000), ['%' => '%25', "\r" => '%0D', "\n" => '%0A']) . "\n";
 }
 
 /** Fails unless $got equals $want. */
