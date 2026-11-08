@@ -8703,6 +8703,41 @@ changed, which no hot reload can take.
   innermost control of its one child, the nodes on the way stretched
   (`ListView::fillWithControl`); a button's label stays at the start.
 
+## The Windows backend, stage by stage
+
+`Platform\Windows` is mygo's internal/windows over FFI, built in stages, each
+checked on CI's windows job (PHP's official x64 build; the runner has no
+GPU, so Direct3D 11 is WARP's), what is not there yet throwing Unsupported.
+`tests/testdata/windows_probe.php` tried first what it rests on: Win32
+calling a window procedure of PHP, COM through vtables (DXGI, Direct3D 11,
+HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
+(DirectWrite drawing through an `IDWriteTextRenderer` of closures).
+
+- `Win32`: each library a cdef of its own, its types in it (another's reach
+  it as void *); wide strings (an array, which a pointer parameter takes);
+  one window procedure for every class (mygo's wndProc), a window's messages
+  to the closure `createWindow` was given for it; a handle's address read
+  through a slot, as `ffi_addr_test` asks.
+- The loop (stage 1): the thread's queue; the app's hidden window (mygo's
+  appHwnd) gets ready, dispatch and run-next posted to itself, the timers
+  (SetTimer, 10 ms at the least; none is the queue's next turn; those asked
+  for before init wait for it), WM_SETTINGCHANGE (ImmersiveColorSet: the
+  theme; intl: the locale), WM_DISPLAYCHANGE, and power and the session.
+  `step()` waits 50 ms at most (MsgWaitForMultipleObjectsEx) and posts
+  WM_QUIT again for the loop outside. The process is per-monitor DPI aware
+  (v2) and COM apartment threaded.
+- The paths are Go's there: the roaming AppData holds the user data and
+  logs, the local AppData the cache. The displays are in points, a
+  monitor's pixels over its effective DPI's scale (96 a point). The theme
+  is Settings' apps' mode, the preferences the DWM's accent, animation and
+  transparency effects, a contrast theme and the text size. The languages
+  are the display languages, the region the user's formats (LOCALE_SNAME,
+  the first weekday, the time format's hour cycle). The clipboard has text
+  for now; the shell opens with ShellExecute, shows in Explorer, trashes to
+  the Recycle Bin; power is WM_POWERBROADCAST, WTS's lock and unlock, and
+  the thread's execution state.
+- `windows_backend_test` runs an app of no windows on it and checks each.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is

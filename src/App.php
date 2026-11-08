@@ -685,7 +685,7 @@ final class App
         }
         $home = (string)getenv('HOME');
         $lib = self::devDataHome() ?? "$home/Library";
-        [$dir, $make] = PHP_OS_FAMILY === 'Linux' ? self::xdgPath($name, $home) : match ($name) {
+        [$dir, $make] = PHP_OS_FAMILY === 'Linux' ? self::xdgPath($name, $home) : (PHP_OS_FAMILY === 'Windows' ? self::windowsPath($name) : match ($name) {
             PathName::Home => [$home, false],
             PathName::AppData => ["$lib/Application Support", false],
             PathName::UserData => ["$lib/Application Support/" . self::name(), true],
@@ -700,11 +700,41 @@ final class App
             PathName::Music => ["$home/Music", false],
             PathName::Pictures => ["$home/Pictures", false],
             PathName::Videos => ["$home/Movies", false],
-        };
+        });
         if ($make && !is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
             throw new RuntimeException("myphp: cannot create $dir");
         }
         return $dir;
+    }
+
+    /**
+     * A well-known directory on Windows, as Go's os.UserConfigDir and
+     * UserCacheDir give them there (mygo's defaultPath): the roaming
+     * AppData holds the app's data and logs, the local AppData its cache;
+     * the folders are the profile's. @return array{0: string, 1: bool} the path, and whether path() makes it
+     */
+    private static function windowsPath(PathName $name): array
+    {
+        $home = (string)getenv('USERPROFILE');
+        $roaming = (string)(getenv('APPDATA') ?: "$home\\AppData\\Roaming");
+        $local = (string)(getenv('LOCALAPPDATA') ?: "$home\\AppData\\Local");
+        $exe = Native\Bundle::path() !== null ? Native\Bundle::command()[0] : Native\Bundle::executable();
+        return match ($name) {
+            PathName::Home => [$home, false],
+            PathName::AppData => [$roaming, false],
+            PathName::UserData => ["$roaming\\" . self::name(), true],
+            PathName::Cache => ["$local\\" . self::name(), true],
+            PathName::Logs => ["$roaming\\" . self::name() . '\\logs', true],
+            PathName::Temp => [rtrim(sys_get_temp_dir(), '\\/'), false],
+            PathName::Resources => [Native\Bundle::resources() ?? dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '\\resources', false],
+            PathName::Exe => [$exe, false],
+            PathName::Desktop => ["$home\\Desktop", false],
+            PathName::Documents => ["$home\\Documents", false],
+            PathName::Downloads => ["$home\\Downloads", false],
+            PathName::Music => ["$home\\Music", false],
+            PathName::Pictures => ["$home\\Pictures", false],
+            PathName::Videos => ["$home\\Videos", false],
+        };
     }
 
     /**
@@ -1088,6 +1118,7 @@ final class App
             self::isIOS() => new Platform\iOS\Backend(new AppHandler),
             PHP_OS_FAMILY === 'Darwin' => new Platform\Darwin\Backend(new AppHandler),
             PHP_OS_FAMILY === 'Linux' => new Platform\Linux\Backend(new AppHandler),
+            PHP_OS_FAMILY === 'Windows' => new Platform\Windows\Backend(new AppHandler),
             default => throw new Platform\Unsupported('myphp: ' . PHP_OS_FAMILY . ' has no backend yet'),
         };
     }

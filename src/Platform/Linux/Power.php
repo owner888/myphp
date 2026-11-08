@@ -28,7 +28,7 @@ final class Power implements Platform\Power
             fn(string $signal, $params) => $h->powerEvent(DBus::child($params, 0, 'g_variant_get_boolean') ? 'suspend' : 'resume'));
         foreach (['org.gnome.ScreenSaver', self::SAVER] as $iface) {
             DBus::subscribe(DBus::SESSION, null, $iface, 'ActiveChanged', null,
-                fn(string $signal, $params) => $h->powerEvent(DBus::child($params, 0, 'g_variant_get_boolean') ? 'lock-screen' : 'unlock-screen'));
+                fn(string $signal, $params) => $h->powerEvent(DBus::child($params, 0, 'g_variant_get_boolean') ? 'lockScreen' : 'unlockScreen'));
         }
     }
 
