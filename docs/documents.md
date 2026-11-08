@@ -25,13 +25,11 @@ $notes = new Documents(new DocumentsOptions(
     new: fn(): string => '',
     equal: fn(string $a, string $b): bool => $a === $b,
     window: function (Document $doc): Window {
-        $text = new TextState($doc->content());
-        $text->multiline = true;
-        $w = new Window(new WindowOptions(content: Content::view(function (Context $c) use ($doc, $text) {
-            $c->textarea($text, '', 0, 0);
-            if ($text->text !== $doc->content()) { $doc->set($text->text); }
-        })));
-        $doc->onReload(function () use ($doc, $text, $w) { $text->text = $doc->content(); $w->invalidate(); });
+        $s = new class { public string $text = ''; };
+        $s->text = $doc->content();
+        $w = new Window(new WindowOptions(content: Content::view(fn() => TextEditor(text: $s->text)
+            ->onChange(of: $s->text, action: fn() => $doc->set($s->text)))));
+        $doc->onReload(function () use ($doc, $s, $w) { $s->text = $doc->content(); $w->invalidate(); });
         return $w;
     },
 ));

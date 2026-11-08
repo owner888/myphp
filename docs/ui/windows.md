@@ -1,5 +1,25 @@
 # Windows with native UI
 
+A window's view is `Content::file(__DIR__ . '/view.php', $app)`, or
+`Content::view(fn() => …)` for a small one; the window takes the [window
+options](../windows.md#options) of any window. With `titleBarStyle:
+'hidden'` or `'hiddenInset'` the content goes under the title bar, a
+`NavigationSplitView`'s sidebar and toolbar placing themselves around the
+window controls, as SwiftUI's on a Mac; `->gesture(WindowDragGesture())`
+makes a view drag the window, as SwiftUI's. `vibrancy:` shows the
+desktop's material through the window, `'sidebar'` under a sidebar.
+
+<!-- no-test -->
+```php
+new Window(new WindowOptions(title: 'Notes', width: 900, height: 600, stateKey: 'main',
+    titleBarStyle: 'hiddenInset', vibrancy: 'sidebar',
+    content: Content::file(__DIR__ . '/view.php', $app)));
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 A window with `content` takes the [window options](../windows.md#options)
 of any window, such as its size, `stateKey`, `frameless` and `parent`, as
 well as menus, dialogs and the other [desktop APIs](../native.md). It has

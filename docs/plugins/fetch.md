@@ -163,19 +163,17 @@ A view that loads what it shows, a runnable app:
 <?php
 require 'vendor/autoload.php'; // or the framework's src/autoload.php
 use MyPHP\{App, Http, Window, WindowOptions};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 $repo = ['state' => 'loading', 'stars' => 0, 'error' => ''];
 App::whenReady(function () use (&$repo) {
     $win = new Window(new WindowOptions(title: 'Stars', width: 360, height: 120,
-        content: Content::view(function (Context $c) use (&$repo) {
-            $c->column(20, 8);
-              match ($repo['state']) {
-                  'loading' => $c->spinner(),
-                  'done' => $c->text("owner888/myphp has {$repo['stars']} stars"),
-                  'failed' => $c->text("Could not load it: {$repo['error']}"),
-              };
-            $c->end();
+        content: Content::view(function () use (&$repo) {
+            return match ($repo['state']) {
+                'loading' => ProgressView(),
+                'done' => Text(verbatim: "owner888/myphp has {$repo['stars']} stars"),
+                'failed' => Text(verbatim: "Could not load it: {$repo['error']}"),
+            };
         })));
     App::go(function () use (&$repo, $win) {
         try {

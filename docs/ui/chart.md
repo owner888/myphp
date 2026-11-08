@@ -1,5 +1,22 @@
 # Charts
 
+`Chart` draws data as Swift Charts does: `Chart($data)(fn($row) =>
+BarMark(x: …, y: …))`, or `Chart()(marks…)`, of `BarMark`, `LineMark`,
+`AreaMark`, `PointMark`, `RuleMark`, `SectorMark` and `LinePlot` (tens of
+thousands of points a frame); `->chartXSelection(value:)`,
+`->chartYScale(domain:)`, `->chartXAxis()` and the rest are Swift Charts'
+([Coming from SwiftUI](../swiftui.md)).
+
+```php
+$app = new class { public array $sales = [['month' => 'Jan', 'n' => 12], ['month' => 'Feb', 'n' => 18], ['month' => 'Mar', 'n' => 9]]; };
+$view = fn() => Chart($app->sales)(fn(array $s) => BarMark(x: PlottableValue::value('Month', $s['month']), y: PlottableValue::value('Sales', $s['n'])))
+    ->frame(height: 200)->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 The classes of `MyPHP\UI\Chart` build charts without a look of their own,
 as headless libraries such as visx do on the web, with the parts of Swift
 Charts: scales that map data onto a plot and pick round ticks, a plot with

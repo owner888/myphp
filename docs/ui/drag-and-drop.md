@@ -1,5 +1,24 @@
 # Drag and drop
 
+`->draggable($data)` lets a view be dragged, its data a string or a
+`Transfer\Data` of several representations, within the window and to
+other apps; `->dropDestination(for:, action:)` takes what is dropped on a
+view, as SwiftUI's. A `ListView`'s `->onMove()` reorders its rows by
+dragging ([list](list.md)).
+
+```php
+$app = new class { public array $dropped = []; };
+$view = fn() => HStack(spacing: 24)(
+    Text('Drag me')->padding()->background(Color::secondarySystemBackground)->draggable('hello'),
+    Text('Drop here')->padding()->border(Color::separator)
+        ->dropDestination(for: 'text/plain', action: function (array $items) use ($app) { array_push($app->dropped, ...$items); return true; }),
+)->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 `$c->drag($node, $value)` makes a node the source of a value dragged within
 the window: once the pointer pressing it moves a few points, a translucent
 copy of the node follows the pointer, and the press is no click.

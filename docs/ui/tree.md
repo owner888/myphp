@@ -1,41 +1,23 @@
 # Tree
 
-`$c->tree()` creates a tree whose items `$c->treeItem()` builds, each
-inside the item it belongs to. An item's children show while its `bool`
-(by reference) is true; a click on its arrow opens or closes it, and
-`$c->clicked()` reports a click elsewhere on it, or Enter, for choosing it,
-which its `$selected` argument shows.
+Nested items that open and close are `DisclosureGroup`s inside one another,
+each a branch, its leaves the views inside it, as SwiftUI's outline of a
+few items:
 
 ```php
-$app = new class { public string $chosen = ''; public ?bool $srcOpen = true; };
-$view = function (Context $c) use ($app) {
-    $item = function (string $path, string $label, ?bool &$open, ?Closure $children) use ($c, $app) {
-        if ($c->clicked($c->treeItem($label, $open, $children, $app->chosen === $path))) {
-            $app->chosen = $path;
-        }
-    };
-    $leaf = null;
-    $c->tree(function () use ($item, $app, &$leaf) {
-        $item('src', 'src', $app->srcOpen, function () use ($item, &$leaf) {
-            $item('src/main.php', 'main.php', $leaf, null);
-        });
-        $item('composer.json', 'composer.json', $leaf, null);
-    });
-};
+$view = fn() => VStack(alignment: HorizontalAlignment::leading)(
+    DisclosureGroup('Documents')(
+        Label('Notes.txt', systemImage: 'doc'),
+        DisclosureGroup('Photos')(Label('Beach.jpg', systemImage: 'photo')),
+    ),
+    Label('Downloads', systemImage: 'arrow.down.circle'),
+)->padding();
 ```
 
-Null children, or a null open, makes a leaf.
-
-## Keyboard
-
-While an item has the keyboard focus, Up and Down move it to the items
-around, Right opens the item or moves to its first child, and Left closes
-it or moves to its parent.
-
-A tree builds every item it shows. For trees of thousands of items, or with
-columns, use an [outline](outline.md), which builds only the rows in view.
+Each keeps whether it is open itself, or binds it with `isExpanded:`. For
+thousands of items, an [outline](outline.md).
 
 ## Accessibility
 
-Assistive technology sees a tree of items, each with its level, open or
-closed when it has children.
+Assistive technology sees each branch as a button, expanded or collapsed,
+and the leaves under it.

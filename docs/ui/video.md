@@ -1,5 +1,18 @@
 # Video
 
+`VideoPlayer($player)` shows a film and its controls, taking the room it
+is given, as SwiftUI's; `$player` a `MediaPlayerState` the app keeps, which
+opens, plays and seeks.
+
+<!-- no-test -->
+```php
+$view = fn() => VideoPlayer($this->player)->frame(minWidth: 480, minHeight: 270);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 `$c->video()` shows a video that plays: a short clip looping behind the
 content, as a launcher's library or a music player's hero shows one, or a
 preview in a grid. It shows a `VideoPlayer`, which plays the frames a

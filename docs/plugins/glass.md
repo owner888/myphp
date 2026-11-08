@@ -1,5 +1,18 @@
 # Glass
 
+In a view, `->glassEffect(new Glass())` puts a view on myphp's glass, as
+SwiftUI's `glassEffect()`; `Glass(Style::Clear)` the clear kind:
+
+```php
+use MyPHP\Plugins\Glass\Glass;
+
+$view = fn() => Text('On glass')->padding()->glassEffect(new Glass())->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](../ui/custom-widgets.md)).
+
 The glass plugin draws Liquid Glass in native UI, the material of macOS 26
 and later: what is under a node shows through it, frosted, bent near its
 edges as through the rim of a lens, and lit along its hairline rim. It
