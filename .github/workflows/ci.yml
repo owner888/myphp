@@ -52,3 +52,34 @@ jobs:
           test -x bin/myphp
           test -x scripts/package-android-apk.sh
           test -x scripts/package-ios-app.sh
+
+  # The Windows backend's ground (tests/testdata/windows_probe.php), on PHP's
+  # official x64 build: FFI's callbacks from Win32, COM through vtables,
+  # Direct3D 11 of WARP (the runner has no GPU), HLSL, DirectWrite drawing
+  # through a renderer of PHP's.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install PHP
+        shell: pwsh
+        run: |
+          $releases = Invoke-RestMethod https://windows.php.net/downloads/releases/releases.json
+          $build = $releases.'8.4'.PSObject.Properties | Where-Object { $_.Name -match '^nts-vs\d+-x64$' } | Select-Object -First 1
+          $zip = $build.Value.zip.path
+          Write-Host "PHP $($releases.'8.4'.version): $zip"
+          Invoke-WebRequest "https://windows.php.net/downloads/releases/$zip" -OutFile "$env:RUNNER_TEMP\php.zip"
+          Expand-Archive "$env:RUNNER_TEMP\php.zip" -DestinationPath C:\myphp-php
+          Set-Content C:\myphp-php\php.ini @(
+            'extension_dir="C:\myphp-php\ext"',
+            'extension=ffi', 'extension=mbstring', 'extension=intl', 'extension=curl', 'extension=openssl', 'extension=sodium', 'extension=sockets', 'extension=fileinfo',
+            'ffi.enable=1', 'memory_limit=-1'
+          )
+          "C:\myphp-php" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: Check PHP
+        run: |
+          php -v
+          php -m
+      - name: Windows probe
+        run: php tests/testdata/windows_probe.php
