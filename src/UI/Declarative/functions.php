@@ -312,19 +312,25 @@ function Group(): D\Group { return new D\Group(); }
 
 /**
  * Text, as SwiftUI's: $text the key of its translation in the app's catalogs (locales/zh-Hans.json: {"Profile": "个人资料"}),
- * shown as it is where none has it, $args its ICU placeholders (Text('Hello, {name}!', ['name' => $this->name])), its inline
+ * shown as it is where none has it, its ICU placeholders named arguments (Text('Hello, {name}!', name: $this->name)), its inline
  * Markdown read (**bold**, *italic*, `code`, ~~struck~~); Text(verbatim: $note->title), for what the user wrote, neither.
  * @param array<string, mixed> $args
  */
 /**
- * SwiftUI's Text: $text the key of its translation, $args its placeholders; $verbatim shown as it is. An array of Texts
- * is their concatenation, each in its own style, as SwiftUI's Text(a) + Text(b): Text([Text('Error')->bold()->foregroundStyle(Color::red), Text(verbatim: $why)]).
+ * SwiftUI's Text: $text the key of its translation, its placeholders named arguments, as close as PHP comes to SwiftUI's
+ * interpolation (Text('Count: {count}', count: $this->count)), or $args (a placeholder named text, args or verbatim);
+ * $verbatim shown as it is. A string interpolated by PHP ("Count: {$n}") is a key of its own for every value, which no
+ * catalog has. An array of Texts is their concatenation, each in its own style, as SwiftUI's Text(a) + Text(b):
+ * Text([Text('Error')->bold()->foregroundStyle(Color::red), Text(verbatim: $why)]).
  * @param string|list<D\Text> $text
  */
-function Text(string|array $text = '', array $args = [], ?string $verbatim = null): D\Text
+function Text(string|array $text = '', array $args = [], ?string $verbatim = null, mixed ...$placeholders): D\Text
 {
+    foreach ($placeholders as $name => $_) {
+        if (is_int($name)) { throw new \LogicException("Text('$text'): a placeholder is a named argument, Text('Count: {count}', count: \$n)"); }
+    }
     if (is_array($text)) { return new D\Text('', false, [], $text); }
-    return $verbatim !== null ? new D\Text($verbatim, true) : new D\Text($text, false, $args);
+    return $verbatim !== null ? new D\Text($verbatim, true) : new D\Text($text, false, $placeholders + $args);
 }
 
 /** A button: Button('Save', action: fn() => $this->save()), with a symbol: Button('Copy', systemImage: 'doc.on.doc', action: …), or with a label view: Button(action: …, label: Label('Add', systemImage: 'plus')). */

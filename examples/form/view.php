@@ -26,7 +26,7 @@ return fn() => ScrollView()(VStack(alignment: HorizontalAlignment::leading, spac
     // A strip wider than the window: scrolls sideways with the trackpad or its thumb.
     ScrollView(Axis::horizontal)(HStack(spacing: 8)(
         Each(range(0, 29))(fn(int $i) => VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
-            Text('Tag {i}', ['i' => $i]),
+            Text('Tag {i}', i: $i),
             Text(verbatim: sprintf('#%06x', ($i * 2654435761) & 0xffffff))->font(Font::caption)->foregroundStyle(Color::secondary),
         )->padding(6)->background(Color::background)),
     )->padding(8))->background(Color::gray->opacity(0.12)),
@@ -55,9 +55,9 @@ return fn() => ScrollView()(VStack(alignment: HorizontalAlignment::leading, spac
         Button('Clear', action: fn() => $this->clear()),
     ),
     match ($this->greeting) {
-        'hello' => Text('Hello, {name} from {city} (#{count})', ['name' => $this->name, 'city' => $this->city, 'count' => $this->submits]),
-        'card' => Text('Card activated (#{count})', ['count' => $this->submits]),
+        'hello' => Text('Hello, {name} from {city} (#{count})', name: $this->name, city: $this->city, count: $this->submits),
+        'card' => Text('Card activated (#{count})', count: $this->submits),
         default => Text('Submit, or press Return in a field.'),
     },
-    Text('name: {bytes, plural, one {# byte} other {# bytes}}', ['bytes' => strlen($this->name)])->font(Font::caption)->foregroundStyle(Color::secondary),
+    Text('name: {bytes, plural, one {# byte} other {# bytes}}', bytes: strlen($this->name))->font(Font::caption)->foregroundStyle(Color::secondary),
 )->padding(24))->environment(locale: $this->lang);

@@ -2,8 +2,13 @@
 
 `Text` shows a line or a paragraph, which wraps at the width it is given,
 as SwiftUI's. Its string is the key of its translation in the app's
-strings ([languages](../i18n.md)), its `args:` the placeholders;
-`Text(verbatim:)` shows a string as it is, as data should be.
+strings ([languages](../i18n.md)), its placeholders named arguments,
+`Text('Count: {count}', count: $n)`, as close as PHP comes to SwiftUI's
+`Text("Count: \(n)")` (or `args:`, an array, for a placeholder named
+`text`, `args` or `verbatim`). Not `Text("Count: {$n}")`: PHP joins
+that before `Text` sees it, a key of its own for every number, which no
+translation has. `Text(verbatim:)` shows a string as it is, as data
+should be.
 
 ```php
 $app = new class { public int $files = 12; };
@@ -16,7 +21,7 @@ $view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
 
 A key is an ICU message, so its placeholders choose between forms as
 they are, with or without a translation in the strings:
-`Text('{n, plural, one {# word} other {# words}}', ['n' => $words])` shows
+`Text('{n, plural, one {# word} other {# words}}', n: $words)` shows
 "1 word" and "4 words", and a catalog gives each language its own forms.
 
 ## Style

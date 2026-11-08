@@ -935,6 +935,13 @@ try { $h->type('x'); $threw = false; } catch (\LogicException) { $threw = true; 
 $h->clickLabel('Note'); $h->type('Milk'); $h->backspace(); $h->frame(2);
 same([true, 'Mil'], [$threw, $editApp->body], 'typing with nothing focused throws; clicked by its label, typed, one deleted back');
 
+// A Text's placeholders are named arguments, as SwiftUI's interpolation, args: still taken; one given by place is a mistake said.
+$countApp = new class { public int $n = 1; };
+$h = new Headless(fn() => VStack()(Text('{n, plural, one {# word} other {# words}}', n: $countApp->n), Text('{a} and {b}', ['b' => 'y'], a: 'x')), 300, 200);
+$h->frame(2); $one = $h->texts(); $countApp->n = 4; $h->frame(2);
+try { Text('{n}', [], null, 3); $said = false; } catch (\LogicException) { $said = true; }
+same([['1 word', 'x and y'], ['4 words', 'x and y'], true], [$one, $h->texts(), $said], 'named placeholders, plural forms, args: alongside; a placeholder by place throws');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);
