@@ -2,12 +2,10 @@
   "name": "Online Media",
   "identifier": "io.myphp.ytdl",
   "version": "1.0.0",
-  "ghRepo": "owner888/myphp-plugin-online-media",
-  "ghVersion": 1,
   "description": "Official plugin for playing online media via yt-dlp / youtube-dl. The built-in youtube-dl support will be disabled when this plugin is enabled.",
   "author": {
     "name": "myphp Developers",
-    "url": "https://github.com/owner888/myphp-plugin-online-media"
+    "url": "https://github.com/owner888/myphp"
   },
   "entry": "main.php",
   "globalEntry": "global.php",

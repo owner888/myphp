@@ -12,8 +12,9 @@ yt-dlp support is off: pages are read through the plugin's hooks.
 
 ## Install
 
-In myphp, Settings > Plugins > Get Plugins…, choose Online Media; or enter
-`owner888/myphp-plugin-online-media`.
+Built into myphp: Settings > Plugins > Get Plugins…, choose it under the
+official plugins, and it is installed from the app. A newer version comes
+with the app's next.
 
 ## Languages
 

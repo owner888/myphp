@@ -1269,6 +1269,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : []; // in Resources/frontend
         copyTree($dir, "$contents/Resources/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
         copyTree("$framework/src", "$contents/Resources/app/myphp/src", []);
+        copyTree("$framework/plugins", "$contents/Resources/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
         // The frontend, served at myphp://localhost/ (mygo's embedded frontendDist).
         if (($c['frontendDist'] ?? '') !== '') {
             copyTree(path($dir, $c['frontendDist']), "$contents/Resources/frontend", ['.DS_Store']);
@@ -1343,6 +1344,7 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
         copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
         copyTree("$framework/src", "$stage/app/myphp/src", []);
+        copyTree("$framework/plugins", "$stage/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
         if (($c['frontendDist'] ?? '') !== '') {
             copyTree(path($dir, $c['frontendDist']), "$stage/frontend", ['.DS_Store']);
         }

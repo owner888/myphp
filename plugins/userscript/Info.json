@@ -2,12 +2,10 @@
   "name": "User Scripts",
   "identifier": "io.myphp.user-script",
   "version": "1.0.0",
-  "ghVersion": 1,
-  "ghRepo": "owner888/myphp-plugin-userscript",
   "description": "User Scripts for myphp",
   "author": {
     "name": "myphp Developers",
-    "url": "https://github.com/owner888/myphp-plugin-userscript"
+    "url": "https://github.com/owner888/myphp"
   },
   "entry": "main.php",
   "globalEntry": "global.php",

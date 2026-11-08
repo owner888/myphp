@@ -7476,7 +7476,8 @@ opening; and myphp's official plugins of PHP.
   on its row (IINA's PluginManager.update: asked, downloaded, agreed).
 - The store (`MediaPlayerPluginStore`, Get Plugins…, IINA's
   PluginStorePanel): a repository's "owner/repo" or URL installed; the
-  official plugins (`Plugins::OFFICIAL`) and the community's (myphp's
+  official plugins (`Plugins::official()`, built in: installed from the
+  app's copy, no network) and the community's (myphp's
   repository's plugins.json, `Plugins::COMMUNITY_LIST`) to choose from;
   the one chosen's details and its repository as GitHub tells it.
 - The developer tool (`PlayerPlugins\DevTool`, `MediaPlayerDevTool`;
@@ -7502,10 +7503,14 @@ opening; and myphp's official plugins of PHP.
   Deno downloaded, videos downloaded), User Scripts
   (`io.myphp.user-script`: scripts of PHP run with `$iina`, their window
   and editor), OpenSubtitles (`io.myphp.opensub`: its sidebar searching
-  opensubtitles.com, logging in, downloading; the provider). Each is
-  published as a repository of its own (`Plugins::OFFICIAL`'s URLs), its
-  folder the repository's root; the community's list is the repository's
-  plugins.json (IINA's format: name, url, id, desc of each).
+  opensubtitles.com, logging in, downloading; the provider). They are
+  built in (`Plugins::BUILT_IN`, IINA's downloaded from their repositories):
+  `myphp build` ships plugins/ beside src/, the store installs one from
+  there, and as the plugins are read one installed is replaced by the
+  app's copy where that is a newer version (Info.json's version), its
+  preferences and data kept. Only the community's plugins come from GitHub;
+  their list is the repository's plugins.json (IINA's format: name, url, id,
+  desc of each).
 
 ## Platform layer (v1.147)
 

@@ -7,8 +7,9 @@ player runs with `$iina`, the plugin API, as a plugin's entry is given it: Manag
 
 ## Install
 
-In myphp, Settings > Plugins > Get Plugins…, choose Userscript; or enter
-`owner888/myphp-plugin-userscript`.
+Built into myphp: Settings > Plugins > Get Plugins…, choose it under the
+official plugins, and it is installed from the app. A newer version comes
+with the app's next.
 
 ## Languages
 

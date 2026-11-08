@@ -5,10 +5,8 @@
   "description": "Official OpenSubtitles plugin for myphp",
   "author": {
     "name": "myphp Developers",
-    "url": "https://github.com/owner888/myphp-plugin-opensub"
+    "url": "https://github.com/owner888/myphp"
   },
-  "ghVersion": 1,
-  "ghRepo": "owner888/myphp-plugin-opensub",
   "entry": "main.php",
   "globalEntry": "global.php",
   "permissions": [
