@@ -28,6 +28,8 @@ final class MenuItem
     public int $webKit = 0;
     /** @internal what holds the item in its list: a Menu, or the item whose submenu it is */
     public Menu|MenuItem|null $parent = null;
+    /** The SF Symbol's name a phone's context menu shows at the item's start (UI\MenuItem::systemImage, a SwiftUI Button's systemImage), '' for none. Not mygo's. */
+    public string $systemImage = '';
 
     /**
      * @param MenuItem[] $submenu

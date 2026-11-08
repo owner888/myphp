@@ -182,8 +182,8 @@ $packets = fn() => ListView($this->packets)(function (array $p, int $i) { // the
         ))->buttonStyle(ButtonStyle::plain) // a tap opens the frame's sheet
             ->swipeActions(Button('Delete', role: ButtonRole::destructive, action: fn() => array_splice($this->packets, $i, 1))) // swiped toward the start, as a Mail's row
             ->contextMenu(
-                Button('Copy Hex', action: fn() => \MyPHP\Clipboard::writeText($p['hex'])),
-                Button('Delete', role: ButtonRole::destructive, action: fn() => array_splice($this->packets, $i, 1)),
+                Button('Copy Hex', action: fn() => \MyPHP\Clipboard::writeText($p['hex']), systemImage: 'doc.on.doc'),
+                Button('Delete', role: ButtonRole::destructive, action: fn() => array_splice($this->packets, $i, 1), systemImage: 'trash'),
             ); // held, as an iPhone's long press
     })->listStyle(ListStyle::plain)
     ->navigationTitle('Packet Log')

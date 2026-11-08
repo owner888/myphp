@@ -30,6 +30,13 @@ final class MenuItem
         return $this;
     }
 
+    /** Shows SF Symbol $name at the item's start in a phone's context menu, as UIMenu's image (a SwiftUI Button's systemImage); null for none. */
+    public function systemImage(?string $name): static
+    {
+        if ($this->p !== null) { $this->p->systemImage = $name ?? ''; }
+        return $this;
+    }
+
     /** Shows a check mark by the item when $on is true, as for a setting that choosing the item toggles. */
     public function checked(bool $on): static
     {

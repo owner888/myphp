@@ -15,12 +15,18 @@ use MyPHP\UI\{Context, Node};
  */
 final class Button extends View
 {
+    public readonly ?View $label;
+
+    /** $systemImage, an SF Symbol's name: the label a Label of the title and it, as SwiftUI's Button(_:systemImage:action:), and in a menu the item's icon. */
     public function __construct(
         public readonly string $title,
         public readonly ?Closure $action = null,
         public readonly ?\ButtonRole $role = null,
-        public readonly ?View $label = null,
-    ) {}
+        ?View $label = null,
+        public readonly ?string $systemImage = null,
+    ) {
+        $this->label = $label ?? ($systemImage !== null ? new Label($title, $systemImage) : null);
+    }
 
     protected function build(Context $c, Env $env): ?Node
     {

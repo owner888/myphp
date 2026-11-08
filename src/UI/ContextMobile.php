@@ -386,6 +386,7 @@ trait ContextMobile
             if ($it->type !== \MyPHP\MenuItem::SEPARATOR) { $wide = max($wide, $this->measureText(0, new Span($it->label, $t->fontSize))[0]); }
         }
         $high += 16; // 8 over its first item and under its last
+        $icons = array_filter($items, static fn(\MyPHP\MenuItem $it) => $it->systemImage !== '') !== []; // any item with a symbol: all the labels after a column of them
         if (!array_key_exists('target', $m)) { $m['target'] = $rt->touchMenu['target'] = $rt->contextMenuTarget($m['x'], $m['y']); $rt->liftNode = null; } // the node it lifts, the next frames' record keeping it (Runtime::$liftNode)
         $lifted = $rt->liftNode;
         if ($lifted !== null) { // where it shows in the window, scrolled and moved as it is
@@ -395,7 +396,7 @@ trait ContextMobile
             $m['rect'] = $rt->touchMenu['rect'] = $m['target'] !== 0 ? $rt->rectOf($m['target']) : null; // not yet recorded: its box as laid out
         }
         $at = $m['rect'] ?? [$m['x'], $m['y'] - 12, 0.0, 24.0]; // none: the finger's point
-        $w = min(max($wide + 48 + 24, 200.0), 280.0, $this->width - 16); // as wide as its longest label and 24 each side, 200 to 280
+        $w = min(max($wide + 48 + 24 + ($icons ? 34 : 0), 200.0), 280.0, $this->width - 16); // as wide as its longest label and 24 each side, 200 to 280
         $grown = $m['rect'] !== null ? min(1.02, ($this->width - 16) / max($m['rect'][2], 1.0)) : 1.0; // how much the lifted node grows (or narrows, as wide as the window), lifted
         $liftedAt = $m['rect'] === null ? null : [$m['rect'][0] + $m['rect'][2] * (1 - $grown) / 2, $m['rect'][2] * $grown]; // its start and width, lifted
         if ($liftedAt === null) { $edge = $m['x'] - 24; }
@@ -420,7 +421,7 @@ trait ContextMobile
         $shown = !($m['closing'] ?? false);
         $gone = false;
         $under = null; // the item the finger slides over
-        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $grown, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
+        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $grown, $icons, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
             $this->key('touchMenu');
             $fade = $rt->motions[$this->upcomingId()]['fade'] ?? null;
             if (!$shown && ($fade === null || ($fade->value <= 0.001 && !$fade->moving))) { // closed, and faded out
@@ -450,22 +451,28 @@ trait ContextMobile
                       $pa->clip($big, static fn() => $pa->copyOf($node, $map), 13 * $up);
                   })->color = null;
               }
-              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->left($x)->size($w, 0)->padding(8, 0)->radius(32)->clip()->shadow(0, 10, 40, 0, 0x000000, 0.18)->role(Role::MENU)->opacity($p); // iOS 26's: rounded 32, its items apart by no line, a group's by a hairline
+              $panel = $this->column(0, 0)->absolute()->top($y)->left($x)->size($w, 0)->padding(8, 0)->radius(32)->systemMaterial('glass')->clip()->role(Role::MENU)->opacity($p); // iOS 26's: of glass, rounded 32, its items apart by no line, a group's by a hairline
+                $this->box(0, 0, $t->dark ? 0x1c1c1e : 0xffffff)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(32)->role(Role::NONE)->bgAlpha = 0.6; // tinted, as the system's menu, its items read over any page
                 foreach ($items as $it) {
                     if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a hairline 24 in, 8 apart from the items, as iOS 26's
                         $this->box(0, 1 / max($this->scale, 1.0), $t->border)->alignSelf(Node::STRETCH)->margin(8, 24)->shrink(0);
-                                continue;
+                        continue;
                     }
                     if ($it->type === \MyPHP\MenuItem::HEADER) {
                         $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 24, 4, 24)->singleLine();
-                                continue;
+                        continue;
                     }
                     $off = $it->disabled || $it->submenu !== [];
-                    $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 24)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
+                    $row = $this->row(0, 14)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 24)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
                     $rect = $rt->rectOf($row->id); // as last laid out: where the finger slides and lifts
                     if (!$off && $inside($rect, $slide)) { $under = (int)$it->id; }
                     if (!$off && (($this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) || $inside($rect, $slide))) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }
-                      $this->text($it->label, $t->fontSize, $off ? $t->textMuted : ($it->role === 'destructive' ? $t->danger : $t->text))->singleLine()->grow(1)->shrink(1)->minWidth(0);
+                      $fg = $off ? $t->textMuted : ($it->role === 'destructive' ? $t->danger : $t->text);
+                      if ($icons) { // a column of the items' symbols at their start, 20 wide, as UIMenu's images
+                          if ($it->systemImage !== '') { $this->image(Image::symbol($it->systemImage, 20, $fg), 20, 20)->shrink(0)->role(Role::NONE); }
+                          else { $this->box(20, 20, 0)->shrink(0)->role(Role::NONE)->color = null; }
+                      }
+                      $this->text($it->label, $t->fontSize, $fg)->singleLine()->grow(1)->shrink(1)->minWidth(0);
                       if ($it->checked) { $this->text('✓', $t->fontSize, $t->accent)->shrink(0); }
                     $this->end();
                     if ($shown && !$off && ($this->clicked($row) || $inside($rect, $lift))) { $chosen = (int)$it->id; }
