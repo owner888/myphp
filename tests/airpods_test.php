@@ -161,6 +161,17 @@ check($tab !== null && $t->rect($tab)[1] > 700, 'on a phone the pages are tabs a
 $t->clickOn($tab); $t->frame(2);
 same('Connection', $s->page, 'and a tab chooses its page');
 
+// The Search tab, in the bar with the others (iOS 27's TabRole.search): its field across the top, the scopes under it, the
+// frames of the scope that hold the query.
+$t->clickOn($t->byLabel('Search')); $t->frame(2);
+same('Search', $s->page, 'the Search tab chosen');
+$rx = count(array_filter($s->packets, fn(array $p) => $p['dir'] === 'RX'));
+$t->clickText('RX'); $t->frame(2);
+$rows = count(array_filter($t->texts(), fn(string $x) => $x === 'RX'));
+same(['RX', $rx + 1], [$s->scope, $rows], 'the RX scope shows the frames received (and its segment)');
+$s->query = 'zzz-no-such'; $t->frame(2);
+check($t->byText('No frames match') !== null, 'a query nothing holds says so');
+
 // 5. Opcode 0x0031 Proximity Keys (IRK + ENC_KEY) & 3-Device Rotation Auto-Takeover
 check($s->irk !== null && strlen($s->irk) === 16 && $s->encKey !== null && strlen($s->encKey) === 16, 'IRK and ENC_KEY received from Opcode 0x0031');
 $rpa = AirPodsCrypto::generateRpa($s->irk, "\x11\x22\x45");

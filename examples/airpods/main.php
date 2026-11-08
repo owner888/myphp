@@ -133,6 +133,9 @@ final class AirPodsApp
     public bool $packetOpen = false;
     /** Whether the log's Clear asks to confirm. */
     public bool $clearAsked = false;
+    /** The Search tab's query and scope (all, RX, TX, BLE). */
+    public string $query = '';
+    public string $scope = 'all';
     /** @var list<array{dir: string, summary: string, hex: string}> */
     public array $packets = [];
     private ?string $lastBleRaw = null;
