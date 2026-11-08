@@ -209,13 +209,16 @@ The apps run where they are, but to ship them to users, sign them: see
 - [Native UI](ui/README.md), to build interfaces in PHP, or
   [the frontend](frontend.md), for web pages.
 - [Menus and the tray](menus.md) and the [desktop APIs](native.md).
-- The examples in the repository, which `myphp run -d macos examples/<name>` runs:
+- The examples in the repository, which `myphp run -d macos examples/<name>`
+  runs (`-d linux` on Linux):
   - with web pages: `examples/hello` (the smallest app), `examples/todo`
     (typed services and events, persistence, dialogs, menus, several
     windows), `examples/frameless` (a custom title bar) and
     `examples/native` (menus, a tray icon, dialogs, notifications, a
     global shortcut, the clipboard and dark mode);
   - with native UI: `examples/counter-native` (a counter),
+    `examples/notes` (a notepad: a sidebar of notes with a search, rich
+    text, saving, a headless test of its own in `tests/`),
     `examples/clipboard` (copying and dragging text, HTML, lazy JSON, and
     file lists), `examples/effort-slider`, `examples/confetti`,
     `examples/blackhole` and `examples/chat-glow` (shaders and motion),

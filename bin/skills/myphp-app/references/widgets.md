@@ -139,14 +139,17 @@ editing, saved between runs. Decide in this order:
    filtering by `shown()`; with nothing found, a `ListView()(Text('No note
    matches.'))` in its place, the same modifier on it, so the field stays.
 
-`examples/notes` is this app, laid out as `SKILL.md` says: `src/Notes.php`
-its state (the notes, JSON saving, search, delete), `view.php` its view
-with the rich-text editor and the toolbars, `main.php` the window and the
-Format menu, `tests/ui_test.php` its headless test: copy its shape, then
+`examples/notes` is this app, with rich text: `src/Notes.php` its state
+(the notes, JSON saving, search, delete), `view.php` its view with the
+rich-text editor and the toolbars, `tests/ui_test.php` its headless test,
+as `SKILL.md` lays them out; its entry is `main.php`, as every example's,
+where an app of `myphp init` has `app.php` and `myphp.json`: copy its shape, then
 cut what the user did not ask for.
 
 For plain text, the view binds the editor to the body of the note shown,
-by its index, and saves an edit, not a change of note:
+by its index, and saves an edit, not a change of note. `index()`,
+`shown()`, `title()` and `save()` are the state class's own methods, to
+write:
 
 ```php
 return function () {

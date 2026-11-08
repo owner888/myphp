@@ -2557,7 +2557,9 @@ function doctor(array $args): void
     help($args, "doctor\n\nChecks the tools, toolchains and system libraries MyPHP needs.");
     echo "Doctor summary (to see all details, run `myphp doctor -v`):\n\n";
 
-    $section = function (string $title, array $items): bool {
+    $tty = stream_isatty(STDOUT); // colors only on a terminal, not into a pipe or a file
+    $c = fn(string $code, string $text): string => $tty ? "\033[{$code}m$text\033[0m" : $text;
+    $section = function (string $title, array $items) use ($c): bool {
         $allOk = true;
         foreach ($items as $item) {
             if (!$item[0]) {
@@ -2565,13 +2567,13 @@ function doctor(array $args): void
                 break;
             }
         }
-        $icon = $allOk ? "\033[32m[✓]\033[0m" : "\033[31m[!]\033[0m";
+        $icon = $allOk ? $c('32', '[✓]') : $c('31', '[!]');
         echo "$icon $title\n";
         foreach ($items as [$ok, $desc, $hint]) {
-            $mark = $ok ? "\033[32m•\033[0m" : "\033[31m✗\033[0m";
+            $mark = $ok ? $c('32', '•') : $c('31', '✗');
             echo "    $mark $desc\n";
             if (!$ok && $hint !== '') {
-                echo "      \033[33m! $hint\033[0m\n";
+                echo '      ' . $c('33', "! $hint") . "\n";
             }
         }
         echo "\n";
@@ -2609,9 +2611,11 @@ function doctor(array $args): void
     }
 
     // The system libraries of the Linux desktop: GTK 3 draws the windows (native UI), WebKitGTK the web pages
+    $gtk = true; // a Linux desktop opens windows with it
     if (PHP_OS_FAMILY === 'Linux') {
         $libs = (string)@shell_exec('/sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null');
         $has = fn(string $so): bool => str_contains($libs, $so);
+        $gtk = $has('libgtk-3.so.0');
         $section("Linux Desktop Libraries", [
             [$has('libgtk-3.so.0'), $has('libgtk-3.so.0') ? 'GTK 3 (windows, native UI)' : 'GTK 3 not found: no window opens', 'sudo apt install libgtk-3-0 (Debian, Ubuntu) or sudo dnf install gtk3 (Fedora)'],
             [$has('libepoxy.so.0'), $has('libepoxy.so.0') ? 'libepoxy (the GPU renderer)' : 'libepoxy not found', 'sudo apt install libepoxy0, or sudo dnf install libepoxy'],
@@ -2641,18 +2645,19 @@ function doctor(array $args): void
     $iosPhp = FRAMEWORK . '/build/ios/libs/libphp.a';
     $iosSimPhp = FRAMEWORK . '/build/ios-simulator/libs/libphp.a';
     $stale = fn(string $lib, string $script): bool => is_file($lib) && filemtime(FRAMEWORK . "/scripts/$script") > filemtime($lib);
-    $section("Phone runtimes (libphp with ffi, curl, openssl and libxml)", [
+    $section("Phone runtimes (libphp with ffi, curl, openssl and libxml)", array_slice([
         [is_file($androidPhp) && !$stale($androidPhp, 'build-android-php.sh'), is_file($androidPhp) ? ($stale($androidPhp, 'build-android-php.sh') ? 'Android: built before its script last changed' : 'Android: built') : 'Android: not built yet', 'myphp run -d android <dir> builds it (10-20 minutes the first time)'],
         [is_file($iosPhp) && !$stale($iosPhp, 'build-ios-php.sh'), is_file($iosPhp) ? ($stale($iosPhp, 'build-ios-php.sh') ? 'iOS device: built before its script last changed' : 'iOS device: built') : 'iOS device: not built yet', 'myphp run -d <an iPhone> <dir> builds it'],
         [is_file($iosSimPhp) && !$stale($iosSimPhp, 'build-ios-php.sh'), is_file($iosSimPhp) ? ($stale($iosSimPhp, 'build-ios-php.sh') ? 'iOS simulator: built before its script last changed' : 'iOS simulator: built') : 'iOS simulator: not built yet', 'myphp run -d ios <dir> builds it'],
-    ]);
+    ], 0, PHP_OS_FAMILY === 'Darwin' ? 3 : 1)); // iOS's are built on a Mac alone
 
     // 5. Connected Devices
     $devices = DeviceManager::listDevices();
     $deviceCount = count($devices);
     $deviceItems = [];
     foreach ($devices as $d) {
-        $deviceItems[] = [true, "{$d->name} ({$d->platform}, {$d->status}) • {$d->id}", ""];
+        $usable = $d->platform !== 'linux' || $gtk; // a Linux desktop without GTK 3 opens no window
+        $deviceItems[] = [$usable, "{$d->name} ({$d->platform}, {$d->status}) • {$d->id}" . ($usable ? '' : ': no GTK 3, so no window opens'), $usable ? '' : 'Install GTK 3: see Linux Desktop Libraries above'];
     }
     $section("Connected Devices ($deviceCount available)", $deviceItems ?: [[false, "No connected devices found", "Connect an Android device or boot an iOS simulator"]]);
 }
