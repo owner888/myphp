@@ -926,6 +926,15 @@ $h->frame(2);
 $h->clickText('Delete'); $h->frame(2);
 same('alert', $askApp->did, 'the click lands on the alert, the button it covers left alone');
 
+// A test types into what has the focus: with nothing focused, type() throws rather than drop the text; a TextEditor(text:)
+// is found by its accessibilityLabel, and backspace() deletes back.
+$editApp = new class { public string $body = ''; };
+$h = new Headless(fn() => TextEditor(text: $editApp->body)->accessibilityLabel('Note'), 400, 300);
+$h->frame(2);
+try { $h->type('x'); $threw = false; } catch (\LogicException) { $threw = true; }
+$h->clickLabel('Note'); $h->type('Milk'); $h->backspace(); $h->frame(2);
+same([true, 'Mil'], [$threw, $editApp->body], 'typing with nothing focused throws; clicked by its label, typed, one deleted back');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

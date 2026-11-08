@@ -490,32 +490,10 @@ same([], array_values($missing), 'and in Chinese');
 \MyPHP\App::setLocale($saved);
 \MyPHP\App::setLanguages('en');
 
-// notes (mygo's TestNotes): a new note takes a title and a list typed with Markdown, and its title shows in the sidebar.
-Headless::load('notes');
-$s = new \MyPHP\Examples\Notes\Notes(); // nothing read or written: the welcome note
-$t = new Headless(Headless::view('notes', $s), 900, 640);
-$t->paints = true;
-$t->frame();
-same('Welcome to Notes', $s->current()->title(), 'the welcome note, its chip measured');
-$t->clickLabel('New note'); $t->frame();
-$t->press(600, 300); $t->release(600, 300); $t->frame();
-$t->type('Shopping'); $t->frame();
-$t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:'); $t->frame();
-$t->type('- milk'); $t->frame();
-$n = $s->current();
-same('Shopping', $n->title(), 'the new note is titled by its first line');
-$md = $n->document()->text()->markdown();
-check(str_contains($md, '# Shopping') && str_contains($md, '- milk'), "its Markdown: $md");
-check($t->byText('Shopping') !== null, 'the sidebar shows it: ' . json_encode($t->texts()));
-$s->query = 'welcome'; $t->frame();
-same([false, true], [$t->byText('Shopping') !== null, $t->byText('Welcome to Notes') !== null], 'the search finds the notes with its words');
-$s->query = 'nothing like it'; $t->frame();
-check($t->byText('No note matches.') !== null && $t->byLabel('Search') !== null, 'none found: says so, the search field kept: ' . json_encode($t->texts()));
-$s->query = ''; $t->frame();
-$t->clickLabel('Delete note'); $t->frame();
-$t->clickText('Delete'); $t->frame();
-same(['Welcome to Notes'], array_map(fn($n) => $n->title(), $s->notes), 'Delete asks, then deletes the note shown');
-same('Welcome to Notes', $s->current()->title(), 'and shows the next');
+// notes (mygo's TestNotes), laid out as an app of its own (src/, tests/): its own test passes. It types into a note,
+// searches, saves, reads back and deletes.
+exec(escapeshellarg(PHP_BINARY) . ' -d ffi.enable=1 ' . escapeshellarg(__DIR__ . '/../examples/notes/tests/ui_test.php') . ' 2>&1', $lines, $code);
+check($code === 0, "notes: its own test passes:\n" . implode("\n", $lines));
 
 // inbox: mailboxes with a badge, rows chosen by a click and Cmd-click, opened by a double click, the End button scrolling.
 try { \MyPHP\UI\Image::symbol('doc', 16, 0); $symbols = true; } catch (\FFI\Exception) { $symbols = false; } // the system's symbols: on Linux, GTK's icon theme

@@ -1,7 +1,7 @@
 # MyPHP pitfalls
 
 What agents get wrong most often, and what MyPHP does not have even though
-mygo, its upstream, or other UI toolkits do. When the docs and this list
+SwiftUI or other UI toolkits do. When the docs and this list
 disagree, the docs of the checkout win: it may have grown since.
 
 ## Mistakes that compile and misbehave

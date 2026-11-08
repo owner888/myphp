@@ -404,10 +404,17 @@ final class Headless
         return null;
     }
 
-    /** Text typed: into the focused field's TextState, as the view does, else inserted at the focused control. */
+    /**
+     * Text typed: into the focused field's TextState, as the view does, else inserted at the focused control. With nothing
+     * focused it would go nowhere, so it throws: click the field first (clickText on its title or placeholder, clickLabel
+     * on its accessibilityLabel — a TextEditor(text:), which has neither, by ->accessibilityLabel()).
+     */
     public function type(string $s): Node
     {
         if ($this->input->push(['key', $s, 0, 0])) { return $this->frame(); }
+        if ($this->input->client === null && $this->input->focus === null && $this->rt->focus === null) {
+            throw new \LogicException('type(' . json_encode($s, JSON_UNESCAPED_UNICODE) . '): nothing has the focus to type into; click the field first (clickText, or clickLabel on its accessibilityLabel)');
+        }
         if ($this->input->client !== null) {
             $this->input->client->replaceText(null, $s); // the view's text input client
         } elseif ($this->input->focus !== null) {
@@ -438,6 +445,8 @@ final class Headless
     public function end(): Node { return $this->key(Key::END, 'moveToEndOfDocument:'); }
     public function pageDown(): Node { return $this->key(Key::PAGE_DOWN, 'pageDown:'); }
     public function space(): Node { return $this->type(' '); }
+    /** Backspace, which deletes back: the Mac's Delete key (Key::DELETE). */
+    public function backspace(): Node { return $this->key(Key::DELETE, 'deleteBackward:', 0, "\x7f"); }
 
     /** The rect node $n had last frame: x, y, w, h, in the window's points (zoomed, Context::setZoom: the content's times the zoom, as mygo's Tester.Find). */
     public function rect(Node $n): array { return $this->rt->windowRect($this->rt->rectOf($n->id) ?? throw new \RuntimeException('no rect for ' . self::label($n))); }
