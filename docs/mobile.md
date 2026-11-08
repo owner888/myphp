@@ -5,7 +5,7 @@ UI drawn on the GPU (GLES 3 on Android, Metal on iOS), the same PHP, the
 app's `main.php` unchanged. What a phone has that the desktop lacks —
 touch, the safe area, the software keyboard, the system's Back, the
 pickers — is myphp's own (mygo has no mobile platform;
-`docs/mygo-deviations.md`, "The phone").
+`docs/upstream-deviations.md`, "The phone").
 
 ## Building and running
 
@@ -115,6 +115,11 @@ Text Size, Android's Font size), which scales the theme's text and every
 `Font` style as Dynamic Type does; and Reduce Motion (iOS) or
 Remove animations (Android), with which what animates settles at once.
 Changing a setting while the app runs changes the window.
+
+VoiceOver and TalkBack read the views and act on them
+([accessibility](ui/accessibility.md)): rows of lists with their swipe
+actions and Show Menu, tabs, switches, sliders, fields; a menu, a sheet
+or an alert on top alone until it closes.
 
 ## Files and photos
 
@@ -243,4 +248,8 @@ widgets map to them so:
 keyboard, Chinese input), `Dialog::open` with image filters (the photo
 picker) and without (documents), `Http::get` of an https URL, Back at a
 pushed page then at the first, the bars at the notch and the home
-indicator, dark mode.
+indicator, dark mode. Then with VoiceOver (Settings > Accessibility) or
+TalkBack on, in `examples/airpods`: swipe through a page, double-tap a
+tab and a switch, a row's actions (VoiceOver: swipe up or down; TalkBack:
+three-finger tap) and Show Menu, then dismiss the menu (two-finger scrub,
+Back).

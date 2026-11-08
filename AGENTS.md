@@ -19,7 +19,7 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 10. **Public API takes mygo's names** (the developer's rule): lowerCamel of
     the Go name, never one of our own. Anything that is not mygo's yet —
     left out, done differently, named otherwise — goes in
-    `docs/mygo-deviations.md` as it is found; take it out once it matches.
+    `docs/upstream-deviations.md` as it is found; take it out once it matches.
 11. **Native is native** (the developer's rule): a system view (glass,
     materials, controls) is used as the system draws it, its defaults left
     alone; never force its appearance, tint or style to chase a look. If it
@@ -36,7 +36,7 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 15. **Mobile widgets, which mygo has none of** (the developer's rule): written as the desktop's — immediate mode, a value's state as `&$ref`,
     a lifetime's as a State object (TextState, ListState), `changed()`/`dismissed()` to report — named and sized after UIKit and the HIG;
     a notion Apple has no name for takes Flutter's (`safeArea`); never a Flutter `Scaffold`/`AppBar`/`SnackBar`-style API. Each goes in
-    `docs/mygo-deviations.md`; docs/mobile.md maps SwiftUI's and Flutter's names to them, for anyone (an agent) coming from either.
+    `docs/upstream-deviations.md`; docs/mobile.md maps SwiftUI's and Flutter's names to them, for anyone (an agent) coming from either.
 16. **Nothing a user sees carries upstream's name** (the developer's iron rule): an example's, a template's or a doc sample's
     text, links and URLs are myphp's own (`https://github.com/owner888/myphp`), never mygo's or egoist's; credit stays in README and comments.
 

@@ -198,5 +198,5 @@ own, and PageOptions' `trustedOrigins`.
 
 What only a real `NSDocument` does: renaming in the title bar's popover,
 "— Edited" next to the title, browsing versions, locking files, iCloud
-drafts; documents that are folders (packages). See docs/mygo-deviations.md
+drafts; documents that are folders (packages). See docs/upstream-deviations.md
 for what differs from mygo's.

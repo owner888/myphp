@@ -16,6 +16,15 @@ $view = fn() => HStack()(
 )->padding();
 ```
 
+On a phone, VoiceOver and TalkBack move through the views one swipe at a
+time, as through UIKit's and Android's own: a row of a list is one element
+named by what it shows, its controls after it; a row's `swipeActions` are
+its actions (VoiceOver's Actions rotor, TalkBack's actions menu), and a
+`contextMenu` adds Show Menu, which opens it as a long press does; the
+menu, a sheet or an alert on top is all they read until it closes, which
+their dismiss gesture does (a two-finger scrub, Back). Rows a list builds
+beyond its edges scroll into view as they reach them.
+
 > The rest of this page is about the engine under the views: its builder,
 > `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
 > $c) => …)` ([custom widgets](custom-widgets.md)).

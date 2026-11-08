@@ -5,7 +5,7 @@ description: Maintain PHP desktop applications built with MyPHP, including nativ
 
 # MyPHP app maintenance
 
-Check which MyPHP checkout the app uses (`framework` in `myphp.json`, or `$MYPHP_HOME`) and the app's existing conventions before changing APIs. Read the framework's `AGENTS.md`, `docs/architecture.md` and the doc comments of the classes involved; `docs/mygo-deviations.md` lists where MyPHP differs from mygo, whose names its API takes. Confirm that an API exists in that checkout before using it.
+Check which MyPHP checkout the app uses (`framework` in `myphp.json`, or `$MYPHP_HOME`) and the app's existing conventions before changing APIs. Read the framework's `AGENTS.md`, `docs/architecture.md` and the doc comments of the classes involved; `docs/upstream-deviations.md` lists where MyPHP differs from mygo, whose names its API takes. Confirm that an API exists in that checkout before using it.
 
 The native UI rules below apply where the app uses `MyPHP\UI`; preserve a web app's frontend and its typed TypeScript client (`bindings`, which `myphp generate` writes).
 

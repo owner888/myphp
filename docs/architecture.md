@@ -3200,7 +3200,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   asked: the farm, mayoi, the piano and the gallery's charts draw from
   PHP's engines again (`Random\Randomizer` with Xoshiro256**, the
   piano's `mt_rand`), alike to mygo's but not draw for draw
-  (mygo-deviations.md, the examples).
+  (upstream-deviations.md, the examples).
 - **The exec launcher's app has no process in LaunchServices.** Once the
   launcher execs php, `NSRunningApplication` (and so
   `frontmostApplication`, accessibility clients, automation) reports the
@@ -5106,7 +5106,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   PHP that is 2.2 µs a node (69 properties by hand; `get_object_vars`
   9 to 17 µs) against 2.5 µs of laying it out, and it keeps only the
   layout. So the work is skipped where the app says what a part is built
-  from (`Context::memo`, below; `mygo-deviations.md`).
+  from (`Context::memo`, below; `upstream-deviations.md`).
 - **The hot spots made cheaper**: `Affine::bounds` of an affine map
   without its projective path (a translated column's every node);
   `Node::transformAt` returns at once without a pose or transform;
@@ -6043,7 +6043,7 @@ succeeds are told of, an empty line is none.
   toggle with play or pause, seeking with a duration); the video
   player's Now Playing (`show`) and it share the system's one, the last to
   show it having the commands. The artwork is not shown on macOS
-  (docs/mygo-deviations.md).
+  (docs/upstream-deviations.md).
 
 ## An image lets its pixels go once shown (v1.94)
 
@@ -6788,7 +6788,7 @@ succeeds are told of, an empty line is none.
 - The hover is asked for once the pointer rested 300 ms (`Hover::DELAY`)
   and fades in over 100 ms as it first shows (`Hover::FADE_IN`, its
   `shownAt`), as VS Code's, unless the desktop asks for less motion
-  (mygo-deviations.md).
+  (upstream-deviations.md).
 - examples/code-editor opens a PHP file first (`Greeter.php`, the Go
   server's counterpart), and completes the keywords of a file's language,
   PHP's or Go's, rather than Go's in all.
@@ -6839,7 +6839,7 @@ succeeds are told of, an empty line is none.
   follows its press: `buildMaterial` animates `$lit` to 1 while the node
   is hovered, within 150 ms (at once with Reduce Motion, as `animate()`
   is), and `paintMaterial` lays a veil over the glass by it, white at 10%
-  in a dark theme and black at 5% in a light one (mygo-deviations.md).
+  in a dark theme and black at 5% in a light one (upstream-deviations.md).
 - `DisplayList::rect`, `ring`, `gradient` and `glass` keep a radius to
   half the shorter side, as CSS's radii are: past it the shader's corners
   came to points, as a capsule's glass and its veil did (the gallery's
@@ -8688,7 +8688,7 @@ changed, which no hot reload can take.
 
 ## Open items
 
-Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
+Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is
 known to fall short of what it could be is here.
 
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
@@ -8701,7 +8701,7 @@ known to fall short of what it could be is here.
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
 - Video: ASS's outlines are cut out per glyph, not per line (v1.64, its
-  section and mygo-deviations.md; its styles, places and motion, v1.44;
+  section and upstream-deviations.md; its styles, places and motion, v1.44;
   image subtitles, PGS and VobSub, v1.43); a size animated by \t
   rasterizes its glyphs anew each frame.
 - Video: Vorbis is decoded in PHP (v1.55), FLAC by the system (v1.42),

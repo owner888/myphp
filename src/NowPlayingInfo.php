@@ -10,7 +10,7 @@ final class NowPlayingInfo
         public string $title = '',
         public string $artist = '',
         public string $album = '',
-        /** The image of the album or the episode, PNG or JPEG bytes. macOS does not show it yet (docs/mygo-deviations.md). */
+        /** The image of the album or the episode, PNG or JPEG bytes. macOS does not show it yet (docs/upstream-deviations.md). */
         public string $artwork = '',
         /** How long the track is; 0 is unknown, as for a live stream, which shows no progress. */
         public float $duration = 0.0,

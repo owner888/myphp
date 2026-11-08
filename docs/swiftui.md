@@ -5,8 +5,8 @@ write a myphp view. myphp's views are SwiftUI's: the same names, argument
 labels and order, in PHP syntax. Left is SwiftUI, right is myphp; every PHP
 block runs headless in `tests/docs_examples_test.php`. In the blocks,
 `$app` is the state and `$view` what a view file returns. `docs/mobile.md`
-covers what a phone adds; `docs/mygo-deviations.md` lists where myphp
-differs from mygo, the Go framework it ports.
+covers what a phone adds; `docs/upstream-deviations.md` lists where myphp
+differs from the Go framework it ports.
 
 ## The shape of an app
 

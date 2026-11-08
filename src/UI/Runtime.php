@@ -806,6 +806,7 @@ final class Runtime
         $this->dragScroll();
         $this->scrollTextSelection();
         $this->clickable = []; // this frame's build asks again
+        $this->swipeActionsOf = [];
         $this->steppers = []; // the keys above used last frame's; this frame's build registers again
         $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
         $this->lastOverlayIds = $lastOverlays;

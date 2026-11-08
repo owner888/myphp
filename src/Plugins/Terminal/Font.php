@@ -22,7 +22,7 @@ final class Font
         public array $features = [],
         /** The height of rows, a multiple of the font's own line height: 1 when 0, and 1.2 rows 20% taller, as Ghostty's adjust-cell-height = 20%. */
         public float $lineHeight = 0,
-        /** Draws text with a thicker stroke, as Ghostty's font-thicken: not drawn yet (docs/mygo-deviations.md). */
+        /** Draws text with a thicker stroke, as Ghostty's font-thicken: not drawn yet (docs/upstream-deviations.md). */
         public bool $thicken = false,
     ) {}
 

@@ -42,6 +42,7 @@ enum MyphpEventType {
     MYPHP_EVENT_WEB_MESSAGE = 15,
     MYPHP_EVENT_FILES_RESULT = 16,
     MYPHP_EVENT_BACK = 17,
+    MYPHP_EVENT_ACCESS = 18, // an action of TalkBack: .time_ms the node, .action the AccessNode action, .width its index
 };
 
 typedef struct {
@@ -205,6 +206,7 @@ static jmethodID g_mid_bt_scan_ble = NULL;
 static jmethodID g_mid_bt_connect_l2cap = NULL;
 static jmethodID g_mid_bt_disconnect = NULL;
 static jmethodID g_mid_bt_is_connected = NULL;
+static jmethodID g_mid_access_update = NULL;
 static jmethodID g_mid_bt_send = NULL;
 static jmethodID g_mid_bt_poll = NULL;
 static jmethodID g_mid_bt_last_error = NULL;
@@ -373,6 +375,7 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_bt_connect_l2cap = (*env)->GetStaticMethodID(env, clazz, "btConnectL2capSocket", "(Ljava/lang/Object;)Z");
     g_mid_bt_disconnect = (*env)->GetStaticMethodID(env, clazz, "btDisconnect", "()V");
     g_mid_bt_is_connected = (*env)->GetStaticMethodID(env, clazz, "btIsConnected", "()Z");
+    g_mid_access_update = (*env)->GetStaticMethodID(env, clazz, "setAccessTree", "([B)V");
     g_mid_bt_send = (*env)->GetStaticMethodID(env, clazz, "btSend", "([B)Z");
     g_mid_bt_poll = (*env)->GetStaticMethodID(env, clazz, "btPoll", "()[B");
     g_mid_bt_last_error = (*env)->GetStaticMethodID(env, clazz, "btGetLastError", "()Ljava/lang/String;");
@@ -845,6 +848,41 @@ Java_com_owner888_myphp_MyphpActivity_nativeBack(JNIEnv *env, jclass clazz) {
 JNIEXPORT void JNICALL
 Java_com_owner888_myphp_MyphpActivity_nativeSignal(JNIEnv *env, jclass clazz) {
     myphp_signal_backend();
+}
+
+// ---- Accessibility: TalkBack reads PHP's frames (MyphpAccess.java) ----------
+// 1 once a screen reader asked (which may be before PHP's loop runs), 2 once PHP was told (myphp_take_access_on).
+static volatile int g_access_on = 0;
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeAccessOn(JNIEnv *env, jclass clazz) {
+    if (g_access_on == 0) { g_access_on = 1; }
+    myphp_signal_backend();
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeAccessAction(JNIEnv *env, jclass clazz, jlong node, jint action, jint index) {
+    if (g_event_pipe[1] < 0) return;
+    MyphpEvent ev = {.type = MYPHP_EVENT_ACCESS, .action = action, .width = index, .time_ms = node};
+    write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+// 1 once, when a screen reader asked: PHP describes its frames from then on.
+int myphp_take_access_on(void) {
+    if (g_access_on == 1) { g_access_on = 2; return 1; }
+    return 0;
+}
+
+// The elements of the frame, as JSON (UI\AccessElements::encode), to MyphpAccess: bytes, as its UTF-8 is not JNI's.
+void myphp_access_update(const char *json) {
+    if (!json) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_access_update) return;
+    jsize n = (jsize)strlen(json);
+    jbyteArray bytes = (*env)->NewByteArray(env, n);
+    (*env)->SetByteArrayRegion(env, bytes, 0, n, (const jbyte *)json);
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_access_update, bytes);
+    (*env)->DeleteLocalRef(env, bytes);
 }
 
 // Probes which BluetoothSocket L2CAP constructor signature exists in ART via JNI.

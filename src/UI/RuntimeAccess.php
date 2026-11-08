@@ -29,6 +29,20 @@ trait RuntimeAccess
     private array $announcements = [];
     /** @var array<int, true> the nodes asked whether they were clicked this frame (Context::clicked, mygo's flagClickable) */
     private array $clickable = [];
+    /** @internal @var array<int, list<string>> this frame's rows swiped for actions (Context::swipeActions), by the node swiped: their actions' names, which assistive technology offers as the row's own */
+    public array $swipeActionsOf = [];
+    /** @var array<int, int> the node swiped for actions whose actions an element of the tree offers, by that element's id */
+    private array $customOf = [];
+    /** @var array<int, int> the actions assistive technology chose of rows swiped for actions, by the node swiped, until the row's build takes it (takeSwipeAction) */
+    private array $swipeChosen = [];
+
+    /** @internal the action assistive technology chose of the row swiped by node $id since its last build, -1 for none (Context::swipeActions). */
+    public function takeSwipeAction(int $id): int
+    {
+        $i = $this->swipeChosen[$id] ?? -1;
+        unset($this->swipeChosen[$id]);
+        return $i;
+    }
     /** The last frame's tree of nodes. */
     private ?Node $root = null;
     /** @var array<int, array{0: int, 1: ListState, 2: int}> the nodes of the tree for rows of lists: the row's first node, its list and its index */
@@ -100,7 +114,7 @@ trait RuntimeAccess
     private function accessTreeOf(Node $root): AccessTree
     {
         $t = new AccessTree;
-        $this->rowNodes = []; $this->parentOf = []; $this->nodeOf = [];
+        $this->rowNodes = []; $this->parentOf = []; $this->nodeOf = []; $this->customOf = [];
         $focused = null;
         $this->accessNode($t, $root, -1, null, $focused, 0);
         if ($this->focus !== null) {
@@ -184,12 +198,23 @@ trait RuntimeAccess
         $this->parentOf[$n->id] = $parentId;
         $this->nodeOf[$n->id] = $n;
         if ($n->id === $this->focus) { $focused = $n; }
+        // A row swiped for actions: its actions are its row's, the row of the list it is in, not an element of their own.
+        $swipes = $this->swipeActionsOf[$n->id] ?? null;
+        if ($swipes !== null && $parent >= 0 && in_array($t->nodes[$parent]->role, [Role::LIST_ITEM, Role::ROW], true)) {
+            $t->nodes[$parent]->customActions = $swipes;
+            $this->customOf[$t->nodes[$parent]->id] = $n->id;
+            $swipes = null;
+            $role = null;
+        } else {
+            $role = $this->roleOf($n);
+        }
         // What is behind a dialog is inert: the dialog on top and what shows above it alone.
-        if (($role = $this->roleOf($n)) !== null && $this->reachable($n->id)) {
+        if ($role !== null && $this->reachable($n->id)) {
             $node = new AccessNode($n->id, $parent, $role);
             $node->label = $n->label;
             $node->bounds = $n->world->bounds($n->x, $n->y, $n->w, $n->h); // as it shows, through its transform (mygo's accessBounds)
             if ($clip !== null) { $node->actions |= AccessNode::ACTION_SCROLL_INTO_VIEW; }
+            if ($swipes !== null) { $node->customActions = $swipes; $this->customOf[$n->id] = $n->id; } // a row of its own, in no list
             $this->accessDetails($n, $node, $clip);
             $t->nodes[] = $node;
             $parent = count($t->nodes) - 1;
@@ -364,6 +389,8 @@ trait RuntimeAccess
                 $node->selEnd = mb_strlen(substr($e->text, 0, $b), 'UTF-8');
             }
         }
+        if ((($this->menuNodes[$n->id] ?? 0) & 1) !== 0) { $node->actions |= AccessNode::ACTION_SHOW_MENU; } // a context menu of the app's
+        if ($node->role === Role::DIALOG || $node->role === Role::ALERT_DIALOG || $node->role === Role::MENU) { $node->actions |= AccessNode::ACTION_DISMISS; }
         if ($n->accFill !== null) { ($n->accFill)($node); }
     }
 
@@ -416,6 +443,20 @@ trait RuntimeAccess
                 [$code, $selector] = $action === AccessNode::INCREMENT ? [Key::UP, 'moveUp:'] : [Key::DOWN, 'moveDown:'];
                 $this->keys[] = ['', $code, 0, false];
                 if ($this->command($selector)) { $this->keys[array_key_last($this->keys)][3] = true; }
+                break;
+            case AccessNode::SHOW_MENU:
+                // As a long press there opens it: the context menu of the node, at its middle.
+                $b = $n !== null ? $n->world->bounds($n->x, $n->y, $n->w, $n->h) : $this->rectOf($row[0]);
+                if ($b === null) { break; }
+                $this->menuPress($b[0] + $b[2] / 2, $b[1] + $b[3] / 2);
+                break;
+            case AccessNode::CUSTOM:
+                if (isset($this->customOf[$id])) { $this->swipeChosen[$this->customOf[$id]] = $from; } // the row performs it as it builds
+                break;
+            case AccessNode::DISMISS:
+                // Escape, as pressed: what is on top closes.
+                $this->keys[] = ["\e", Key::ESCAPE, 0, false];
+                if ($this->command('cancelOperation:')) { $this->keys[array_key_last($this->keys)][3] = true; }
                 break;
             case AccessNode::SELECT_TEXT:
                 if (($e = $n?->edit) !== null) {
