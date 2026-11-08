@@ -41,6 +41,8 @@ final class Env
     /** The page of a NavigationStack the view is on, which navigationTitle() names, and the stack. */
     public ?Route $route = null;
     public ?NavigationStack $stack = null;
+    /** Whether a bar above takes the toolbar of the view built (a NavigationSplitView's detail): no bar of its own. @internal */
+    public bool $toolbarTaken = false;
     public ?string $title = null;
     public ?\TitleDisplayMode $titleMode = null;
     /** What the page's scroll is painted in, which the stack and tabs around it take behind their bars (iOS's bars, clear over the page): {color: ?int}. */

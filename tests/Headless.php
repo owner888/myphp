@@ -472,11 +472,28 @@ final class Headless
     /** The first node showing $text, or null. */
     public function byText(string $text, ?Node $from = null): ?Node
     {
-        $from ??= $this->root;
+        if ($from === null) { return $this->reachableFirst(fn(Node $root) => $this->byText($text, $root), fn(Node $n) => ($n->kind === Node::RICH ? $n->plainText() : $n->text) === $text); }
         if ($from === null || $from->inert) { return null; }
         if (($from->kind === Node::RICH ? $from->plainText() : $from->text) === $text) { return $from; }
         foreach ($from->kids as $k) { if (($r = $this->byText($text, $k)) !== null) { return $r; } }
         return null;
+    }
+
+    /**
+     * The first node of the tree $match takes that the pointer can reach — over a dialog or an alert, the one in it, not
+     * the one behind it that it blocks — else the first in tree order ($first from the root), as a user would find it.
+     */
+    private function reachableFirst(Closure $first, Closure $match): ?Node
+    {
+        if ($this->root === null) { return null; }
+        $found = null;
+        $walk = function (Node $n) use (&$walk, &$found, $match): void {
+            if ($found !== null || $n->inert) { return; }
+            if ($match($n) && $this->rt->reachable($n->id)) { $found = $n; return; }
+            foreach ($n->kids as $k) { $walk($k); }
+        };
+        $walk($this->root);
+        return $found ?? $first($this->root);
     }
 
     /** A click on the switch titled $label, which must be there: a form's switch takes a tap, its title none, as UIKit's and AppKit's. */
@@ -503,7 +520,7 @@ final class Headless
      */
     public function byLabel(string $label, ?Node $from = null): ?Node
     {
-        $from ??= $this->root;
+        if ($from === null) { return $this->reachableFirst(fn(Node $root) => $this->byLabel($label, $root), fn(Node $n) => $this->byLabel($label, $n) === $n); }
         if ($from === null || $from->inert) { return null; }
         $f = $from->nameFrom;
         $name = $from->label !== '' ? $from->label : ($f !== null ? ($f->label !== '' ? $f->label : ($f->kind === Node::RICH ? $f->plainText() : (string)$f->text)) : '');

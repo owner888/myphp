@@ -27,9 +27,9 @@ $toolbar = function (Document $doc) use ($format) {
         $format('Link', 'Link (⌘K)', $f->link !== '', fn() => $this->openLink($doc))
             ->popover(isPresented: $this->linkOpen, content: fn() => HStack(spacing: 6)(
                 TextField('https://', text: $this->linkURL)->frame(width: 260)->defaultFocus()
-                    ->onSubmit(function () use ($doc) { $doc->setLink(trim($this->linkURL)); $this->linkOpen = false; }),
-                Button('Link', action: function () use ($doc) { $doc->setLink(trim($this->linkURL)); $this->linkOpen = false; })->buttonStyle(ButtonStyle::borderedProminent),
-                $f->link !== '' ? Button('Remove', action: function () use ($doc) { $doc->setLink(''); $this->linkOpen = false; }) : null,
+                    ->onSubmit(fn() => $this->setLink($doc, $this->linkURL)),
+                Button('Link', action: fn() => $this->setLink($doc, $this->linkURL))->buttonStyle(ButtonStyle::borderedProminent),
+                $f->link !== '' ? Button('Remove', action: fn() => $this->setLink($doc, '')) : null,
             )->padding(10)),
         Divider()->frame(height: 20),
         $format('•', 'Bulleted list (⇧⌘8)', $f->paragraph->list === ListKind::Bullets, fn() => $doc->toggleList(ListKind::Bullets)),
@@ -40,26 +40,38 @@ $toolbar = function (Document $doc) use ($format) {
         Divider()->frame(height: 20),
         Button('Copy Markdown', action: fn() => Clipboard::writeText($doc->text()->markdown())),
         Spacer(),
-        Button('New', action: $this->add(...))->keyboardShortcut('n')->accessibilityLabel('New note'),
     );
 };
 
-return function () use ($toolbar) {
+/** A note's row in the sidebar: its title over when it was edited. */
+$row = fn(Note $note) => VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+    Text(verbatim: $note->title())->lineLimit(1),
+    Text(verbatim: $note->updated->format('M j, H:i'))->font(Font::caption)->foregroundStyle(Color::secondary),
+);
+
+return function () use ($toolbar, $row) {
     $n = $this->current();
     $doc = $n->document();
     $words = count(preg_split('/\s+/u', $doc->text()->plainText(), -1, PREG_SPLIT_NO_EMPTY));
+    $shown = $this->shown();
     return NavigationSplitView(
-        sidebar: ListView(selection: $this->selected)(
-            Section('Notes')(Each($this->notes, id: 'id')(fn(Note $note) => Text(verbatim: $note->title())->tag((string)$note->id))),
-        ),
+        sidebar: ($shown === []
+            ? ListView()(Text('No note matches.')->foregroundStyle(Color::secondary)) // inside the list, so the search field stays
+            : ListView($shown, id: 'id', selection: $this->selected)($row)
+        )->searchable(text: $this->query),
         detail: VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
             $toolbar($doc),
             TextEditor(document: $doc, options: new EditorOptions(label: 'Note', placeholder: 'Title', onLinkCommand: fn() => $this->openLink($doc)))->id($n->id),
             Text(verbatim: sprintf('%d words · edited %s', $words, $n->updated->format('M j, H:i')))->font(Font::caption)->foregroundStyle(Color::secondary),
-        )->padding(Edge::vertical, 12)->padding(Edge::horizontal, 20),
-    )->onChange(of: [$n->id, $doc->version()], action: function (array $was, array $now) use ($n, $doc) { // an edit, saved; not another note shown
-        if ($was[0] !== $now[0]) { return; }
-        $n->text = $doc->text(); $n->updated = new DateTimeImmutable();
-        $this->save();
-    });
+        )->padding(Edge::vertical, 12)->padding(Edge::horizontal, 20)
+            ->toolbar(
+                Button('New', systemImage: 'square.and.pencil', action: $this->add(...))->keyboardShortcut('n')->accessibilityLabel('New note'),
+                Button('Delete…', systemImage: 'trash', action: fn() => $this->asking = true)->keyboardShortcut(KeyEquivalent::delete)->accessibilityLabel('Delete note'),
+            ),
+    )
+        ->onChange(of: [$n->id, $doc->version()], action: fn(array $was, array $now) => $was[0] === $now[0] ? $this->edited($n) : null) // an edit, saved; not another note shown
+        ->alert('Delete this note?', isPresented: $this->asking, actions: [
+            Button('Cancel', role: ButtonRole::cancel),
+            Button('Delete', action: $this->delete(...), role: ButtonRole::destructive),
+        ], message: "“{$n->title()}” goes for good: there is no undo.");
 };

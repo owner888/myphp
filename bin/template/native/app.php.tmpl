@@ -5,12 +5,7 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\Content;
 
 require __DIR__ . '/boot.php';
-
-/** The app's state: view.php shows it and changes it, as $this. */
-final class Counter
-{
-    public int $count = 0;
-}
+require __DIR__ . '/src/Counter.php';
 
 $state = new Counter();
 

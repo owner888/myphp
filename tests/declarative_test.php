@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Content, Context, Key, Node};
-use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem, GeometryProxy, ScrollViewProxy, UnitPoint, Binding, ListStyle;
+use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem, GeometryProxy, ScrollViewProxy, UnitPoint, Binding, ListStyle, ButtonRole;
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 
@@ -891,6 +891,40 @@ $inputs = []; $walk = function (Node $n) use (&$walk, &$inputs) { if ($n->kind =
 $h->clickOn($inputs[0]); $h->up(); $h->up(); $h->frame(2);
 $h->clickOn($inputs[1]); $h->up(); $h->frame(2);
 same([3, '20.00', true], [$fieldsApp->copies, $fieldsApp->price, in_array('Notes.txt', $h->texts(), true)], 'Up steps the number and the decimal fields; the editable text shows its text');
+
+// A NavigationSplitView's sidebar of the app's data, as SwiftUI's takes any List: rows of any views, a selection, a search
+// field and a context menu over it.
+$splitApp = new class { public ?int $chosen = null; public string $query = ''; public array $notes = [['id' => 1, 'title' => 'Groceries', 'line' => 'Milk'], ['id' => 2, 'title' => 'Ideas', 'line' => 'A notepad']]; };
+$h = new Headless(fn() => NavigationSplitView(
+    ListView(array_values(array_filter($splitApp->notes, fn($n) => $splitApp->query === '' || stripos($n['title'], $splitApp->query) !== false)), id: 'id', selection: $splitApp->chosen)(
+        fn(array $n) => VStack(alignment: HorizontalAlignment::leading)(Text(verbatim: $n['title'])->bold(), Text(verbatim: $n['line'])->foregroundStyle(Color::secondary)),
+    )->searchable($splitApp->query)->contextMenu(menu: fn(array $ids) => [Button('Delete', action: fn() => null)]),
+    $splitApp->chosen === null ? Text('No note') : Text(verbatim: 'Showing ' . $splitApp->chosen),
+), 800, 500);
+$h->frame(2);
+$h->clickText('Ideas'); $h->frame(2);
+$shownIdeas = in_array('Showing 2', $h->texts(), true);
+$splitApp->query = 'gro'; $h->frame(2);
+same([2, true, true, false], [$splitApp->chosen, $shownIdeas, in_array('Groceries', $h->texts(), true), in_array('A notepad', $h->texts(), true)], 'a sidebar of data rows: two-line rows chosen, the detail following, the search filtering');
+
+// A toolbar outside a NavigationStack and a split view's detail is a bar of its own over the view, as a Mac window's,
+// not dropped.
+$barApp = new class { public int $n = 0; };
+$h = new Headless(fn() => HSplitView()(Text('List'), Text('Editor'))->toolbar(Button('New', action: fn() => $barApp->n++)), 600, 400);
+$h->frame(2);
+$h->clickText('New'); $h->frame(2);
+same([1, true], [$barApp->n, $h->rect($h->byText('New'))[1] < $h->rect($h->byText('Editor'))[1]], 'the toolbar shows above the view and its button runs');
+
+// Over an alert, a test's click on a title finds the alert's button, not the one of that title it covers.
+$askApp = new class { public bool $asking = true; public string $did = ''; };
+$h = new Headless(fn() => VStack()(Button('Delete', action: fn() => $askApp->did = 'toolbar'))
+    ->alert('Delete this note?', isPresented: $askApp->asking, actions: [
+        Button('Cancel', role: ButtonRole::cancel),
+        Button('Delete', action: fn() => $askApp->did = 'alert', role: ButtonRole::destructive),
+    ]), 393, 600);
+$h->frame(2);
+$h->clickText('Delete'); $h->frame(2);
+same('alert', $askApp->did, 'the click lands on the alert, the button it covers left alone');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);

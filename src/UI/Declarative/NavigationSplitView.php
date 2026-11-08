@@ -8,7 +8,9 @@ use MyPHP\UI\{Context, Image, Node};
 /**
  * NavigationSplitView, as SwiftUI's: a sidebar beside the detail. The
  * sidebar is a ListView(selection:) of Labels and Texts tagged with what
- * they choose, in Sections that fold; the detail the view of the choice,
+ * they choose, in Sections that fold, or any list, of the app's data
+ * (ListView($items, id:, selection:)), with a search field over it; the
+ * detail the view of the choice,
  * taking the rest of the room. Up, Down and typing choose in the sidebar
  * while it has the focus.
  */
@@ -23,15 +25,15 @@ final class NavigationSplitView extends View
     /** $columnVisibility, bound: whether the sidebar shows (NavigationSplitViewVisibility), which a button by the window controls toggles, as SwiftUI's sidebar toggle. */
     public function __construct(public readonly ListView $sidebar, public readonly View|array $detail, mixed &$columnVisibility = null, bool $hasVisibility = false)
     {
-        if ($sidebar->events !== [] || $sidebar->mods !== []) { throw new \LogicException('the sidebar is drawn as a sidebar, its own modifiers not: put them on the NavigationSplitView, NavigationSplitView(sidebar: ListView(selection: $this->page)(…), detail: …)->onChange(of: $this->page, action: …)'); }
         if ($hasVisibility) { $this->visibility = &$columnVisibility; $this->hasVisibility = true; }
     }
 
     protected function build(Context $c, Env $env): ?Node
     {
         $t = $env->theme;
-        $selection = &$this->sidebar->selection();
-        $chosen = (string)($selection ?? ''); // the sidebar's items are keyed by their tags as strings
+        $asList = $this->asList(); // a list keeps its own selection, if it has one: a list of a search finding nothing has none
+        if (!$asList) { $selection = &$this->sidebar->selection(); }
+        $chosen = $asList ? '' : (string)($selection ?? ''); // the sidebar's items are keyed by their tags as strings
         $vibrant = $c->vibrancy(); // the window's material shows through the sidebar, as a Mac's
         $bar = $c->titleBar(); // a hidden title bar: the content goes under it, the window controls over the sidebar
         $inset = $bar['height'] > 0;
@@ -48,11 +50,18 @@ final class NavigationSplitView extends View
             $side = $c->column()->size($width, 0)->shrink(0)->margin(0, 0, 0, $w - $width);
             if (!$vibrant) { $side->background($t->surface); }
               if ($inset) { $c->box(0, $barH, 0)->fillWidth()->shrink(0)->dragWindow()->color = null; } // under the window controls: the window moves by it
-              $list = $c->sidebar($chosen, function () use ($c, $env): void { self::items($c, $env, $this->sidebar->content()); }, $width)->grow(1);
-              if ($vibrant) { $list->color = null; }
+              if ($asList) { // a list of the app's data, or one with modifiers (searchable, contextMenu): the ListView itself in the sidebar, as SwiftUI's
+                  $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
+                    $list = $this->sidebar->render($c, $env->along(Node::COLUMN));
+                  $c->end();
+                  if ($list !== null && $vibrant) { $list->color = null; }
+              } else {
+                  $list = $c->sidebar($chosen, function () use ($c, $env): void { self::items($c, $env, $this->sidebar->content()); }, $width)->grow(1);
+                  if ($vibrant) { $list->color = null; }
+              }
             $c->end();
           $c->end();
-          if ($chosen !== (string)($selection ?? '')) { $selection = self::tagOf($this->sidebar->content(), $chosen) ?? $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar, the tag itself (an int id stays an int, as SwiftUI's Hashable): before the detail, whose actions may choose too
+          if (!$asList && $chosen !== (string)($selection ?? '')) { $selection = self::tagOf($this->sidebar->content(), $chosen) ?? $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar, the tag itself (an int id stays an int, as SwiftUI's Hashable): before the detail, whose actions may choose too
           if ($w > 0) { $c->box(1, 0, $t->border); }
           $detail = $c->column(0, 0, 1)->minWidth(0)->minHeight(0)->alignSelf(Node::STRETCH);
             $views = is_array($this->detail) ? $this->detail : [$this->detail];
@@ -76,7 +85,7 @@ final class NavigationSplitView extends View
                 $c->end();
                 $c->divider();
             }
-            View::renderAll($c, $env->along(Node::COLUMN), $views);
+            View::renderAll($c, $env->along(Node::COLUMN)->with(['toolbarTaken' => $toolbar !== null]), $views);
           $c->end();
         $c->end();
         if ($this->hasVisibility && $inset) { // the sidebar's button, next to the window controls whether it shows or not
@@ -93,6 +102,21 @@ final class NavigationSplitView extends View
     }
 
     /** The sidebar's rows of $content: Sections fold, Labels and Texts are items choosing their tags. @param array<mixed> $content */
+    /**
+     * Whether the sidebar is drawn as its ListView rather than as AppKit's source list of tagged Labels and Texts: a list
+     * of data (ListView($items, id:, selection:)(fn($item) => …), rows of any views), or one with modifiers of its own
+     * (searchable, contextMenu…), as SwiftUI's sidebar takes any List.
+     */
+    private function asList(): bool
+    {
+        if ($this->sidebar->items !== null || $this->sidebar->events !== [] || $this->sidebar->mods !== []) { return true; }
+        foreach (ListView::flat($this->sidebar->content()) as $v) {
+            if ($v instanceof Section) { continue; }
+            if (!($v instanceof Label || $v instanceof Text) || !$v->hasTag) { return true; }
+        }
+        return false;
+    }
+
     /** The tag of the item of $content keyed $key, null for none. @param array<mixed> $content */
     private static function tagOf(array $content, string $key): mixed
     {

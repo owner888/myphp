@@ -486,10 +486,34 @@ abstract class View
     public function render(Context $c, Env $env): ?Node
     {
         $env = $this->sets === [] ? $env : $env->with($this->sets);
+        $bar = null; // a toolbar no stack's bar nor split view takes: a bar of its own over the view, as a Mac window's toolbar
         foreach ($this->wraps as [$kind, $a]) {
             if ($kind === 'title') { $env->route?->title(Localized::string($a, $env)); }
-            if ($kind === 'toolbar') { $env->stack?->setToolbar($env, $a); }
+            if ($kind === 'toolbar') {
+                if ($env->stack !== null) { $env->stack->setToolbar($env, $a); }
+                elseif (!$env->toolbarTaken) { $bar = $a; }
+            }
         }
+        if ($bar !== null) {
+            $env = $env->with(['toolbarTaken' => true]); // the view inside is built once, under the bar
+            $col = $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
+              $c->row(0, 8)->alignSelf(Node::STRETCH)->shrink(0)->padding(6, 12)->alignItems(Node::CENTER);
+                $c->spacer();
+                $c->toolbar(function () use ($c, $env, $bar): void { self::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless]), $bar); });
+              $c->end();
+              $c->divider();
+              $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
+                $inner = $this->renderBody($c, $env);
+              $c->end();
+            $c->end();
+            return $inner === null ? null : $col;
+        }
+        return $this->renderBody($c, $env);
+    }
+
+    /** render() past the title and the toolbar: the swipe actions, the view and its boxes, its presentations. */
+    private function renderBody(Context $c, Env $env): ?Node
+    {
         if ($this->swipe !== null) {
             $labels = array_map(fn(Button $b) => ($b->role === \ButtonRole::destructive ? '!' : '') . $b->title, $this->swipe);
             $node = null;

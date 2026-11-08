@@ -2,12 +2,13 @@
 // Notes is a notes app in native UI (mygo's examples/notes): notes in a
 // sidebar, each edited as rich text (MyPHP\UI\RichText), with a toolbar of
 // its formats, the Format menu, links, Markdown shortcuts and export, and
-// the notes saved as JSON in the user's Application Support folder.
-// Cmd+N makes a note.
+// the notes saved as JSON in the app's folder of user data. The search
+// field over the sidebar filters the notes; Cmd+N makes one, and
+// Cmd+Backspace deletes the one shown, once you say so.
 // Run: ./run.sh notes
 declare(strict_types=1);
 
-use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
+use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};
 use MyPHP\UI\{Content, Painter, Span};
 use MyPHP\UI\RichText\{Attachment, Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text};
 
@@ -41,39 +42,83 @@ final class Note
     }
 }
 
+/** The notes and what the window shows of them: the view reads it and calls its actions, and changes it nowhere else. */
 final class Notes
 {
-    /** @var list<Note> */
+    /** @var list<Note> Never empty: deleting the last note makes a new one. */
     public array $notes = [];
     /** The id of the note shown. */
-    public string $selected = '';
-    public int $next = 0;
+    public ?int $selected = null;
+    /** The sidebar's search. */
+    public string $query = '';
+    /** The alert asking before a note is deleted. */
+    public bool $asking = false;
     /** The popover asking for a link's URL. */
     public bool $linkOpen = false;
     public string $linkURL = '';
-    /** Where the notes are saved, '' for nowhere. */
-    public string $path = '';
-    /** Nothing was saved: the welcome note is the first. */
-    public bool $welcome = false;
+    private int $next = 0;
 
+    /** $path is where the notes are saved, '' for nowhere (a test's). */
+    public function __construct(private string $path = '')
+    {
+        $json = $path === '' ? false : @file_get_contents($path);
+        if ($json !== false) {
+            foreach (json_decode($json, true, 64, JSON_THROW_ON_ERROR) as $n) {
+                $this->notes[] = new Note($n['id'], Text::unmarshalJSON(json_encode($n['text'], JSON_THROW_ON_ERROR)), new DateTimeImmutable($n['updated']));
+                $this->next = max($this->next, $n['id']);
+            }
+        }
+        if ($this->notes === []) { // nothing saved: the welcome note is the first
+            $this->notes = [new Note(++$this->next, welcome(), new DateTimeImmutable())];
+        }
+        $this->selected = $this->notes[0]->id;
+    }
+
+    /** The note shown: the one selected, else the first. */
     public function current(): Note
     {
-        if ($this->welcome) { $this->welcome = false; $this->notes = [new Note(++$this->next, welcome(), new DateTimeImmutable())]; }
         foreach ($this->notes as $n) {
-            if ((string)$n->id === $this->selected) { return $n; }
+            if ($n->id === $this->selected) { return $n; }
         }
-        if ($this->notes === []) { $this->add(); }
-        $this->selected = (string)$this->notes[0]->id;
         return $this->notes[0];
     }
 
+    /** @return list<Note> The notes the search finds, all without one. */
+    public function shown(): array
+    {
+        $q = trim($this->query);
+        return $q === '' ? $this->notes : array_values(array_filter($this->notes, fn(Note $n) => mb_stripos($n->current()->plainText(), $q) !== false));
+    }
+
     /** Adds an empty note at the top, and shows it. */
-    public function add(): Note
+    public function add(): void
     {
         $n = new Note(++$this->next, Text::of(new Paragraph(new ParagraphStyle(heading: 1))), new DateTimeImmutable());
         array_unshift($this->notes, $n);
-        $this->selected = (string)$n->id;
-        return $n;
+        $this->selected = $n->id;
+        $this->query = ''; // so the new note shows in the sidebar
+    }
+
+    /** Deletes the note shown, which the alert asked about, and shows the next; the last one gone, a new one. */
+    public function delete(): void
+    {
+        $id = $this->current()->id;
+        $at = array_search($id, array_map(fn(Note $n) => $n->id, $this->notes), true);
+        array_splice($this->notes, $at, 1);
+        if ($this->notes === []) {
+            $this->add();
+        } else {
+            $this->selected = $this->notes[min($at, count($this->notes) - 1)]->id;
+        }
+        $this->save();
+    }
+
+    /** The editor changed $n: its time, and the notes saved. */
+    public function edited(Note $n): void
+    {
+        $n->text = $n->current();
+        $n->updated = new DateTimeImmutable();
+        $this->save();
     }
 
     /** Asks for the URL of a link over the selection. */
@@ -83,18 +128,11 @@ final class Notes
         $this->linkOpen = true;
     }
 
-    /** Reads the saved notes, or shows the welcome note. */
-    public function load(string $dir): void
+    /** Sets the link the popover asked for over the selection ('' takes it off), and closes it. */
+    public function setLink(Document $doc, string $url): void
     {
-        $this->path = "$dir/MyPHP Notes/notes.json";
-        $json = @file_get_contents($this->path);
-        if ($json !== false) {
-            foreach (json_decode($json, true, 64, JSON_THROW_ON_ERROR) as $n) {
-                $this->notes[] = new Note($n['id'], Text::unmarshalJSON(json_encode($n['text'], JSON_THROW_ON_ERROR)), new DateTimeImmutable($n['updated']));
-                $this->next = max($this->next, $n['id']);
-            }
-        }
-        $this->welcome = $this->notes === [];
+        $doc->setLink(trim($url));
+        $this->linkOpen = false;
     }
 
     /** Writes the notes, where the app has a place for them. */
@@ -106,8 +144,8 @@ final class Notes
             $n->text = $n->current();
             $out[] = ['id' => $n->id, 'text' => json_decode($n->text->marshalJSON(), true, 512, JSON_THROW_ON_ERROR), 'updated' => $n->updated->format(DATE_RFC3339_EXTENDED)];
         }
-        if (!is_dir(dirname($this->path))) { @mkdir(dirname($this->path), 0755, true); }
-        @file_put_contents($this->path, json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        file_put_contents($this->path, json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)) !== false
+            || throw new RuntimeException("cannot save the notes to {$this->path}");
     }
 }
 
@@ -141,9 +179,8 @@ function welcome(): Text
     );
 }
 
-$s = new Notes();
-$s->load(getenv('HOME') . '/Library/Application Support');
-App::setName('Notes');
+App::setName('Notes'); // before App::path(), which is named after the app
+$s = new Notes(App::path(PathName::UserData) . '/notes.json');
 App::whenReady(function () use ($s) {
     App::setMenu(new Menu([
         new MenuItem(role: 'appMenu'),

@@ -73,7 +73,7 @@ two fit, take the first: it is the simpler one.
 |---|---|---|
 | Content taller than the window | `ScrollView()(…)`; `ScrollViewReader` to scroll to an id | scroll.md |
 | An app's top-level pages, on every screen | `TabView(selection: $this->page)(Tab('Home', systemImage: 'house', value: 'home')(…), …)->tabViewStyle(TabViewStyle::sidebarAdaptable)`: a sidebar on the desktop, tabs on a tablet, the tab bar on a phone. Write it once; never branch on the platform for it | tabs.md, ../mobile.md |
-| A source list of the app's data on the left (Notes, Mail) | `NavigationSplitView(ListView($notes, selection: $this->chosen)(…), $detail)` | sidebar.md |
+| A source list of the app's data on the left (Notes, Mail) | `NavigationSplitView(ListView($notes, id: 'id', selection: $this->chosen)(fn($n) => …)->searchable(text: $this->query), $detail)`: rows of any views | sidebar.md |
 | Two panes the user resizes | `HSplitView()(…, …)` | split.md |
 | Pages with a history, Back | `NavigationStack(path: $this->path)(…)->navigationDestination(for: '/notes/{id}', destination: __DIR__ . '/pages/note.php')`, `NavigationLink('Note', value: "/notes/$id")` | navigation.md |
 | Where am I | `Breadcrumbs($path, selection: $this->at)` | breadcrumbs.md |
@@ -121,18 +121,28 @@ editing, saved between runs. Decide in this order:
 3. **The editor**: plain text → `TextEditor(text: $this->notes[$i]['body'])`;
    formatting, images, Markdown export → `TextEditor(document: …)` on a
    `Document` per note, made when the note is made, never in the view.
-4. **Actions**: `->toolbar(Button('New', action: …, systemImage:
-   'square.and.pencil')->keyboardShortcut('n'))`; delete from
-   `->contextMenu(Button('Delete', role: ButtonRole::destructive, …))`
-   on the row, confirmed by `->alert`.
-5. **Saving**: notes as JSON in `App::path(PathName::UserData)`, loaded in
-   the constructor, saved from the class's methods after each change.
-6. **Search**: `->searchable(text: $this->query)` on the list, filtering
-   the titles, once there is more than a screen of notes.
+   An edit is saved from `->onChange(of: …, action: fn() =>
+   $this->edited($note))`: the action calls a method of the state, which
+   saves.
+4. **Actions**: the detail's `->toolbar(Button('New', systemImage:
+   'square.and.pencil', action: $this->add(...))->keyboardShortcut('n'),
+   Button('Delete…', systemImage: 'trash', action: fn() => $this->asking
+   = true))`, which shows in the window's toolbar; the delete confirmed by
+   `->alert('Delete this note?', isPresented: $this->asking, actions: […])`.
+   A row's `->contextMenu` can offer the same.
+5. **Saving**: notes as JSON in `App::path(PathName::UserData)` (after
+   `App::setName`), loaded in the constructor, saved from the class's
+   methods after each change. The view only reads the state and calls
+   those methods: a method it calls while it is built (`current()`,
+   `shown()`) changes nothing.
+6. **Search**: `->searchable(text: $this->query)` on the sidebar's list,
+   filtering by `shown()`; with nothing found, a `ListView()(Text('No note
+   matches.'))` in its place, the same modifier on it, so the field stays.
 
 `examples/notes` is this app: `main.php` its state (the notes, JSON
-saving, the Format menu) and `view.php` its view, with the rich-text
-editor and the toolbar: copy its shape, then cut what the user did not
-ask for. Test it as `SKILL.md` says: a headless test that adds a note,
-types, and finds the title in the list; then `myphp screenshot` in light
-and dark.
+saving, search, delete, the Format menu) and `view.php` its view, with
+the rich-text editor and the toolbars: copy its shape, then cut what the
+user did not ask for. Test it as `SKILL.md` says: a headless test that
+adds a note, types, finds the title in the list, searches and deletes
+(`clickText('Delete')` over the alert clicks the alert's button); then
+`myphp screenshot` in light and dark.
