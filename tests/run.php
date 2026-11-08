@@ -4,6 +4,40 @@
 declare(strict_types=1);
 
 // The temporary folder as the system resolves it, before anything asks PHP for it (PHP keeps the first answer): macOS's is under /var, a link to /private/var, which getcwd() and the system's paths give.
+// php tests/run.php --each: each test in a process of its own, the failures gathered, one that crashes its process
+// among them; on GitHub Actions all of them in one annotation, as a step shows ten at most (CI's windows job).
+if (($argv[1] ?? '') === '--each') {
+    $byTest = []; $checks = 0; $failed = 0;
+    foreach (glob(__DIR__ . '/*_test.php') as $file) {
+        $name = basename($file, '_test.php');
+        echo "$name\n";
+        $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __FILE__, $name], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, getenv() + ['MYPHP_TEST_CHILD' => '1']);
+        fclose($pipes[0]);
+        $out = (string)stream_get_contents($pipes[1]); $err = (string)stream_get_contents($pipes[2]);
+        $code = proc_close($p);
+        $lines = explode("\n", trim($out));
+        echo implode("\n", array_slice($lines, 1)), "\n", $err;
+        $fails = array_values(array_map(fn(string $l) => substr(ltrim($l), 6), array_filter($lines, fn(string $l) => str_starts_with(ltrim($l), 'FAIL: '))));
+        $m = [];
+        foreach (array_reverse($lines) as $l) { if (preg_match('/^(\d+) checks, (\d+) failed$/', $l, $m) === 1) { break; } }
+        $checks += (int)($m[1] ?? 0);
+        if ($m === [] || $code !== 0 && $fails === []) {
+            $fails[] = "crashed (exit $code): " . substr(trim($err !== '' ? $err : $out), -400);
+        }
+        if ($fails !== []) { $byTest[$name] = $fails; $failed += count($fails); }
+    }
+    printf("%d checks, %d failed, in %d tests\n", $checks, $failed, count($byTest));
+    if ($byTest !== [] && getenv('GITHUB_ACTIONS') === 'true') {
+        $lines = [];
+        foreach ($byTest as $t => $f) {
+            $lines[] = sprintf('%s: %d failed', $t, count($f));
+            foreach (array_slice($f, 0, 3) as $one) { $lines[] = '  - ' . mb_strcut(str_replace(["\r", "\n"], ' ', $one), 0, 240); }
+        }
+        echo '::error title=Failures by test::' . strtr(implode("\n", $lines), ['%' => '%25', "\r" => '', "\n" => '%0A']) . "\n";
+    }
+    exit($byTest === [] ? 0 : 1);
+}
+
 $tmp = getenv('TMPDIR');
 if ($tmp !== false && $tmp !== '' && ($real = realpath($tmp)) !== false) {
     putenv("TMPDIR=$real");
@@ -51,7 +85,7 @@ foreach ($files as $file) {
 }
 printf("%d checks, %d failed\n", $checks, count($failures));
 // On GitHub Actions, every failing test in one notice, as a step shows ten errors at most.
-if ($byTest !== [] && getenv('GITHUB_ACTIONS') === 'true') {
+if ($byTest !== [] && getenv('GITHUB_ACTIONS') === 'true' && getenv('MYPHP_TEST_CHILD') === false) {
     $lines = array_map(fn(string $t, array $f) => sprintf('%s: %d failed; first: %s', $t, count($f), mb_strcut(str_replace(["\r", "\n"], ' ', $f[0]), 0, 300)), array_keys($byTest), $byTest);
     echo '::notice title=Failures by test::' . strtr(implode("\n", $lines), ['%' => '%25', "\n" => '%0A']) . "\n";
 }

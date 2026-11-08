@@ -83,7 +83,7 @@ jobs:
           php -m
       - name: Windows probe
         run: php tests/testdata/windows_probe.php
-      # The suite, as the backend grows: what fails on Windows yet is listed, the job not failed by it.
+      # The suite, as the backend grows, each test in a process of its own: what fails on Windows yet is listed in one annotation, the job not failed by it.
       - name: PHP tests
         continue-on-error: true
-        run: php tests/run.php
+        run: php tests/run.php --each
