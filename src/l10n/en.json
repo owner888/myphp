@@ -661,6 +661,10 @@
   "@back": {
     "description": "The button of a navigation bar that goes back to the previous page, when that page has no title."
   },
+  "showMenu": "Show Menu",
+  "@showMenu": {
+    "description": "An action a screen reader (VoiceOver, TalkBack) offers on what has a context menu: it opens the menu, as a long press does."
+  },
   "save": "Save",
   "@save": {
     "description": "A button of a dialog that saves a document."

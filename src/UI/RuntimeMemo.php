@@ -12,7 +12,7 @@ namespace MyPHP\UI;
  * steppers, local state…) is noted as it is built and given back each frame
  * it is placed again; a build that changed anything else there is not kept.
  * Not mygo's, whose nodes are compared one by one: in PHP that costs about
- * as much as laying them out (docs/mygo-deviations.md).
+ * as much as laying them out (docs/upstream-deviations.md).
  */
 trait RuntimeMemo
 {

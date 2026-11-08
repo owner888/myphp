@@ -19,7 +19,7 @@ use RuntimeException;
  * spec means it), or whose icons the theme lacks, is drawn as a transparent
  * square of the size, so that the UI lays out as it would, and told once in
  * the log: a gap that shows, not another icon in its place
- * (docs/mygo-deviations.md lists them).
+ * (docs/upstream-deviations.md lists them).
  *
  * @internal
  */

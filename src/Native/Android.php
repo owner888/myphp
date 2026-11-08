@@ -27,6 +27,8 @@ final class Android
     public const EVENT_WEB_MESSAGE = 15;
     public const EVENT_FILES_RESULT = 16;
     public const EVENT_BACK = 17;
+    /** An action of TalkBack on an element: time_ms its node, action the AccessNode action, width its index. */
+    public const EVENT_ACCESS = 18;
 
     // MotionEvent action constants
     public const ACTION_DOWN = 0;
@@ -99,6 +101,8 @@ final class Android
             void myphp_save_file(const char *mime_type, const char *name, int callback_id);
             int myphp_take_files_result(int callback_id, char *out, int max_len);
             char *myphp_take_web_message(void);
+            int myphp_take_access_on(void);
+            void myphp_access_update(const char *json);
             void myphp_free_web_message(char *msg);
             int myphp_is_network_connected(void);
             void myphp_create_web_view(int page_id);

@@ -141,6 +141,9 @@ final class Backend implements Platform\Backend
                     case Android::EVENT_BACK:
                         $win?->onBack();
                         break;
+                    case Android::EVENT_ACCESS:
+                        $win?->onAccessAction((int)$ev->time_ms, (int)$ev->action, (int)$ev->width);
+                        break;
                     case Android::EVENT_FILES_RESULT:
                         Dialogs::onFilesResult((int)$ev->width);
                         break;
@@ -158,6 +161,10 @@ final class Backend implements Platform\Backend
                 \MyPHP\Logger::error("Exception in event dispatch: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
                 throw $e;
             }
+        }
+
+        if ($f->myphp_take_access_on() > 0) { // a screen reader is on: the frames describe themselves for it from now on
+            Window::instance()?->onAccessOn();
         }
 
         // Render at most one frame per VSync (EVENT_CHOREOGRAPHER), after all input and lifecycle events have been consumed

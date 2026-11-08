@@ -293,3 +293,39 @@ same('你X', $client->text, 'text inserted in place of its UTF-16 selection');
 $disabled = true; $t->frame();
 accessSend($t, ['access', $field->id, AccessNode::SET_VALUE, 'blocked']);
 same('你X', $client->text, 'disabled: not set');
+
+// A phone's: a row's swipe actions are its own actions (UIKit's swipe actions, under VoiceOver its actions), its context
+// menu opens as a long press would, the menu alone then (what is behind it inert), and Dismiss closes it, as Escape.
+$did = new \ArrayObject();
+$t = new Headless(function (Context $c) use ($did) {
+    \MyPHP\UI\Content::render(fn() => \ListView(2)(fn(int $i) => \Text("Row $i")
+        ->swipeActions(\Button('Delete', role: \ButtonRole::destructive, action: fn() => $did->append("delete $i")), \Button('Pin', action: fn() => $did->append("pin $i")))
+        ->contextMenu(\Button('Copy', action: fn() => $did->append("copy $i"))))->listStyle(\ListStyle::plain), $c);
+    $c->touchMenu();
+}, 393, 852);
+$t->rt->touch = true; $t->theme = \MyPHP\UI\Theme::phone(false);
+$t->rt->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen) use ($t): void { $t->rt->touchMenu = ['items' => $items, 'x' => $x, 'y' => $y, 'chosen' => $chosen]; };
+$t->frame(2);
+accessSend($t, ['accessOn']);
+$row = accessNode($t->rt->accessTree, Role::LIST_ITEM, 'Row 1');
+$rows = array_filter($t->rt->accessTree->nodes, fn(AccessNode $n) => $n->role === Role::LIST_ITEM && $n->label === 'Row 1');
+same([['Delete', 'Pin'], 1], [$row?->customActions, count($rows)], 'a row swiped for actions: its actions the row\'s own, the row once');
+accessSend($t, ['access', $row->id, AccessNode::CUSTOM, '', 1]); $t->frame(2);
+same(['pin 1'], $did->getArrayCopy(), 'its second action performed');
+$text = accessNode($t->rt->accessTree, Role::TEXT, 'Row 0');
+check(($text->actions & AccessNode::ACTION_SHOW_MENU) !== 0, 'what has a context menu shows it');
+accessSend($t, ['access', $text->id, AccessNode::SHOW_MENU]); $t->frame(2);
+$menu = accessNode($t->rt->accessTree, Role::MENU, '');
+same([true, true, null], [$menu !== null && ($menu->actions & AccessNode::ACTION_DISMISS) !== 0, accessNode($t->rt->accessTree, Role::MENU_ITEM, 'Copy') !== null, accessNode($t->rt->accessTree, Role::LIST_ITEM, 'Row 1')], 'the menu opens, its items alone to read, Dismiss closing it');
+accessSend($t, ['access', $menu->id, AccessNode::DISMISS]);
+for ($k = 0; $k < 4; $k++) { usleep(100_000); $t->frame(2); }
+same([null, ['pin 1']], [$t->rt->touchMenu, $did->getArrayCopy()], 'Dismiss closes it, nothing chosen');
+// What a phone's screen reader moves through: the rows, each one element named by its text, its swipe actions and its
+// menu its own; given again only when it changed.
+$t->frame(2);
+$els = \MyPHP\UI\AccessElements::of($t->rt->accessTree);
+$row1 = array_values(array_filter($els, fn(array $e) => $e['label'] === 'Row 1'));
+same([1, 'row', ['Delete', 'Pin'], true], [count($row1), $row1[0]['kind'] ?? null, $row1[0]['custom'] ?? null, (($row1[0]['actions'] ?? 0) & AccessNode::ACTION_SHOW_MENU) !== 0], 'a row: one element, its actions and menu');
+$enc = new \MyPHP\UI\AccessElements();
+$first = $enc->encode($t->rt->accessTree);
+same([true, null], [is_array(json_decode((string)$first, true)['elements'] ?? null), $enc->encode($t->rt->accessTree)], 'encoded, then nothing while nothing changed');

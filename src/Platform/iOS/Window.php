@@ -6,8 +6,8 @@ namespace MyPHP\Platform\iOS;
 use Closure;
 use MyPHP\Native\{iOS, Metal, ObjC};
 use MyPHP\Platform;
-use MyPHP\{App, Logger, Rectangle, WindowOptions};
-use MyPHP\UI\{DisplayList, Image, Node, TextInputRange, TextState};
+use MyPHP\{App, L10n, Logger, Rectangle, WindowOptions};
+use MyPHP\UI\{AccessElements, AccessTree, DisplayList, Image, Node, TextInputRange, TextState};
 
 final class Window implements Platform\Window
 {
@@ -16,6 +16,8 @@ final class Window implements Platform\Window
     private ?Closure $afterPresent = null;
     private bool $asked = false;
     private bool $repaintOnly = false;
+    /** What VoiceOver was last given of the frames, which it is given again only as it changes. */
+    private AccessElements $access;
     private float $scale = 3.0;
     private float $width = 393.0;
     private float $height = 852.0;
@@ -104,6 +106,11 @@ final class Window implements Platform\Window
         $this->w->runtime->underLayer = false;
         $this->w->runtime->overLayer = true;
         Metal::setClearColor($this->view, App::theme()->background);
+        // VoiceOver reads the frames' elements, once it asked for them (pollEvents): the launcher's UIAccessibilityElements
+        $this->access = new AccessElements();
+        $this->w->runtime->onAccess = function (AccessTree $t): void {
+            if (($json = $this->access->encode($t, L10n::in(App::locale())->get('showMenu'))) !== null) { iOS::ffi()->myphp_ios_access_update($json); }
+        };
         $this->requestFrame();
     }
 
@@ -137,6 +144,17 @@ final class Window implements Platform\Window
                 } elseif ((int)$iev->type === 2) {
                     $this->onImeCompose(\FFI::string($iev->text));
                 }
+            }
+
+            // VoiceOver asked for the elements: the frames describe themselves from now on; what it does to them, as AccessNode actions
+            if ($f->myphp_ios_poll_access_on() > 0) {
+                $this->w->input?->push(['accessOn']);
+                $this->requestFrame();
+            }
+            $act = $f->new('MyphpAccessAction');
+            while ($f->myphp_ios_poll_access_action(\FFI::addr($act)) > 0) {
+                $this->w->input?->push(['access', (int)$act->id, (int)$act->action, '', (int)$act->index, 0]);
+                $this->requestFrame();
             }
 
             if ($f->myphp_ios_poll_theme_changed() > 0) {

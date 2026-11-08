@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace MyPHP\Platform\Android;
 
 use FFI;
-use MyPHP\{App, Logger, Rectangle, WindowOptions};
+use MyPHP\{App, L10n, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\{Android, Gl};
 use MyPHP\Platform;
-use MyPHP\UI\{DisplayList, Image, Key, Node, TextInputRange, TextState};
+use MyPHP\UI\{AccessElements, AccessTree, DisplayList, Image, Key, Node, TextInputRange, TextState};
 
 /**
  * Android Window backed by Activity SurfaceView, rendered via EGL & GLES 3.2.
@@ -19,6 +19,8 @@ final class Window implements Platform\Window
     private ?\Closure $frame = null;
     private ?\Closure $afterPresent = null;
     private bool $asked = false;
+    /** What TalkBack was last given of the frames, which it is given again only as it changes. */
+    private ?AccessElements $access = null;
     private bool $repaintOnly = false;
     private bool $initialized = false;
 
@@ -69,6 +71,11 @@ final class Window implements Platform\Window
     {
         $this->frame = $frame;
         $this->afterPresent = $afterPresent;
+        // TalkBack reads the frames' elements, once a screen reader is on (onAccessOn): the activity's virtual views (MyphpAccess)
+        $this->access = new AccessElements();
+        $this->w->runtime->onAccess = function (AccessTree $t): void {
+            if (($json = $this->access?->encode($t, L10n::in(App::locale())->get('showMenu'))) !== null) { Android::ffi()->myphp_access_update($json); }
+        };
 
         $this->initEgl();
         $this->requestFrame();
@@ -679,6 +686,20 @@ final class Window implements Platform\Window
             }
             $this->requestFrame();
         }
+    }
+
+    /** A screen reader is on: the frames describe themselves for it from now on. */
+    public function onAccessOn(): void
+    {
+        $this->w->input?->push(['accessOn']);
+        $this->requestFrame();
+    }
+
+    /** An action of TalkBack on the element of node $node: an AccessNode action, $index a custom action's. */
+    public function onAccessAction(int $node, int $action, int $index): void
+    {
+        $this->w->input?->push(['access', $node, $action, '', $index, 0]);
+        $this->requestFrame();
     }
 
     /** The system's Back (the button, the gesture): the window's chain, Window::back. */

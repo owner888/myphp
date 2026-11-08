@@ -8,7 +8,7 @@ use MyPHP\Haptics;
 
 /**
  * The widgets of a phone (not mygo's, which has no mobile platform;
- * docs/mygo-deviations.md): a tab bar across the bottom, a navigation
+ * docs/upstream-deviations.md): a tab bar across the bottom, a navigation
  * bar across the top with the page's title and the way back, a sheet
  * rising from the bottom, an action sheet of choices, and the safe area
  * they extend into and content keeps out of. Their sizes are UIKit's
@@ -785,6 +785,10 @@ trait ContextMobile
         }
         foreach ($buttons as $i => $b) {
             if ($this->clicked($b)) { $action = $i; $close(); }
+        }
+        if ($rt !== null) { // its actions offered by a screen reader, as UIKit's swipe actions are (the row's custom actions): one chosen there is performed as tapped
+            $rt->swipeActionsOf[$inner->id] = array_map(static fn(string $l) => ltrim($l, '!'), $actions);
+            if (($chosen = $rt->takeSwipeAction($inner->id)) >= 0 && $chosen < count($actions)) { $action = $chosen; $close(); }
         }
         if ($open && abs($offset[0]) == $total && $this->clicked($inner)) { // a tap on an open row closes it
             $close();

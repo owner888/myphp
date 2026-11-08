@@ -324,7 +324,7 @@ final class MediaPlayerMenus
         return [
             $it('videoPanel', self::t($s?->sidebar === 'video' ? 'iinaMenuHideVideo' : 'iinaMenuShowVideo'), fn() => $s->perform(['video-panel'], true)),
             $sep(),
-            $it('cycleVideoTracks', self::t('iinaMenuCycleVideoTracks'), fn() => null, fn(): bool => false), // the film's one picture, shown always (docs/mygo-deviations.md)
+            $it('cycleVideoTracks', self::t('iinaMenuCycleVideoTracks'), fn() => null, fn(): bool => false), // the film's one picture, shown always (docs/upstream-deviations.md)
             self::list($s, 'videoTrack', self::t('iinaMenuVideoTrack'), fn() => self::tracks($s, Track::VIDEO)),
             $sep(),
             $it('halfSize', self::t('iinaMenuHalfSize'), fn() => $s->windowScale(0.5), $sized),

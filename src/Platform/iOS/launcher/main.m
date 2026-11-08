@@ -1160,6 +1160,182 @@ static void* php_worker_thread(void *arg) {
 }
 @end
 
+// ---- Accessibility: VoiceOver reads PHP's frames ---------------------------
+// PHP gives the elements a screen reader moves through as JSON whenever they change (UI\AccessElements, through
+// myphp_ios_access_update): one UIAccessibilityElement per element, kept by its node's id from frame to frame so that
+// VoiceOver's cursor stays on it, in the Metal view's accessibilityElements. What VoiceOver does to them (activate,
+// adjust, a custom action, escape) goes back as AccessNode actions, which PHP polls (myphp_ios_poll_access_action).
+// PHP describes its frames only once something asked for the elements (myphp_ios_poll_access_on). Not mygo's.
+
+typedef struct {
+    int64_t id;
+    int action; // an AccessNode action: PRESS 0, FOCUS 1, INCREMENT 2, DECREMENT 3, SCROLL_INTO_VIEW 5, SHOW_MENU 10, CUSTOM 11, DISMISS 12
+    int index;  // CUSTOM's: which of the element's custom actions
+} MyphpAccessAction;
+
+#define ACCESS_QUEUE_SIZE 64
+static MyphpAccessAction g_access_queue[ACCESS_QUEUE_SIZE];
+static int g_access_head = 0, g_access_tail = 0;
+static pthread_mutex_t g_access_mutex = PTHREAD_MUTEX_INITIALIZER;
+static volatile int g_access_asked = 0;       // something asked for the elements: PHP describes its frames from then on
+static NSArray *g_access_list = nil;          // the elements, in reading order
+static NSMutableDictionary<NSNumber *, id> *g_access_elements = nil; // by node id
+static int64_t g_access_top = 0, g_access_focus = 0;
+
+// The AccessNode bits the elements carry.
+enum { ACC_DISABLED = 1 << 1, ACC_CHECKED = 1 << 2, ACC_MIXED = 1 << 3, ACC_PASSWORD = 1 << 7, ACC_OFFSCREEN = 1 << 10 };
+enum { ACC_PRESS = 1 << 0, ACC_FOCUS = 1 << 1, ACC_INCREMENT = 1 << 2, ACC_DECREMENT = 1 << 3, ACC_SHOW_MENU = 1 << 7 };
+
+static void push_access_action(int64_t node, int action, int index) {
+    pthread_mutex_lock(&g_access_mutex);
+    int next = (g_access_head + 1) % ACCESS_QUEUE_SIZE;
+    if (next != g_access_tail) {
+        g_access_queue[g_access_head] = (MyphpAccessAction){node, action, index};
+        g_access_head = next;
+    }
+    pthread_mutex_unlock(&g_access_mutex);
+    g_needs_render = 1;
+}
+
+@interface MyphpAccessElement : UIAccessibilityElement
+@property (nonatomic, assign) int64_t nodeId;
+@property (nonatomic, assign) int nodeActions;
+@property (nonatomic, assign) int nodeStates;
+@property (nonatomic, assign) BOOL tapped; // a field: VoiceOver taps it, as a finger would, which brings its keyboard
+@end
+
+@implementation MyphpAccessElement
+- (BOOL)accessibilityActivate {
+    if (self.tapped) { return NO; } // VoiceOver taps its middle (accessibilityActivationPoint)
+    if (self.nodeActions & ACC_PRESS) { push_access_action(self.nodeId, 0, 0); return YES; }
+    if (self.nodeActions & ACC_FOCUS) { push_access_action(self.nodeId, 1, 0); return YES; }
+    return NO;
+}
+// Reached out of view, as the next row of a list: it scrolls into view (SCROLL_INTO_VIEW), as UIKit's cells.
+- (void)accessibilityElementDidBecomeFocused { if (self.nodeStates & ACC_OFFSCREEN) { push_access_action(self.nodeId, 5, 0); } }
+- (void)accessibilityIncrement { push_access_action(self.nodeId, 2, 0); }
+- (void)accessibilityDecrement { push_access_action(self.nodeId, 3, 0); }
+@end
+
+@interface MyphpMetalView (Access)
+@end
+
+@implementation MyphpMetalView (Access)
+- (BOOL)isAccessibilityElement { return NO; }
+- (NSArray *)accessibilityElements {
+    if (!g_access_asked) { g_access_asked = 1; g_needs_render = 1; } // PHP starts describing its frames
+    NSMutableArray *all = [NSMutableArray arrayWithArray:g_access_list ?: @[]];
+    for (WKWebView *web in g_webviews.allValues) { if (!web.hidden) { [all addObject:web]; } } // a page's own elements, after the view's
+    return all;
+}
+// The two-finger scrub: what is on top closes (DISMISS), as Escape.
+- (BOOL)accessibilityPerformEscape {
+    if (g_access_top == 0) { return NO; }
+    push_access_action(g_access_top, 12, 0);
+    return YES;
+}
+@end
+
+static UIAccessibilityTraits access_traits(NSString *kind, int states, int actions) {
+    UIAccessibilityTraits t = UIAccessibilityTraitNone;
+    if ([kind isEqualToString:@"button"] || [kind isEqualToString:@"tab"] || [kind isEqualToString:@"popup"]) { t |= UIAccessibilityTraitButton; }
+    else if ([kind isEqualToString:@"link"]) { t |= UIAccessibilityTraitLink; }
+    else if ([kind isEqualToString:@"heading"]) { t |= UIAccessibilityTraitHeader; }
+    else if ([kind isEqualToString:@"text"]) { t |= UIAccessibilityTraitStaticText; }
+    else if ([kind isEqualToString:@"image"]) { t |= UIAccessibilityTraitImage; }
+    else if ([kind isEqualToString:@"search"]) { t |= UIAccessibilityTraitSearchField; }
+    else if ([kind isEqualToString:@"slider"]) { t |= UIAccessibilityTraitAdjustable; }
+    else if ([kind isEqualToString:@"progress"]) { t |= UIAccessibilityTraitUpdatesFrequently; }
+    else if ([kind isEqualToString:@"switch"] || [kind isEqualToString:@"checkbox"] || [kind isEqualToString:@"radio"]) {
+        t |= UIAccessibilityTraitButton;
+        if (@available(iOS 17.0, *)) { if (![kind isEqualToString:@"radio"]) { t |= UIAccessibilityTraitToggleButton; } }
+    } else if ([kind isEqualToString:@"row"] && (actions & (ACC_PRESS | ACC_FOCUS))) { t |= UIAccessibilityTraitButton; }
+    if (states & ACC_CHECKED) { t |= UIAccessibilityTraitSelected; }
+    if (states & ACC_DISABLED) { t |= UIAccessibilityTraitNotEnabled; }
+    return t;
+}
+
+// Applies PHP's elements, on the main thread.
+static void apply_access(NSData *data) {
+    NSDictionary *d = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if (![d isKindOfClass:[NSDictionary class]] || g_view == nil) { return; }
+    if (!g_access_elements) { g_access_elements = [NSMutableDictionary dictionary]; }
+    NSMutableDictionary *kept = [NSMutableDictionary dictionary];
+    NSMutableArray *list = [NSMutableArray array];
+    NSString *showMenu = d[@"showMenu"] ?: @"Show Menu";
+    for (NSDictionary *e in d[@"elements"]) {
+        int64_t node = [e[@"id"] longLongValue];
+        MyphpAccessElement *el = g_access_elements[@(node)] ?: [[MyphpAccessElement alloc] initWithAccessibilityContainer:g_view];
+        NSString *kind = e[@"kind"];
+        int states = [e[@"states"] intValue], actions = [e[@"actions"] intValue];
+        el.nodeId = node;
+        el.nodeActions = actions;
+        el.nodeStates = states;
+        el.tapped = [kind isEqualToString:@"field"] || [kind isEqualToString:@"search"];
+        el.accessibilityLabel = [e[@"label"] length] ? e[@"label"] : nil;
+        NSString *value = e[@"value"];
+        if ([kind isEqualToString:@"switch"] || [kind isEqualToString:@"checkbox"]) { value = (states & ACC_MIXED) ? @"2" : (states & ACC_CHECKED) ? @"1" : @"0"; } // as UISwitch's
+        el.accessibilityValue = (states & ACC_PASSWORD) ? nil : ([value length] ? value : nil);
+        el.accessibilityHint = [e[@"hint"] length] ? e[@"hint"] : nil;
+        el.accessibilityTraits = access_traits(kind, states, actions);
+        el.accessibilityFrameInContainerSpace = CGRectMake([e[@"x"] doubleValue], [e[@"y"] doubleValue], [e[@"w"] doubleValue], [e[@"h"] doubleValue]);
+        NSMutableArray *custom = [NSMutableArray array];
+        NSArray *names = e[@"custom"];
+        for (NSUInteger i = 0; i < names.count; i++) {
+            int index = (int)i;
+            [custom addObject:[[UIAccessibilityCustomAction alloc] initWithName:names[i] actionHandler:^BOOL(UIAccessibilityCustomAction *a) { push_access_action(node, 11, index); return YES; }]];
+        }
+        if (actions & ACC_SHOW_MENU) {
+            [custom addObject:[[UIAccessibilityCustomAction alloc] initWithName:showMenu actionHandler:^BOOL(UIAccessibilityCustomAction *a) { push_access_action(node, 10, 0); return YES; }]];
+        }
+        el.accessibilityCustomActions = custom.count ? custom : nil;
+        kept[@(node)] = el;
+        [list addObject:el];
+    }
+    BOOL changed = list.count != g_access_list.count;
+    for (NSUInteger i = 0; !changed && i < list.count; i++) { changed = list[i] != g_access_list[i]; }
+    g_access_elements = kept;
+    g_access_list = list;
+    int64_t top = [d[@"top"] longLongValue], focus = [d[@"focus"] longLongValue];
+    if (top != g_access_top) { // a dialog or a menu came or went: another screen, VoiceOver on its first element
+        g_access_top = top;
+        UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, nil);
+    } else if (focus != g_access_focus && focus != 0 && kept[@(focus)]) {
+        UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, kept[@(focus)]);
+    } else if (changed) {
+        UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, nil);
+    }
+    g_access_focus = focus;
+    for (NSString *say in d[@"say"]) { UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, say); }
+}
+
+// C exports for PHP ext-ffi
+
+// The elements of the frame, as JSON (UI\AccessElements::encode): applied on the main thread.
+void myphp_ios_access_update(const char *json) {
+    if (!json) return;
+    NSData *data = [NSData dataWithBytes:json length:strlen(json)];
+    dispatch_async(dispatch_get_main_queue(), ^{ apply_access(data); });
+}
+
+// 1 once, when something first asked for the elements (VoiceOver, Voice Control, Switch Control): PHP then describes its frames.
+int myphp_ios_poll_access_on(void) {
+    if (g_access_asked == 1) { g_access_asked = 2; return 1; }
+    return 0;
+}
+
+// The next action VoiceOver took on an element, 0 when there is none.
+int myphp_ios_poll_access_action(MyphpAccessAction *out) {
+    pthread_mutex_lock(&g_access_mutex);
+    int has = g_access_tail != g_access_head;
+    if (has) {
+        *out = g_access_queue[g_access_tail];
+        g_access_tail = (g_access_tail + 1) % ACCESS_QUEUE_SIZE;
+    }
+    pthread_mutex_unlock(&g_access_mutex);
+    return has;
+}
+
 @interface MyphpViewController : UIViewController
 @end
 

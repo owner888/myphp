@@ -96,6 +96,8 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     private SurfaceView surfaceView;
+    /** TalkBack's elements of PHP's frames. */
+    private MyphpAccess access;
     private FrameLayout mRootLayout;
     private static final Map<Integer, WebView> sWebViews = new HashMap<>();
     private static final Paint sTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
@@ -165,7 +167,19 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             public boolean onCheckIsTextEditor() {
                 return true;
             }
+
+            // TalkBack's elements are PHP's (MyphpAccess): the virtual views of the surface, found under the finger as it explores
+            @Override
+            public android.view.accessibility.AccessibilityNodeProvider getAccessibilityNodeProvider() {
+                return access != null ? access : super.getAccessibilityNodeProvider();
+            }
+
+            @Override
+            public boolean dispatchHoverEvent(MotionEvent event) {
+                return (access != null && access.onHover(event)) || super.dispatchHoverEvent(event);
+            }
         };
+        access = new MyphpAccess(surfaceView);
         surfaceView.setFocusable(true);
         surfaceView.setFocusableInTouchMode(true);
         surfaceView.setOnTouchListener((v, event) -> {
@@ -1523,4 +1537,21 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeBack();
     private static native void nativeOnWebMessage(int pageId, String message);
     private static native void nativeSignal();
+    private static native void nativeAccessOn();
+    private static native void nativeAccessAction(long node, int action, int index);
+
+    /** A screen reader is on: PHP describes its frames from now on (MyphpAccess). */
+    static void accessOn() { nativeAccessOn(); }
+
+    /** An action of TalkBack on the element of node $node, an AccessNode action, for PHP. */
+    static void accessAction(long node, int action, int index) { nativeAccessAction(node, action, index); }
+
+    /** A touch, as a finger's: TalkBack's tap on a text field, which brings its keyboard. */
+    static void touch(int action, float x, float y, long time) { nativeTouchEvent(action, x, y, time); }
+
+    /** PHP's elements of a frame, as JSON (UI\AccessElements::encode), from PHP's thread: applied on the UI thread. */
+    public static void setAccessTree(byte[] json) {
+        if (sInstance == null) { return; }
+        sInstance.runOnUiThread(() -> { if (sInstance != null && sInstance.access != null) { sInstance.access.apply(json); } });
+    }
 }

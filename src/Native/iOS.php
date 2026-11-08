@@ -30,6 +30,12 @@ final class iOS
                 int32_t kind, dark;
             } MyphpMaterialPlace;
 
+            typedef struct {
+                int64_t id;
+                int action;
+                int index;
+            } MyphpAccessAction;
+
             int myphp_ios_get_screen_width(void);
             int myphp_ios_get_screen_height(void);
             float myphp_ios_get_screen_scale(void);
@@ -52,6 +58,9 @@ final class iOS
             void myphp_ios_place_materials(const MyphpMaterialPlace *places, int count);
             float myphp_ios_text_scale(void);
             int myphp_ios_reduce_motion(void);
+            void myphp_ios_access_update(const char *json);
+            int myphp_ios_poll_access_on(void);
+            int myphp_ios_poll_access_action(MyphpAccessAction *out);
             char *myphp_ios_clipboard_get_text(void);
             void myphp_ios_clipboard_set_text(const char *text);
             void myphp_ios_free_string(char *s);

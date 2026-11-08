@@ -21,6 +21,12 @@ final class AccessNode
     /** The actions an element takes. SCROLL_INTO_VIEW scrolls the containers around it to show it; EXPAND opens and closes an item of a tree. */
     public const ACTION_PRESS = 1 << 0, ACTION_FOCUS = 1 << 1, ACTION_INCREMENT = 1 << 2, ACTION_DECREMENT = 1 << 3, ACTION_SET_VALUE = 1 << 4,
         ACTION_SCROLL_INTO_VIEW = 1 << 5, ACTION_EXPAND = 1 << 6;
+    /**
+     * ACTION_SHOW_MENU opens the element's context menu, as a long press does on a phone (VoiceOver's and TalkBack's
+     * actions); ACTION_DISMISS closes what is on top, a menu, a sheet or an alert, as Escape does (VoiceOver's two-finger
+     * scrub, Android's Back). Not mygo's.
+     */
+    public const ACTION_SHOW_MENU = 1 << 7, ACTION_DISMISS = 1 << 8;
 
     /**
      * The actions of assistive technology on an element (Runtime::accessAction); SELECT_TEXT selects characters $from
@@ -29,6 +35,8 @@ final class AccessNode
      */
     public const PRESS = 0, FOCUS = 1, INCREMENT = 2, DECREMENT = 3, SET_VALUE = 4, SCROLL_INTO_VIEW = 5, EXPAND = 6, COLLAPSE = 7, SELECT_TEXT = 8,
         INSERT_TEXT = 9;
+    /** SHOW_MENU and DISMISS as their ACTION_ bits say; CUSTOM performs custom action $from of $customActions. */
+    public const SHOW_MENU = 10, CUSTOM = 11, DISMISS = 12;
 
     /** Names the element; $value is its value, as the text of a text field, for elements that have one. */
     public string $label = '', $value = '';
@@ -48,6 +56,8 @@ final class AccessNode
     public int $posInSet = 0, $setSize = 0;
     /** The ACTION_ bits of what the element takes. */
     public int $actions = 0;
+    /** @var list<string> the names of the element's own actions, which a screen reader offers among its actions (UIAccessibilityCustomAction, TalkBack's): a row's swipe actions */
+    public array $customActions = [];
     /** The web view (MyPHP\WebView) whose page the node stands for, its elements the page's own, which the tree leaves out (mygo's WebView); null for others. */
     public ?object $webView = null;
 
