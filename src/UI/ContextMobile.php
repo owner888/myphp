@@ -334,9 +334,11 @@ trait ContextMobile
 
     /**
      * A phone's context menu (Runtime::$touchMenu, what a long press on a
-     * node with a contextMenu opens), as UIKit's: over the dimmed window, a
-     * rounded list of its items 250 wide by where the finger pressed,
-     * below it or above where there is no room; an item 44 high, a
+     * node with a contextMenu opens), as UIKit's: the window blurred and
+     * dimmed but for that node, and a rounded list of its items 250 wide
+     * below the node, or above where there is no room; the finger held on
+     * slides over the items, the one under it pressed, and lifted on one
+     * chooses it (Runtime::$touchMenuFinger); an item 44 high, a
      * destructive one in the danger color, a disabled one muted, a checked
      * one marked; a group's line a wider gap. A tap on an item chooses it,
      * a tap beside closes it; it fades in as it opens and out as it closes
@@ -355,15 +357,29 @@ trait ContextMobile
         $items = array_values(array_filter($m['items'], static fn(\MyPHP\MenuItem $it) => !$it->hidden));
         $high = 0.0;
         foreach ($items as $it) { $high += match ($it->type) { \MyPHP\MenuItem::SEPARATOR => 8.0, \MyPHP\MenuItem::HEADER => 30.0, default => 44.0 }; }
+        if (!array_key_exists('rect', $m)) { $m['rect'] = $rt->touchMenu['rect'] = $rt->contextMenuRect($m['x'], $m['y']); } // where the node is as it opens, kept sharp while it shows
+        $at = $m['rect'] ?? [$m['x'], $m['y'] - 12, 0.0, 24.0]; // none: the finger's point
         $w = min(250.0, $this->width - 32);
         $x = max(16.0, min($m['x'] - 24, $this->width - 16 - $w));
-        $y = $m['y'] + 12;
-        if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = max($this->windowSafeArea[0] + 16, $m['y'] - 12 - $high); } // no room below: above the finger
+        $y = $at[1] + $at[3] + 8; // below the node
+        if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = $at[1] - 8 - $high; } // no room below: above it
+        if ($y < $this->windowSafeArea[0] + 16) { $y = max($this->windowSafeArea[0] + 16, $this->height - $this->windowSafeArea[2] - 16 - $high); } // nor above (a tall node): over it, at the bottom
+        $finger = $rt->touchMenuFinger;
+        $lift = null; // where the finger held on lifted, having moved: the item there is chosen
+        if ($finger !== null && $finger[2]) {
+            $rt->touchMenuFinger = null;
+            if ($m['moved'] ?? false) { $lift = [$finger[0], $finger[1]]; }
+        } elseif ($finger !== null && !($m['moved'] ?? false) && hypot($finger[0] - $m['x'], $finger[1] - $m['y']) > 10) {
+            $m['moved'] = $rt->touchMenu['moved'] = true;
+        }
+        $slide = ($finger !== null && !$finger[2] && ($m['moved'] ?? false)) ? [$finger[0], $finger[1]] : null; // the finger sliding over the items
+        $inside = static fn(?array $r, ?array $pt) => $r !== null && $pt !== null && $pt[0] >= $r[0] && $pt[0] < $r[0] + $r[2] && $pt[1] >= $r[1] && $pt[1] < $r[1] + $r[3];
         $chosen = null;
         $back = $panel = null;
         $shown = !($m['closing'] ?? false);
         $gone = false;
-        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, $shown, $rt, $items, $t, $w, $x, $y): void {
+        $under = null; // the item the finger slides over
+        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
             $this->key('touchMenu');
             $fade = $rt->motions[$this->upcomingId()]['fade'] ?? null;
             if (!$shown && ($fade === null || ($fade->value <= 0.001 && !$fade->moving))) { // closed, and faded out
@@ -371,11 +387,22 @@ trait ContextMobile
                 $gone = true;
                 return;
             }
-            $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height);
+            $back = $this->column(0, 0)->at(0, 0)->size($this->width, $this->height);
             if ($shown) { $back->block(); } else { $back->passThrough(); }
             if (!isset($rt->motions[$back->id]['fade'])) { $this->jump($back, 'fade', 0.0); } // opened now: from nothing
             $p = $this->animate($back, 'fade', $shown ? 1 : 0, $shown ? 0.2 : 0.25);
-            $back->alpha = 0.15 * $p;
+              // the window blurred and dimmed around the node, which stays sharp: four panes about it, or one with no node
+              $r = $m['rect'];
+              $panes = $r === null ? [[0.0, 0.0, $this->width, $this->height]] : [
+                  [0.0, 0.0, $this->width, max($r[1], 0.0)], [0.0, $r[1] + $r[3], $this->width, max($this->height - $r[1] - $r[3], 0.0)],
+                  [0.0, $r[1], max($r[0], 0.0), $r[3]], [$r[0] + $r[2], $r[1], max($this->width - $r[0] - $r[2], 0.0), $r[3]],
+              ];
+              foreach ($panes as [$px, $py, $pw, $ph]) {
+                  if ($pw <= 0 || $ph <= 0) { continue; }
+                  $this->column(0, 0)->absolute()->top($py)->start($px)->size($pw, $ph)->role(Role::NONE)->material(new \MyPHP\Plugins\Glass\Blur(10 * $p));
+                    $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
+                  $this->end();
+              }
               $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(14)->clip()->shadow(0, 8, 30, 0, 0x000000, 0.25)->role(Role::MENU)->opacity($p);
                 $last = null;
                 foreach ($items as $it) {
@@ -392,18 +419,25 @@ trait ContextMobile
                     $off = $it->disabled || $it->submenu !== [];
                     $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
                     if ($last !== null) { $row->borderWidth(1 / max($this->scale, 1.0), 0, 0, 0)->borderColor($t->border); } // a hairline between two items of a group
-                    if (!$off && $this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }
+                    $rect = $rt->rectOf($row->id); // as last laid out: where the finger slides and lifts
+                    if (!$off && $inside($rect, $slide)) { $under = (int)$it->id; }
+                    if (!$off && (($this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) || $inside($rect, $slide))) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }
                       $this->text($it->label, $t->fontSize, $off ? $t->textMuted : ($it->role === 'destructive' ? $t->danger : $t->text))->singleLine()->grow(1)->shrink(1)->minWidth(0);
                       if ($it->checked) { $this->text('✓', $t->fontSize, $t->accent)->shrink(0); }
                     $this->end();
-                    if ($shown && !$off && $this->clicked($row)) { $chosen = (int)$it->id; }
+                    if ($shown && !$off && ($this->clicked($row) || $inside($rect, $lift))) { $chosen = (int)$it->id; }
                     $last = $row;
                 }
               $this->end();
             $this->end();
         });
+        if ($rt->touchMenu !== null && $under !== ($m['under'] ?? null)) { // slid onto another item: felt, as UIKit's
+            if ($under !== null) { $rt->haptic('selection'); }
+            $rt->touchMenu['under'] = $under;
+        }
         if ($gone) {
             $rt->touchMenu = null;
+            $rt->touchMenuFinger = null;
         } elseif ($chosen !== null) { // chosen: it fades out, the choice reaching the item in the next frame (chosen())
             $rt->touchMenu['closing'] = true;
             ($m['chosen'])($chosen);
@@ -600,8 +634,10 @@ trait ContextMobile
      * red for one marked "!Delete"; let go (or flicked) past half their
      * width the row stays open, else it closes. Dragged past half the
      * row's width (48 points past the buttons at least) the first button
-     * takes the whole room, with a tap felt as it crosses; let go there it
-     * performs the first action (UIKit's full swipe), decided by where the
+     * takes the whole room, with a tap felt as it crosses; let go there the
+     * row slides out and then performs the first action, back in place at
+     * once for a destructive one (the row goes), sliding back for another
+     * (UIKit's full swipe), decided by where the
      * finger let go, not by where a flick would carry it: a flick only
      * opens or closes. A tap on an open row closes it;
      * a tap on a closed one is the row's clicked(). $action is the index of
@@ -660,9 +696,16 @@ trait ContextMobile
           }
         $this->end();
         $close = static function () use (&$offset, $rt): void { $offset = [0.0, 0.0]; $rt?->changed(); };
-        if (abs($offset[0]) == $width) { // let go past $full: the full swipe performs the first action
-            $action = 0; $close();
+        if (abs($offset[0]) == $width && !$this->dragging($inner) && abs($shown[0]) >= $width * 0.97) { // let go past $full, and slid out of the row (the spring's tail not waited for): the full swipe performs the first action
+            $action = 0;
             $kept->past = false;
+            if ($actions[0] !== '' && $actions[0][0] === '!') { // destructive: the row goes, so it is back in place at once, not sliding in again (the next row takes its place)
+                $offset = [0.0, 0.0];
+                $rt?->dragRecs[$inner->id]?->hold($offset, $rt->now);
+                $rt?->changed();
+            } else {
+                $close();
+            }
         }
         foreach ($buttons as $i => $b) {
             if ($this->clicked($b)) { $action = $i; $close(); }

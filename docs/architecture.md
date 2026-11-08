@@ -8663,6 +8663,11 @@ changed, which no hot reload can take.
   48 points past the buttons. Rule: as UIKit's, the full swipe is decided
   by where the finger let go, past half the row, its crossing felt and
   shown (the first button across the room); a flick only opens or closes.
+- A full swipe on Delete jumped the row back before it went, and the row
+  taking its place could slide in from the side. Rule: the row slides out
+  first, the action reported once it is (nearly) there; for a destructive
+  action the offset is put back at once (`DragRec::hold`), not animated,
+  as the node is the next row's.
 
 ## Open items
 

@@ -237,9 +237,11 @@ $h->click(100, 20); $now += 2_000_000_000; $h->frame();
 $h->hover(380, 20); $h->press(380, 20);
 foreach ([370, 340, 300, 260, 220, 180, 150] as $x) { $now += 10_000_000; $h->drag($x, 20); }
 $now += 200_000_000; $h->release(150, 20);
-same([1, 0], $chosen, 'swiped 230 points, past half the row, the first action is performed');
+same([1], $chosen, 'let go past half the row, it first slides out');
 $now += 2_000_000_000; $h->frame();
-same(0.0, $rec->own[0], 'and the row is closed again');
+same([1, 0], $chosen, 'swiped 230 points, past half the row and slid out, the first action is performed');
+same(0.0, $rec->own[0], 'and the row closes again (Flag is no destructive action: it slides back)');
+$now += 2_000_000_000; $h->frame();
 // a tap on a closed row is the row's click
 $h->click(100, 20);
 same(1, $taps, 'a tap on the closed row is its click');
