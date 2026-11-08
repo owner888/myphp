@@ -34,7 +34,7 @@ if (($argv[1] ?? '') === '--each') {
         foreach (array_reverse($lines) as $l) { if (preg_match('/^(\d+) checks, (\d+) failed$/', $l, $m) === 1) { break; } }
         $checks += (int)($m[1] ?? 0);
         if ($m === [] || $code !== 0 && $fails === []) {
-            $fails[] = ($code === -1 ? 'hung' : "crashed (exit $code)") . ': ' . substr(trim($err !== '' ? $err : $out), -400);
+            $fails[] = ($code === -1 ? 'hung, its output ending: ' . substr(trim($out), -300) . ' | ' : "crashed (exit $code): ") . substr(trim($err !== '' ? $err : $out), -400);
         }
         if ($fails !== []) { $byTest[$name] = $fails; $failed += count($fails); }
     }
@@ -43,9 +43,17 @@ if (($argv[1] ?? '') === '--each') {
         $lines = [];
         foreach ($byTest as $t => $f) {
             $lines[] = sprintf('%s: %d failed', $t, count($f));
-            foreach (array_slice($f, 0, 3) as $one) { $lines[] = '  - ' . mb_strcut(str_replace(["\r", "\n"], ' ', $one), 0, 240); }
+            foreach (array_slice($f, 0, 2) as $one) { $lines[] = '  - ' . mb_strcut(str_replace(["\r", "\n"], ' ', $one), 0, 200); }
         }
-        echo '::error title=Failures by test::' . strtr(implode("\n", $lines), ['%' => '%25', "\r" => '', "\n" => '%0A']) . "\n";
+        // An annotation holds 4 KB or so, a step ten: the lines in chunks of that.
+        $chunks = [''];
+        foreach ($lines as $l) {
+            if (strlen(end($chunks)) + strlen($l) > 3800) { $chunks[] = ''; }
+            $chunks[count($chunks) - 1] .= $l . "\n";
+        }
+        foreach (array_slice($chunks, 0, 9) as $i => $chunk) {
+            echo '::error title=Failures by test ' . ($i + 1) . '/' . count($chunks) . '::' . strtr(rtrim($chunk), ['%' => '%25', "\r" => '', "\n" => '%0A']) . "\n";
+        }
     }
     exit($byTest === [] ? 0 : 1);
 }
