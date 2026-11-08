@@ -773,6 +773,9 @@ same([true, true, ['delete 1'], false, null], [$shown, $fading, $menuRan->getArr
 // The finger that opened it held on: slid onto an item it presses it, lifted there chooses it, as UIKit's; lifted where it opened, nothing.
 $h->rightClick($x, $y); $h->rt->touchMenuFinger = [$x, $y, false]; $h->frame(2);
 $sharp = $h->rt->touchMenu['rect'] ?? null;
+$liftedRow = ($h->rt->liftNode?->contextPreview ?? false) && $h->rt->liftNode->id !== ($h->rt->touchMenu['target'] ?? -1); // the list's whole cell, not the Text in its padding
+$withCopy = $h->paint()->n; $kept = $h->rt->liftNode; $h->rt->liftNode = null; $without = $h->paint()->n; $h->rt->liftNode = $kept;
+same([true, true], [$liftedRow, $withCopy > $without], 'the pressed row\'s cell lifted: recorded, and painted again over the blur');
 $h->rt->touchMenuFinger = [$x, $y, true]; $h->frame(2);
 $still = $h->rt->touchMenu !== null && $menuRan->count() === 1;
 $r = $h->rt->rectOf($h->byText('Copy Hex')->id);
