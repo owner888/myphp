@@ -34,7 +34,7 @@ typedef struct { IDXGIFactoryVtbl *v; } IDXGIFactory;
 typedef struct { uint16_t Description[128]; uint32_t VendorId, DeviceId, SubSysId, Revision; size_t DedicatedVideoMemory, DedicatedSystemMemory, SharedSystemMemory; uint32_t luidLow; int32_t luidHigh; } DXGI_ADAPTER_DESC;
 typedef struct { void *r[8]; int32_t (*GetDesc)(void *self, DXGI_ADAPTER_DESC *desc); } IDXGIAdapterVtbl;
 typedef struct { IDXGIAdapterVtbl *v; } IDXGIAdapter;
-typedef struct { void *r[3]; void *(*GetBufferPointer)(void *self); size_t (*GetBufferSize)(void *self); } ID3DBlobVtbl;
+typedef struct { void *qi, *addRef; uint32_t (*Release)(void *self); void *(*GetBufferPointer)(void *self); size_t (*GetBufferSize)(void *self); } ID3DBlobVtbl;
 typedef struct { ID3DBlobVtbl *v; } ID3DBlob;
 
 typedef struct { float left, top, width, widthIncludingTrailingWhitespace, height, layoutWidth, layoutHeight; uint32_t maxBidiReorderingDepth, lineCount; } DWRITE_TEXT_METRICS;
