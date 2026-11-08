@@ -1,5 +1,23 @@
 # Right to left
 
+Views lay out from the right when the app's language reads right to left,
+as SwiftUI's: `leading` and `trailing` (`HorizontalAlignment::leading`,
+`Edge::leading`) are the right and the left then, an `HStack` starts at the
+right, a back chevron points right. `->environment(layoutDirection:
+LayoutDirection::rightToLeft)` gives a part its own direction, as a phone
+number or a media player's controls that stay left to right:
+
+```php
+$view = fn() => VStack(alignment: HorizontalAlignment::leading)(
+    Text('مرحبا'),
+    HStack()(Text('+1 555 0100'))->environment(layoutDirection: LayoutDirection::leftToRight),
+)->environment(layoutDirection: LayoutDirection::rightToLeft)->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 Arabic, Hebrew, Persian and Urdu read from right to left, and so do the
 interfaces of apps in those languages: a row starts at the right, a
 sidebar is on the right, a back arrow points right. Native UI lays a

@@ -23,7 +23,7 @@ $data = new Data(new Item(
 Clipboard::write($data, new ClipboardOptions(
     onRelease: function () { /* release resources captured by these providers */ },
 ));
-// In a view: $c->dragData($row, $data) — the same model, with an independent provider cache.
+// In a view: ->draggable($data) — the same model, with an independent provider cache.
 ```
 
 Empty bytes are valid. `Format::TEXT`, `HTML`, `PNG`, `URI_LIST`,

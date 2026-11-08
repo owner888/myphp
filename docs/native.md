@@ -115,7 +115,7 @@ as a switch flips, a long press opens a menu, a save succeeds — not on
 every button, which the system's own controls do not do either.
 
 ```php
-if ($c->changed($c->switch('Wi-Fi', $app->wifi))) { Haptics::impact('light'); }
+Toggle('Wi-Fi', isOn: $app->wifi)->onChange(of: $app->wifi, action: fn() => Haptics::impact('light'));
 ```
 
 `fileIcon()` returns the icon the file manager shows for a file, a folder

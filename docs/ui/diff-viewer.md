@@ -1,5 +1,17 @@
 # Diff viewer
 
+`DiffView($diff)` shows two versions side by side or unified, taking the
+room it is given: `$diff` a `DiffState` the app keeps.
+
+<!-- no-test -->
+```php
+$view = fn() => DiffView($this->diff);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 `MyPHP\UI\Editor\DiffState` shows the changes between two texts, as
 Pierre's diffs and code review tools do: side by side or one over the
 other, with the words changed within lines highlighted, the unchanged

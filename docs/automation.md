@@ -116,14 +116,14 @@ text fields and comboboxes, in characters), `level`, `posInSet` and
 `setSize` that it has. IDs are strings of digits: they are 64-bit, which
 JavaScript's numbers would round.
 
-`key` is the key the app gave the node with `Context::key`, a string or
+`key` is the key the app gave the view with `->id()`, a string or
 an integer. Unlike an ID, which a frame may change as the view changes,
 it is the app's own name for the element, made to last; give the
 elements tests look for keys of their own:
 
 ```php
-if ($c->clicked($c->key('add')->button('Add'))) { $count++; }
-$c->key('name')->input($name);
+Button('Add', action: fn() => $app->count++)->id('add');
+TextField('Name', text: $app->name)->id('name');
 ```
 
 Only the elements assistive technology reads are in the tree: a row or a

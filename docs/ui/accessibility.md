@@ -1,5 +1,25 @@
 # Accessibility
 
+Views describe themselves to assistive technology, as SwiftUI's: a
+`Button` is a button named by its title, a `Toggle` a switch or a check box
+with its state, a `Slider` a slider with its value, a `Text` its text.
+`->accessibilityLabel('Close')` names a view without text, as a button of
+an icon alone, and finds it in [tests](testing.md); `->help()` describes
+it. VoiceOver on macOS and iOS, TalkBack on Android and Orca on Linux read
+them and act on them as the keyboard and the pointer would.
+
+```php
+$app = new class { public int $n = 0; };
+$view = fn() => HStack()(
+    Button(action: fn() => $app->n++, label: Image(systemName: 'plus'))->accessibilityLabel('Add')->help('Add an item'),
+    Text("{$app->n} items"),
+)->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 Assistive technology, such as VoiceOver on macOS and Orca on Linux, reads
 a window's native UI as it reads other apps: the widgets with their roles,
 names, values and states, the texts, and the nodes that take the focus, as

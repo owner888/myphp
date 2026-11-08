@@ -1,5 +1,22 @@
 # Web view
 
+`WebView($page)` puts a web page among the views, taking the room it is
+given, as SwiftUI's `WebView`; `$page` a `MyPHP\WebView` the window makes
+(`Window::newWebView()`). What shows over it (menus, sheets) shows over
+the page.
+
+<!-- no-test -->
+```php
+$view = fn() => VStack(spacing: 0)(
+    Text('Docs')->font(Font::headline)->padding(),
+    WebView($this->page),
+);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 `$c->webView()` shows a web page in a window of native UI: a document the
 web engine renders beside native controls, a page per tab, a preview of
 HTML the app makes. The page is the system's web view (WKWebView,

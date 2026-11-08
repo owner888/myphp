@@ -1,5 +1,18 @@
 # Loading
 
+In a view, an indicator is a `Representable` of the plugin's, as
+`examples/loading` shows them:
+
+```php
+use MyPHP\Plugins\Loading\{Loading, Options};
+
+$view = fn() => Representable(fn(Context $c) => (Loading::all()[0]->new)($c, new Options(size: 24)))->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](../ui/custom-widgets.md)).
+
 The loading plugin has the 29 loading indicators of
 [loading.dev](https://loading.dev), `loading-dev` for
 React, for native UI: arcs, rings, dots, bars and blocks that MyPHP draws

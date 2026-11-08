@@ -1,5 +1,17 @@
 # Markdown
 
+`Markdown($text)` shows Markdown, its blocks and inline styles, as
+MarkdownUI's view; `streaming: true` while the text is still coming in, as
+an assistant's answer, its last block kept open.
+
+```php
+$view = fn() => ScrollView()(Markdown("# Notes\n\nSome **bold** text and a list:\n\n- one\n- two")->padding());
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 The classes of `MyPHP\UI\Markdown` show Markdown in native UI: CommonMark,
 GitHub's tables, task lists, strikethrough and autolinks, footnotes and
 math. They are built for the replies of language models, which stream in

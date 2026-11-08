@@ -1,5 +1,23 @@
 # Transitions
 
+Views animate as SwiftUI's: `->animation(Animation::smooth(), value:
+$app->items)` animates what changes with the value, `withAnimation()` what
+an action changes, `->transition(AnyTransition::opacity())` how a view
+comes and goes, and `->matchedGeometryEffect(id:, in:)` one view moving
+into another's place.
+
+```php
+$app = new class { public bool $shown = true; };
+$view = fn() => VStack(spacing: 12)(
+    Button('Toggle', action: fn() => withAnimation(Animation::snappy(), fn() => $app->shown = !$app->shown)),
+    $app->shown ? Text('Hello')->transition(AnyTransition::opacity()) : null,
+)->padding();
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 `$c->transition($node, $t)` makes a node move smoothly where the layout
 changes it: from where the last frame showed it to where it is now, in its
 parent, at its size, and in its background and border colors. The view

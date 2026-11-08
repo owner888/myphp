@@ -1,5 +1,18 @@
 # Code editor
 
+`CodeEditor($state)` edits code, taking the room it is given: `$state` an
+`Editor\State` the app keeps, over a `Buffer`, highlighted, completed and
+diagnosed as it says.
+
+<!-- no-test -->
+```php
+$view = fn() => CodeEditor($this->editor);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 The classes of `MyPHP\UI\Editor` are a code editor and a [diff
 viewer](diff-viewer.md) for native UI, designed after Zed's: syntax
 highlighting, several carets and selections, soft wraps, folding, finding

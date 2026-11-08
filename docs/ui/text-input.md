@@ -1,5 +1,22 @@
 # Text input
 
+`TextField(title, text:)` edits a string on one line, `axis:
+Axis::vertical` growing with its lines; `SecureField` a password;
+`TextEditor(text:)` several lines; all bound to a property, as SwiftUI's,
+with selection, undo, the clipboard and input methods.
+
+```php
+$app = new class { public string $name = ''; public string $notes = ''; public int $sent = 0; };
+$view = fn() => Form()(
+    TextField('Name', text: $app->name)->onSubmit(fn() => $app->sent++),
+    TextEditor(text: $app->notes)->frame(height: 80),
+);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 `$c->input()` creates a single-line text input editing a `TextState`, and
 `$c->textarea()` a multi-line one. They change the state's `text` as the
 user types: read it, or ask `$c->changed()` for work that follows, and

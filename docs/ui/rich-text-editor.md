@@ -1,5 +1,18 @@
 # Rich text editor
 
+`TextEditor(document: $doc)` edits rich text, a `RichText\Document` the
+app keeps: headings, lists, links, images, as Notes does; `TextEditor(text:
+$this->body)` edits plain text, as SwiftUI's.
+
+<!-- no-test -->
+```php
+$view = fn() => TextEditor(document: $this->doc);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](custom-widgets.md)).
+
 The classes of `MyPHP\UI\RichText` edit attributed text, as NSTextView does
 on macOS and SwiftUI's `TextEditor` bound to an `AttributedString`. They
 support:
