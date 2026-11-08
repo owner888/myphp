@@ -8680,6 +8680,11 @@ changed, which no hot reload can take.
   list cell's padding, on the theme's surface. Rule: what lifts is the
   cell around it (`Node::$contextPreview`, which `ListView::row` sets), on
   the color painting behind it (`Runtime::$liftColor`, as `record` walks).
+- A list's row of a button or with a context menu answered only on its
+  text, not across the row as SwiftUI's List. Cause: the cell's padding
+  was outside the control. Rule: such a cell gives its padding to the
+  innermost control of its one child, the nodes on the way stretched
+  (`ListView::fillWithControl`); a button's label stays at the start.
 
 ## Open items
 

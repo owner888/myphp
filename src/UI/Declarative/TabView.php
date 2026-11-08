@@ -49,7 +49,7 @@ final class TabView extends View
         foreach ($this->tabs as $i => $t) { if ($t->value === $this->selection) { $index = $i; } }
         if ($this->style === \TabViewStyle::automatic && !($c->runtime?->touch ?? false)) { return $this->desktop($c, $env, $index); }
         if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
-        $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env)], $this->tabs);
+        $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env), $t->role === \TabRole::search], $this->tabs); // the search tab apart, at the bar's end
         $backdrop = (object)['color' => null];
         $minimize = match ($this->minimize) { \TabBarMinimizeBehavior::onScrollDown => 1, \TabBarMinimizeBehavior::onScrollUp => -1, default => 0 };
         $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {

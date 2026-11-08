@@ -221,12 +221,44 @@ final class ListView extends View
             foreach ($n->kids as $k) { // a switch (31 high) or segments (32) centered in a row 44 high, as UIKit's cells, not padded 11 as a line of text
                 if ($k->kind === Node::SWITCH || $k->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(6, 16); break; }
             }
+            self::fillWithControl($n);
         }
         if ($n !== null) { $n->contextPreview = true; } // a context menu inside lifts the whole cell, as SwiftUI's in a List
         if ($separator && $n !== null) { // UIKit's separator: a hairline under the row from 16 in to its end
             $n->drawOver(static function (\MyPHP\UI\Painter $p, array $r): void { $hair = 1 / max($p->scale(), 1.0); $p->fill([$r[0] + 16, $r[1] + $r[3] - $hair, $r[2] - 16, $hair], $p->theme()->border); }); // one pixel
         }
         return $n;
+    }
+
+    /**
+     * A cell of one button, or of one view with a context menu or swipe
+     * actions, made that control across the whole cell, as SwiftUI's List
+     * does: a tap or a press anywhere in the row is the control's, not only
+     * on its text. The cell's padding goes to the innermost such control of
+     * its one child, the nodes on the way stretched across the cell.
+     */
+    private static function fillWithControl(Node $cell): void
+    {
+        $chain = [];
+        for ($k = $cell; count($flow = array_values(array_filter($k->kids, static fn(Node $x) => !$x->absolute))) === 1;) {
+            $k = $flow[0];
+            $chain[] = $k;
+        }
+        $at = null;
+        foreach ($chain as $i => $k) {
+            if ($k->contextMenu || $k->draggable || ($k->focusable && $k->role === \MyPHP\UI\Role::BUTTON)) { $at = $i; }
+        }
+        if ($at === null) {
+            return;
+        }
+        $pads = $cell->sides();
+        for ($i = 0; $i <= $at; $i++) {
+            $chain[$i]->grow(1)->alignSelf(Node::STRETCH);
+        }
+        if ($chain[$at]->role === \MyPHP\UI\Role::BUTTON) { $chain[$at]->justify(Node::START); } // its label at the row's start, as a List's button's, not centered in it
+        $own = $chain[$at]->sides();
+        $chain[$at]->padding($own[0] + $pads[0], $own[1] + $pads[1], $own[2] + $pads[2], $own[3] + $pads[3]);
+        $cell->padding(0);
     }
 
     /** An inset grouped list of $content: sections, and rows outside one in a section of their own. @internal @param array<mixed> $content */

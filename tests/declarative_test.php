@@ -609,6 +609,19 @@ $below = array_values(array_filter(range(0, 29), function (int $i) use ($h, $y):
 $h->clickOn($tabB); $h->frame(3);
 same([true, 'b', []], [$below !== [], $underApp->tab, array_keys(array_filter($underApp->on))], 'a tap on the tab bar chooses its tab, the switch under it untouched');
 
+// Tab(role: .search): apart at the bar's end, a circle 56 wide, titled Search; a tap on it chooses it.
+$searchApp = new class { public string $tab = 'home'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $searchApp->tab)(
+    Tab('Home', systemImage: 'house', value: 'home')(Text('Home page')),
+    Tab('Library', systemImage: 'folder', value: 'library')(Text('Library page')),
+    Tab(value: 'search', role: \TabRole::search)(Text('Search page')),
+), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
+$circle = $h->byLabel('Search'); $lib = $h->byLabel('Library');
+$rc = $h->rect($circle); $rl = $h->rect($lib);
+$h->clickOn($circle); $h->frame(3);
+same([[56.0, 56.0], true, true, 'search', true], [[$rc[2], $rc[3]], abs($rc[0] + $rc[2] - (393 - 16)) < 1, $rl[0] + $rl[2] < $rc[0], $searchApp->tab, in_array('Search page', $h->texts(), true)], 'the search tab apart at the bar\'s end, chosen by a tap');
+
 // preferredColorScheme and dynamicTypeSize choose the app's appearance and text size over the system's, as SwiftUI's:
 // the platform's theme in that appearance (a phone's stays UIKit's), its text DynamicTypeSize's times larger; null
 // follows the system again.
@@ -736,6 +749,16 @@ $h = new Headless(fn(Context $c) => Content::render(fn() => ListView(['Short', '
 $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
 same($h->rect($h->byText('A much longer row'))[0], $h->rect($h->byText('Short'))[0], 'a swiped row\'s content at its start');
 
+// A list's row of one button, or of a view with a context menu, is that control across the row, as SwiftUI's List: a tap
+// beside its text runs the button, a press there finds the menu.
+$rowRan = new \ArrayObject();
+$h = new Headless(fn(Context $c) => Content::render(fn() => ListView(['Short'])(fn(string $t) => Button(action: fn() => $rowRan->append('tap'), label: Text(verbatim: $t))
+    ->buttonStyle(\ButtonStyle::plain)->contextMenu(Button('Copy', action: fn() => null)))->listStyle(\ListStyle::plain), $c), 393, 600);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
+[, $y] = $h->middle($h->byText('Short'));
+$h->click(370, $y); $h->frame(2);
+same([['tap'], true], [$rowRan->getArrayCopy(), $h->rt->hasContextMenuAt(370, $y)], 'a tap and a press at the row\'s far end are its button\'s and its menu\'s');
+
 // confirmationDialog's cancel-role Button is the action sheet's own Cancel, below, not one more choice; its action runs as it closes.
 $confirmApp = new class { public bool $asked = true; public array $ran = []; };
 $h = new Headless(fn(Context $c) => Content::render(fn() => Text('Page')->confirmationDialog('Clear?', isPresented: $confirmApp->asked, actions: [
@@ -770,9 +793,25 @@ $h->rightClick($x, $y); $h->frame(2);
 $h->click(20, 800);
 for ($k = 0; $k < 4; $k++) { usleep(100_000); $h->frame(2); }
 same([true, true, ['delete 1'], false, null], [$shown, $fading, $menuRan->getArrayCopy(), in_array('Copy Hex', $h->texts(), true), $h->rt->touchMenu], 'a phone\'s context menu: shown, an item chosen and the menu fading out, a tap beside closes it');
+// A node on the window's right (a message of one's own): the menu lined up with its right edge, as a messenger's.
+$h2 = new Headless(function (Context $c) {
+    Content::render(fn() => VStack()(HStack()(Spacer(), Text('Mine')->padding(12)->contextMenu(Button('Copy', action: fn() => null), Button('Delete', role: \ButtonRole::destructive, action: fn() => null)))->padding(16))->frame(maxWidth: INF, maxHeight: INF), $c);
+    $c->touchMenu();
+}, 393, 852);
+$h2->rt->touch = true; $h2->theme = \MyPHP\UI\Theme::phone(false);
+$h2->rt->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen) use ($h2): void { $h2->rt->touchMenu = ['items' => $items, 'x' => $x, 'y' => $y, 'chosen' => $chosen]; };
+$h2->frame(2);
+[$mx, $my] = $h2->middle($h2->byText('Mine'));
+$h2->rightClick($mx, $my); $h2->frame(3);
+$lr = $h2->rt->touchMenu['rect']; $grownR = min(1.02, (393 - 16) / $lr[2]);
+$menuRight = null; $walk = function (Node $n) use (&$walk, &$menuRight, $h2) { if ($n->role === \MyPHP\UI\Role::MENU) { $r = $h2->rect($n); $menuRight = $r[0] + $r[2]; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h2->frame());
+same(round($lr[0] + $lr[2] / 2 + $lr[2] * $grownR / 2, 3), round($menuRight, 3), 'a node on the right: the menu lined up with its right edge');
+
 // The finger that opened it held on: slid onto an item it presses it, lifted there chooses it, as UIKit's; lifted where it opened, nothing.
 $h->rightClick($x, $y); $h->rt->touchMenuFinger = [$x, $y, false]; $h->frame(2);
 $sharp = $h->rt->touchMenu['rect'] ?? null;
+$liftedStart = $sharp[0] + $sharp[2] * (1 - min(1.02, (393 - 16) / $sharp[2])) / 2;
+same($liftedStart + 24, $h->rect($h->byText('Copy Hex'))[0], 'the menu lined up with the lifted row\'s start (its items 24 in)');
 $liftedRow = ($h->rt->liftNode?->contextPreview ?? false) && $h->rt->liftNode->id !== ($h->rt->touchMenu['target'] ?? -1); // the list's whole cell, not the Text in its padding
 $withCopy = $h->paint()->n; $kept = $h->rt->liftNode; $h->rt->liftNode = null; $without = $h->paint()->n; $h->rt->liftNode = $kept;
 same([true, true], [$liftedRow, $withCopy > $without], 'the pressed row\'s cell lifted: recorded, and painted again over the blur');
@@ -782,6 +821,27 @@ $r = $h->rt->rectOf($h->byText('Copy Hex')->id);
 $h->rt->touchMenuFinger = [$r[0] + 4, $r[1] + 4, false]; $h->frame(2);
 $h->rt->touchMenuFinger = [$r[0] + 4, $r[1] + 4, true]; $h->frame(2);
 same([true, true, ['delete 1', 'copy 1']], [$sharp !== null && $y >= $sharp[1] && $y < $sharp[1] + $sharp[3], $still, $menuRan->getArrayCopy()], 'the row kept sharp; a lift where it opened chooses nothing; slid onto Copy Hex and lifted, it is chosen');
+
+// searchable() on a phone: iOS 26's field, a capsule 44 high 16 in from the sides, no border, the prompt in it.
+$query = '';
+$h = new Headless(function (Context $c) use (&$query) { Content::render(fn() => ListView(['Result'])(fn(string $t) => Text(verbatim: $t))->listStyle(\ListStyle::plain)->searchable($query, prompt: 'Find frames'), $c); }, 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(true); $h->frame(2);
+$field = null;
+$walk = function (Node $n) use (&$walk, &$field) { if ($n->kind === Node::INPUT) { $field = $n; } foreach ($n->kids as $k) { $walk($k); } };
+$walk($h->frame());
+$r = $h->rect($field);
+same([16.0, 393.0 - 32, 44.0, 22.0, 0.0, 'Find frames'], [$r[0], $r[2], $r[3], $field->radius, $field->borderWidth, $field->text], 'a phone\'s search field as iOS 26\'s');
+// searchScopes(): its choices a segmented control across under the field, bound to the scope.
+$scopeApp = new class { public string $q = ''; public string $scope = 'media'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => ListView(['Result'])(fn(string $t) => Text(verbatim: $t))->listStyle(\ListStyle::plain)
+    ->searchable($scopeApp->q)->searchScopes($scopeApp->scope, Text('Media')->tag('media'), Text('Servers')->tag('servers'), Text('Widgets')->tag('widgets')), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(2);
+$fieldBottom = null; $walk = function (Node $n) use (&$walk, &$fieldBottom, $h) { if ($n->kind === Node::INPUT) { $r = $h->rect($n); $fieldBottom = $r[1] + $r[3]; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->frame());
+$m = $h->rect($h->byText('Media')); $w = $h->rect($h->byText('Widgets'));
+$h->clickText('Servers'); $h->frame(2);
+same([true, true, 'servers'], [$m[1] > $fieldBottom, $w[0] + $w[2] > 300, $scopeApp->scope], 'the scopes under the field, across the view; a tap on one chooses it');
+try { Text('x')->searchScopes($scopeApp->scope, Text('A')->tag('a')); $threw = false; } catch (\LogicException) { $threw = true; }
+same(true, $threw, 'searchScopes() without searchable() says where it goes');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
