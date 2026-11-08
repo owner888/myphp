@@ -3,7 +3,7 @@
 // Forward buttons (a right click lists the pages), Cmd+[ and Cmd+], and a
 // mouse's back and forward buttons; links to paths; notes sliding in
 // deeper and back; a settings layout whose sections change inside it.
-// Run: ./run.sh router
+// Run: myphp run -d macos examples/router
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

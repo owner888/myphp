@@ -2,7 +2,7 @@
 // A window without native chrome (mygo's examples/frameless): the page draws
 // its own title bar, marks it draggable with `--app-region: drag` and drives
 // the window through window.myphp.window.
-// Run: ./run.sh frameless
+// Run: myphp run -d macos examples/frameless
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

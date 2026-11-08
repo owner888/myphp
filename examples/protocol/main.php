@@ -4,7 +4,7 @@
 // a "shapes" scheme draws at run time, a body streamed a chunk at a time,
 // a download served by PHP, and a bound method the page may call, being
 // the app's own.
-// Run: ./run.sh protocol
+// Run: myphp run -d macos examples/protocol
 declare(strict_types=1);
 
 use MyPHP\{App, Ipc, Protocol, ProtocolRequest, ProtocolResponse, Window, WindowOptions};

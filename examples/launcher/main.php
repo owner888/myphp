@@ -4,7 +4,7 @@
 // full-screen ones included, without taking the active app away; type to
 // find an installed app, Up and Down to choose, Enter to open it, Escape to
 // clear or close. It lives in the menu bar, without a Dock icon.
-// Run: ./run.sh launcher
+// Run: myphp run -d macos examples/launcher
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, CloseEvent, GlobalShortcut, InstalledApp, Menu, MenuItem, QuitEvent, Screen, Shell, Tray, TrayOptions, Window, WindowOptions};

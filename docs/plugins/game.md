@@ -9,8 +9,8 @@ their own. It is all PHP. Native UI draws a game as it draws the rest:
 them](../ui/drawing.md)) and plays its sound ([audio](../audio.md)).
 
 [examples/mayoi](../../examples/mayoi), a little survivor game, is made of
-all of them: click it, then walk with WASD or the arrows (`./run.sh
-mayoi`). [examples/farm](../../examples/farm) is a calmer one, a farm to
+all of them: click it, then walk with WASD or the arrows (`myphp run -d macos
+examples/mayoi`). [examples/farm](../../examples/farm) is a calmer one, a farm to
 till and water.
 
 ## The game loop

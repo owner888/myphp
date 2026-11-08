@@ -207,7 +207,7 @@ The apps run where they are, but to ship them to users, sign them: see
 - [Native UI](ui/README.md), to build interfaces in PHP, or
   [the frontend](frontend.md), for web pages.
 - [Menus and the tray](menus.md) and the [desktop APIs](native.md).
-- The examples in the repository, which `./run.sh <name>` runs:
+- The examples in the repository, which `myphp run -d macos examples/<name>` runs:
   - with web pages: `examples/hello` (the smallest app), `examples/todo`
     (typed services and events, persistence, dialogs, menus, several
     windows), `examples/frameless` (a custom title bar) and

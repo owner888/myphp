@@ -5,7 +5,7 @@
 // myphp.call and a Channel. The buttons change files through a bound
 // method; changing them in Finder or an editor shows the same. The folder
 // is the one given, or a "watched" folder in the app's data directory.
-// Run: ./run.sh watch [folder]
+// Run: myphp run -d macos examples/watch [folder]
 declare(strict_types=1);
 
 use MyPHP\{App, Ipc, PathName, Window, WindowOptions};

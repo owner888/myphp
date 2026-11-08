@@ -3,7 +3,7 @@
 // Displays real-time ping to remote Mac mini (Tailscale), public egress IP,
 // DNS latency (DoH), and local hotspot latency directly on the macOS menu bar.
 // Uses MyPHP core's native SF Symbols and dual-line status title capabilities.
-// Run: ./run.sh netmonitor
+// Run: myphp run -d macos examples/netmonitor
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, Clipboard, Menu, MenuItem, Network, NetworkStatus, Process, QuitEvent, Tray, TrayOptions};

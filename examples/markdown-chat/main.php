@@ -3,7 +3,7 @@
 // token as Markdown (mygo's examples/markdown-chat): Markdown::stream shows
 // a reply while it comes, Markdown::view once it is done, and the list
 // follows the end until the user scrolls up.
-// Run: ./run.sh markdown-chat
+// Run: myphp run -d macos examples/markdown-chat
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

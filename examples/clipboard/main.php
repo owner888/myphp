@@ -2,7 +2,7 @@
 // One data model for copying and dragging a note (mygo's
 // examples/clipboard): the same note as text, HTML, or JSON made only when
 // a reader asks for it; pasted or dropped back in the best format offered.
-// Run: ./run.sh clipboard
+// Run: myphp run -d macos examples/clipboard
 declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, Window, WindowOptions};

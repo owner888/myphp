@@ -4,7 +4,7 @@
 // a Mac, the system's there. They take the keyboard, and close as the user
 // clicks elsewhere or presses Escape. They extend beyond the window, and
 // flip or slide to stay on the screen.
-// Run: ./run.sh flyout
+// Run: myphp run -d macos examples/flyout
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

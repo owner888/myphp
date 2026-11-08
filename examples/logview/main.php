@@ -5,7 +5,7 @@
 // Cmd+F finds among them, Cmd+Shift+C copies the chosen line, a file
 // dropped on the window opens.
 // The window remembers its frame.
-// Run: ./run.sh logview [file]    (try /var/log/system.log or a file you append to)
+// Run: myphp run -d macos examples/logview [file]    (try /var/log/system.log or a file you append to)
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};

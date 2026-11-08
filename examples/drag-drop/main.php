@@ -6,7 +6,7 @@
 // so it travels to another instance of the app too. The source removes
 // its note only once a move is done; the sample file always copies.
 // Escape gives a drag up; the status and the log say how each ended.
-// Run: ./run.sh drag-drop
+// Run: myphp run -d macos examples/drag-drop
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

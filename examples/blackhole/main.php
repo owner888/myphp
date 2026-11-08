@@ -11,7 +11,7 @@
 // both over the window with a lens's color fringes and a film's grain.
 // The scene renders at a resolution of its own, which drops while frames
 // come late and rises again once they keep up, as games do.
-// Run: ./run.sh blackhole
+// Run: myphp run -d macos examples/blackhole
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

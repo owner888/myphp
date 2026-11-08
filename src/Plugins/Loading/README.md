@@ -11,8 +11,8 @@ Loading::arc($c)->label('Saving');
 Loading::ring($c, new Options(size: 32, color: $t->accent, easing: Easing::EaseInOut));
 ```
 
-`Loading::all()` lists them by name; see `examples/loading` (`./run.sh
-loading`), and `Loading`'s and `Options`' comments.
+`Loading::all()` lists them by name; see `examples/loading` (`myphp run -d macos
+examples/loading`), and `Loading`'s and `Options`' comments.
 
 The indicators follow loading.dev's SVG and CSS (`loading-dev` 0.3.5,
 MIT, © Jakub Krehel; see [NOTICE.md](NOTICE.md)) as mygo's do: their

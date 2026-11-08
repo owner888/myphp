@@ -4,7 +4,7 @@
 // kept within its display's work area, hidden on a click elsewhere, Escape,
 // Cmd+W or Hide; hiding keeps its text, selection and undo history. There is
 // no Dock icon; a right click on the icon shows its menu.
-// Run: ./run.sh menubar-native
+// Run: myphp run -d macos examples/menubar-native
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, CloseEvent, Menu, MenuItem, Point, QuitEvent, Screen, Tray, TrayOptions, Window, WindowOptions};

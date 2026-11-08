@@ -4,8 +4,8 @@
 // Clock.ticks streams through a Channel (a generator: the window stays live
 // between ticks), the page drives its window (myphp.window.setTitle), and a
 // preload script runs before the page's own.
-// Run: ./run.sh webview
-// TypeScript client: MYPHP_GENERATE=examples/webview/myphp.ts ./run.sh webview
+// Run: myphp run -d macos examples/webview
+// TypeScript client: myphp generate examples/webview
 declare(strict_types=1);
 
 use MyPHP\{App, Channel, ChannelClosed, Event, Ipc, PageOptions, Window, WindowOptions};

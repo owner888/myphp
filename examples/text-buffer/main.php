@@ -1,7 +1,7 @@
 <?php
 // A large editable document in an indexed text buffer (mygo's
 // examples/text-buffer): 100 000 lines, with emoji and right-to-left text.
-// Run: ./run.sh text-buffer
+// Run: myphp run -d macos examples/text-buffer
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};

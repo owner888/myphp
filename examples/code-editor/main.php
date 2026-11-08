@@ -4,7 +4,7 @@
 // the file, hovers, diagnostics of TODO comments and the changes against
 // the file as it was in the gutter; and the diff of those changes, side by
 // side or unified, which edits the same buffer.
-// Run: ./run.sh code-editor
+// Run: myphp run -d macos examples/code-editor
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};

@@ -3,7 +3,7 @@
 // body out, every request kept in a list. Built to shake out text input,
 // lists and network together: curl runs as a child process (Process) so
 // the window stays live while a request is in flight.
-// Run: ./run.sh http
+// Run: myphp run -d macos examples/http
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Process, Window, WindowOptions};

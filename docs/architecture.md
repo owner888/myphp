@@ -2584,10 +2584,10 @@ of 63 cells, ten builder calls each, is the dearest), which leaves the 16.7 ms
 budget to CoreText (shaping is cached by line) and Metal. The display
 list is clipped to the window before the paint, so what lies outside
 costs nothing. What the benchmark cannot time is the Mac's half:
-`MYPHP_STATS=1 ./run.sh inbox 1000000` prints it a second at a time.
+`MYPHP_STATS=1 myphp run -d macos examples/inbox 1000000` prints it a second at a time.
 
-The Mac's half, measured by the developer (`MYPHP_STATS=1 ./run.sh
-inbox 1000000`, scrolling): 55–59 frames a second at 1.4–2.5 ms a
+The Mac's half, measured by the developer (`MYPHP_STATS=1 myphp run -d macos
+examples/inbox 1000000`, scrolling): 55–59 frames a second at 1.4–2.5 ms a
 frame, rising to 3–4 ms as faster scrolling shows more never-seen
 strings a second (CoreText shapes each new line once; the line cache
 sweeps by age and stays near 300–2000 lines). What that run also showed
@@ -3299,7 +3299,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   (the slow frames of a scrolling inbox: 10–20 ms of layout, most of a
   megabyte held, for a dozen new rows). It breaks between words now
   (`tests/wrap_test.php`).
-- **Every frame's tree was a cycle.** `MYPHP_STATS=1 ./run.sh inbox
+- **Every frame's tree was a cycle.** `MYPHP_STATS=1 myphp run -d macos examples/inbox
   1000000`, scrolled on the developer's Mac, ran at 54–59 frames a second
   with frames of 4–9 ms, memory going up and down by tens of megabytes and
   PHP's collector running several times a second, freeing some 12 000
@@ -4433,8 +4433,8 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the clock began waiting, a stall as it plays) of what reaches
   CACHE_WAIT past the clock, as mpv's cache-buffering-state counts what is
   cached past what its decoders read.
-- `./run.sh video` logs the player to the terminal (`MYPHP_VIDEO_LOG=1`
-  in examples/video): what opened, its events, a frame drawn inside
+- `MYPHP_VIDEO_LOG=1 myphp run -d macos examples/video` logs the player to the terminal
+  (examples/video): what opened, its events, a frame drawn inside
   another, a frame over 0.1 s; with pcntl, every 3 s, where PHP is in a
   frame held up 3 s, and while a film opens, where each fiber waiting
   waits. No sampling by a flood of signals (SIGUSR1 every 10 ms): the
@@ -4576,7 +4576,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   observer, its block one for the process). Removing asks nothing and
   leaves the gains, Manual. A file that is not ten gains a name shows as
   the error, the pop-up of no profile.
-- **The tracing JIT and `?->`**: under `run.sh`'s `opcache.jit=1255`,
+- **The tracing JIT and `?->`**: under `myphp run`'s `opcache.jit=1255`,
   `Layout`'s `$n->followX?->scroll` once warned "Attempt to read property
   \"scroll\" on null" (a video opening, 12 s in, the frames hot), which
   `?->` cannot. It is a plain null check there now; the suite under the
@@ -4589,8 +4589,8 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   zend_fetch_debug_backtrace spinning), the equalizer's name prompt open
   over 3 s inside its frame, OK'd. It logs only that a frame is held up
   now; a hang's place is `sample`'s. The waiting fibers' traces stay
-  (ReflectionFiber, of suspended fibers, never hung). Only `./run.sh
-  video` had it; a dialog shown from a frame holds the frame, as
+  (ReflectionFiber, of suspended fibers, never hung). Only `myphp run -d macos
+  examples/video` had it; a dialog shown from a frame holds the frame, as
   `Dialog::open` from the audio tab always did.
 
 ## 10-bit AV1 in software, HDR colors, a menu button's focus (v1.57)
@@ -4610,7 +4610,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   screen and thumbnail as its 8-bit twin's (clip-av1-10-twin8.mkv, the
   same testsrc2 encoded at 8 bits). HDR on an HDR screen is the
   developer's to look at; an HDR film's thumbnails are not tone-mapped.
-  `MYPHP_VIDEO_SOFTWARE=1 ./run.sh video …` turns hardware decoding off
+  `MYPHP_VIDEO_SOFTWARE=1 myphp run -d macos examples/video …` turns hardware decoding off
   in examples/video (`Player::$hardwareDecoding`), for a Mac of AV1's
   own decoder (M3 on) to decode it by libdav1d.
 - **The format of a hardware-decoded film says the container's colors**

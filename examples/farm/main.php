@@ -12,7 +12,7 @@
 // 1 2 3 or Q choose the tool, + and - zoom, and M plays or stops the music.
 // With a gamepad: the left stick or the d-pad walks, A uses the tool, the
 // shoulder buttons choose it, and Start plays or stops the music.
-// Run: ./run.sh farm
+// Run: myphp run -d macos examples/farm
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

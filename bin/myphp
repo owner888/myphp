@@ -2879,7 +2879,7 @@ function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, 
 
 function runCommand(array $args): void
 {
-    help($args, "run [flags] [dir]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop, and prints its log:\nthe app's own lines, PHP's warnings and errors, and the system's warnings and errors about it.\n\nOn a phone, as Flutter's run: a saved PHP file, or r, hot reloads the app: it loads its views of files\n(Content::file) again, its state kept; R hot restarts it, its state lost; c clears the console, q quits.\nNeither builds it again; a change to the native code (the launcher, the Java, the runtime) needs myphp run again.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux)\n  -v, --verbose              the build's output and every line of the log");
+    help($args, "run [flags] [dir] [args...]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop, and prints its log:\nthe app's own lines, PHP's warnings and errors, and the system's warnings and errors about it.\nOn the desktop, what follows dir goes to the app, its \$argv, a path made absolute: myphp run -d macos examples/photos ~/Pictures.\n\nOn a phone, as Flutter's run: a saved PHP file, or r, hot reloads the app: it loads its views of files\n(Content::file) again, its state kept; R hot restarts it, its state lost; c clears the console, q quits.\nNeither builds it again; a change to the native code (the launcher, the Java, the runtime) needs myphp run again.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux)\n  -v, --verbose              the build's output and every line of the log");
     $deviceId = option($args, 'd') ?: (option($args, 'device') ?: (option($args, '-device') ?: ''));
     $all = flag($args, 'v') || flag($args, 'verbose');
     $step = fn(array $cmd, ?string $cwd = null): int => $all ? sh($cmd, $cwd) : quiet($cmd, $cwd); // the build's output only when it fails
@@ -2956,7 +2956,8 @@ function runCommand(array $args): void
         // 3. Desktop Workflow
         logf("Running on desktop...");
         $mainPhp = file_exists($dir . '/main.php') ? $dir . '/main.php' : $dir . '/app.php';
-        passthru(escapeshellcmd(PHP_BINARY) . ' ' . implode(' ', PHP_FLAGS) . ' ' . escapeshellarg($mainPhp));
+        $appArgs = array_map(fn(string $a) => !str_starts_with($a, '-') && ($real = realpath($a)) !== false ? $real : $a, array_slice(array_values($args), 1)); // as myphp dev's
+        passthru(implode(' ', array_map('escapeshellarg', [PHP_BINARY, ...PHP_FLAGS, $mainPhp, ...$appArgs])));
     }
 }
 

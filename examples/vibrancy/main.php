@@ -3,7 +3,7 @@
 // examples/vibrancy): a sidebar over a translucent material, under a hidden
 // title bar whose window controls sit over the view, inset over the
 // sidebar. Pick a material in the sidebar to see it behind the window.
-// Run: ./run.sh vibrancy
+// Run: myphp run -d macos examples/vibrancy
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

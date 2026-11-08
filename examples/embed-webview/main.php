@@ -3,7 +3,7 @@
 // sidebar of tabs, each a web view, under a toolbar whose menu, picker,
 // tooltip, sheet and alert show over the page, as the badge over its
 // corner does. The notes page calls PHP and hears from it through the bridge.
-// Run: ./run.sh embed-webview
+// Run: myphp run -d macos examples/embed-webview
 declare(strict_types=1);
 
 use MyPHP\{App, Event, Ipc, WebView, WebViewOptions, Window, WindowOptions};

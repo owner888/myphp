@@ -9,7 +9,7 @@
 // draw), CSS's round corners, filter: blur() on the letters of the level
 // as they change, which the painter has not: the letters are rasterized
 // once (Context::renderGlyphs) and blurred on the CPU as they move.
-// Run: ./run.sh effort-slider
+// Run: myphp run -d macos examples/effort-slider
 declare(strict_types=1);
 
 use MyPHP\{App, Theme as AppTheme, ThemeSource, Window, WindowOptions};

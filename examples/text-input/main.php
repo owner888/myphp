@@ -3,7 +3,7 @@
 // (mygo's examples/text-input): the app owns the text, the selection, the
 // marked text of input methods and the drawing; handleTextInput gives the
 // field the system's text services.
-// Run: ./run.sh text-input
+// Run: myphp run -d macos examples/text-input
 declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, Menu, MenuItem, Window, WindowOptions};

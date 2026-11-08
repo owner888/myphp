@@ -4,7 +4,7 @@
 // notifications, a global shortcut, the clipboard and dark mode. The page
 // calls PHP's Native service; PHP tells it what happened by the "log"
 // event. The app keeps running in the tray once its window is closed.
-// Run: ./run.sh native
+// Run: myphp run -d macos examples/native
 declare(strict_types=1);
 
 use MyPHP\{App, CallContext, Clipboard, Dialog, Event, GlobalShortcut, Ipc, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, Screen, Theme, ThemeSource, Tray, TrayOptions, Window, WindowOptions};

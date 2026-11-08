@@ -4,7 +4,7 @@
 // LinePlot in a TimelineView: every frame takes in the samples that came
 // since the last, and each plot paints only the extremes of each pixel
 // column.
-// Run: ./run.sh chart-streaming
+// Run: myphp run -d macos examples/chart-streaming
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

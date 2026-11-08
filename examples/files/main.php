@@ -6,7 +6,7 @@
 // the file, with the system), Backspace goes up, Cmd+F finds among the
 // entries, Space previews an image in a modal, Delete… asks before
 // moving to the Trash. The window remembers its frame.
-// Run: ./run.sh files [folder]
+// Run: myphp run -d macos examples/files [folder]
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Shell, Window, WindowOptions};

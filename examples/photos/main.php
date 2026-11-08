@@ -3,7 +3,7 @@
 // time full size. Built to shake out the image path: decoding off the main
 // thread as the images show, the image atlas's room, window-level
 // shortcuts, drops.
-// Run: ./run.sh photos [folder]
+// Run: myphp run -d macos examples/photos [folder]
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Screen, Window, WindowOptions};

@@ -16,7 +16,7 @@
 // pointer's blows on, a few hundred numbers a frame. Every visit has a wind of its own, picked by a random
 // seed; ⌘R starts another. After three minutes without input the wind
 // settles and the texture fades out, to come back at the next move.
-// Run: ./run.sh wind
+// Run: myphp run -d macos examples/wind
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

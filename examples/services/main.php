@@ -5,7 +5,7 @@
 // the network's state as it changes, the clipboard, a secret in the
 // Keychain, recent documents, cookies, opening at login (from a bundle),
 // and the page's own: find in page, print, print to PDF, a download.
-// Run: ./run.sh services
+// Run: myphp run -d macos examples/services
 declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, Cookie, Cookies, Event, FindOptions, Ipc, Network, NetworkStatus, PDFOptions, PageSize, SecretNotFound, Secrets, Window, WindowOptions};

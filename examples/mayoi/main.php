@@ -17,7 +17,7 @@
 // Arrows or WASD walk, Esc pauses and M plays or stops the music; at a
 // level, 1 2 3, a click, or the arrows and Space choose. With a gamepad:
 // the left stick or the d-pad walks, A chooses, Start pauses.
-// Run: ./run.sh mayoi
+// Run: myphp run -d macos examples/mayoi
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
