@@ -8652,6 +8652,11 @@ changed, which no hot reload can take.
   takes the touch; once the menu opens the touch is the menu's (its moves
   and lift reach nothing else). The menu fades in and out, never gone
   between two frames (that read as a flash).
+- Copy on iOS threw (ArgumentCountError in `Data::text()`). Cause: the
+  iOS clipboard called a `Data` API that does not exist (`text()`,
+  `setText()`), and no test loads it (FFI). Rule: a platform's clipboard
+  reads and writes through `Data::read(Format::TEXT)` and `Data::text()`,
+  as Android's.
 
 ## Open items
 

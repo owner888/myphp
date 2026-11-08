@@ -7,30 +7,31 @@ use Closure;
 use MyPHP\Native\iOS;
 use MyPHP\Platform;
 use MyPHP\Transfer\Data;
+use MyPHP\Transfer\Format;
+use MyPHP\Transfer\FormatUnavailable;
 
 final class Clipboard implements Platform\Clipboard
 {
-    public function readData(array $formats): Data
+    public function readData(array $formats): Data // text alone, as Android's: Data's own API (it has no setText nor text())
     {
-        $d = new Data();
         $text = $this->readText();
-        if ($text !== '') {
-            $d->setText($text);
+        if ($text === '') {
+            return new Data();
         }
-        return $d;
+        return Data::text($text);
     }
 
     public function writeData(Data $data, ?Closure $released): void
     {
-        $text = $data->text();
-        if ($text !== null) {
-            $this->writeText($text);
-        }
+        try {
+            $this->writeText($data->read(Format::TEXT));
+        } catch (FormatUnavailable) {} // no text in it: nothing this clipboard holds
+        $released?->__invoke();
     }
 
     public function formats(): array
     {
-        return ['public.utf8-plain-text'];
+        return [Format::TEXT];
     }
 
     public function flush(): void
