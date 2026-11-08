@@ -24,7 +24,13 @@ set_error_handler(function (int $no, string $msg, string $file, int $line) use (
     if ((error_reporting() & $no) === 0) { return false; }
     $failures[] = $what = "PHP: $msg at " . basename($file) . ":$line";
     echo "  FAIL: $what\n";
+    \MyPHP\Tests\annotate($what);
     return true;
+});
+set_exception_handler(function (\Throwable $e): never { // what ends the run, annotated as the failures
+    \MyPHP\Tests\annotate('uncaught ' . $e);
+    fwrite(STDERR, "PHP Fatal error:  Uncaught $e\n");
+    exit(255);
 });
 $only = array_slice($argv, 1);
 $files = glob(__DIR__ . '/*_test.php');

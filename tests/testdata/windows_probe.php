@@ -13,7 +13,9 @@ $failed = 0;
 $report = function (string $what, bool $ok, string $detail = '') use (&$failed): void {
     if (!$ok) { $failed++; }
     echo ($ok ? 'ok   ' : 'FAIL ') . $what . ($detail !== '' ? ": $detail" : '') . "\n";
+    if (!$ok && getenv('GITHUB_ACTIONS') === 'true') { echo "::error::$what" . ($detail !== '' ? ': ' . strtr($detail, ["\r" => '', "\n" => '%0A']) : '') . "\n"; } // seen without the log
 };
+set_exception_handler(function (Throwable $e): never { echo "::error::uncaught " . strtr((string)$e, ["\r" => '', "\n" => '%0A']) . "\n"; exit(255); });
 $try = function (string $what, Closure $fn) use ($report): void {
     try { $fn(); } catch (Throwable $e) { $report($what, false, get_class($e) . ': ' . $e->getMessage() . ' at line ' . $e->getLine()); }
 };
