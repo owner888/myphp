@@ -171,7 +171,8 @@ $connection = function (bool $connected) use ($check, $tr) {
 };
 
 /** The frames sent and received, newest last, only those in view built. */
-$packets = fn() => ListView($this->packets)(function (array $p, int $i) { // the frames as the frame began: a row deleting one does not move the rows after it in this pass
+/** A frame of the log as a row: a tap opens its sheet, a swipe or a long press deletes it; $i its index in the log. */
+$packetRow = function (array $p, int $i) {
         return Button(action: function () use ($i) { $this->packetShown = $i; $this->packetOpen = true; }, label: HStack(alignment: VerticalAlignment::top, spacing: 10)(
             Text(verbatim: $p['dir'])->font(Font::caption)->bold()->monospaced()
                 ->foregroundStyle($p['dir'] === 'TX' ? Color::accentColor : ($p['dir'] === 'RX' ? Color::green : Color::orange))->frame(width: 28, alignment: Alignment::leading),
@@ -185,13 +186,32 @@ $packets = fn() => ListView($this->packets)(function (array $p, int $i) { // the
                 Button('Copy Hex', action: fn() => \MyPHP\Clipboard::writeText($p['hex']), systemImage: 'doc.on.doc'),
                 Button('Delete', role: ButtonRole::destructive, action: fn() => array_splice($this->packets, $i, 1), systemImage: 'trash'),
             ); // held, as an iPhone's long press
-    })->listStyle(ListStyle::plain)
+};
+
+$packets = fn() => ListView($this->packets)($packetRow) // the frames as the frame began: a row deleting one does not move the rows after it in this pass
+    ->listStyle(ListStyle::plain)
     ->navigationTitle('Packet Log')
     ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', ['count' => count($this->packets)])->foregroundStyle(Color::secondary), Button('Clear', action: function () { $this->clearAsked = true; }))
     ->confirmationDialog('Clear every frame of the log?', isPresented: $this->clearAsked, actions: [
         Button('Clear Log', role: ButtonRole::destructive, action: function () { $this->packets = []; }),
         Button('Cancel', role: ButtonRole::cancel),
     ]);
+
+/** The Search tab: the frames whose summary or bytes hold the query, of the scope's direction (iOS 27's search tab, its field across the top, the scopes under it). */
+$search = function () use ($packetRow) {
+    $q = trim($this->query);
+    $found = [];
+    foreach ($this->packets as $i => $p) {
+        if ($this->scope !== 'all' && $p['dir'] !== $this->scope) { continue; }
+        if ($q !== '' && stripos($p['summary'], $q) === false && stripos($p['hex'], $q) === false) { continue; }
+        $found[] = $p + ['at' => $i];
+    }
+    return ($found === [] ? VStack()(Spacer(), Text($q === '' ? 'No frames yet' : 'No frames match')->foregroundStyle(Color::secondary), Spacer())->frame(maxWidth: INF)
+        : ListView($found)(fn(array $p) => $packetRow($p, $p['at']))->listStyle(ListStyle::plain))
+        ->navigationTitle('Search')
+        ->searchable($this->query, prompt: 'Frames')
+        ->searchScopes($this->scope, Text('All')->tag('all'), Text(verbatim: 'RX')->tag('RX'), Text(verbatim: 'TX')->tag('TX'), Text(verbatim: 'BLE')->tag('BLE'));
+};
 
 /** A frame of the log, whole, in a sheet at half the window that a drag takes to the whole (presentationDetents). */
 $packetSheet = function () {
@@ -245,7 +265,7 @@ $preferences = fn() => Form()(
     ),
 )->navigationTitle('Settings');
 
-return function () use ($settings, $connection, $packets, $lidSheet, $preferences, $packetSheet) {
+return function () use ($settings, $connection, $packets, $search, $lidSheet, $preferences, $packetSheet) {
     $this->pollTransport();
     $connected = $this->transport->isConnected();
     return TabView(selection: $this->page)(
@@ -253,6 +273,7 @@ return function () use ($settings, $connection, $packets, $lidSheet, $preference
         Tab('Connection', systemImage: 'antenna.radiowaves.left.and.right', value: 'Connection')($connection($connected)),
         Tab('Packet Log', systemImage: 'list.bullet.rectangle', value: 'Packets')($packets())->badge(count($this->packets)),
         Tab('Settings', systemImage: 'gearshape', value: 'Settings')($preferences()),
+        Tab(value: 'Search', role: TabRole::search)($search()),
     )->tabViewStyle(TabViewStyle::sidebarAdaptable)->tabBarMinimizeBehavior(TabBarMinimizeBehavior::onScrollDown)->sheet(isPresented: $this->popupOpen, content: fn() => $lidSheet($connected))
         ->onChange(of: $this->popupOpen, action: function ($old, $open) { if (!$open) { $this->popupDismissed = true; } })
         ->sheet(isPresented: $this->packetOpen, content: $packetSheet)

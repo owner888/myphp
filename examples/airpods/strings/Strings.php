@@ -408,6 +408,30 @@ final class Strings
     {
         return self::in(\MyPHP\I18n::locale())->Cancel();
     }
+
+    /**
+     * Says "Search" in the language the app shows.
+     */
+    public static function Search(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Search();
+    }
+
+    /**
+     * Says "Frames" in the language the app shows.
+     */
+    public static function Frames(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Frames();
+    }
+
+    /**
+     * Says "All" in the language the app shows.
+     */
+    public static function All(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->All();
+    }
 }
 
 /** The messages of Strings in one language. */
@@ -805,6 +829,30 @@ final class StringsMessages
     public function Cancel(): string
     {
         return Strings::$catalog->format($this->locale, 'Cancel', []);
+    }
+
+    /**
+     * Says "Search" in the language of these messages.
+     */
+    public function Search(): string
+    {
+        return Strings::$catalog->format($this->locale, 'Search', []);
+    }
+
+    /**
+     * Says "Frames" in the language of these messages.
+     */
+    public function Frames(): string
+    {
+        return Strings::$catalog->format($this->locale, 'Frames', []);
+    }
+
+    /**
+     * Says "All" in the language of these messages.
+     */
+    public function All(): string
+    {
+        return Strings::$catalog->format($this->locale, 'All', []);
     }
 }
 

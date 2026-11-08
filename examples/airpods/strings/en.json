@@ -133,5 +133,10 @@
   "Clear": "Clear",
   "Clear Log": "Clear Log",
   "Cancel": "Cancel",
-  "Clear every frame of the log?": "Clear every frame of the log?"
+  "Clear every frame of the log?": "Clear every frame of the log?",
+  "Search": "Search",
+  "Frames": "Frames",
+  "All": "All",
+  "No frames yet": "No frames yet",
+  "No frames match": "No frames match"
 }

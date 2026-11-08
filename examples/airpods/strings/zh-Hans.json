@@ -133,5 +133,10 @@
   "Clear": "清除",
   "Clear Log": "清除日志",
   "Cancel": "取消",
-  "Clear every frame of the log?": "清除日志中的所有帧？"
+  "Clear every frame of the log?": "清除日志中的所有帧？",
+  "Search": "搜索",
+  "Frames": "帧",
+  "All": "全部",
+  "No frames yet": "还没有帧",
+  "No frames match": "没有匹配的帧"
 }
