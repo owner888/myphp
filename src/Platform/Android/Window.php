@@ -461,7 +461,7 @@ final class Window implements Platform\Window
 
                 $pressId = ++$this->longPressId;
                 \MyPHP\App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
-                    if ($this->touchActive && !$this->touchIsScrolling && $this->longPressId === $pressId) {
+                    if ($this->touchActive && !$this->touchIsScrolling && !$this->touchAxisTaken && $this->longPressId === $pressId) {
                         $this->touchLongPressed = true;
                         $input = $this->w->input;
                         if ($input !== null && $this->w->runtime?->hasContextMenuAt($ptX, $ptY)) { // a node with a menu: it opens on the long press, which is no tap
@@ -470,6 +470,7 @@ final class Window implements Platform\Window
                             $input->mouse($ptX, $ptY);
                             $input->push(['down', $ptX, $ptY, 1, 1, 0, $time]);
                             $input->push(['up', $ptX, $ptY, 1, 1, 0, $time]);
+                            $this->touchActive = false; // the touch is the menu's now: its moves scroll and swipe nothing, its lift taps nothing, as UIKit's context menu cancelling the other gestures
                             $this->requestFrame();
                         } elseif ($input !== null) {
                             $input->mouse($ptX, $ptY);
@@ -486,6 +487,9 @@ final class Window implements Platform\Window
                     break;
                 }
                 $rt = $this->w->runtime;
+                if (hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY) > 10.0) { // moved off: no long press (UILongPressGestureRecognizer's allowableMovement)
+                    ++$this->longPressId;
+                }
                 if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && $rt->isDraggingControl())) {
                     // A node dragged along one axis alone (a row swiped sideways, a sheet pulled down) takes the finger
                     // once it moved 8 points along that axis; moved across it first, the container scrolls instead, as
@@ -496,7 +500,7 @@ final class Window implements Platform\Window
                         $along = abs($axes === Node::HORIZONTAL ? $ptX - $this->touchStartX : $ptY - $this->touchStartY);
                         $across = abs($axes === Node::HORIZONTAL ? $ptY - $this->touchStartY : $ptX - $this->touchStartX);
                         if ($along > 8.0) {
-                            $this->touchAxisTaken = true; $undecided = false;
+                            $this->touchAxisTaken = true; $undecided = false; ++$this->longPressId; // the swipe took the touch: no long press
                         } elseif ($across > 8.0) {
                             $rt->cancelTouchPress(); // the move is the scroll's: below, as any touch moving on a container
                         } else {

@@ -763,10 +763,13 @@ $h->frame(2);
 [$x, $y] = $h->middle($h->byText('Row 1'));
 $h->rightClick($x, $y); $h->frame(2);
 $shown = in_array('Copy Hex', $h->texts(), true);
-$h->clickText('Delete'); $h->frame(3);
+$h->clickText('Delete'); $h->frame(2);
+$fading = in_array('Copy Hex', $h->texts(), true); // it fades out, not gone at once
+for ($k = 0; $k < 4; $k++) { usleep(100_000); $h->frame(2); }
 $h->rightClick($x, $y); $h->frame(2);
-$h->click(20, 800); $h->frame(3);
-same([true, ['delete 1'], false, null], [$shown, $menuRan->getArrayCopy(), in_array('Copy Hex', $h->texts(), true), $h->rt->touchMenu], 'a phone\'s context menu: shown, an item chosen, a tap beside closes it');
+$h->click(20, 800);
+for ($k = 0; $k < 4; $k++) { usleep(100_000); $h->frame(2); }
+same([true, true, ['delete 1'], false, null], [$shown, $fading, $menuRan->getArrayCopy(), in_array('Copy Hex', $h->texts(), true), $h->rt->touchMenu], 'a phone\'s context menu: shown, an item chosen and the menu fading out, a tap beside closes it');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);

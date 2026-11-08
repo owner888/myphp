@@ -47,7 +47,7 @@ trait RuntimeMenu
      */
     public Closure $popupMenu;
 
-    /** @internal a phone's context menu while it shows, which Context::touchMenu builds over the view: its items (MyPHP\MenuItem), where (window points), and what takes the choice (-1: none) */
+    /** @internal a phone's context menu while it shows, which Context::touchMenu builds over the view: its items (MyPHP\MenuItem), where (window points), what takes the choice, and 'closing' while it fades out */
     public ?array $touchMenu = null;
 
     private function initMenus(): void
