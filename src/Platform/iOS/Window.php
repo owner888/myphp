@@ -32,6 +32,8 @@ final class Window implements Platform\Window
     /** A finger on a node dragged along one axis moved along it: the drag's, not the scroll's, until it lifts. */
     private bool $touchAxisTaken = false;
     private int $longPressId = 0;
+    /** The touch opened a context menu: its moves and lift are the menu's (Runtime::$touchMenuFinger). */
+    private bool $touchMenuHeld = false;
     /** @var list<array{0: int, 1: float, 2: float}> */
     private array $touchHistory = [];
     private bool $keyboardVisible = false;
@@ -224,6 +226,7 @@ final class Window implements Platform\Window
                 $this->touchStartTime = $time;
                 $this->touchIsScrolling = false;
                 $this->touchAxisTaken = false;
+                $this->touchMenuHeld = false;
                 $this->touchHistory = [[$time, $ptX, $ptY]];
 
                 // Check if touch starts inside focused text field
@@ -254,7 +257,8 @@ final class Window implements Platform\Window
                             $input->mouse($ptX, $ptY);
                             $input->push(['down', $ptX, $ptY, 1, 1, 0, $time]);
                             $input->push(['up', $ptX, $ptY, 1, 1, 0, $time]);
-                            $this->touchActive = false; // the touch is the menu's now: its moves scroll and swipe nothing, its lift taps nothing, as UIKit's context menu cancelling the other gestures
+                            $this->touchMenuHeld = true; // the touch is the menu's now: its moves slide over the items, its lift chooses one, and they scroll, swipe and tap nothing else, as UIKit's context menu cancelling the other gestures
+                            $this->w->runtime->touchMenuFinger = [$ptX, $ptY, false];
                             $this->requestFrame();
                         } elseif ($input !== null) {
                             $input->mouse($ptX, $ptY);
@@ -267,6 +271,11 @@ final class Window implements Platform\Window
 
             case 1: // touchesMoved
                 if (!$this->touchActive) {
+                    break;
+                }
+                if ($this->touchMenuHeld) { // the finger that opened a context menu: the menu's (Context::touchMenu)
+                    if ($this->w->runtime !== null) { $this->w->runtime->touchMenuFinger = [$ptX, $ptY, false]; }
+                    $this->requestFrame();
                     break;
                 }
                 $rt = $this->w->runtime;
@@ -327,6 +336,12 @@ final class Window implements Platform\Window
                 if (!$this->touchActive) {
                     break;
                 }
+                if ($this->touchMenuHeld) { // the finger that opened a context menu: the menu's (Context::touchMenu)
+                    if ($this->w->runtime !== null) { $this->w->runtime->touchMenuFinger = [$ptX, $ptY, true]; }
+                    $this->touchMenuHeld = false; $this->touchActive = false;
+                    $this->requestFrame();
+                    break;
+                }
                 $this->touchActive = false;
                 $rt = $this->w->runtime;
                 if ($rt !== null) {
@@ -372,6 +387,7 @@ final class Window implements Platform\Window
                 break;
 
             case 3: // touchesCancelled
+                $this->touchMenuHeld = false;
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
                 $this->touchInField = false;

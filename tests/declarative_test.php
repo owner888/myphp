@@ -770,6 +770,15 @@ $h->rightClick($x, $y); $h->frame(2);
 $h->click(20, 800);
 for ($k = 0; $k < 4; $k++) { usleep(100_000); $h->frame(2); }
 same([true, true, ['delete 1'], false, null], [$shown, $fading, $menuRan->getArrayCopy(), in_array('Copy Hex', $h->texts(), true), $h->rt->touchMenu], 'a phone\'s context menu: shown, an item chosen and the menu fading out, a tap beside closes it');
+// The finger that opened it held on: slid onto an item it presses it, lifted there chooses it, as UIKit's; lifted where it opened, nothing.
+$h->rightClick($x, $y); $h->rt->touchMenuFinger = [$x, $y, false]; $h->frame(2);
+$sharp = $h->rt->touchMenu['rect'] ?? null;
+$h->rt->touchMenuFinger = [$x, $y, true]; $h->frame(2);
+$still = $h->rt->touchMenu !== null && $menuRan->count() === 1;
+$r = $h->rt->rectOf($h->byText('Copy Hex')->id);
+$h->rt->touchMenuFinger = [$r[0] + 4, $r[1] + 4, false]; $h->frame(2);
+$h->rt->touchMenuFinger = [$r[0] + 4, $r[1] + 4, true]; $h->frame(2);
+same([true, true, ['delete 1', 'copy 1']], [$sharp !== null && $y >= $sharp[1] && $y < $sharp[1] + $sharp[3], $still, $menuRan->getArrayCopy()], 'the row kept sharp; a lift where it opened chooses nothing; slid onto Copy Hex and lifted, it is chosen');
 
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);

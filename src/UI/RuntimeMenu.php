@@ -50,6 +50,16 @@ trait RuntimeMenu
     /** @internal a phone's context menu while it shows, which Context::touchMenu builds over the view: its items (MyPHP\MenuItem), where (window points), what takes the choice, and 'closing' while it fades out */
     public ?array $touchMenu = null;
 
+    /** @internal the finger that opened a phone's context menu, held on after (Platform Window): where it is, and whether it lifted there; Context::touchMenu chooses the item it lifts on, as UIKit's */
+    public ?array $touchMenuFinger = null;
+
+    /** @internal where the node whose context menu opens at $x, $y is, in window points: what a phone's menu keeps sharp, the rest blurred (Context::touchMenu) */
+    public function contextMenuRect(float $x, float $y): ?array
+    {
+        $s = $this->menuTarget($this->menuChain($x, $y));
+        return $s === 0 ? null : $this->rectOf($s);
+    }
+
     private function initMenus(): void
     {
         $this->popupMenu = fn(array $items, float $x, float $y, bool $rtl, Closure $chosen) => null;

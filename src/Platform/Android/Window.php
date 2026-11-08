@@ -261,12 +261,13 @@ final class Window implements Platform\Window
     private int $touchStartTime = 0;
     private int $touchLastTime = 0;
     private bool $touchIsScrolling = false;
-    private bool $touchLongPressed = false;
     private bool $touchInField = false;
     /** A finger on a node dragged along one axis moved along it: the drag's, not the scroll's, until it lifts. */
     private bool $touchAxisTaken = false;
     private bool $downFrameDrawn = false;
     private int $longPressId = 0;
+    /** The touch opened a context menu: its moves and lift are the menu's (Runtime::$touchMenuFinger). */
+    private bool $touchMenuHeld = false;
     private int $releaseSeq = 0;
     /** @var list<array{0: int, 1: float, 2: float}> [timeNs, x, y] */
     private array $touchHistory = [];
@@ -437,8 +438,8 @@ final class Window implements Platform\Window
                 $this->touchStartTime = $time;
                 $this->touchLastTime = $time;
                 $this->touchIsScrolling = false;
-                $this->touchLongPressed = false;
                 $this->touchAxisTaken = false;
+                $this->touchMenuHeld = false;
                 $this->touchHistory = [[$time, $ptX, $ptY]];
 
                 // Check if touch begins inside the focused text field box
@@ -462,7 +463,6 @@ final class Window implements Platform\Window
                 $pressId = ++$this->longPressId;
                 \MyPHP\App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
                     if ($this->touchActive && !$this->touchIsScrolling && !$this->touchAxisTaken && $this->longPressId === $pressId) {
-                        $this->touchLongPressed = true;
                         $input = $this->w->input;
                         if ($input !== null && $this->w->runtime?->hasContextMenuAt($ptX, $ptY)) { // a node with a menu: it opens on the long press, which is no tap
                             $this->w->runtime->cancelTouchPress();
@@ -470,7 +470,8 @@ final class Window implements Platform\Window
                             $input->mouse($ptX, $ptY);
                             $input->push(['down', $ptX, $ptY, 1, 1, 0, $time]);
                             $input->push(['up', $ptX, $ptY, 1, 1, 0, $time]);
-                            $this->touchActive = false; // the touch is the menu's now: its moves scroll and swipe nothing, its lift taps nothing, as UIKit's context menu cancelling the other gestures
+                            $this->touchMenuHeld = true; // the touch is the menu's now: its moves slide over the items, its lift chooses one, and they scroll, swipe and tap nothing else, as UIKit's context menu cancelling the other gestures
+                            $this->w->runtime->touchMenuFinger = [$ptX, $ptY, false];
                             $this->requestFrame();
                         } elseif ($input !== null) {
                             $input->mouse($ptX, $ptY);
@@ -484,6 +485,11 @@ final class Window implements Platform\Window
 
             case Android::ACTION_MOVE:
                 if (!$this->touchActive) {
+                    break;
+                }
+                if ($this->touchMenuHeld) { // the finger that opened a context menu: the menu's (Context::touchMenu)
+                    if ($this->w->runtime !== null) { $this->w->runtime->touchMenuFinger = [$ptX, $ptY, false]; }
+                    $this->requestFrame();
                     break;
                 }
                 $rt = $this->w->runtime;
@@ -545,6 +551,12 @@ final class Window implements Platform\Window
                 if (!$this->touchActive) {
                     break;
                 }
+                if ($this->touchMenuHeld) { // the finger that opened a context menu: the menu's (Context::touchMenu)
+                    if ($this->w->runtime !== null) { $this->w->runtime->touchMenuFinger = [$ptX, $ptY, true]; }
+                    $this->touchMenuHeld = false; $this->touchActive = false;
+                    $this->requestFrame();
+                    break;
+                }
                 $this->touchActive = false;
                 $rt = $this->w->runtime;
                 if ($rt !== null) {
@@ -591,6 +603,7 @@ final class Window implements Platform\Window
                 break;
 
             case Android::ACTION_CANCEL:
+                $this->touchMenuHeld = false;
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
                 $this->w->runtime?->cancelTouchPress();
