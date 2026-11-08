@@ -19,6 +19,7 @@ final class Iina
     public readonly PreferencesApi $preferences;
     public readonly MenuApi $menu;
     public readonly UtilsApi $utils;
+    public readonly StringsApi $strings;
     public readonly FileApi $file;
     public readonly HttpApi $http;
     public readonly ?CoreApi $core;
@@ -40,6 +41,7 @@ final class Iina
         $this->preferences = new PreferencesApi($instance);
         $this->menu = new MenuApi($instance);
         $this->utils = new UtilsApi($instance);
+        $this->strings = new StringsApi($instance);
         $this->file = new FileApi($instance);
         $this->http = new HttpApi($instance);
         $player = !$instance->isGlobal;

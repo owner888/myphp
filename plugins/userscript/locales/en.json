@@ -1,0 +1,17 @@
+{
+  "User Scripts": "User Scripts",
+  "Manage User Scripts...": "Manage User Scripts...",
+  "About User Scripts": "About User Scripts",
+  "User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package.": "User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package.",
+  "A script is PHP code run in each player with <code>$iina</code>, the plugin's API, as IINA's plugins of JavaScript are given <code>iina</code>. Read the documentation at <code>https://docs.iina.io</code> to learn more about the IINA plugin API.": "A script is PHP code run in each player with <code>$iina</code>, the plugin's API, as IINA's plugins of JavaScript are given <code>iina</code>. Read the documentation at <code>https://docs.iina.io</code> to learn more about the IINA plugin API.",
+  "＋ New Script": "＋ New Script",
+  "Script Name": "Script Name",
+  "Action": "Action",
+  "← Exit": "← Exit",
+  "Save": "Save",
+  "Edit": "Edit",
+  "Delete": "Delete",
+  "Are you sure to delete {name}?": "Are you sure to delete {name}?",
+  "Saved.": "Saved.",
+  "Name updated.": "Name updated."
+}

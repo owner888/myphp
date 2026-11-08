@@ -99,28 +99,28 @@
   <div class="right">
     <div id="quota" class="header-item ui-hover hidden"></div>
     <div id="log-btn" class="header-item ui-clickable ui-hover">
-      <svg class="icon" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg><span>Log</span>
+      <svg class="icon" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg><span data-l10n="Log"></span>
       <div id="log" class="popup-menu-container log-container hidden"></div>
     </div>
   </div>
 </div>
 <div id="search" class="ui-lr">
-  <div class="left search-container"><input id="search-text" type="text" placeholder="Search…"></div>
+  <div class="left search-container"><input id="search-text" type="text" data-l10n-placeholder="Search…"></div>
   <div class="right">
-    <button id="go" style="margin-right: 4px" disabled>GO</button>
+    <button id="go" style="margin-right: 4px" disabled data-l10n="GO"></button>
     <button id="toggle-options">...</button>
   </div>
 </div>
 <div id="search-options">
   <div class="search-opt-actions ui-lr">
-    <div class="left"><button id="set-languages">Languages...</button></div>
-    <div class="right"><button id="paste-filename" style="margin-right: 4px">Paste filename</button></div>
+    <div class="left"><button id="set-languages" data-l10n="Languages..."></button></div>
+    <div class="right"><button id="paste-filename" style="margin-right: 4px" data-l10n="Paste filename"></button></div>
   </div>
-  <div class="search-opt-item"><label>Type</label><div class="segmented-control" id="opt-type"></div></div>
-  <div class="search-opt-item"><label for="opt-machine">Include machine translated</label><input type="checkbox" id="opt-machine"></div>
-  <div class="search-opt-item"><label for="opt-ai">Include AI translated</label><input type="checkbox" id="opt-ai" checked></div>
-  <div class="search-opt-item"><label for="opt-trusted">Only from trusted source</label><input type="checkbox" id="opt-trusted"></div>
-  <div class="search-opt-item"><div>Hearing impared</div><div class="segmented-control" id="opt-impaired"></div></div>
+  <div class="search-opt-item"><label data-l10n="Type"></label><div class="segmented-control" id="opt-type"></div></div>
+  <div class="search-opt-item"><label for="opt-machine" data-l10n="Include machine translated"></label><input type="checkbox" id="opt-machine"></div>
+  <div class="search-opt-item"><label for="opt-ai" data-l10n="Include AI translated"></label><input type="checkbox" id="opt-ai" checked></div>
+  <div class="search-opt-item"><label for="opt-trusted" data-l10n="Only from trusted source"></label><input type="checkbox" id="opt-trusted"></div>
+  <div class="search-opt-item"><div data-l10n="Hearing impaired"></div><div class="segmented-control" id="opt-impaired"></div></div>
 </div>
 <div id="messages"></div>
 <div id="search-results"></div>
@@ -132,6 +132,7 @@
   </div>
 </div>
 <script>
+const t = (key, args) => iina.strings.get(key, args); // the plugin's messages (locales/), in the app's language
 // IINA's plugin-opensub sidebar (its Vue app, its Client and API of opensubtitles.com), without a framework or a bundler.
 const ICON_USER = '<svg class="icon" viewBox="0 0 448 512"><path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/></svg>';
 const ICON_PIE = '<svg class="icon" viewBox="0 0 576 512"><path d="M304 240V16.6c0-9 7-16.6 16-16.6C443.7 0 544 100.3 544 224c0 9-7.6 16-16.6 16H304zM32 272C32 150.7 122.1 50.3 239 34.3c9.2-1.3 17 6.1 17 15.4V288L412.5 444.5c6.7 6.7 6.2 17.7-1.5 23.1C371.8 495.6 323.8 512 272 512C139.5 512 32 404.6 32 272zm526.4 16c9.3 0 16.6 7.8 15.4 17c-7.7 55.9-34.6 105.6-73.9 142.3c-6 5.6-15.4 5.2-21.2-.7L320 288H558.4z"/></svg>';
@@ -267,18 +268,18 @@ function render() {
     item.onclick = showUserPopup;
     if (state.userPopupShown && userInfoAvailable) {
       const pop = el("div", { class: "popup-menu-container" });
-      const rows = [["ID", u.user_id], ["Level", u.level], ["Allowed downloads", u.allowed_downloads], ["Allowed translations", u.allowed_translations],
-        ["Downloads count", u.downloads_count], ["Remaining downloads", u.remaining_downloads], ["Reset time (last updated)", u.reset_time]];
+      const rows = [["ID", u.user_id], [t("Level"), u.level], [t("Allowed downloads"), u.allowed_downloads], [t("Allowed translations"), u.allowed_translations],
+        [t("Downloads count"), u.downloads_count], [t("Remaining downloads"), u.remaining_downloads], [t("Reset time (last updated)"), u.reset_time]];
       const info = el("div", { class: "user-info" });
       for (const [k, v] of rows) info.append(el("span", { class: "title" }, k), `: ${v ?? ""}`, el("br"));
-      const out = el("div", { class: "ui-clickable ui-hover" }, "Log out");
+      const out = el("div", { class: "ui-clickable ui-hover" }, t("Log out"));
       out.onclick = (e) => { e.stopPropagation(); logout(); };
       pop.append(info, el("hr"), out);
       item.append(pop);
     }
     left.append(item);
   } else {
-    const item = el("div", { class: "header-item ui-clickable ui-hover" }, "Log in");
+    const item = el("div", { class: "header-item ui-clickable ui-hover" }, t("Log in"));
     item.onclick = login;
     left.append(item);
   }
@@ -287,7 +288,7 @@ function render() {
   if (state.quotaInfo) {
     quota.innerHTML = ICON_PIE;
     quota.append(String(state.quotaInfo.remaining));
-    quota.title = `Requests: ${state.quotaInfo.requests}\nRemaining: ${state.quotaInfo.remaining}\n${state.quotaInfo.message}`;
+    quota.title = t("Requests: {requests}\nRemaining: {remaining}", state.quotaInfo) + `\n${state.quotaInfo.message}`;
   }
   $("log-btn").classList.toggle("active", state.showLog);
   const logBox = $("log");
@@ -297,13 +298,13 @@ function render() {
   $("go").disabled = state.isSearching || !$("search-text").value;
   const messages = $("messages");
   messages.textContent = "";
-  if (state.errorGettingLanguages) messages.append(el("div", { class: "message-item" }, `Cannot get language list. Using ${langString()} for now.`));
+  if (state.errorGettingLanguages) messages.append(el("div", { class: "message-item" }, t("Cannot get language list. Using {languages} for now.", { languages: langString() })));
   if (langString().length < 1) {
-    const here = el("a", {}, "here");
+    const here = el("a", {}, t("Set languages"));
     here.onclick = setLanguages;
-    messages.append(el("div", { class: "message-item" }, "Language not set. Using English by default. Click ", here, " to set."));
+    messages.append(el("div", { class: "message-item" }, t("Language not set. Using English by default."), " ", here));
   }
-  if (state.errorSavingJWT) messages.append(el("div", { class: "message-item" }, "Cannot save the JWT token to keychain. Login status will not be saved."));
+  if (state.errorSavingJWT) messages.append(el("div", { class: "message-item" }, t("Cannot save the JWT token to keychain. Login status will not be saved.")));
   renderResults();
   renderModal();
 }
@@ -311,8 +312,8 @@ function render() {
 function pagination() {
   const p = el("div", { class: "search-pagination" });
   const b = (label, page, disabled) => { const x = el("button", {}, label); x.disabled = disabled; x.onclick = () => performSearch(page); return x; };
-  p.append(b("First", 1, state.pageNumber === 1), b("Prev", state.pageNumber - 1, state.pageNumber === 1), el("span", {}, `${state.pageNumber} / ${state.pageTotal}`),
-    b("Next", state.pageNumber + 1, state.pageNumber === state.pageTotal), b("Last", state.pageTotal, state.pageNumber === state.pageTotal));
+  p.append(b(t("First"), 1, state.pageNumber === 1), b(t("Prev"), state.pageNumber - 1, state.pageNumber === 1), el("span", {}, `${state.pageNumber} / ${state.pageTotal}`),
+    b(t("Next"), state.pageNumber + 1, state.pageNumber === state.pageTotal), b(t("Last"), state.pageTotal, state.pageNumber === state.pageTotal));
   return p;
 }
 
@@ -325,10 +326,10 @@ function getLanguageName(code) {
 function renderResults() {
   const box = $("search-results");
   box.textContent = "";
-  if (state.isSearching) { box.append(el("div", { class: "search-results-alert" }, "Loading...")); return; }
+  if (state.isSearching) { box.append(el("div", { class: "search-results-alert" }, t("Loading..."))); return; }
   if (state.searchResults === null) return;
   if (state.searchResults.length === 0) {
-    box.append(el("div", { class: "search-results-alert" }, 'No result for query "', el("span", { class: "query-text-in-no-result" }, state.cachedSearch?.query ?? ""), '".'));
+    box.append(el("div", { class: "search-results-alert" }, t("No result for query “{query}”.", { query: state.cachedSearch?.query ?? "" })));
     return;
   }
   if (state.pageTotal > 1) box.append(pagination());
@@ -366,11 +367,11 @@ function renderModal() {
   m.rendered = m.type;
   body.textContent = ""; footer.textContent = "";
   if (m.type === "login") {
-    body.innerHTML = 'Please enter your <em>opensubtitles.com</em> username and password. Note that this is not the same as your <em>opensubtitles.org</em> account. If you have not <a href="https://www.opensubtitles.com/users/import">migrated</a> your account yet, please do so before logging in.';
-    const user = el("input", { type: "text", placeholder: "Username", autocorrect: "off", autocomplete: "off", id: "login-user" });
-    const pass = el("input", { type: "password", placeholder: "Password", id: "login-pass" });
+    body.innerHTML = t('Please enter your <em>opensubtitles.com</em> username and password. Note that this is not the same as your <em>opensubtitles.org</em> account. If you have not <a href="https://www.opensubtitles.com/users/import">migrated</a> your account yet, please do so before logging in.');
+    const user = el("input", { type: "text", placeholder: t("Username"), autocorrect: "off", autocomplete: "off", id: "login-user" });
+    const pass = el("input", { type: "password", placeholder: t("Password"), id: "login-pass" });
     body.append(el("div", { class: "login-container" }, user, pass), el("p", { class: "login-error", id: "login-error" }));
-    const go = el("button", { id: "login-go" }, "Login");
+    const go = el("button", { id: "login-go" }, t("Log in"));
     go.onclick = performLogin;
     footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }), el("div", { class: "right" }, go)));
   } else if (m.type === "subInfo") {
@@ -379,19 +380,19 @@ function renderModal() {
     const files = el("ul");
     for (const file of a.files) files.append(el("li", {}, file.file_name));
     body.append(el("div", { class: "sub-info-title" }, a.release),
-      row("Language:", `${(state.langMap || {})[a.language.toLowerCase()] ?? a.language} (${a.language})`), row("Uploaded by", `${a.uploader.name} (${a.uploader.rank})`),
-      row("Date:", new Date(a.upload_date).toLocaleString()), el("div", {}, `${a.ratings}★ / ${a.votes} votes / ${a.points ?? "0"} points`),
+      row(t("Language:"), `${(state.langMap || {})[a.language.toLowerCase()] ?? a.language} (${a.language})`), row(t("Uploaded by"), `${a.uploader.name} (${a.uploader.rank})`),
+      row(t("Date:"), new Date(a.upload_date).toLocaleString()), el("div", {}, t("{ratings}★ / {votes} votes / {points} points", { ratings: a.ratings, votes: a.votes, points: a.points ?? 0 })),
       el("div", { class: "feature-title" }, `${f.title} (${f.year}) `, el("span", { class: "feature-type" }, f.feature_type)),
       el("div", {}, el("span", { class: "sub-info-label" }, "IMDB:"), el("span", {}, String(f.imdb_id)), " / ", el("span", { class: "sub-info-label" }, "TMDB:"), el("span", {}, String(f.tmdb_id))),
-      row("FPS:", a.fps), row("Downloads:", `${a.download_count} (${a.new_download_count} new)`), row("Trusted Source:", a.from_trusted), row("AI Translated:", a.ai_translated),
-      row("Machine Translated:", a.machine_translated), row("Hearing Impaired:", a.hearing_impaired), row("Comments:", a.comments), el("div", { class: "sub-info-label" }, "Files:"), files);
-    const browser = el("button", {}, "Show in browser");
+      row("FPS:", a.fps), row(t("Downloads:"), t("{count} ({new} new)", { count: a.download_count, new: a.new_download_count })), row(t("Trusted Source:"), a.from_trusted), row(t("AI Translated:"), a.ai_translated),
+      row(t("Machine Translated:"), a.machine_translated), row(t("Hearing Impaired:"), a.hearing_impaired), row(t("Comments:"), a.comments), el("div", { class: "sub-info-label" }, t("Files:")), files);
+    const browser = el("button", {}, t("Show in browser"));
     browser.onclick = () => rpc.call("$openLink", a.url);
-    const dl = el("button", {}, "Download");
+    const dl = el("button", {}, t("Download"));
     dl.onclick = () => download(state.subInfo);
     footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }, browser), el("div", { class: "right" }, dl)));
   } else if (m.type === "lang") {
-    if (state.langList === null) { body.append("Loading..."); }
+    if (state.langList === null) { body.append(t("Loading...")); }
     else {
       const box = el("div", { class: "lang-container" });
       for (const lang of [...state.langList].sort((a, b) => a.language_name.localeCompare(b.language_name))) {
@@ -402,14 +403,14 @@ function renderModal() {
       }
       body.append(box);
     }
-    const close = el("button", {}, "Close");
+    const close = el("button", {}, t("Close"));
     close.onclick = () => { state.modal = null; render(); };
-    footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }, `Selected: ${langString()}`), el("div", { class: "right" }, close)));
+    footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }, t("Selected: {languages}", { languages: langString() })), el("div", { class: "right" }, close)));
   }
 }
 
 function showModal(type, title) { state.modal = { type, title }; render(); }
-function showSubInfo(sub) { state.subInfo = sub; showModal("subInfo", "Subtitle Details"); }
+function showSubInfo(sub) { state.subInfo = sub; showModal("subInfo", t("Subtitle Details")); }
 
 async function getUserInfo() {
   log(`Login status: ${client.loggedIn}`);
@@ -428,7 +429,7 @@ async function showUserPopup() {
 
 function login() {
   if (client.loggedIn) { getUserInfo().then(render); return; }
-  showModal("login", "Login");
+  showModal("login", t("Log in"));
 }
 
 async function logout() {
@@ -471,7 +472,7 @@ async function refreshLanguageList() {
   render();
 }
 
-function setLanguages() { showModal("lang", "Languages"); refreshLanguageList(); }
+function setLanguages() { showModal("lang", t("Languages")); refreshLanguageList(); }
 
 async function pasteFilename() { $("search-text").value = await rpc.call("$getFileName"); render(); }
 
@@ -479,8 +480,8 @@ async function download(item) {
   const a = item.attributes;
   log(`Downloading ${a.release} (ID: ${item.id}, ${a.files.length} files)`);
   const fidList = a.files.map((f) => f.file_id);
-  if (fidList.length < 1) { rpc.call("$sendOSD", "No files to download"); return; }
-  rpc.call("$sendOSD", "Downloading…");
+  if (fidList.length < 1) { rpc.call("$sendOSD", t("No files to download")); return; }
+  rpc.call("$sendOSD", t("Downloading…"));
   try {
     const res = await client.download(fidList);
     log(`Downloaded ${a.release} (${fidList.length} files)`);
@@ -521,8 +522,8 @@ async function performSearch(page = null) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  segmented("opt-type", { movie: "Movie", episode: "Episode", all: "All" }, () => state.optType, (k) => { state.optType = k; });
-  segmented("opt-impaired", { include: "Include", exclude: "Exclude", only: "Only" }, () => state.optHearingImpaired, (k) => { state.optHearingImpaired = k; });
+  segmented("opt-type", { movie: t("Movie"), episode: t("Episode"), all: t("All") }, () => state.optType, (k) => { state.optType = k; });
+  segmented("opt-impaired", { include: t("Include"), exclude: t("Exclude"), only: t("Only") }, () => state.optHearingImpaired, (k) => { state.optHearingImpaired = k; });
   $("search-text").addEventListener("input", render);
   $("search-text").addEventListener("keypress", (e) => { if (e.key === "Enter") performSearch(); });
   $("go").onclick = () => performSearch();

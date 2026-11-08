@@ -79,7 +79,7 @@ return function (Iina $iina) {
         if (!empty($json['chapters'])) {
             $console->log('Adding pre-parsed chapters');
             foreach (array_values($json['chapters']) as $i => $chapter) {
-                $state->chapterList[] = ['time' => $chapter['start_time'] ?? 0, 'title' => $chapter['title'] ?? "Chapter $i"];
+                $state->chapterList[] = ['time' => $chapter['start_time'] ?? 0, 'title' => $chapter['title'] ?? $iina->strings->get('Chapter {n}', ['n' => $i])];
             }
         } elseif (!empty($json['description']) && !empty($json['duration'])) {
             $state->chapterList = $extractChapters((string)$json['description'], (float)$json['duration']);
@@ -113,12 +113,12 @@ return function (Iina $iina) {
             $console->log('reconstruct menu');
             $menu->removeAllItems();
             $menu->addItem($menu->separator());
-            $menu->addItem($menu->item('Download this video', function () use ($iina, $core, $state) {
-                $core->osd('Preparing for download');
+            $menu->addItem($menu->item($iina->strings->get('Download this video'), function () use ($iina, $core, $state) {
+                $core->osd($iina->strings->get('Preparing for download'));
                 $iina->global?->postMessage('downloadVideo', $state->currentURL);
             }, ['keyBinding' => 'Meta+d']));
-            $videoItem = $menu->item('Video Quality');
-            $audioItem = $menu->item('Audio Quality');
+            $videoItem = $menu->item($iina->strings->get('Video Quality'));
+            $audioItem = $menu->item($iina->strings->get('Audio Quality'));
             $reopen = fn() => $core->open((string)$mpv->getString('path')); // mpv's loadfile of the page again
             foreach ($json['formats'] as $f) {
                 $audio = ($f['vcodec'] ?? null) === 'none';
@@ -136,7 +136,7 @@ return function (Iina $iina) {
     };
 
     $ytdlSuccess = function (string $url, array $json, array $option) use ($iina, $core, $console, $mpv, $addVideo) {
-        $core->osd('Opening media…');
+        $core->osd($iina->strings->get('Opening media…'));
         $json['proxy'] = $json['proxy'] ?? $option['proxy'];
         if (!empty($json['direct'])) {
             $console->log('Got direct URL');
@@ -182,7 +182,7 @@ return function (Iina $iina) {
     };
 
     $runYTDLHook = function (string $url) use ($iina, $core, $console, $mpv, $utils, $state, $ytdlSuccess) {
-        $core->osd($state->isSwitchingFormat ? 'Switching quality…' : 'Fetching online media information…');
+        $core->osd($iina->strings->get($state->isSwitchingFormat ? 'Switching quality…' : 'Fetching online media information…'));
         $format = format($iina);
         $allsubs = true;
         $option = ['proxy' => null, 'usePlaylist' => false];
@@ -231,21 +231,21 @@ return function (Iina $iina) {
             array_push($args, '--', $url);
             $out = $utils->exec($path, $args);
             if (($out['status'] ?? 1) !== 0) {
-                $core->osd('Failed to run youtube-dl');
+                $core->osd($iina->strings->get('Failed to run youtube-dl'));
                 $console->error('Error running youtube-dl: ' . ($out['stderr'] ?? ''));
                 return;
             }
             $console->log('Finished running youtube-dl');
             $json = json_decode($out['stdout'], true);
             if (!is_array($json)) {
-                $core->osd('Failed to fetch online media information');
+                $core->osd($iina->strings->get('Failed to fetch online media information'));
                 $console->error("Failed to parse youtube-dl's output: " . json_last_error_msg());
                 return;
             }
             $console->log('Youtube-dl succeeded.');
             $ytdlSuccess($url, $json, $option);
         } catch (\Throwable $e) {
-            $core->osd('Unknown error.');
+            $core->osd($iina->strings->get('Unknown error.'));
             $console->error("Unexpected error: {$e->getMessage()}");
         }
     };
@@ -275,6 +275,6 @@ return function (Iina $iina) {
         $next();
     });
 
-    $iina->global?->onMessage('downloading', fn() => $core->osd('Video downloading'));
-    $iina->global?->onMessage('downloaded', fn() => $core->osd('Video downloaded'));
+    $iina->global?->onMessage('downloading', fn() => $core->osd($iina->strings->get('Video downloading')));
+    $iina->global?->onMessage('downloaded', fn() => $core->osd($iina->strings->get('Video downloaded')));
 };

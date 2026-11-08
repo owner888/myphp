@@ -16,7 +16,10 @@ use RuntimeException;
  * once for the app), description, localized {lang: {name, description,
  * sidebarTab: {name}}}, preferencesPage and helpPage (HTML), allowedDomains,
  * permissions, subtitleProviders [{id, name}], sidebarTab {name}, ghRepo
- * ("user/repo"), ghVersion, preferenceDefaults. Its preferences are kept
+ * ("user/repo"), ghVersion, preferenceDefaults; and myphp's i18n {dir,
+ * source}, as an app's myphp.json, the catalogs of its own messages
+ * (`locales` and `en` without it, if there is such a folder), which its
+ * code says with $iina->strings and its pages with iina.strings. Its preferences are kept
  * in ".preferences/<id>.json" (IINA's .plist), its data in ".data/<id>",
  * its temporary files in the system's temporary folder.
  */
@@ -38,6 +41,8 @@ final class Plugin
     public readonly ?array $subProviders;
     /** @var array<string, mixed> */
     public readonly array $defaultPreferences;
+    /** The catalogs of its messages (Info.json's i18n), null for a plugin without. */
+    public readonly ?\MyPHP\Catalog $catalog;
     /** Whether it is a link to a folder elsewhere (IINA's isExternal: the DEV of the list). */
     public readonly bool $isExternal;
     public string $root, $entryURL;
@@ -84,6 +89,13 @@ final class Plugin
             throw new RuntimeException("Plugin ID \"{$json['identifier']}\"should comply with the Reverse domain name notation");
         }
         $this->root = $root;
+        $i18n = is_array($json['i18n'] ?? null) ? $json['i18n'] : [];
+        $locales = $root . '/' . (is_string($i18n['dir'] ?? null) ? $i18n['dir'] : 'locales');
+        try {
+            $this->catalog = is_dir($locales) ? new \MyPHP\Catalog($locales, is_string($i18n['source'] ?? null) ? $i18n['source'] : 'en') : null;
+        } catch (\InvalidArgumentException $e) { // a plugin of broken catalogs is not loaded, as one of a broken Info.json
+            throw new RuntimeException("The plugin's catalogs: {$e->getMessage()}", 0, $e);
+        }
         $l10n = self::localization(is_array($json['localized'] ?? null) ? $json['localized'] : []);
         $this->name = is_string($l10n['name'] ?? null) ? $l10n['name'] : $json['name'];
         $this->version = $json['version'];
@@ -129,6 +141,88 @@ final class Plugin
         }
         Logger::debug("Loaded plugin: {$this->name} {$this->version}", Plugins::LOG);
     }
+
+    /**
+     * Message $key of its catalogs in the language the app shows, $args in its placeholders (ICU's), as an app's Text
+     * says its own: $key itself, formatted, where its catalogs have none.
+     * @param array<string, mixed> $args
+     */
+    public function string(string $key, array $args = []): string
+    {
+        $locale = \MyPHP\App::locale();
+        if ($this->catalog?->message($locale, $key) !== null) { return $this->catalog->format($locale, $key, $args); }
+        return $args === [] ? $key : \MyPHP\Message::parse($key)->format($locale, $args);
+    }
+
+    /**
+     * Its pages' iina.strings (WebPane, the settings' page): the messages of its catalogs, as written in the language
+     * the app shows, which the page formats, and the page's elements of data-l10n (its text), data-l10n-html (its
+     * markup), data-l10n-placeholder and data-l10n-title said in it. '' for a plugin without catalogs.
+     */
+    public function stringsScript(): string
+    {
+        $locale = \MyPHP\App::locale();
+        $messages = [];
+        foreach ($this->catalog?->keys() ?? [] as $key) {
+            if (($m = $this->catalog->message($locale, $key)) !== null) { $messages[$key] = (string)$m[0]; }
+        }
+        return str_replace(['LOCALE', 'MESSAGES'], [json_encode($locale), json_encode((object)$messages, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)], self::STRINGS);
+    }
+
+    /** iina.strings: get(key, args), ICU's arguments, numbers, plural, selectordinal and select, as the app's catalogs say them. */
+    private const STRINGS = <<<'JS'
+(() => {
+  const iina = window.iina || (window.iina = {});
+  const locale = LOCALE, messages = MESSAGES;
+  const number = (n) => new Intl.NumberFormat(locale).format(n);
+  const block = (s, i) => { let d = 1, j = i + 1; while (j < s.length && d) { if (s[j] === "{") d++; else if (s[j] === "}") d--; j++; } return j; };
+  const format = (s, args, pound) => {
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === "'" && s[i + 1] === "'") { out += "'"; i++; continue; }
+      if (c === "'" && "{}#".includes(s[i + 1] ?? "")) { const j = s.indexOf("'", i + 1); out += s.slice(i + 1, j < 0 ? s.length : j); i = j < 0 ? s.length : j; continue; }
+      if (c === "#" && pound !== undefined) { out += number(pound); continue; }
+      if (c !== "{") { out += c; continue; }
+      const end = block(s, i), body = s.slice(i + 1, end - 1);
+      i = end - 1;
+      const [name, type = ""] = body.split(",").map((p) => p.trim());
+      const v = args[name];
+      if (type === "plural" || type === "selectordinal" || type === "select") {
+        const rest = body.slice(body.indexOf(",", body.indexOf(",") + 1) + 1), cases = {};
+        for (let k = 0; k < rest.length;) {
+          while (k < rest.length && /\s/.test(rest[k])) k++;
+          if (k >= rest.length) break;
+          let key = "";
+          while (k < rest.length && rest[k] !== "{" && !/\s/.test(rest[k])) key += rest[k++];
+          while (k < rest.length && /\s/.test(rest[k])) k++;
+          const m = block(rest, k);
+          cases[key] = rest.slice(k + 1, m - 1);
+          k = m;
+        }
+        if (type === "select") { out += format(cases[v] ?? cases.other ?? "", args, pound); continue; }
+        const n = Number(v), rule = new Intl.PluralRules(locale, type === "selectordinal" ? { type: "ordinal" } : {}).select(n);
+        out += format(cases["=" + n] ?? cases[rule] ?? cases.other ?? "", args, n);
+        continue;
+      }
+      out += type === "number" || typeof v === "number" ? number(v) : (v ?? "");
+    }
+    return out;
+  };
+  iina.strings = {
+    locale,
+    get(key, args = {}) { return format(Object.hasOwn(messages, key) ? messages[key] : key, args); },
+  };
+  const translate = () => {
+    document.documentElement.lang = locale;
+    for (const e of document.querySelectorAll("[data-l10n]")) e.textContent = iina.strings.get(e.dataset.l10n);
+    for (const e of document.querySelectorAll("[data-l10n-html]")) e.innerHTML = iina.strings.get(e.dataset.l10nHtml); // a message of markup, the plugin's own
+    for (const e of document.querySelectorAll("[data-l10n-placeholder]")) e.placeholder = iina.strings.get(e.dataset.l10nPlaceholder);
+    for (const e of document.querySelectorAll("[data-l10n-title]")) e.title = iina.strings.get(e.dataset.l10nTitle);
+  };
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", translate) : translate();
+})();
+JS;
 
     /** The strings of the language the app shows of $l10n (IINA's localized: "en" too, Info.json's own the rest). @param array<string, mixed> $l10n @return array<string, mixed> */
     private static function localization(array $l10n): array

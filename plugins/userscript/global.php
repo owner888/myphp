@@ -10,7 +10,7 @@ return function (Iina $iina) {
     $file = $iina->file;
 
     $window->loadFile('standalone/index.html'); // first: a page loaded clears the listeners (IINA's)
-    $window->setProperty(['title' => 'User Scripts']);
+    $window->setProperty(['title' => $iina->strings->get('User Scripts')]);
 
     $window->onMessage('load-scripts', fn() => $window->postMessage('load-scripts-done', load($iina)));
     $window->onMessage('save-scripts', function ($scripts) use ($iina, $window) {
@@ -48,5 +48,5 @@ return function (Iina $iina) {
     });
 
 
-    $iina->menu->addItem($iina->menu->item('Manage User Scripts...', fn() => $window->open(), ['keyBinding' => 'Meta+Shift+U']));
+    $iina->menu->addItem($iina->menu->item($iina->strings->get('Manage User Scripts...'), fn() => $window->open(), ['keyBinding' => 'Meta+Shift+U']));
 };

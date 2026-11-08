@@ -10,3 +10,7 @@ loads subtitles; a provider of Find Online Subtitles, which opens the sidebar.
 
 In myphp, Settings > Plugins > Get Plugins…, choose Online Subtitles; or enter
 `owner888/myphp-plugin-opensub`.
+
+## Languages
+
+English, Simplified and Traditional Chinese, and Japanese (`locales/`): it speaks the language the app shows. A translation to another language is a `locales/<tag>.json` of the same keys as `en.json`.

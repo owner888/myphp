@@ -17,7 +17,7 @@ return function (Iina $iina) {
 
     $iina->event->on('iina.menu-update', function () use ($iina, $core, $sidebar) {
         $iina->menu->removeAllItems();
-        $iina->menu->addItem($iina->menu->item('Show Sidebar', fn() => $sidebar->show(), ['keyBinding' => 'Meta+p', 'enabled' => (bool)$core->window->visible]));
+        $iina->menu->addItem($iina->menu->item($iina->strings->get('Show Sidebar'), fn() => $sidebar->show(), ['keyBinding' => 'Meta+p', 'enabled' => (bool)$core->window->visible]));
     });
 
     // IINA's rpcClient: a function served is called by "#call.$name" and answers "#on.$name"; one called answers so.

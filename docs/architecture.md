@@ -7315,6 +7315,18 @@ developer tool the third.
   none. Its preferences are kept in ".preferences/<id>.json" (IINA's
   plist), its data in ".data/<id>" (@data), its temporary files in
   the system's temporary folder (@tmp).
+- A plugin's own messages, not IINA's (whose plugins have Info.json's
+  localized alone): catalogs as an app's, `locales/<tag>.json` (Info.json's
+  `i18n` {dir, source}, as myphp.json's), said in the language the app
+  shows. Its code says them with `$iina->strings->get('Opening media…')`,
+  ICU's placeholders and plurals included; its pages (overlays,
+  sidebars, standalone windows, settings and help) with
+  `iina.strings.get(key, args)`, the messages of the app's language
+  given them as they load, and their elements of `data-l10n` (text),
+  `data-l10n-html` (markup), `data-l10n-placeholder` and
+  `data-l10n-title` said in it. A key the catalogs lack is said as it
+  is. The official plugins are in English, Simplified and Traditional
+  Chinese and Japanese, as MyPHP's own strings.
 - An entry is a PHP file returning a function of an `Iina`:
 
       <?php

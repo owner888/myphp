@@ -47,49 +47,42 @@
 
 <body>
   <div class="pref-section">
-    Use custom youtube-dl/yt-dlp:
-    <p class="small secondary pref-help">
-      Enter the path to the youtube-dl or yt-dlp binary.
-      If you are using Homebrew, the path is usually <code>/opt/homebrew/bin/yt-dlp</code> for Apple Sillion Macs and
-      <code>/usr/local/bin/yt-dlp</code> for Intel Macs.
-    </p>
+    <span data-l10n="Use custom youtube-dl/yt-dlp:"></span>
+    <p class="small secondary pref-help" data-l10n-html="Enter the path to the youtube-dl or yt-dlp binary. If you are using Homebrew, the path is usually &lt;code&gt;/opt/homebrew/bin/yt-dlp&lt;/code&gt; for Apple Silicon Macs and &lt;code&gt;/usr/local/bin/yt-dlp&lt;/code&gt; for Intel Macs."></p>
     <div style="margin-top: 2px">
       <input type="text" data-pref-key="ytdl_path" style="width: 100%; margin-top: 2px" />
     </div>
   </div>
   <div class="pref-section">
-    JavaScript runtime:
-    <p class="small secondary pref-help">
-      yt-dlp now requires a JavaScript runtime to extract video information from some sites, including YouTube.
-      If you have any of the supported runtimes installed (deno, node, quickjs, bun), enter its full path here.
-    </p>
+    <span data-l10n="JavaScript runtime:"></span>
+    <p class="small secondary pref-help" data-l10n="yt-dlp now requires a JavaScript runtime to extract video information from some sites, including YouTube. If you have any of the supported runtimes installed (deno, node, quickjs, bun), enter its full path here."></p>
     <div style="margin-top: 2px">
       <input type="text" data-pref-key="js_runtime" style="width: 100%; margin-top: 2px" />
     </div>
   </div>
   <div class="pref-section">
-    Default video and audio quality:
+    <span data-l10n="Default video and audio quality:"></span>
     <div style="margin-top: 4px; line-height: 24px">
       <div>
         <label><input type="radio" name="video_quality" value="best" data-pref-key />
-          Best video and audio</label>
+          <span data-l10n="Best video and audio"></span></label>
       </div>
       <div>
         <label><input type="radio" name="video_quality" value="use_max" data-pref-key />
-          Video not larger than:</label>
+          <span data-l10n="Video not larger than:"></span></label>
         <input type="number" data-pref-key="max_video_height" style="width: 4em" />
         p
       </div>
       <div>
         <label><input type="radio" name="video_quality" value="custom" data-pref-key />
-          Custom youtube-dl format:</label>
+          <span data-l10n="Custom youtube-dl format:"></span></label>
         <input type="text" data-pref-key="custom_ytdl_format" />
       </div>
     </div>
   </div>
   <div class="pref-section">
     <label>
-      Excluded URLs:
+      <span data-l10n="Excluded URLs:"></span>
       <div style="margin-top: 2px">
         <input type="text" data-pref-key="excluded_urls" style="width: 100%; margin-top: 2px" />
       </div>
@@ -98,44 +91,35 @@
   <div class="pref-section">
     <label>
       <input type="checkbox" data-type="bool" data-pref-key="include_subs" />
-      Include subtitles
+      <span data-l10n="Include subtitles"></span>
     </label>
     <div style="margin-top: 4px;"></div>
     <label style="margin-left: 16px;">
       <input type="checkbox" data-type="bool" data-pref-key="include_auto_subs" />
-      Also include auto-generated subtitles
+      <span data-l10n="Also include auto-generated subtitles"></span>
     </label>
   </div>
   <div class="pref-section">
     <label>
       <input type="checkbox" data-type="bool" data-pref-key="try_ytdl_first" />
-      Try youtube-dl first
+      <span data-l10n="Try youtube-dl first"></span>
     </label>
-    <p class="small secondary pref-help">
-      Try parsing the URL with youtube-dl first, instead of the default where
-      it's only after mpv failed to open it.
-    </p>
+    <p class="small secondary pref-help" data-l10n="Try parsing the URL with youtube-dl first, instead of the default where it's only after mpv failed to open it."></p>
   </div>
   <div class="pref-section">
     <label>
       <input type="checkbox" data-type="bool" data-pref-key="use_manifest" />
-      Use manifest URL
+      <span data-l10n="Use manifest URL"></span>
     </label>
-    <p class="small secondary pref-help">
-      Use the master manifest URL for formats like HLS and DASH, if available,
-      allowing for video/audio selection at runtime.
-    </p>
+    <p class="small secondary pref-help" data-l10n="Use the master manifest URL for formats like HLS and DASH, if available, allowing for video/audio selection at runtime."></p>
   </div>
   <div class="pref-section">
     <label>
-      Raw options:
+      <span data-l10n="Raw options:"></span>
       <input type="text" data-pref-key="raw_options" autocomplete="off" autocorrect="off" autocapitalize="off"
         spellcheck="false" style="width: 100%; margin-top: 2px" />
     </label>
-    <p class="small secondary pref-help">
-      Additional raw options to pass to youtube-dl/yt-dlp, for example:<br>
-      <code>--write-auto-sub --sub-langs en</code>
-    </p>
+    <p class="small secondary pref-help" data-l10n-html="Additional raw options to pass to youtube-dl/yt-dlp, for example:&lt;br&gt;&lt;code&gt;--write-auto-sub --sub-langs en&lt;/code&gt;"></p>
   </div>
 </body>
 

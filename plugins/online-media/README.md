@@ -14,3 +14,7 @@ yt-dlp support is off: pages are read through the plugin's hooks.
 
 In myphp, Settings > Plugins > Get Plugins…, choose Online Media; or enter
 `owner888/myphp-plugin-online-media`.
+
+## Languages
+
+English, Simplified and Traditional Chinese, and Japanese (`locales/`): it speaks the language the app shows. A translation to another language is a `locales/<tag>.json` of the same keys as `en.json`.

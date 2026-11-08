@@ -26,7 +26,7 @@ $plugin = function (string $folder, array $info, string $main = '<?php return fu
     @mkdir($d, 0777, true);
     file_put_contents("$d/Info.json", json_encode($info + ['name' => 'P', 'author' => ['name' => 'A'], 'version' => '1.0', 'entry' => 'main.php']));
     file_put_contents("$d/main.php", $main);
-    foreach ($files as $f => $text) { file_put_contents("$d/$f", $text); }
+    foreach ($files as $f => $text) { @mkdir(dirname("$d/$f"), 0777, true); file_put_contents("$d/$f", $text); }
     return $d;
 };
 $find = function (array $items, string $id) use (&$find): ?MenuItem {
@@ -403,6 +403,37 @@ if (PHP_OS_FAMILY === 'Darwin') {
         \MyPHP\Native\ObjC::msg('v:p', \MyPHP\Native\ObjC::msg('p:', \MyPHP\Native\ObjC::cls('NSRunLoop'), 'currentRunLoop'), 'runUntilDate:', \MyPHP\Native\ObjC::msg('p:d', \MyPHP\Native\ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', 0.05));
     }
     same(1, $ticked, 'a timer');
+}
+
+// A plugin's own messages (Info.json's i18n, myphp's): its code says them with $iina->strings in the app's language,
+// plural forms and all, a key without a message as it is; its pages with iina.strings, of the same messages, and their
+// elements of data-l10n said in it.
+$pd = $plugin('io.test.l.iinaplugin', ['identifier' => 'io.test.l', 'name' => 'Lingo'], '<?php return function ($iina) {};', [
+    'locales/en.json' => json_encode(['Opening media…' => 'Opening media…', 'files' => '{n, plural, one {# file} other {# files}}', 'hi' => "Hi, {name}! It's '{'ok'}'"]),
+    'locales/zh-Hans.json' => json_encode(['Opening media…' => '正在打开媒体…', 'files' => '{n, plural, other {# 个文件}}', 'hi' => '你好，{name}！'], JSON_UNESCAPED_UNICODE),
+]);
+$lp = Plugin::load($pd);
+$saved = \MyPHP\App::locale(); $langs = \MyPHP\App::languages();
+\MyPHP\App::setLanguages('en', 'zh-Hans'); // the app's: a plugin says its messages in the language the app shows
+\MyPHP\App::setLocale('zh-Hans');
+$said = [$lp->string('Opening media…'), $lp->string('files', ['n' => 3]), $lp->string('Not translated {x}', ['x' => 1])];
+$script = $lp->stringsScript();
+\MyPHP\App::setLocale('en');
+$saidEn = [$lp->string('files', ['n' => 1]), $lp->string('files', ['n' => 2])];
+$scriptEn = $lp->stringsScript();
+\MyPHP\App::setLanguages(...$langs);
+\MyPHP\App::setLocale($saved);
+same([['正在打开媒体…', '3 个文件', 'Not translated 1'], ['1 file', '2 files']], [$said, $saidEn], 'a plugin says its messages in the app\'s language');
+if (\MyPHP\Native\Build\Cmd::look('node') === '') { echo "  iina.strings skipped: no node\n"; } else {
+    $js = sys_get_temp_dir() . '/myphp-strings-' . getmypid() . '.js';
+    file_put_contents($js, 'const els = [{ dataset: { l10n: "Opening media…" }, textContent: "" }];'
+        . 'globalThis.window = globalThis; globalThis.document = { readyState: "complete", documentElement: {}, querySelectorAll: (q) => q === "[data-l10n]" ? els : [] };'
+        . $script . ';const zh = [els[0].textContent, iina.strings.get("files", { n: 3 }), iina.strings.get("hi", { name: "Ada" }), document.documentElement.lang];'
+        . 'delete window.iina;' . $scriptEn . ';console.log(JSON.stringify([zh, [iina.strings.get("files", { n: 1 }), iina.strings.get("files", { n: 2 }), iina.strings.get("hi", { name: "Ada" }), iina.strings.get("Other {x}", { x: "y" })]]));');
+    $nodeOut = [];
+    exec('node ' . escapeshellarg($js) . ' 2>&1', $nodeOut);
+    unlink($js);
+    same([['正在打开媒体…', '3 个文件', '你好，Ada！', 'zh-Hans'], ['1 file', '2 files', "Hi, Ada! It's {ok}", 'Other y']], json_decode(implode('', $nodeOut), true), 'its pages say them alike: ' . implode("\n", $nodeOut));
 }
 
 Plugins::$newPlayer = null;

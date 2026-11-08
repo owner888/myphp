@@ -372,7 +372,7 @@ JS;
         if ($st->web !== null) { return $st->web; }
         $w = $c->runtime?->window?->get();
         if ($w === null) { return null; }
-        $web = $st->web = $w->newWebView(new \MyPHP\WebViewOptions(page: new \MyPHP\PageOptions(preloadScript: self::PREFERENCES_BRIDGE . "\n" . self::PREFERENCES_SYNC), transparent: true));
+        $web = $st->web = $w->newWebView(new \MyPHP\WebViewOptions(page: new \MyPHP\PageOptions(preloadScript: self::PREFERENCES_BRIDGE . "\n" . $p->stringsScript() . "\n" . self::PREFERENCES_SYNC), transparent: true));
         $page = $web->page();
         $page->on('message', function (string $name, mixed $data) use ($p, $st, $page): void {
             if ($st->tab !== 0 || !is_array($data)) { return; } // the settings' alone: not a help page's (IINA's)

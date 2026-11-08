@@ -34,23 +34,24 @@
 <body>
 <div id="list">
   <div class="card">
-    <h3>About User Scripts</h3>
-    <p>User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package.</p>
-    <div style="text-align: right"><button class="primary" id="add">＋ New Script</button></div>
+    <h3 data-l10n="About User Scripts"></h3>
+    <p data-l10n="User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package."></p>
+    <div style="text-align: right"><button class="primary" id="add" data-l10n="＋ New Script"></button></div>
   </div>
   <div id="list-wrap" class="sheet">
-    <table><thead><tr><th>Script Name</th><th></th><th>Action</th></tr></thead><tbody id="rows"></tbody></table>
+    <table><thead><tr><th data-l10n="Script Name"></th><th></th><th data-l10n="Action"></th></tr></thead><tbody id="rows"></tbody></table>
   </div>
 </div>
 <div id="editor">
   <div class="toolbar sheet">
-    <div class="group"><button id="exit">← Exit</button><button class="primary" id="save">Save</button></div>
+    <div class="group"><button id="exit" data-l10n="← Exit"></button><button class="primary" id="save" data-l10n="Save"></button></div>
     <div class="name"><input id="script-name"><button id="rename">✓</button></div>
   </div>
   <textarea id="code" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
 </div>
 <div id="notif"></div>
 <script>
+const t = (key, args) => iina.strings.get(key, args); // the plugin's messages (locales/), in the app's language
 // IINA's plugin-userscript window (its React app's List and Editor), without a framework: the messages of its global instance alike.
 const call = (name, data, done) => new Promise((resolve) => { iina.onMessage(done, resolve); iina.postMessage(name, data); });
 const loadUserScripts = () => call("load-scripts", null, "load-scripts-done");
@@ -77,13 +78,13 @@ function renderList() {
     const actions = document.createElement("td");
     actions.className = "group";
     const edit = document.createElement("button");
-    edit.textContent = "Edit";
+    edit.textContent = t("Edit");
     edit.onclick = () => { location.hash = "#/edit/" + script.id; };
     const del = document.createElement("button");
-    del.textContent = "Delete";
+    del.textContent = t("Delete");
     del.className = "danger";
     del.onclick = async () => {
-      if (!window.confirm(`Are you sure to delete ${script.name}?`)) return;
+      if (!window.confirm(t("Are you sure to delete {name}?", { name: script.name }))) return;
       scripts = scripts.filter((s) => s !== script);
       await saveUserScripts(scripts);
       renderList();
@@ -110,11 +111,11 @@ async function showEditor(id) {
   document.getElementById("script-name").value = info ? info.name : "";
   document.getElementById("save").onclick = async () => {
     await call("set-script-content", { id, content: document.getElementById("code").value }, "set-script-content-done");
-    notify("Saved.");
+    notify(t("Saved."));
   };
   document.getElementById("rename").onclick = async () => {
     await call("set-script-info", { id, name: document.getElementById("script-name").value }, "set-script-info-done");
-    notify("Name updated.");
+    notify(t("Name updated."));
   };
 }
 

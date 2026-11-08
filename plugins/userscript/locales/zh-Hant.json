@@ -1,0 +1,17 @@
+{
+  "User Scripts": "使用者腳本",
+  "Manage User Scripts...": "管理使用者腳本…",
+  "About User Scripts": "關於使用者腳本",
+  "User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package.": "使用者腳本和瀏覽器裡的一樣：用外掛 API 新增、分享想要的功能，而不必麻煩地製作外掛套件。",
+  "A script is PHP code run in each player with <code>$iina</code>, the plugin's API, as IINA's plugins of JavaScript are given <code>iina</code>. Read the documentation at <code>https://docs.iina.io</code> to learn more about the IINA plugin API.": "腳本是在每個播放器裡執行的 PHP 程式碼，拿到的是外掛 API <code>$iina</code>，就像 IINA 的 JavaScript 外掛拿到 <code>iina</code>。想了解 IINA 外掛 API，請看 <code>https://docs.iina.io</code> 的文件。",
+  "＋ New Script": "＋ 新增腳本",
+  "Script Name": "腳本名稱",
+  "Action": "操作",
+  "← Exit": "← 返回",
+  "Save": "儲存",
+  "Edit": "編輯",
+  "Delete": "刪除",
+  "Are you sure to delete {name}?": "確定要刪除 {name} 嗎？",
+  "Saved.": "已儲存。",
+  "Name updated.": "名稱已更新。"
+}

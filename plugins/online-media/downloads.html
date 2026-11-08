@@ -210,20 +210,14 @@
 
 <body>
     <section id="status">
-        <h4>Status</h4>
+        <h4 data-l10n="Status"></h4>
         <div class="binary-status status-bundled">
-            <div class="status-title">⚠ Not Found</div>
-            <div class="status-msg text-secondary">
-                No managed yt-dlp installation found. This means you are using a yt-dlp or youtube-dl found on your
-                system, if any. It may not work correctly.
-                Please download the latest yt-dlp.
-            </div>
-            <button id="download-binary">Download latest yt-dlp</button>
+            <div class="status-title" data-l10n="⚠ Not Found"></div>
+            <div class="status-msg text-secondary" data-l10n="No managed yt-dlp installation found. This means you are using a yt-dlp or youtube-dl found on your system, if any. It may not work correctly. Please download the latest yt-dlp."></div>
+            <button id="download-binary" data-l10n="Download latest yt-dlp"></button>
             <div class="download-container" style="display: none;">
                 <div class="downloading">
-                    <div class="message">
-                        Downloading yt-dlp. This may take minutes depending on your connection speed.
-                    </div>
+                    <div class="message" data-l10n="Downloading yt-dlp. This may take minutes depending on your connection speed."></div>
                     <div class="spinner">
                         <div></div>
                         <div></div>
@@ -236,17 +230,13 @@
             </div>
         </div>
         <div class="binary-status status-managed">
-            <div class="status-title">Managed</div>
-            <div class="status-msg text-secondary">
-                You are using a yt-dlp installation managed by this plugin.
-            </div>
-            <button id="update-managed-binary">Update yt-dlp</button>
-            <button id="show-binary-in-finder">Show in Finder</button>
+            <div class="status-title" data-l10n="Managed"></div>
+            <div class="status-msg text-secondary" data-l10n="You are using a yt-dlp installation managed by this plugin."></div>
+            <button id="update-managed-binary" data-l10n="Update yt-dlp"></button>
+            <button id="show-binary-in-finder" data-l10n="Show in Finder"></button>
             <div class="download-container" style="display: none;">
                 <div class="downloading">
-                    <div class="message">
-                        Downloading yt-dlp. This may take minutes depending on your connection speed.
-                    </div>
+                    <div class="message" data-l10n="Downloading yt-dlp. This may take minutes depending on your connection speed."></div>
                     <div class="spinner">
                         <div></div>
                         <div></div>
@@ -259,25 +249,16 @@
             </div>
         </div>
         <div class="binary-status status-custom">
-            <div class="status-title">Custom Binary</div>
-            <div class="status-msg text-secondary">
-                You are using your own custom yt-dlp binary. You may need to update it manually.
-            </div>
+            <div class="status-title" data-l10n="Custom Binary"></div>
+            <div class="status-msg text-secondary" data-l10n="You are using your own custom yt-dlp binary. You may need to update it manually."></div>
         </div>
         <div id="js-runtime-alert">
-            <div class="status-title">JavaScript Runtime Required</div>
-            <div class="status-msg text-secondary">
-                yt-dlp requires a JavaScript runtime for Youtube videos.
-                If you have any of the supported runtimes installed (Deno, Node, QuickJS, Bun),
-                please <b>specify the path in the plugin settings.</b>
-                The plugin can also download and use Deno for you, which takes about 80MB of disk space.
-            </div>
-            <button id="download-deno">Download JavaScript Runtime</button>
+            <div class="status-title" data-l10n="JavaScript Runtime Required"></div>
+            <div class="status-msg text-secondary" data-l10n-html="yt-dlp requires a JavaScript runtime for Youtube videos. If you have any of the supported runtimes installed (Deno, Node, QuickJS, Bun), please &lt;b&gt;specify the path in the plugin settings.&lt;/b&gt; The plugin can also download and use Deno for you, which takes about 80MB of disk space."></div>
+            <button id="download-deno" data-l10n="Download JavaScript Runtime"></button>
             <div class="download-container" style="display: none;">
                 <div class="downloading">
-                    <div class="message">
-                        Downloading Deno. This may take minutes depending on your connection speed.
-                    </div>
+                    <div class="message" data-l10n="Downloading Deno. This may take minutes depending on your connection speed."></div>
                     <div class="spinner">
                         <div></div>
                         <div></div>
@@ -290,15 +271,13 @@
             </div>
         </div>
         <div class="info-container">
-            <button id="check-binary">Verify yt-dlp binary</button>
-            <div class="binary-msg text-secondary" id="binary-desc">
-                This will print out information about your yt-dlp binary to make sure it is functioning correctly.
-            </div>
+            <button id="check-binary" data-l10n="Verify yt-dlp binary"></button>
+            <div class="binary-msg text-secondary" id="binary-desc" data-l10n="This will print out information about your yt-dlp binary to make sure it is functioning correctly."></div>
             <div class="binary-msg text-secondary" id="binary-version"></div>
         </div>
     </section>
     <section id="downloads">
-        <h4>Downloads</h4>
+        <h4 data-l10n="Downloads"></h4>
         <div id="content"></div>
     </section>
 </body>
