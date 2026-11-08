@@ -161,8 +161,10 @@ trait ContextMobile
      * page's content growing above it (a Router's view); tabBarInset() is
      * the height the band takes. $small, from 0 to 1, shrinks it to the
      * chosen tab alone, a capsule at its start (iOS 26's minimized bar);
-     * a tap on that sets $expand. Not mygo's.
-     * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items an icon (an SVG, or a function of the color drawing one), and a label
+     * a tap on that sets $expand. An item marked search (its third, true)
+     * is apart at the bar's end, a circle of glass 56 wide holding its
+     * icon, as iOS 26's search tab; minimized, it stays. Not mygo's.
+     * @param list<array{0: SVG|Closure(int): Image|null, 1: string, 2?: bool}> $items an icon (an SVG, or a function of the color drawing one), a label, and whether it is the search tab
      */
     public function tabBar(array $items, int &$index, float $small = 0.0, ?bool &$expand = null): Node
     {
@@ -170,15 +172,19 @@ trait ContextMobile
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
         $bottom = max($this->safeArea[2], 8.0);
-        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->padding(8, 16, $bottom, 16)->justify($small > 0 ? Node::START : Node::CENTER)->alignItems(Node::STRETCH)
+        $search = null; // the search tab's index, apart
+        foreach ($items as $i => $it) { if ($it[2] ?? false) { $search = $i; } }
+        $apart = $search === null ? 0.0 : 56.0 + 8.0; // its circle and the gap before it
+        $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->padding(8, 16 + $apart, $bottom, 16)->justify($small > 0 ? Node::START : Node::CENTER)->alignItems(Node::STRETCH)
             ->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
-          $full = max($this->width - 32, 64.0);
+          $full = max($this->width - 32 - $apart, 64.0);
           $pill = $this->row(4, 0, 1)->size(0, 56)->radius(28)->alignItems(Node::STRETCH)->systemMaterial('glass');
           if ($small > 0) { $pill->maxWidth($full + (64 - $full) * $small); } // narrowing to the chosen tab's 64
             if (!($this->runtime?->systemMaterials ?? true)) { // myphp's own glass (Android): frosted as iOS 26's bar is, what passes under it a haze, not bent text
                 $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72;
             }
             foreach ($items as $i => [$svg, $label]) {
+                if ($i === $search) { continue; } // apart, below
                 $on = $i === $index;
                 if ($small >= 0.5 && !$on) { continue; } // shrunk: the chosen tab alone
                 $color = $on ? $t->accent : $t->textMuted;
@@ -196,6 +202,22 @@ trait ContextMobile
                 }
             }
           $this->end();
+          if ($search !== null) { // the search tab: a circle of glass at the bar's end
+              [$svg, $label] = $items[$search];
+              $on = $search === $index;
+              $color = $on ? $t->accent : $t->text;
+              $circle = $this->column(0, 0)->absolute()->end(16)->bottom($bottom)->size(56, 56)->radius(28)->systemMaterial('glass')->center()->focusable()->role(Role::TAB)->label($label);
+              $circle->on = $on; $circle->checked($on);
+                if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72; }
+                if ($on) { $this->box(0, 0, $t->text)->absolute()->top(4)->bottom(4)->start(4)->end(4)->radius(24)->role(Role::NONE)->bgAlpha = 0.08; } // chosen: a capsule of its own, as the bar's tabs
+                if ($svg instanceof SVG) { $this->icon($svg, 24, $color); }
+                elseif ($svg instanceof Closure) { $this->image($svg($color), 24, 24)->role(Role::NONE); }
+              $this->end();
+              if ($this->clicked($circle) && !$on) {
+                  $index = $search;
+                  $n->changed = true;
+              }
+          }
         $this->end();
         return $n;
     }
@@ -358,7 +380,12 @@ trait ContextMobile
         $t = $this->theme;
         $items = array_values(array_filter($m['items'], static fn(\MyPHP\MenuItem $it) => !$it->hidden));
         $high = 0.0;
-        foreach ($items as $it) { $high += match ($it->type) { \MyPHP\MenuItem::SEPARATOR => 8.0, \MyPHP\MenuItem::HEADER => 30.0, default => 44.0 }; }
+        $wide = 0.0; // its longest label
+        foreach ($items as $it) {
+            $high += match ($it->type) { \MyPHP\MenuItem::SEPARATOR => 17.0, \MyPHP\MenuItem::HEADER => 30.0, default => 44.0 };
+            if ($it->type !== \MyPHP\MenuItem::SEPARATOR) { $wide = max($wide, $this->measureText(0, new Span($it->label, $t->fontSize))[0]); }
+        }
+        $high += 16; // 8 over its first item and under its last
         if (!array_key_exists('target', $m)) { $m['target'] = $rt->touchMenu['target'] = $rt->contextMenuTarget($m['x'], $m['y']); $rt->liftNode = null; } // the node it lifts, the next frames' record keeping it (Runtime::$liftNode)
         $lifted = $rt->liftNode;
         if ($lifted !== null) { // where it shows in the window, scrolled and moved as it is
@@ -368,9 +395,13 @@ trait ContextMobile
             $m['rect'] = $rt->touchMenu['rect'] = $m['target'] !== 0 ? $rt->rectOf($m['target']) : null; // not yet recorded: its box as laid out
         }
         $at = $m['rect'] ?? [$m['x'], $m['y'] - 12, 0.0, 24.0]; // none: the finger's point
-        $w = min(250.0, $this->width - 32);
-        $edge = $m['rect'] !== null ? ($this->direction() === Direction::RightToLeft ? $m['rect'][0] + $m['rect'][2] - $w : $m['rect'][0]) : $m['x'] - 24;
-        $x = max(16.0, min($edge, $this->width - 16 - $w)); // at the lifted node's leading edge, as UIKit's
+        $w = min(max($wide + 48 + 24, 200.0), 280.0, $this->width - 16); // as wide as its longest label and 24 each side, 200 to 280
+        $grown = $m['rect'] !== null ? min(1.02, ($this->width - 16) / max($m['rect'][2], 1.0)) : 1.0; // how much the lifted node grows (or narrows, as wide as the window), lifted
+        $liftedAt = $m['rect'] === null ? null : [$m['rect'][0] + $m['rect'][2] * (1 - $grown) / 2, $m['rect'][2] * $grown]; // its start and width, lifted
+        if ($liftedAt === null) { $edge = $m['x'] - 24; }
+        elseif ($liftedAt[1] >= $this->width * 0.8) { $edge = $this->direction() === Direction::RightToLeft ? $liftedAt[0] + $liftedAt[1] - $w : $liftedAt[0]; } // as wide as the window: at its leading edge
+        else { $edge = $liftedAt[0] + $liftedAt[1] / 2 < $this->width / 2 ? $liftedAt[0] : $liftedAt[0] + $liftedAt[1] - $w; } // lined up with the side of the window it is on, as UIKit's (a message's bubble, left or right)
+        $x = max(8.0, min($edge, $this->width - 8 - $w));
         $y = $at[1] + $at[3] + 8; // below the node
         if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = $at[1] - 8 - $high; } // no room below: above it
         if ($y < $this->windowSafeArea[0] + 16) { $y = max($this->windowSafeArea[0] + 16, $this->height - $this->windowSafeArea[2] - 16 - $high); } // nor above (a tall node): over it, at the bottom
@@ -389,7 +420,7 @@ trait ContextMobile
         $shown = !($m['closing'] ?? false);
         $gone = false;
         $under = null; // the item the finger slides over
-        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
+        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $grown, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
             $this->key('touchMenu');
             $fade = $rt->motions[$this->upcomingId()]['fade'] ?? null;
             if (!$shown && ($fade === null || ($fade->value <= 0.001 && !$fade->moving))) { // closed, and faded out
@@ -406,7 +437,7 @@ trait ContextMobile
                 $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
               $this->end();
               if (($r = $m['rect']) !== null && $m['target'] !== 0) {
-                  $s = 1 + (min(1.02, ($this->width - 16) / max($r[2], 1.0)) - 1) * $p; // a little larger as it lifts, as UIKit's; a cell as wide as the window a little narrower, 8 in from its sides
+                  $s = 1 + ($grown - 1) * $p; // a little larger as it lifts, as UIKit's; a cell as wide as the window a little narrower, 8 in from its sides
                   $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2;
                   $big = [$cx - $r[2] * $s / 2, $cy - $r[3] * $s / 2, $r[2] * $s, $r[3] * $s];
                   $map = Affine::translation($cx, $cy)->mul(Affine::scaling($s, $s))->mul(Affine::translation(-$cx, -$cy));
@@ -419,18 +450,18 @@ trait ContextMobile
                       $pa->clip($big, static fn() => $pa->copyOf($node, $map), 13 * $up);
                   })->color = null;
               }
-              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(22)->clip()->shadow(0, 10, 40, 0, 0x000000, 0.18)->role(Role::MENU)->opacity($p); // iOS 26's: rounded 22, its items apart by no line
+              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->left($x)->size($w, 0)->padding(8, 0)->radius(32)->clip()->shadow(0, 10, 40, 0, 0x000000, 0.18)->role(Role::MENU)->opacity($p); // iOS 26's: rounded 32, its items apart by no line, a group's by a hairline
                 foreach ($items as $it) {
-                    if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a wider gap, as UIKit's
-                        $this->box(0, 8, $t->dark ? 0x1c1c1e : 0xe5e5ea)->alignSelf(Node::STRETCH)->shrink(0);
+                    if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a hairline 24 in, 8 apart from the items, as iOS 26's
+                        $this->box(0, 1 / max($this->scale, 1.0), $t->border)->alignSelf(Node::STRETCH)->margin(8, 24)->shrink(0);
                                 continue;
                     }
                     if ($it->type === \MyPHP\MenuItem::HEADER) {
-                        $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 16, 4, 16)->singleLine();
+                        $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 24, 4, 24)->singleLine();
                                 continue;
                     }
                     $off = $it->disabled || $it->submenu !== [];
-                    $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 20)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
+                    $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 24)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
                     $rect = $rt->rectOf($row->id); // as last laid out: where the finger slides and lifts
                     if (!$off && $inside($rect, $slide)) { $under = (int)$it->id; }
                     if (!$off && (($this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) || $inside($rect, $slide))) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }

@@ -3576,11 +3576,14 @@ final class Context
         $size ??= $t->fontSize;
         // mygo's field(): padding Space(1.5) by Space(2), the glass, the input and the clear button Space(1.5) apart.
         $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2) + 1; $gap = $t->space(1.5); // its padding inside its border, which takes a point
+        $phone = $this->runtime?->touch ?? false;
+        if ($phone) { $glass = 17.0; $clear = 17.0; $pad = 13.0; $gap = 9.0; } // iOS 26's: a capsule 44 high, the glass 17 at 13 in, the text 39 in
         $parent = $this->stack[count($this->stack) - 1];
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, $this->texts()->get('search'), $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
           $n->search = true;
-          $this->icon(self::magnifier(), $glass, $t->textMuted)->at($pad, ($n->fh - $glass) / 2);
+          if ($phone) { $n->radius($n->fh / 2)->borderWidth(0); $n->color = $t->surface; } // a capsule of the fill, no border, as UISearchBar's in iOS 26
+          $this->icon(self::magnifier(), $glass, $phone ? Theme::mix($t->text, $t->surface, 0.15) : $t->textMuted)->at($pad, ($n->fh - $glass) / 2); // a phone's glass in the text's color, the placeholder muted
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
               $x = $this->column(0, 0, 0, $t->textMuted)->radius($clear / 2)->size($clear, $clear)->absolute()->right($pad)->top(($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))->keepFocus()
                   ->draw(static function (Painter $p, array $r) {

@@ -328,6 +328,24 @@ abstract class View
     }
 
     /**
+     * Scopes under the field of searchable() (after it in the chain), bound
+     * to $scope: Texts or Labels tagged with the values they choose, as
+     * SwiftUI's searchScopes(_:scopes:), a segmented control across the
+     * view under the field (a Picker's, pickerStyle(.segmented)).
+     */
+    public function searchScopes(mixed &$scope, View ...$scopes): static
+    {
+        for ($i = count($this->mods) - 1; $i >= 0; $i--) {
+            if ($this->mods[$i][0] === 'search') {
+                $this->mods[$i][1][2] = &$scope;
+                $this->mods[$i][1][3] = $scopes;
+                return $this;
+            }
+        }
+        throw new \LogicException("searchScopes() goes after searchable(), whose field it is under: ->searchable(\$this->query)->searchScopes(\$this->scope, Text('All')->tag('all'), …)");
+    }
+
+    /**
      * A find bar over the view while $isPresented, as SwiftUI's
      * findNavigator(isPresented:) of a TextEditor, for any view: Cmd+F opens
      * it; its field is bound to $text, it shows $matches, the app's count of
@@ -486,16 +504,27 @@ abstract class View
         return $node;
     }
 
-    /** The search field of a searchable() layer, at the top of its box $box: bound to $f[0], its prompt $f[1]. @param array{0: string, 1: string} $f */
+    /** The search field of a searchable() layer, at the top of its box $box: bound to $f[0], its prompt $f[1]; with searchScopes(), $f[2] the scope and $f[3] its choices, a segmented control under it. @param array{0: string, 1: string, 2?: mixed, 3?: list<View>} $f */
     private static function searchField(Context $c, Env $env, Node $box, array &$f): void
     {
         $make = fn() => (object)['query' => new \MyPHP\UI\TextState($f[0]), 'app' => $f[0]];
         $kept = $c->runtime?->local($box->id, $make) ?? $make();
         if ($f[0] !== $kept->app) { $kept->query->text = $f[0]; $kept->query->setCursor(strlen($f[0])); } // set by the app
-        $c->row(8, 0)->alignSelf(Node::STRETCH);
-          $c->searchField($kept->query, 0)->label(Localized::string($f[1], $env))->grow(1);
+        $row = $c->row(8, 0)->alignSelf(Node::STRETCH);
+        if ($c->runtime?->touch ?? false) { $row->padding(8, 16, 10, 16); } // a phone's: 16 in from the sides, as UISearchBar's
+          $field = $c->searchField($kept->query, 0)->label(Localized::string($f[1], $env))->grow(1);
+          $field->text = Localized::string($f[1], $env); // the prompt shows in it, as SwiftUI's
         $c->end();
         $f[0] = $kept->app = $kept->query->text;
+        if (isset($f[3]) && $f[3] !== []) { // the scopes: a Picker's segments across under the field, as UISearchBar's scope bar
+            $scope = &$f[2];
+            $chosen = new Binding(get: function () use (&$scope) { return $scope; }, set: function ($v) use (&$scope): void { $scope = $v; });
+            $bar = $c->row(0, 0)->alignSelf(Node::STRETCH);
+            if ($c->runtime?->touch ?? false) { $bar->padding(0, 16, 10, 16); }
+              $seg = (new Picker('', $chosen))(...$f[3])->pickerStyle(\PickerStyle::segmented)->render($c, $env->along(Node::ROW));
+              if ($seg !== null) { $seg->grow = 1; $seg->shrink(1)->minWidth(0); foreach ($seg->kids as $k) { $k->basis(0)->grow = 1; } } // across the view, the segments sharing it
+            $c->end();
+        }
     }
 
     /** The find bar of a findNavigator() layer, at the top of its box $box. @param array{0: bool, 1: string, 2: int, 3: int} $f */

@@ -444,7 +444,7 @@ function TabView(mixed &$selection): D\TabView { return new D\TabView($selection
 
 /** A tab of a TabView, its $value what the TabView's selection holds while it shows; its $image shows on a phone's tab bar and in a sidebar. */
 /** A tab of a TabView: Tab('Inbox', systemImage: 'tray', value: 'inbox')( …its views… ), or with an SVG, image: $svg. */
-function Tab(string $title, ?SVG $image = null, mixed $value = null, ?string $systemImage = null): D\Tab { return new D\Tab($title, $image, $value, $systemImage); }
+function Tab(string $title = '', ?SVG $image = null, mixed $value = null, ?string $systemImage = null, ?TabRole $role = null): D\Tab { return new D\Tab($title, $image, $value, $systemImage, $role); }
 
 /** How a TabView shows its tabs, as SwiftUI's TabViewStyle. */
 enum TabViewStyle { case automatic; case sidebarAdaptable; }
@@ -467,6 +467,8 @@ final class PresentationDetent
 
 /** When a phone's tab bar shrinks to the chosen tab as the page scrolls, as SwiftUI's on iOS 26: automatic is never on an iPhone. */
 enum TabBarMinimizeBehavior { case automatic; case onScrollDown; case onScrollUp; case never; }
+/** What a Tab is, as SwiftUI's TabRole: search, the tab of the app's search, apart at the end of a phone's tab bar (iOS 26's), titled Search and shown by a magnifying glass unless it says otherwise. */
+enum TabRole { case search; }
 
 /** SwiftUI's NavigationBarItem.TitleDisplayMode. */
 enum TitleDisplayMode { case automatic; case inline; case large; }
