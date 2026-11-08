@@ -19,7 +19,7 @@ final class Content
     /** A window's view: fn() => VStack()(…), as a view file returns it. @param Closure(): mixed $view */
     public static function view(Closure $view): self
     {
-        return new self($view);
+        return new self(self::takesContext($view) ? $view : static fn(Context $c) => self::render($view, $c)); // the window calls it with its Context: a declarative view rendered into it
     }
 
     /**

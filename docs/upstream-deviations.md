@@ -2607,6 +2607,12 @@ other platforms; a tip of the keyboard focus shows on those alone.
   - myphp: the same, the atlases' dirty rows shared out among them
     (`Gl::$pending`), as myphp's atlases tell one range.
   - Why: myphp's atlases were Metal's, of one device.
+- **Orca and the formats of text**
+  - mygo: a text's runs (AccessTextRun) are its ATK run attributes, which
+    Orca reads as bold, italic, underlined.
+  - myphp: the whole text is one run of the default attributes.
+  - Why: myphp's tree (AccessNode) tells no runs yet; the rest of the
+    port (`Platform\Linux\Access`) is upstream's.
 - **The app's desktop entry, without one it was launched from**
   - mygo: named after the executable (`desktopEntryID`), which the portal
     is told and global shortcuts' session is named after.

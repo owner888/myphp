@@ -129,6 +129,7 @@ final class Window implements Platform\Window
         Gtk::connect($this->win, 'destroy', 'widget', function ($widget, $data): void {
             $this->dead = true;
             unset(self::$open[Gtk::addr($this->win)]);
+            if ($this->area !== null) { Access::destroy($this->area); }
             $this->w->closed();
         });
         Gtk::connect($this->win, 'focus-in-event', 'event', function ($widget, $event, $data): int {
@@ -264,7 +265,7 @@ final class Window implements Platform\Window
         $this->frame = $frame;
         $this->afterPresent = $afterPresent;
         $this->transparent = $o->transparent;
-        $this->area = $f->g_object_ref($f->gtk_gl_area_new()); // held as the window is (release())
+        $this->area = $f->g_object_ref(Access::newArea($this)); // held as the window is (release()); its accessible the content's tree (Access)
         $this->onTick = $f->new('HTick', false);
         $this->onTick->fn = function ($widget, $clock, $data): int {
             Gtk::idle(fn() => $this->frameNow());
@@ -295,7 +296,7 @@ final class Window implements Platform\Window
         Gtk::connect($this->im, 'commit', 'string', fn($im, $text, $data) => $this->commit((string)$text));
         Gtk::connect($this->im, 'preedit-changed', 'widget', fn($im, $data) => $this->preedit());
         Gtk::connect($this->im, 'preedit-end', 'widget', fn($im, $data) => $this->preedit());
-        $this->w->runtime->onAccess = null;
+        $this->w->runtime->onAccess = fn(\MyPHP\UI\AccessTree $t) => Access::update($this->area, $t); // Orca reads each frame once it asked
     }
 
     /** The area is realized: its context made, the renderer is made in it, and the IM context told the window. */
@@ -748,7 +749,7 @@ final class Window implements Platform\Window
             return $this->webLayout;
         }
         $f = Gtk::ffi();
-        $this->layers = $f->gtk_overlay_new();
+        $this->layers = Access::newOverlay(); // which lists the area alone, the pages being in its nodes (Access)
         $this->webLayout = $f->gtk_layout_new(null, null);
         $f->gtk_container_add($this->layers, $this->webLayout);
         $this->rendering ? Gtk::idle(fn() => $this->layer()) : $this->layer();
@@ -891,6 +892,35 @@ final class Window implements Platform\Window
     {
         $this->ungrab();
         Gtk::ffi()->gtk_widget_hide($this->win);
+    }
+
+    /** @internal Access's: whether the window is gone. */
+    public function isDead(): bool { return $this->dead; }
+
+    /** @internal Access's: assistive technology asked for the content, which describes its last frame now. */
+    public function accessibilityOn(): void { $this->w->runtime?->accessibilityOn(); }
+
+    /** @internal Access's: an action of assistive technology on node $id, an AccessNode action. */
+    public function accessAction(int $id, int $action, string $text, int $from, int $to): void
+    {
+        $this->w->input?->push(['access', $id, $action, $text, $from, $to]);
+        $this->requestFrame();
+    }
+
+    /** @internal Access's: the overlay putting the area over the web views, null before the first. */
+    public function layers(): ?CData { return $this->layers; }
+
+    /** @internal Access's: whether the area is in the overlay of web views. */
+    public function layered(): bool { return $this->layers !== null; }
+
+    /** @internal Access's @return list<SurfaceWebView> */
+    public function surfaceWebViews(): array { return $this->webViews; }
+
+    /** @internal Access's: the web view of the window that $v is, or null. */
+    public function surfaceWebView(\MyPHP\WebView $v): ?SurfaceWebView
+    {
+        $native = $v->native();
+        return $native instanceof SurfaceWebView && in_array($native, $this->webViews, true) ? $native : null;
     }
 
     /** Destroys the window without asking; its destroy signal tells the core. */

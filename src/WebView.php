@@ -33,6 +33,9 @@ final class WebView
     private bool $destroyed = false;
     private ?Background $background = null;
 
+    /** @internal the backend's web view (Platform\Linux\Access finds its page's accessible) */
+    public function native(): Platform\WebView { return $this->native; }
+
     /** @internal Window::newWebView makes it */
     public function __construct(private readonly Window $host, WebViewOptions $o)
     {
