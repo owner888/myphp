@@ -74,7 +74,7 @@ $settings = function (bool $connected) use ($sent, $choice, $batteries, $status,
             (DynamicTypeSize::current()->isAccessibilitySize() ? VStack(alignment: HorizontalAlignment::leading, spacing: 8) : HStack(alignment: VerticalAlignment::top))( // the status under the name at the accessibility sizes
                 VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
                     Text(verbatim: $this->deviceName)->font(Font::title2)->bold(),
-                    Text('{model} · Firmware {firmware}', ['model' => $this->modelNumber, 'firmware' => $this->firmware])->font(Font::subheadline)->foregroundStyle(Color::secondary),
+                    Text('{model} · Firmware {firmware}', model: $this->modelNumber, firmware: $this->firmware)->font(Font::subheadline)->foregroundStyle(Color::secondary),
                 ),
                 Spacer(),
                 $status($connected),
@@ -191,7 +191,7 @@ $packetRow = function (array $p, int $i) {
 $packets = fn() => ListView($this->packets)($packetRow) // the frames as the frame began: a row deleting one does not move the rows after it in this pass
     ->listStyle(ListStyle::plain)
     ->navigationTitle('Packet Log')
-    ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', ['count' => count($this->packets)])->foregroundStyle(Color::secondary), Button('Clear', action: function () { $this->clearAsked = true; }))
+    ->toolbar(Text('{count, plural, one {# frame} other {# frames}}', count: count($this->packets))->foregroundStyle(Color::secondary), Button('Clear', action: function () { $this->clearAsked = true; }))
     ->confirmationDialog('Clear every frame of the log?', isPresented: $this->clearAsked, actions: [
         Button('Clear Log', role: ButtonRole::destructive, action: function () { $this->packets = []; }),
         Button('Cancel', role: ButtonRole::cancel),
@@ -239,7 +239,7 @@ $lidSheet = function (bool $connected) use ($batteries, $tr) {
                 Text('First-time pairing')->font(Font::headline),
                 Each(['Open the case near this phone.', 'Hold the case\'s button until its light flashes white.', 'Click Connect & Pair.'])(
                     fn(string $step, int $i) => Text(verbatim: ($i + 1) . '. ' . $tr($step))->foregroundStyle(Color::secondary)),
-                $this->pairState !== 'idle' ? Text('Status: {state}', ['state' => $this->pairState])->font(Font::caption)->monospaced()->foregroundStyle(Color::orange) : null,
+                $this->pairState !== 'idle' ? Text('Status: {state}', state: $this->pairState)->font(Font::caption)->monospaced()->foregroundStyle(Color::orange) : null,
             )->frame(maxWidth: INF, alignment: Alignment::leading)
             : Text($connected ? 'Connected over L2CAP 0x1001' : 'Paired · ready to connect')->foregroundStyle($connected ? Color::green : Color::secondary),
         HStack(spacing: 10)(

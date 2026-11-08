@@ -11,7 +11,7 @@ use MyPHP\{Catalog, I18n, Message};
  * catalogs (locales/zh-Hans.json: {"Submit": "提交"}), said in the
  * environment's language — environment(locale:), else the app's — and
  * shown as it is where no catalog has it. Its placeholders are ICU's:
- * Text('Hello, {name}!', ['name' => $this->name]).
+ * Text('Hello, {name}!', name: $this->name).
  */
 final class Localized
 {

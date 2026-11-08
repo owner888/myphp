@@ -113,7 +113,7 @@ return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
         Button('Add', action: fn() => $this->add())->buttonStyle(ButtonStyle::borderedProminent)->disabled(trim($this->draft) === ''),
     ),
     ListView($this->items, id: 'id')($row),
-    Text('{n} left', ['n' => $this->left()])->foregroundStyle(Color::secondary), // a key and its placeholder, translatable (an ICU message: '{n, plural, one {# word} other {# words}}' too); Text(verbatim:) for what the user wrote
+    Text('{n} left', n: $this->left())->foregroundStyle(Color::secondary), // a key and its placeholder, translatable (an ICU message: '{n, plural, one {# word} other {# words}}' too); not "{$n} left", a key for every value; Text(verbatim:) for what the user wrote
 )->padding(16);
 ```
 
