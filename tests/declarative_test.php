@@ -878,6 +878,20 @@ same([true, true, 'servers'], [$m[1] > $fieldBottom, $w[0] + $w[2] > 300, $scope
 try { Text('x')->searchScopes($scopeApp->scope, Text('A')->tag('a')); $threw = false; } catch (\LogicException) { $threw = true; }
 same(true, $threw, 'searchScopes() without searchable() says where it goes');
 
+// NumberField, DecimalField and EditableText: the engine's number input, decimal input and editable text as views,
+// bound to the state, each titled in a Form.
+$fieldsApp = new class { public int $copies = 1; public string $price = '19.99'; public string $name = 'Notes.txt'; };
+$h = new Headless(fn() => Form()(
+    NumberField('Copies', value: $fieldsApp->copies, in: [1, 9]),
+    DecimalField('Price', value: $fieldsApp->price, in: ['0', '100'], step: '0.01'),
+    EditableText(text: $fieldsApp->name),
+), 420, 300);
+$h->frame(2);
+$inputs = []; $walk = function (Node $n) use (&$walk, &$inputs) { if ($n->kind === Node::INPUT) { $inputs[] = $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->root);
+$h->clickOn($inputs[0]); $h->up(); $h->up(); $h->frame(2);
+$h->clickOn($inputs[1]); $h->up(); $h->frame(2);
+same([3, '20.00', true], [$fieldsApp->copies, $fieldsApp->price, in_array('Notes.txt', $h->texts(), true)], 'Up steps the number and the decimal fields; the editable text shows its text');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);
