@@ -222,6 +222,7 @@ final class ListView extends View
                 if ($k->kind === Node::SWITCH || $k->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(6, 16); break; }
             }
         }
+        if ($n !== null) { $n->contextPreview = true; } // a context menu inside lifts the whole cell, as SwiftUI's in a List
         if ($separator && $n !== null) { // UIKit's separator: a hairline under the row from 16 in to its end
             $n->drawOver(static function (\MyPHP\UI\Painter $p, array $r): void { $hair = 1 / max($p->scale(), 1.0); $p->fill([$r[0] + 16, $r[1] + $r[3] - $hair, $r[2] - 16, $hair], $p->theme()->border); }); // one pixel
         }

@@ -8668,6 +8668,18 @@ changed, which no hot reload can take.
   first, the action reported once it is (nearly) there; for a destructive
   action the offset is put back at once (`DragRec::hold`), not animated,
   as the node is the next row's.
+- A phone's context menu lifts its node over the blurred window as
+  UIKit's preview: the node is painted again (`Painter::copyOf`, which
+  `dragCopy` shares), not built twice. Rule: the runtime keeps the node as
+  `record` meets it (`Runtime::$liftNode`); the draw callback that paints
+  the copy holds no node, finding it through a WeakReference to the
+  runtime, and its rect comes from the node's world (scrolled), not
+  `rectOf` (laid out).
+- The lifted row was cut at its start (the "RX" half gone) and on a gray
+  of its own. Cause: it lifted the node with the contextMenu, inside the
+  list cell's padding, on the theme's surface. Rule: what lifts is the
+  cell around it (`Node::$contextPreview`, which `ListView::row` sets), on
+  the color painting behind it (`Runtime::$liftColor`, as `record` walks).
 
 ## Open items
 

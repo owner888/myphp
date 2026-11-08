@@ -335,7 +335,9 @@ trait ContextMobile
     /**
      * A phone's context menu (Runtime::$touchMenu, what a long press on a
      * node with a contextMenu opens), as UIKit's: the window blurred and
-     * dimmed but for that node, and a rounded list of its items 250 wide
+     * dimmed, that node lifted over it (painted again, Painter::copyOf, a
+     * little larger, rounded, on the theme's surface, with a shadow), and
+     * a rounded list of its items 250 wide
      * below the node, or above where there is no room; the finger held on
      * slides over the items, the one under it pressed, and lifted on one
      * chooses it (Runtime::$touchMenuFinger); an item 44 high, a
@@ -357,10 +359,18 @@ trait ContextMobile
         $items = array_values(array_filter($m['items'], static fn(\MyPHP\MenuItem $it) => !$it->hidden));
         $high = 0.0;
         foreach ($items as $it) { $high += match ($it->type) { \MyPHP\MenuItem::SEPARATOR => 8.0, \MyPHP\MenuItem::HEADER => 30.0, default => 44.0 }; }
-        if (!array_key_exists('rect', $m)) { $m['rect'] = $rt->touchMenu['rect'] = $rt->contextMenuRect($m['x'], $m['y']); } // where the node is as it opens, kept sharp while it shows
+        if (!array_key_exists('target', $m)) { $m['target'] = $rt->touchMenu['target'] = $rt->contextMenuTarget($m['x'], $m['y']); $rt->liftNode = null; } // the node it lifts, the next frames' record keeping it (Runtime::$liftNode)
+        $lifted = $rt->liftNode;
+        if ($lifted !== null) { // where it shows in the window, scrolled and moved as it is
+            $b = $lifted->world->bounds($lifted->x, $lifted->y, $lifted->w, $lifted->h);
+            $m['rect'] = $rt->touchMenu['rect'] = [$b[0], $b[1], $b[2], $b[3]];
+        } elseif (!array_key_exists('rect', $m)) {
+            $m['rect'] = $rt->touchMenu['rect'] = $m['target'] !== 0 ? $rt->rectOf($m['target']) : null; // not yet recorded: its box as laid out
+        }
         $at = $m['rect'] ?? [$m['x'], $m['y'] - 12, 0.0, 24.0]; // none: the finger's point
         $w = min(250.0, $this->width - 32);
-        $x = max(16.0, min($m['x'] - 24, $this->width - 16 - $w));
+        $edge = $m['rect'] !== null ? ($this->direction() === Direction::RightToLeft ? $m['rect'][0] + $m['rect'][2] - $w : $m['rect'][0]) : $m['x'] - 24;
+        $x = max(16.0, min($edge, $this->width - 16 - $w)); // at the lifted node's leading edge, as UIKit's
         $y = $at[1] + $at[3] + 8; // below the node
         if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = $at[1] - 8 - $high; } // no room below: above it
         if ($y < $this->windowSafeArea[0] + 16) { $y = max($this->windowSafeArea[0] + 16, $this->height - $this->windowSafeArea[2] - 16 - $high); } // nor above (a tall node): over it, at the bottom
@@ -391,34 +401,36 @@ trait ContextMobile
             if ($shown) { $back->block(); } else { $back->passThrough(); }
             if (!isset($rt->motions[$back->id]['fade'])) { $this->jump($back, 'fade', 0.0); } // opened now: from nothing
             $p = $this->animate($back, 'fade', $shown ? 1 : 0, $shown ? 0.2 : 0.25);
-              // the window blurred and dimmed around the node, which stays sharp: four panes about it, or one with no node
-              $r = $m['rect'];
-              $panes = $r === null ? [[0.0, 0.0, $this->width, $this->height]] : [
-                  [0.0, 0.0, $this->width, max($r[1], 0.0)], [0.0, $r[1] + $r[3], $this->width, max($this->height - $r[1] - $r[3], 0.0)],
-                  [0.0, $r[1], max($r[0], 0.0), $r[3]], [$r[0] + $r[2], $r[1], max($this->width - $r[0] - $r[2], 0.0), $r[3]],
-              ];
-              foreach ($panes as [$px, $py, $pw, $ph]) {
-                  if ($pw <= 0 || $ph <= 0) { continue; }
-                  $this->column(0, 0)->absolute()->top($py)->start($px)->size($pw, $ph)->role(Role::NONE)->material(new \MyPHP\Plugins\Glass\Blur(10 * $p));
-                    $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
-                  $this->end();
+              // the window blurred and dimmed, the node lifted over it: painted again, a little larger, rounded on the surface, as UIKit's preview
+              $this->column(0, 0)->absolute()->top(0)->start(0)->size($this->width, $this->height)->role(Role::NONE)->material(new \MyPHP\Plugins\Glass\Blur(10 * $p));
+                $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
+              $this->end();
+              if (($r = $m['rect']) !== null && $m['target'] !== 0) {
+                  $s = 1 + (min(1.02, ($this->width - 16) / max($r[2], 1.0)) - 1) * $p; // a little larger as it lifts, as UIKit's; a cell as wide as the window a little narrower, 8 in from its sides
+                  $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2;
+                  $big = [$cx - $r[2] * $s / 2, $cy - $r[3] * $s / 2, $r[2] * $s, $r[3] * $s];
+                  $map = Affine::translation($cx, $cy)->mul(Affine::scaling($s, $s))->mul(Affine::translation(-$cx, -$cy));
+                  $rtRef = \WeakReference::create($rt); $bg = $rt->liftColor ?? $t->background; $up = $p;
+                  $this->box(0, 0, 0)->absolute()->top(0)->start(0)->size($this->width, $this->height)->role(Role::NONE)->draw(static function (Painter $pa) use ($rtRef, $big, $map, $bg, $up): void { // holds no node: the runtime's, found as it paints
+                      $node = $rtRef->get()?->liftNode;
+                      if ($node === null) { return; }
+                      $pa->shadow($big, 13, 0, 8, 30, 0, 0x000000, 0.2 * $up);
+                      $pa->fill($big, $bg, 13 * $up);
+                      $pa->clip($big, static fn() => $pa->copyOf($node, $map), 13 * $up);
+                  })->color = null;
               }
-              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(14)->clip()->shadow(0, 8, 30, 0, 0x000000, 0.25)->role(Role::MENU)->opacity($p);
-                $last = null;
+              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(22)->clip()->shadow(0, 10, 40, 0, 0x000000, 0.18)->role(Role::MENU)->opacity($p); // iOS 26's: rounded 22, its items apart by no line
                 foreach ($items as $it) {
                     if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a wider gap, as UIKit's
                         $this->box(0, 8, $t->dark ? 0x1c1c1e : 0xe5e5ea)->alignSelf(Node::STRETCH)->shrink(0);
-                        $last = null;
-                        continue;
+                                continue;
                     }
                     if ($it->type === \MyPHP\MenuItem::HEADER) {
                         $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 16, 4, 16)->singleLine();
-                        $last = null;
-                        continue;
+                                continue;
                     }
                     $off = $it->disabled || $it->submenu !== [];
-                    $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
-                    if ($last !== null) { $row->borderWidth(1 / max($this->scale, 1.0), 0, 0, 0)->borderColor($t->border); } // a hairline between two items of a group
+                    $row = $this->row(0, 8)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 20)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
                     $rect = $rt->rectOf($row->id); // as last laid out: where the finger slides and lifts
                     if (!$off && $inside($rect, $slide)) { $under = (int)$it->id; }
                     if (!$off && (($this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) || $inside($rect, $slide))) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }
@@ -426,7 +438,6 @@ trait ContextMobile
                       if ($it->checked) { $this->text('✓', $t->fontSize, $t->accent)->shrink(0); }
                     $this->end();
                     if ($shown && !$off && ($this->clicked($row) || $inside($rect, $lift))) { $chosen = (int)$it->id; }
-                    $last = $row;
                 }
               $this->end();
             $this->end();
@@ -438,6 +449,7 @@ trait ContextMobile
         if ($gone) {
             $rt->touchMenu = null;
             $rt->touchMenuFinger = null;
+            $rt->liftNode = null;
         } elseif ($chosen !== null) { // chosen: it fades out, the choice reaching the item in the next frame (chosen())
             $rt->touchMenu['closing'] = true;
             ($m['chosen'])($chosen);

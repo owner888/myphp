@@ -1403,18 +1403,37 @@ final class Painter
             return;
         }
         [$px, $py] = $e->world->point($e->x + $d['offX'], $e->y + $d['offY']);
-        $shift = Affine::translation($rt->input->mouseX - $px, $rt->input->mouseY - $py);
+        $opacity = $list->opacity();
+        $list->setOpacity(0.75);
+        self::paintMoved($e, Affine::translation($rt->input->mouseX - $px, $rt->input->mouseY - $py), $list, $text, $t, $rt);
+        $list->setOpacity($opacity);
+    }
+
+    /**
+     * Paints $n again, with what it holds, moved by $map after where it
+     * is in the window (its world, a map of window points), at the list's
+     * opacity: a copy of a node already painted elsewhere in the frame, as
+     * a phone's context menu lifts its node over the blurred window
+     * (Context::touchMenu). Not mygo's.
+     */
+    public function copyOf(Node $n, Affine $map): void
+    {
+        self::paintMoved($n, $map, $this->list, $this->text, $this->theme, $this->rt);
+    }
+
+    /** $n and the nodes inside it painted through $map after their worlds, which are then theirs again (dragCopy, copyOf). */
+    private static function paintMoved(Node $e, Affine $map, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
+    {
         $saved = [];
-        $move = function (Node $n) use (&$move, &$saved, $shift) {
+        $move = function (Node $n) use (&$move, &$saved, $map) {
             $saved[] = [$n, $n->world];
-            $n->world = $shift->mul($n->world);
+            $n->world = $map->mul($n->world);
             foreach ($n->kids as $k) { $move($k); }
         };
         $move($e);
-        $opacity = $list->opacity();
-        $list->setOpacity(0.75);
+        $world = $list->world();
         self::paint($e, $list, $text, $t, $rt);
-        $list->setOpacity($opacity);
+        $list->setWorld($world);
         foreach ($saved as [$n, $w]) { $n->world = $w; }
     }
 

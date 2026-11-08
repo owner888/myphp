@@ -130,6 +130,8 @@ final class Node
     public bool $selectable = false, $unselectable = false;
     /** That the node has a context menu (contextMenu()), or is a menu button (menu()). */
     public bool $contextMenu = false, $menuButton = false;
+    /** @internal What a phone's context menu inside it lifts in its place, as UIKit's preview of a list's cell (a list's row, ListView::row); and the color what it lifts shows on, of the node that paints behind it (Runtime::record). */
+    public bool $contextPreview = false;
     public ?\Closure $copyData = null;
     /** For text: the Selectable container around it, as it was built, 0 for none; and the container whose selection it is in, as last recorded (its own id for a Selectable text alone). */
     public int $scope = 0, $textScope = 0;

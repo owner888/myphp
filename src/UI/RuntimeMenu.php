@@ -53,12 +53,21 @@ trait RuntimeMenu
     /** @internal the finger that opened a phone's context menu, held on after (Platform Window): where it is, and whether it lifted there; Context::touchMenu chooses the item it lifts on, as UIKit's */
     public ?array $touchMenuFinger = null;
 
-    /** @internal where the node whose context menu opens at $x, $y is, in window points: what a phone's menu keeps sharp, the rest blurred (Context::touchMenu) */
-    public function contextMenuRect(float $x, float $y): ?array
+    /** @internal the node whose context menu opens at $x, $y, 0 for none: what a phone's menu lifts over the blurred window (Context::touchMenu) */
+    public function contextMenuTarget(float $x, float $y): int
     {
-        $s = $this->menuTarget($this->menuChain($x, $y));
-        return $s === 0 ? null : $this->rectOf($s);
+        return $this->menuTarget($this->menuChain($x, $y));
     }
+
+    /** @internal the node a phone's context menu lifts (Runtime::$touchMenu's 'target'), as the last frame recorded it, which Context::touchMenu paints again over the blur (Painter::copyOf) */
+    public ?Node $liftNode = null;
+
+    /** @internal what $liftNode shows on: the color of the nearest node around it, or with it, painting one (Runtime::record) */
+    public ?int $liftColor = null;
+
+    /** @internal while record walks: the nearest cell around (Node::$contextPreview) and color around */
+    private ?Node $recordCell = null;
+    private ?int $recordColor = null;
 
     private function initMenus(): void
     {

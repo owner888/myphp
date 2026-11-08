@@ -2122,6 +2122,10 @@ final class Runtime
         }
         $hidden = $hidden || $n->invisible; // in its room, but showing nothing and taking neither the pointer nor the focus (mygo's Invisible)
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        if ($this->touchMenu !== null && $n->id === ($this->touchMenu['target'] ?? 0)) { // what a phone's context menu lifts (Context::touchMenu): the cell around, else the node; on the color behind it
+            $this->liftNode = $this->recordCell ?? $n;
+            $this->liftColor = $n->color ?? $this->recordColor;
+        }
         if ($n->frags !== []) { $this->frags[$n->id] = $n->frags; } // text inside a paragraph: its words are its area
         if ($n->hitAreas !== null) { // only where it says (Node::hitAreas), nowhere for none
             if ($n->hitAreas === []) { $this->passing[$n->id] = true; }
@@ -2280,9 +2284,13 @@ final class Runtime
             self::worldTree($g, $n->world); // copies going only show: they are not recorded
         }
         $from = $n->memo !== 0 ? count($this->order) - 1 : 0;
+        [$cellWas, $colorWas] = [$this->recordCell, $this->recordColor];
+        if ($n->contextPreview) { $this->recordCell = $n; }
+        if ($n->color !== null && $n->bgAlpha >= 0.5) { $this->recordColor = $n->color; }
         foreach ($n->paintOrder() as $k) {
             $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
         }
+        [$this->recordCell, $this->recordColor] = [$cellWas, $colorWas];
         $this->setInk($n);
         if ($n->memo !== 0) { $this->memoRecorded($n, $from); }
         if (isset($mark)) { $this->memoRecordEnd($n, $args, $mark); }
