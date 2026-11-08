@@ -384,14 +384,16 @@ $cfg = json_decode(file_get_contents("$root/demo/myphp.json"), true);
 same(['My "Demo" App', 'com.example.mydemoapp', '0.1.0', 'app.php', 'build'], [$cfg['name'], $cfg['identifier'], $cfg['version'], $cfg['entry'], $cfg['out']], 'its configuration');
 check(str_contains(file_get_contents("$root/demo/app.php"), "App::setName('My \"Demo\" App');"), 'its name in the PHP it writes');
 same("\x89PNG", substr(file_get_contents("$root/demo/resources/icon.png"), 0, 4), 'its icon');
-check(is_file("$root/demo/.agents/skills/myphp-maintenance/SKILL.md"), 'its skills');
+check(!is_dir("$root/demo/.agents/skills/myphp-maintenance"), 'not the skill for working on MyPHP itself');
 check(is_file("$root/demo/.agents/skills/myphp-app/SKILL.md") && is_file("$root/demo/.agents/skills/myphp-app/references/pitfalls.md"), 'the app-writing skill, with its references');
 [$code, $out] = $myphp('init', "$root/demo");
 check($code !== 0 && str_contains($out, 'is not empty'), 'not into a project');
-unlink("$root/demo/.agents/skills/myphp-maintenance/SKILL.md");
+exec(escapeshellarg(PHP_BINARY) . ' -d ffi.enable=1 ' . escapeshellarg("$root/demo/tests/ui_test.php") . ' 2>&1', $lines, $code);
+check(is_file("$root/demo/src/Counter.php") && $code === 0, 'its state in src/, and its headless test, which passes: ' . implode("\n", $lines));
+unlink("$root/demo/.agents/skills/myphp-app/SKILL.md");
 file_put_contents("$root/demo/.agents/skills/mine.md", 'mine');
 [$code] = $myphp('install-skills', "$root/demo");
-check($code === 0 && is_file("$root/demo/.agents/skills/myphp-maintenance/SKILL.md") && is_file("$root/demo/.agents/skills/mine.md"), 'install-skills puts them back, leaving others');
+check($code === 0 && is_file("$root/demo/.agents/skills/myphp-app/SKILL.md") && is_file("$root/demo/.agents/skills/mine.md"), 'install-skills puts them back, leaving others');
 
 // The Info.plist: what myphp.json says, the documents and URL schemes, the production flag, and the app's own keys, which win.
 $c = ['name' => 'A & B', 'identifier' => 'com.example.ab', 'version' => '1.2.3', 'copyright' => '© Us', 'urlSchemes' => ['ab'],

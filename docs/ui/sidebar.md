@@ -19,6 +19,35 @@ groups, their headers muted. It is for a sidebar of the app's data; an
 app's top-level pages are a `TabView(.sidebarAdaptable)` ([tabs](tabs.md)),
 which a phone shows as its tab bar.
 
+## A list of the app's data
+
+The sidebar can be any list, as SwiftUI's takes any `List`: rows of the
+app's data, each of any views, with a search field over them and a menu on
+a right click. The row chosen is its id.
+
+```php
+$app = new class {
+    public ?int $chosen = 1;
+    public string $query = '';
+    public array $notes = [['id' => 1, 'title' => 'Groceries', 'line' => 'Milk'], ['id' => 2, 'title' => 'Ideas', 'line' => 'A notepad']];
+    public function shown(): array { return array_values(array_filter($this->notes, fn($n) => $this->query === '' || stripos($n['title'], $this->query) !== false)); }
+};
+$view = fn() => NavigationSplitView(
+    ($app->shown() === []
+        ? ListView()(Text('No note matches.')->foregroundStyle(Color::secondary))
+        : ListView($app->shown(), id: 'id', selection: $app->chosen)(fn(array $n) => VStack(alignment: HorizontalAlignment::leading)(
+            Text(verbatim: $n['title'])->bold(),
+            Text(verbatim: $n['line'])->foregroundStyle(Color::secondary),
+        ))
+    )->searchable(text: $app->query),
+    $app->chosen === null ? Text('No note') : Text(verbatim: "Note {$app->chosen}"),
+);
+```
+
+With nothing found, a list of its own says so, the same `searchable` on
+it, so the field stays as the rows go. `examples/notes` is a whole app of
+this shape.
+
 ## Accessibility
 
 Assistive technology sees the sidebar as a list, its rows by their titles,

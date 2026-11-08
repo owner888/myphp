@@ -77,8 +77,10 @@ disagree, the docs of the checkout win: it may have grown since.
 - **Themes and focus.** No per-window theme (`App::setTheme()` is
   global). Focus is `->focused($this->editing)` and `->defaultFocus()`;
   there is no `@FocusState` enum binding.
-- **Lists.** `ListView` has no empty-state child: show a `Text` instead of
-  it when there are no rows. Scrolling to a position sets only y.
+- **Lists.** `ListView` has no empty-state child: with no rows, show a
+  `ListView()(Text('No notes'))` in its place, with the same modifiers
+  (`searchable` above all, or its field goes with the rows). Scrolling to
+  a position sets only y.
 - **Context and clipboard.** The context does not touch the clipboard:
   use `MyPHP\Clipboard`.
 - **Windows.** No `cornerRadius`, `setIcon`, `skipTaskbar`,

@@ -16,6 +16,10 @@ $view = fn() => NavigationStack()(
 );
 ```
 
+On a `NavigationSplitView`'s detail the items go at the end of the
+window's toolbar, as SwiftUI's on the Mac. On a view outside a stack and a
+split view they are a bar of their own over it, a divider under the bar.
+
 Buttons take no face of their own until hovered; the items are one stop of
 Tab, among which the arrows move the focus. Items that do not fit go into a
 menu at the bar's end.

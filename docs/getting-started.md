@@ -64,13 +64,19 @@ shows [native UI](ui/README.md): PHP alone, with no frontend and no Bun.
 
 ```
 my-app/
-├── app.php          the app: its state and its window
+├── app.php          the app: makes the state and opens its window
+├── src/Counter.php  the state and its actions, with no view
 ├── view.php         the window's view, $this the state (Content::file)
+├── tests/ui_test.php  builds the view headless and drives it
 ├── boot.php         loads MyPHP
 ├── myphp.json       the app's name, identifier and version
+├── .agents/skills/myphp-app/  the skill for an agent writing the app
 └── resources/
     └── icon.png     the app icon, a 1024×1024 PNG
 ```
+
+`php -d ffi.enable=1 tests/ui_test.php` runs the test, which needs no
+window or display ([testing](ui/testing.md)).
 
 `boot.php` loads MyPHP from the checkout that `framework` in the
 configuration names, or from `MYPHP_HOME`, which `myphp dev` and `myphp

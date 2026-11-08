@@ -491,7 +491,7 @@ function init(array $args): void
     writeSkills($dir);
     $rel = str_starts_with($dir, getcwd() . '/') ? substr($dir, strlen(getcwd()) + 1) : $dir;
     if ($template === 'native') {
-        echo "\nCreated $name. Next steps:\n\n  cd $rel\n  myphp dev      # develop with live reload\n  myphp build    # package the app\n\n";
+        echo "\nCreated $name. Next steps:\n\n  cd $rel\n  myphp dev                            # develop with live reload\n  php -d ffi.enable=1 tests/ui_test.php  # test the view headless\n  myphp build                          # package the app\n\n";
         return;
     }
     if (Cmd::look('bun') === '') {
@@ -2973,9 +2973,10 @@ function installSkills(array $args): void
     logf('Installed skills in ' . rtrim($dir, '/') . '/.agents/skills');
 }
 
+/** The skill for writing an app; myphp-maintenance, for working on MyPHP itself, stays in the checkout. */
 function writeSkills(string $dir): void
 {
-    copyTree(SKILLS, "$dir/.agents/skills", []);
+    copyTree(SKILLS . '/myphp-app', "$dir/.agents/skills/myphp-app", []);
 }
 
 // ---- main ---------------------------------------------------------------
