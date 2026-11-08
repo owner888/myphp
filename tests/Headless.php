@@ -771,7 +771,7 @@ function check(bool $cond, string $what): void
 /** A failure also as a GitHub Actions error, which the run's summary and its API show without its log. */
 function annotate(string $what): void
 {
-    if (getenv('GITHUB_ACTIONS') !== 'true') { return; }
+    if (getenv('GITHUB_ACTIONS') !== 'true' || getenv('MYPHP_TEST_CHILD') !== false) { return; } // run.php --each annotates its children's
     $test = isset($GLOBALS['name']) && is_string($GLOBALS['name']) ? "{$GLOBALS['name']}: " : '';
     echo '::error::' . strtr(mb_strcut($test . $what, 0, 2000), ['%' => '%25', "\r" => '%0D', "\n" => '%0A']) . "\n";
 }

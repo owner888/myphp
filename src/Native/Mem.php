@@ -20,9 +20,10 @@ final class Mem
     private static function c(): FFI
     {
         if (!isset(self::$c)) {
-            self::$c = FFI::cdef('void* calloc(size_t, size_t); void free(void*);');
+            // The C library's: the process's own elsewhere, the UCRT on Windows, whose FFI finds no function in the process at large.
+            self::$c = FFI::cdef('void* calloc(size_t, size_t); void free(void*);', PHP_OS_FAMILY === 'Windows' ? 'ucrtbase.dll' : null);
             self::$slot = self::$c->new('void*[1]');
-            self::$slotInt = self::$c->cast('unsigned long[1]', self::$slot);
+            self::$slotInt = self::$c->cast('int64_t[1]', self::$slot); // a pointer's bytes (long is 32 bits on Windows)
         }
         return self::$c;
     }
