@@ -1,0 +1,17 @@
+{
+  "User Scripts": "ユーザースクリプト",
+  "Manage User Scripts...": "ユーザースクリプトを管理…",
+  "About User Scripts": "ユーザースクリプトについて",
+  "User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package.": "ユーザースクリプトはブラウザのものと同じように働きます。プラグインパッケージを作る手間なしに、プラグイン API で欲しい機能を追加・共有できます。",
+  "A script is PHP code run in each player with <code>$iina</code>, the plugin's API, as IINA's plugins of JavaScript are given <code>iina</code>. Read the documentation at <code>https://docs.iina.io</code> to learn more about the IINA plugin API.": "スクリプトは各プレーヤーで実行される PHP コードで、IINA の JavaScript プラグインが <code>iina</code> を受け取るように、プラグイン API <code>$iina</code> を受け取ります。IINA プラグイン API について詳しくは <code>https://docs.iina.io</code> のドキュメントを参照してください。",
+  "＋ New Script": "＋ 新規スクリプト",
+  "Script Name": "スクリプト名",
+  "Action": "操作",
+  "← Exit": "← 戻る",
+  "Save": "保存",
+  "Edit": "編集",
+  "Delete": "削除",
+  "Are you sure to delete {name}?": "{name} を削除してもよろしいですか？",
+  "Saved.": "保存しました。",
+  "Name updated.": "名前を更新しました。"
+}

@@ -77,3 +77,32 @@ $s2->emitForPlugins('iina.menu-update');
 same(['Show Sidebar'], array_map(fn($i) => $i->title, $os->menuItems), 'Show Sidebar, as the menu opens');
 Plugins::stop();
 exec('rm -rf ' . escapeshellarg($root));
+
+// Their messages (locales/): every language of a plugin has the keys of its English, each a message that parses, and
+// what its code and its pages say (strings->get('…'), t("…"), data-l10n…="…") is among them.
+foreach (['online-media', 'userscript', 'opensub'] as $folder) {
+    $base = __DIR__ . "/../plugins/$folder";
+    $en = json_decode((string)file_get_contents("$base/locales/en.json"), true);
+    $bad = [];
+    foreach (glob("$base/locales/*.json") ?: [] as $file) {
+        $msgs = json_decode((string)file_get_contents($file), true);
+        if (array_keys($msgs) != array_keys($en)) { $bad[] = basename($file) . ': ' . json_encode(array_values(array_diff(array_keys($en), array_keys($msgs)) + array_diff(array_keys($msgs), array_keys($en))), JSON_UNESCAPED_UNICODE); }
+        foreach ($msgs as $key => $m) {
+            try { \MyPHP\Message::parse($m); } catch (\Throwable $e) { $bad[] = basename($file) . " $key: {$e->getMessage()}"; }
+        }
+    }
+    $used = [];
+    $files = array_merge(glob("$base/*.php") ?: [], glob("$base/*.html") ?: [], glob("$base/*.js") ?: [], glob("$base/*/*.html") ?: []);
+    foreach ($files as $file) {
+        $src = (string)file_get_contents($file);
+        preg_match_all("/strings->get\\('((?:[^'\\\\]|\\\\.)*)'/", $src, $m1);
+        preg_match_all('/\bt\("((?:[^"\\\\]|\\\\.)*)"/', $src, $m2);
+        preg_match_all("/\\bt\\('((?:[^'\\\\]|\\\\.)*)'/", $src, $m3);
+        preg_match_all('/data-l10n(?:-html|-placeholder|-title)?="([^"]*)"/', $src, $m4);
+        foreach ($m1[1] as $k) { $used[] = stripslashes($k); }
+        foreach ($m2[1] as $k) { $used[] = json_decode("\"$k\""); }
+        foreach ($m3[1] as $k) { $used[] = stripslashes($k); }
+        foreach ($m4[1] as $k) { $used[] = html_entity_decode($k, ENT_QUOTES | ENT_HTML5); }
+    }
+    same([[], []], [$bad, array_values(array_unique(array_diff($used, array_keys($en))))], "$folder: its catalogs whole, and what it says in them");
+}

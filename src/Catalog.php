@@ -158,6 +158,12 @@ final class Catalog
         return $this->source;
     }
 
+    /** The keys of the catalog: its source language's messages'. @return list<string> */
+    public function keys(): array
+    {
+        return array_keys($this->messages[$this->source] ??= self::load($this->files[$this->source]));
+    }
+
     /** The languages of the catalog: its source language, then the others, sorted. @return list<string> */
     public function languages(): array
     {

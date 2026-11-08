@@ -70,7 +70,7 @@ return function (Iina $iina) {
 
     $showDownloadsWindow = function () use ($iina, $console, $global, $window, $file, $utils, $downloads, $updateDownloadsWindow) {
         $window->loadFile('downloads.html');
-        $window->setProperty(['title' => 'Downloads', 'resizable' => true, 'fullSizeContentView' => false, 'hideTitleBar' => false]);
+        $window->setProperty(['title' => $iina->strings->get('Downloads'), 'resizable' => true, 'fullSizeContentView' => false, 'hideTitleBar' => false]);
         $window->setFrame(400, 460);
         $window->onMessage('requestUpdate', function ($m) use ($downloads, $updateDownloadsWindow) {
             if (!($m['force'] ?? false) && !$downloads->statusNeedUpdate) { return; }
@@ -113,7 +113,7 @@ return function (Iina $iina) {
         $window->open();
     };
 
-    $menu->addItem($menu->item('Manage yt-dlp and Downloads...', fn() => $showDownloadsWindow()));
+    $menu->addItem($menu->item($iina->strings->get('Manage yt-dlp and Downloads...'), fn() => $showDownloadsWindow()));
     $global->onMessage('showWindow', fn() => $showDownloadsWindow());
     $global->onMessage('downloadVideo', function ($url, $player) use ($console, $global, $downloadVideo, $showDownloadsWindow) {
         if ($url && $player) {

@@ -1,3 +1,4 @@
+const t = (key, args) => iina.strings.get(key, args); // the plugin's messages (locales/), in the app's language
 // IINA's plugin-online-media downloads-window.js, its mustache template written out.
 function init() {
   iina.postMessage("requestUpdate", { force: true });
@@ -35,10 +36,10 @@ function init() {
     if (!c) { console.error("No active download container found for binaryUpdated message"); return; }
     c.querySelector(".downloading").style.display = "none";
     if (updated) {
-      c.querySelector(".download-info").textContent = "Binary updated successfully. Please allow a few seconds preparing and verifying the new binary.";
+      c.querySelector(".download-info").textContent = t("Binary updated successfully. Please allow a few seconds preparing and verifying the new binary.");
       verifyBinaryInfo();
     } else {
-      c.querySelector(".download-error").textContent = `Failed to update binary: ${error}`;
+      c.querySelector(".download-error").textContent = t("Failed to update binary: {error}", { error });
     }
   });
 
@@ -46,10 +47,10 @@ function init() {
     const c = document.querySelector("#js-runtime-alert .download-container");
     c.querySelector(".downloading").style.display = "none";
     if (downloaded) {
-      c.querySelector(".download-info").textContent = "Deno downloaded successfully.";
+      c.querySelector(".download-info").textContent = t("Deno downloaded successfully.");
       setTimeout(verifyBinaryInfo, 2000);
     } else {
-      c.querySelector(".download-error").textContent = `Failed to download Deno: ${error}`;
+      c.querySelector(".download-error").textContent = t("Failed to download Deno: {error}", { error });
     }
   });
 
@@ -86,9 +87,9 @@ function render(data) {
     return '<div class="downloads-window"><div class="no-task">No downloads. If you just started a download, it may take a few seconds to show up here.</div></div>';
   }
   return '<div class="downloads-window">' + data.map((item) => {
-    const progress = { pending: "Pending", downloading: `${esc(item.dl)}/${esc(item.total)} (ETA ${esc(item.eta)})`, done: "Done", error: `Error: ${esc(item.error)}` }[item.status] ?? "";
+    const progress = { pending: esc(t("Pending")), downloading: esc(t("{downloaded}/{total} (ETA {eta})", { downloaded: item.dl, total: item.total, eta: item.eta })), done: esc(t("Done")), error: esc(t("Error: {error}", { error: item.error })) }[item.status] ?? "";
     const dest = utf8_to_b64(item.dest);
-    const options = item.status === "done" ? `<a href="#" onclick="openFile('${dest}')">Open</a> <a href="#" onclick="revealFile('${dest}')">Reveal in Finder</a>` : "";
+    const options = item.status === "done" ? `<a href="#" onclick="openFile('${dest}')">${esc(t("Open"))}</a> <a href="#" onclick="revealFile('${dest}')">${esc(t("Reveal in Finder"))}</a>` : "";
     return `<div class="download-item"><div class="filename">${esc(item.filename)}</div><div class="progress"><div class="left">${progress}</div><div class="right task-options">${options}</div></div></div>`;
   }).join("") + "</div>";
 }
@@ -110,22 +111,22 @@ function updateBinaryStatus({ path, jsRuntime }) {
 }
 
 function verifyBinaryInfo() {
-  document.getElementById("binary-desc").textContent = "Checking for yt-dlp binary...";
+  document.getElementById("binary-desc").textContent = t("Checking for yt-dlp binary...");
   iina.onMessage("binaryInfo", ({ path, version, jsRuntime, errorMessage }) => {
     let description, binaryLocation = "";
     if (path === "youtube-dl") {
-      description = "No yt-dlp was found; youtube-dl is looked for on your system. It is recommended to download the latest yt-dlp using the button below.";
+      description = t("No yt-dlp was found; youtube-dl is looked for on your system. It is recommended to download the latest yt-dlp using the button below.");
     } else if (path === "@data/yt-dlp/yt-dlp_macos") {
-      description = "You are using the yt-dlp installation managed by this plugin. The binary is in the plugin's data folder (Show in Finder).";
+      description = t("You are using the yt-dlp installation managed by this plugin. The binary is in the plugin's data folder (Show in Finder).");
     } else {
       binaryLocation = path;
-      description = "It seems that you are using a custom yt-dlp binary. You may need to update it manually.";
+      description = t("It seems that you are using a custom yt-dlp binary. You may need to update it manually.");
       document.getElementById("download-binary").style.display = "none";
     }
     if (errorMessage) {
       document.getElementById("binary-version").textContent = errorMessage;
     } else {
-      document.getElementById("binary-version").innerHTML = "Version: " + esc(version) + (binaryLocation ? `<br>binary location: ${esc(binaryLocation)}` : "");
+      document.getElementById("binary-version").innerHTML = esc(t("Version: {version}", { version })) + (binaryLocation ? "<br>" + esc(t("Binary location: {path}", { path: binaryLocation })) : "");
     }
     document.getElementById("binary-desc").textContent = description;
     updateBinaryStatus({ path, jsRuntime });

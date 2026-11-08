@@ -71,7 +71,7 @@ JS;
     /** A web view of $instance's in $window, its messages $hub's, IINA's simple mode's page $simpleHtml its own; $clickable: it reports what takes clicks; $loaded called as a page loads. */
     public function __construct(private readonly Instance $instance, public readonly MessageHub $hub, Window $window, private readonly string $simpleHtml, bool $clickable = false, private readonly ?\Closure $loaded = null)
     {
-        $this->view = $window->newWebView(new WebViewOptions(page: new PageOptions(preloadScript: self::BRIDGE . ($clickable ? "\n" . self::CLICKABLE : '')), transparent: true));
+        $this->view = $window->newWebView(new WebViewOptions(page: new PageOptions(preloadScript: self::BRIDGE . "\n" . $instance->plugin->stringsScript() . ($clickable ? "\n" . self::CLICKABLE : '')), transparent: true));
         $page = $this->view->page();
         $page->on('message', function (string $name, mixed $data): void {
             if ($name === '__iina_clickable') {

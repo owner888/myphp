@@ -11,8 +11,14 @@
   "ghRepo": "owner888/myphp-plugin-opensub",
   "entry": "main.php",
   "globalEntry": "global.php",
-  "permissions": ["show-osd", "file-system", "network-request"],
-  "allowedDomains": ["*"],
+  "permissions": [
+    "show-osd",
+    "file-system",
+    "network-request"
+  ],
+  "allowedDomains": [
+    "*"
+  ],
   "sidebarTab": {
     "name": "OpenSubtitles"
   },
@@ -26,5 +32,16 @@
   "preferenceDefaults": {
     "languages": "",
     "save_login": "keychain"
+  },
+  "localized": {
+    "zh-Hans": {
+      "description": "myphp 的 OpenSubtitles 官方插件"
+    },
+    "zh-Hant": {
+      "description": "myphp 的 OpenSubtitles 官方外掛"
+    },
+    "ja": {
+      "description": "myphp 用の OpenSubtitles 公式プラグイン"
+    }
   }
 }
