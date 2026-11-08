@@ -12,10 +12,13 @@ namespace MyPHP\Tests;
         echo "  skipped: Windows's\n";
         return;
     }
-    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/windows_backend_app.php'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-    fclose($pipes[0]);
-    $out = stream_get_contents($pipes[1]); $err = stream_get_contents($pipes[2]);
+    // What it logs to a file: read after its report, a pipe of it fills and stops the app (Windows's pipes hold 4 KB).
+    $log = (string)tempnam(sys_get_temp_dir(), 'myphp-backend');
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/windows_backend_app.php'], [0 => ['file', 'NUL', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $log, 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]);
     proc_close($p);
+    $err = substr((string)file_get_contents($log), -2000);
+    unlink($log);
     $line = array_values(array_filter(explode("\n", (string)$out), fn(string $l) => str_starts_with($l, '{')))[0] ?? '';
     $r = json_decode($line, true);
     if (!is_array($r)) { check(false, "the app's report: $out $err"); return; }
