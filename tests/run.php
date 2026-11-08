@@ -8,6 +8,7 @@ $tmp = getenv('TMPDIR');
 if ($tmp !== false && $tmp !== '' && ($real = realpath($tmp)) !== false) {
     putenv("TMPDIR=$real");
 }
+const MYPHP_TEST_SUITE = true; // the suite reports its own counts, test by test
 require __DIR__ . '/Headless.php';
 \MyPHP\Logger::console(false); // the app's log kept (the tests read it), not printed over the checks: what the suite fails on purpose logs
 // The suite's user data in a folder of its own, not the user's: the player's settings, playback history and positions (Media\PlayerSettings::default() and the others) start from none.

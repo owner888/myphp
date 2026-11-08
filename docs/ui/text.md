@@ -14,6 +14,11 @@ $view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
 )->padding()->frame(width: 260);
 ```
 
+A key is an ICU message, so its placeholders choose between forms as
+they are, with or without a translation in the strings:
+`Text('{n, plural, one {# word} other {# words}}', ['n' => $words])` shows
+"1 word" and "4 words", and a catalog gives each language its own forms.
+
 ## Style
 
 `->font(Font::headline)` sets a text style: `largeTitle`, `title`,

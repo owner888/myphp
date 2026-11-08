@@ -756,6 +756,11 @@ function freePort(): int
 }
 
 /** Fails the test unless $cond, with $what. */
+// A test run on its own (an app's tests/ui_test.php) says how many checks it made as it ends: a pass is not silence.
+if (!defined('MYPHP_TEST_SUITE')) {
+    register_shutdown_function(static function (): void { printf("%d checks, %d failed\n", $GLOBALS['checks'] ?? 0, count($GLOBALS['failures'] ?? [])); });
+}
+
 function check(bool $cond, string $what): void
 {
     global $checks, $failures;
