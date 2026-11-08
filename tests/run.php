@@ -16,7 +16,7 @@ $userData = sys_get_temp_dir() . '/myphp-tests-' . getmypid();
 @mkdir($userData);
 \MyPHP\App::setPath(\MyPHP\PathName::UserData, $userData);
 
-$checks = 0; $failures = [];
+$checks = 0; $failures = []; $byTest = [];
 ini_set('memory_limit', '-1'); // the whole suite in one process, as CI runs it: an icon's 1024² sums alone take more than PHP's default 128M
 // Deprecations, warnings and notices fail the run, as PHP's defaults hide deprecations (the static FFI::new() did, docs/architecture.md); @ still silences what it marks.
 error_reporting(E_ALL);
@@ -39,8 +39,20 @@ foreach ($files as $file) {
     if ($only !== [] && !in_array($name, $only, true)) { continue; }
     $before = $checks; $failed = count($failures);
     echo "$name\n";
-    require $file;
+    try {
+        require $file;
+    } catch (\Throwable $e) { // the test ends there, the run goes on to the next
+        $failures[] = $what = 'uncaught ' . get_class($e) . ': ' . $e->getMessage() . ' at ' . basename($e->getFile()) . ':' . $e->getLine();
+        echo "  FAIL: $what\n";
+        \MyPHP\Tests\annotate($what);
+    }
     printf("  %d checks, %d failed\n", $checks - $before, count($failures) - $failed);
+    if (count($failures) > $failed) { $byTest[$name] = array_slice($failures, $failed); }
 }
 printf("%d checks, %d failed\n", $checks, count($failures));
+// On GitHub Actions, every failing test in one notice, as a step shows ten errors at most.
+if ($byTest !== [] && getenv('GITHUB_ACTIONS') === 'true') {
+    $lines = array_map(fn(string $t, array $f) => sprintf('%s: %d failed; first: %s', $t, count($f), mb_strcut(str_replace(["\r", "\n"], ' ', $f[0]), 0, 300)), array_keys($byTest), $byTest);
+    echo '::notice title=Failures by test::' . strtr(implode("\n", $lines), ['%' => '%25', "\n" => '%0A']) . "\n";
+}
 exit($failures === [] ? 0 : 1);
