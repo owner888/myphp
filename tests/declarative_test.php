@@ -775,7 +775,7 @@ same([1, ['cancel'], false], [$cancels, $confirmApp->ran, $confirmApp->asked], '
 $menuRan = new \ArrayObject();
 $h = new Headless(function (Context $c) use ($menuRan) {
     Content::render(fn() => ListView(2)(fn(int $i) => Text("Row $i")->contextMenu(
-        Button('Copy Hex', action: fn() => $menuRan->append("copy $i")),
+        Button('Copy Hex', action: fn() => $menuRan->append("copy $i"), systemImage: 'doc.on.doc'),
         Button('Delete', role: \ButtonRole::destructive, action: fn() => $menuRan->append("delete $i")),
     ))->listStyle(\ListStyle::plain), $c);
     $c->touchMenu();
@@ -810,8 +810,10 @@ same(round($lr[0] + $lr[2] / 2 + $lr[2] * $grownR / 2, 3), round($menuRight, 3),
 // The finger that opened it held on: slid onto an item it presses it, lifted there chooses it, as UIKit's; lifted where it opened, nothing.
 $h->rightClick($x, $y); $h->rt->touchMenuFinger = [$x, $y, false]; $h->frame(2);
 $sharp = $h->rt->touchMenu['rect'] ?? null;
+$images = 0; $walk = function (Node $n) use (&$walk, &$images) { if ($n->role === \MyPHP\UI\Role::MENU) { foreach ($n->kids as $row) { foreach ($row->kids as $k) { if ($k->kind === Node::IMAGE) { $images++; } } } } foreach ($n->kids as $k) { $walk($k); } }; $walk($h->frame());
+same(['doc.on.doc', 1], [$h->rt->touchMenu['items'][0]->systemImage, $images], 'a Button\'s systemImage at its menu item\'s start');
 $liftedStart = $sharp[0] + $sharp[2] * (1 - min(1.02, (393 - 16) / $sharp[2])) / 2;
-same($liftedStart + 24, $h->rect($h->byText('Copy Hex'))[0], 'the menu lined up with the lifted row\'s start (its items 24 in)');
+same($liftedStart + 24 + 20 + 14, $h->rect($h->byText('Copy Hex'))[0], 'the menu lined up with the lifted row\'s start (its items 24 in, the labels after a column of symbols 20 wide)');
 $liftedRow = ($h->rt->liftNode?->contextPreview ?? false) && $h->rt->liftNode->id !== ($h->rt->touchMenu['target'] ?? -1); // the list's whole cell, not the Text in its padding
 $withCopy = $h->paint()->n; $kept = $h->rt->liftNode; $h->rt->liftNode = null; $without = $h->paint()->n; $h->rt->liftNode = $kept;
 same([true, true], [$liftedRow, $withCopy > $without], 'the pressed row\'s cell lifted: recorded, and painted again over the blur');

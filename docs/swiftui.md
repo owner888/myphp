@@ -171,6 +171,7 @@ $view = function (Context $c) {
 | `dynamicTypeSize(.xxLarge)` | the same in a declarative view, or `App::setTextScale(DynamicTypeSize::xxLarge->scale())` (null follows the system's text size). |
 | `tabBarMinimizeBehavior(.onScrollDown)` | the same on a `TabView`: a phone's tab bar shrinks to the chosen tab as the page scrolls down, a tap brings it back (iOS 26's). |
 | `Tab(value:role: .search)` | `Tab(value: 'search', role: TabRole::search)`: apart at the end of a phone's tab bar, a circle of glass, titled Search with a magnifying glass (iOS 26's). |
+| `Button("Copy", systemImage: "doc.on.doc") { … }` | `Button('Copy', action: …, systemImage: 'doc.on.doc')`: its label a Label of the title and the symbol; in a phone's context menu the item's icon at its start. |
 | `.searchScopes($scope) { … }` | `->searchable($this->query)->searchScopes($this->scope, Text('All')->tag('all'), …)`: a segmented control across under the search field. |
 | `.presentationDetents([.medium, .large])` | the same on a sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]`, `::fraction(0.3)`, `::height(200)`; a drag moves the sheet between them, down past the smallest closes it. |
 

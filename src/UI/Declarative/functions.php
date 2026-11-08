@@ -327,10 +327,10 @@ function Text(string|array $text = '', array $args = [], ?string $verbatim = nul
     return $verbatim !== null ? new D\Text($verbatim, true) : new D\Text($text, false, $args);
 }
 
-/** A button: Button('Save', action: fn() => $this->save()), or with a label view: Button(action: …, label: Label('Add', systemImage: 'plus')). */
-function Button(string $title = '', ?Closure $action = null, ?ButtonRole $role = null, ?D\View $label = null): D\Button
+/** A button: Button('Save', action: fn() => $this->save()), with a symbol: Button('Copy', systemImage: 'doc.on.doc', action: …), or with a label view: Button(action: …, label: Label('Add', systemImage: 'plus')). */
+function Button(string $title = '', ?Closure $action = null, ?ButtonRole $role = null, ?D\View $label = null, ?string $systemImage = null): D\Button
 {
-    return new D\Button($title, $action, $role, $label);
+    return new D\Button($title, $action, $role, $label, $systemImage);
 }
 
 /** A switch bound to $isOn: Toggle('Wi-Fi', isOn: $this->wifi), or a Binding(get:set:) whose set() runs as the user switches it; or of several, Toggle('All', sources: [&$this->mail, &$this->calendar]), mixed while some are on. */

@@ -36,7 +36,7 @@ final class Menu extends View
     {
         foreach (ListView::flat($content) as $v) {
             match (true) {
-                $v instanceof Button => $m->item(Localized::string($v->title, $env))->destructive($v->role === \ButtonRole::destructive)->chosen() && $v->run(),
+                $v instanceof Button => $m->item(Localized::string($v->title, $env))->destructive($v->role === \ButtonRole::destructive)->systemImage($v->systemImage)->chosen() && $v->run(),
                 $v instanceof Toggle => $m->item(Localized::string($v->title, $env))->checked($v->isOn())->chosen() && $v->flip(),
                 $v instanceof Picker => $v->menuItems($m, $env), // its choices inline, the one chosen checked
                 $v instanceof Divider => $m->separator(),
