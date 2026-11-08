@@ -22,7 +22,7 @@ same pace. It is all PHP: no JavaScript package, and nothing to
 `App::use()`. Pages, which have CSS, can use `loading-dev` itself.
 
 [examples/loading](../../examples/loading) shows them all, with their
-options (`./run.sh loading`):
+options (`myphp run -d macos examples/loading`):
 
 ```php
 use MyPHP\Plugins\Loading\Loading;

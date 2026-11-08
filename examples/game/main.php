@@ -5,7 +5,7 @@
 // drawn through the camera, only those in view, into a canvas of 320×180
 // pixels, which shows pixel-perfect at the largest whole scale the view
 // takes (Game::integerFit); the wheel zooms.
-// Run: ./run.sh game
+// Run: myphp run -d macos examples/game
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

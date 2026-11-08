@@ -6,7 +6,7 @@
 // card bounces a little as it lands; Play, Pause, Reverse, Restart and the
 // scrubber move the whole intro together. It asks for frames only while
 // it plays.
-// Run: ./run.sh timeline
+// Run: myphp run -d macos examples/timeline
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

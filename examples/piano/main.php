@@ -4,7 +4,7 @@
 // a tune. Its sound is synthesized, a sound per key, decoded nowhere; the
 // keys are made one at a time after the window shows, and a key pressed
 // before its turn is made as it is pressed.
-// Run: ./run.sh piano
+// Run: myphp run -d macos examples/piano
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

@@ -5,7 +5,7 @@
 // JavaScript with the same wire values. Notes go into notes.db in the app's
 // data directory. "Reload" shows that a connection belongs to its page:
 // the reloaded page cannot use the last page's id, which PHP closed.
-// Run: ./run.sh sqlite
+// Run: myphp run -d macos examples/sqlite
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

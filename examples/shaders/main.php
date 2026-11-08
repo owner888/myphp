@@ -3,7 +3,7 @@
 // compiles them), on the GPU: waves a uniform moves, text and a path
 // filled with a shader, an element drawn through an effect, and a frosted
 // pane reading what moves behind it.
-// Run: ./run.sh shaders
+// Run: myphp run -d macos examples/shaders
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

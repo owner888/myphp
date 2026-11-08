@@ -5,7 +5,7 @@
 // myphp.call and a Channel: connect streams what happens, send writes a
 // message in its turn. The handshake carries an Authorization header the
 // browser's WebSocket could not send. The default server echoes.
-// Run: ./run.sh websocket [wss://url]
+// Run: myphp run -d macos examples/websocket [wss://url]
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

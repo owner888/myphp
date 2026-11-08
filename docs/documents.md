@@ -37,7 +37,7 @@ App::run();
 ```
 
 `examples/documents` is this editor with a status line and a bar for files
-changed by other apps: `./run.sh documents [file.md…]`.
+changed by other apps: `myphp run -d macos examples/documents [file.md…]`.
 
 ## Documents and their content
 

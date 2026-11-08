@@ -3,7 +3,7 @@
 // popover of the system's below the icon (mygo's examples/menubar-flyout).
 // It closes as the user clicks elsewhere, presses Escape or clicks the icon
 // again; a right click shows its menu.
-// Run: ./run.sh menubar-flyout
+// Run: myphp run -d macos examples/menubar-flyout
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, FlyoutOptions, Menu, MenuItem, QuitEvent, Tray, TrayOptions, Window};

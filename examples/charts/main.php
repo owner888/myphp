@@ -3,7 +3,7 @@
 // bar chart whose month the pointer chooses; a live line whose points the
 // pointer and the arrows choose; stacked areas; a scatter plot; a donut
 // whose sector the pointer chooses.
-// Run: ./run.sh charts
+// Run: myphp run -d macos examples/charts
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

@@ -6,7 +6,7 @@
 // from the Finder; and cards dragged between two lists, as values within
 // the window and as text to other apps (draggable, dropDestination). Option copies,
 // Command moves, where the source allows it.
-// Run: ./run.sh transfer
+// Run: myphp run -d macos examples/transfer
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

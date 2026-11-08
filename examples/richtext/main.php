@@ -4,7 +4,7 @@
 // selection, which shows the selection's formats. ⌘B, ⌘I, ⌘U, ⇧⌘X, ⌘E and
 // ⌘K format; ⇧⌘7, ⇧⌘8 and ⇧⌘L make lists, Tab and ⇧Tab indent them;
 // ⌥⌘1–3 make headings; "# ", "- " and **bold** format as you type.
-// Run: ./run.sh richtext
+// Run: myphp run -d macos examples/richtext
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

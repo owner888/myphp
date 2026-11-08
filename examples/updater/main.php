@@ -7,7 +7,7 @@
 // up, to show the release notes, the progress and the relaunch offer. With
 // --native, the window is drawn in native UI (Native::plugin()), as is the
 // app's own.
-// Run: ./run.sh updater [--demo] [--native]
+// Run: myphp run -d macos examples/updater [--demo] [--native]
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};

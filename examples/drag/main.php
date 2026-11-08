@@ -5,7 +5,7 @@
 // heights, rubber-banded past them; words dragged into a basket, which
 // lights up when one is over it and takes it in, the word flying to its
 // place there (matchedGeometryEffect); a click on one takes it back.
-// Run: ./run.sh drag
+// Run: myphp run -d macos examples/drag
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

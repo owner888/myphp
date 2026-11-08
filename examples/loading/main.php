@@ -2,7 +2,7 @@
 // Loading shows the 29 loading indicators of the loading plugin, after
 // loading.dev, in native UI, with their options: size, color, easing, the
 // ends of their strokes, and a pause (mygo's examples/loading).
-// Run: ./run.sh loading
+// Run: myphp run -d macos examples/loading
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

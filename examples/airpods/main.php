@@ -5,7 +5,7 @@
 //    Fluoride (requiring the Root L2CAP bypass).
 // 2. Decodes Apple BLE 0x004C Proximity Pairing broadcasts and drives the full
 //    AACP binary protocol over L2CAP 0x1001 for standard AirPods 4 (A3053).
-// Run: ./run.sh airpods
+// Run: myphp run -d macos examples/airpods
 declare(strict_types=1);
 
 if (!defined('STDIN')) { define('STDIN', fopen('php://stdin', 'r')); }

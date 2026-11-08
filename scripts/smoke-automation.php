@@ -164,5 +164,5 @@ clearstatcache();
 report(!file_exists($sock), 'and its socket is gone');
 
 echo $failed === 0 ? "all checks passed\n" : "$failed failed\n";
-echo "By hand: ./run.sh video [film] still opens, plays and shows its settings (the player renamed MediaPlayer in v1.118).\n";
+echo "By hand: myphp run -d macos examples/video [film] still opens, plays and shows its settings (the player renamed MediaPlayer in v1.118).\n";
 exit($failed === 0 ? 0 : 1);

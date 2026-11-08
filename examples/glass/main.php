@@ -5,7 +5,7 @@
 // and an interactive glass button that grows while pressed. A hard scroll
 // edge at the bottom (macOS's, under a bar of controls) and a fading blur
 // band in the middle use the same backdrop.
-// Run: ./run.sh glass
+// Run: myphp run -d macos examples/glass
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

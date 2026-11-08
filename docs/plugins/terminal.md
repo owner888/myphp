@@ -32,8 +32,8 @@ App::whenReady(function () {
 App::run();
 ```
 
-The [terminal example](../../examples/terminal) shows this app (`./run.sh
-terminal`). Its window uses the shell's title and closes when the shell
+The [terminal example](../../examples/terminal) shows this app (`myphp run -d macos
+examples/terminal`). Its window uses the shell's title and closes when the shell
 exits.
 
 `Terminal::view()` is a node like any other: size it with `fill()` or

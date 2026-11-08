@@ -106,7 +106,7 @@ examples/          native (inbox over a million rows), form (fields, text area, 
 tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
                    view sends them, paint into an FFI buffer, the widgets and files examples without their windows), *_test.php
                    (check()/same() assertions, no PHPUnit; svg_test reads the renderer's pixels); php tests/bench.php [frames] times build/layout/record/paint
-run.sh             runs an example with the php -d flags; docs/ the guides (docs/ui/README.md: native UI, examples run by tests/docs_examples_test.php); docs/architecture.md  design notes, measurements, pitfalls
+docs/              the guides (docs/ui/README.md: native UI, examples run by tests/docs_examples_test.php); docs/architecture.md  design notes, measurements, pitfalls
 ```
 
 ## Architecture, in short
@@ -182,7 +182,7 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 
 ## Working on it
 
-- PHP ≥ 8.3 with `ext-ffi`; `./run.sh <example>` and `bin/myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
+- PHP ≥ 8.3 with `ext-ffi`; `myphp run` and `myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
 - Before handing back: `php -l` on every changed file; run only relevant
   checks: `php tests/run.php [name]` (e.g. text, layout) when changing src/UI;
   full test suite only for final milestones; ask the developer to run GUI examples;

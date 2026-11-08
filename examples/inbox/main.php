@@ -3,7 +3,7 @@
 // on every frame, and frames happen when something changes. Hover the list
 // for its scroll bar (drag the thumb); click a row to choose it, Cmd-click
 // or Shift-click several.
-// Run: ./run.sh inbox [rows]   (MYPHP_STATS=1 prints per-second frame stats; try 1000000 rows)
+// Run: myphp run -d macos examples/inbox [rows]   (MYPHP_STATS=1 prints per-second frame stats; try 1000000 rows)
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

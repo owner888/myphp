@@ -5,7 +5,7 @@
 // the notes saved as JSON in the app's folder of user data. The search
 // field over the sidebar filters the notes; Cmd+N makes one, and
 // Cmd+Backspace deletes the one shown, once you say so.
-// Run: ./run.sh notes
+// Run: myphp run -d macos examples/notes
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};

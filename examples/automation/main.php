@@ -5,7 +5,7 @@
 // ignores input at rest, round rings, borders and shadows drawn in
 // bands), a window made hidden that shows once its first frame is drawn,
 // and a page; the menu Actions resets the count and quits.
-// Run: ./run.sh automation (MYPHP_AUTOMATION=/tmp/automation.sock to drive it)
+// Run: myphp run -d macos examples/automation (MYPHP_AUTOMATION=/tmp/automation.sock to drive it)
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};

@@ -3,7 +3,7 @@
 // in a window, with the terminal plugin, which emulates it with Ghostty's
 // libghostty-vt. The window takes the shell's title and closes when the
 // shell exits.
-// Run: ./run.sh terminal
+// Run: myphp run -d macos examples/terminal
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

@@ -3,7 +3,7 @@
 // Documents (mygo's examples/documents): the File menu, a window per
 // note, autosave, recovery after a crash, the proxy icon and the edited
 // dot, notes changed by other apps.
-// Run: ./run.sh documents [file.md…]
+// Run: myphp run -d macos examples/documents [file.md…]
 declare(strict_types=1);
 
 use MyPHP\{App, Document, Documents, DocumentsOptions, DocumentType, Window, WindowOptions};

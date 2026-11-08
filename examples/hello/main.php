@@ -3,7 +3,7 @@
 // method called from the page. A project would have `myphp dev` write a
 // typed client for it; this one calls the untyped window.myphp.call to stay
 // in a single file.
-// Run: ./run.sh hello
+// Run: myphp run -d macos examples/hello
 declare(strict_types=1);
 
 use MyPHP\{App, Ipc, Window, WindowOptions};

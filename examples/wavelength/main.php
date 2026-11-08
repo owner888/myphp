@@ -7,7 +7,7 @@
 // screen then, so the window draws one frame for each of the clip's and
 // none between. The clip stands still while the window is out of sight,
 // and shows its first frame while the desktop asks for less motion.
-// Run: ./run.sh wavelength
+// Run: myphp run -d macos examples/wavelength
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

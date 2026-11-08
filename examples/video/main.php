@@ -14,9 +14,10 @@
 // front, as the settings say (IINA's "Open media in new window", its
 // simultaneous opens in one window, its duplicates). Video > Settings…
 // (Cmd+,) has the player's settings, in a window as IINA's
-// (Context::mediaPlayerSettings). Run: ./run.sh video [file or URL], which
-// logs what the players do to the terminal (MYPHP_VIDEO_LOG=1). In
-// examples/video, ../../bin/myphp build makes Video.app and its .dmg.
+// (Context::mediaPlayerSettings). Run: myphp run -d macos examples/video
+// [file or URL]; with MYPHP_VIDEO_LOG=1 before it, it logs what the
+// players do to the terminal. myphp build examples/video makes Video.app
+// and its .dmg.
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
@@ -404,7 +405,7 @@ App::whenReady(function () use ($argv): void {
     MediaPlayerMenus::$showSettings = function (string $page): void { \MyPHP\UI\MediaPlayerSettings::$showPage = $page; Players::settings(); };
     \MyPHP\PlayerPlugins\Plugins::loadGlobalInstances();
     Players::menu();
-    if (isset($argv[1])) { // ./run.sh video file: no bundle, whose document types onOpenFile takes files from the command line by
+    if (isset($argv[1])) { // myphp run -d macos examples/video file: no bundle, whose document types onOpenFile takes files from the command line by
         Players::open([$argv[1]]);
     }
     App::after(0.3, function (): void { if (!Players::$opened) { Players::welcome(); } }); // IINA's checkForShowingInitialWindow: unless the Finder opened a film

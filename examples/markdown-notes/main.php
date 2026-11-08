@@ -5,7 +5,7 @@
 // preview on the right (Markdown()). Edits save themselves half a second after you stop
 // typing (Cmd+S saves now). Cmd+N makes a note, Cmd+Backspace deletes the
 // chosen one. The preview scrolls along with the editor.
-// Run: ./run.sh markdown-notes [folder]
+// Run: myphp run -d macos examples/markdown-notes [folder]
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};

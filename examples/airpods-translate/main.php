@@ -1,7 +1,7 @@
 <?php
 // AirPods Real-time Translation via Menu Bar Tray.
 // Auto-detect spoken language + Gemini 2.5 Flash bi-directional translation.
-// Run: ./run.sh airpods-translate
+// Run: myphp run -d macos examples/airpods-translate
 declare(strict_types=1);
 
 use MyPHP\{ActivationPolicy, App, Clipboard, Menu, MenuItem, Tray, TrayOptions};

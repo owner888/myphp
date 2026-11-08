@@ -111,7 +111,7 @@ What works today, macOS first (the rows name the version that brought them):
 | Secondary subtitles and YouTube's ads (v1.53): a second text subtitle track at the top of the picture, plain, with its own delay and switch, as mpv's secondary-sid (`Player::setSecondarySubtitleTrack`); YouTube's and Twitch's pages read by yt-dlp first, as mpv's ytdl_hook, and a video's formats opened once the ad before it is over (yt-dlp's `available_at`), not refused; a node's id is mygo's, its parent's mixed with its place there, so what comes and goes renumbers only the siblings after it (a scroll, a field's focus keep their state) | works (`tests/player_test.php`, `tests/yt_dlp_test.php`, `tests/ids_test.php`) |
 | The ad's countdown (v1.54): opening a web page's video after the ad before it, the indicator says the seconds left ("Skipping ad… 13s"), then "Opening stream…" | works (`tests/mediaplayer_test.php`) |
 | Vorbis and external audio (v1.55): Matroska and WebM's Vorbis audio, which the system has no decoder of, decoded in PHP by the sound API's own codec (`Audio\Vorbis\Codec`) and played as PCM, stereo to 7.1; an audio file loaded beside the film (`Player::loadAudio`, the sidebar's Load External Audio, as IINA's); IINA's ten-band equalizer and its presets (`Player::setEqualizer`), the audio decoded and filtered here only while a band has a gain | works (`tests/soft_audio_test.php`, `tests/equalizer_test.php`, `tests/player_test.php`) |
-| The equalizer's profiles (v1.56): IINA's saving, renaming and removing of the equalizer's gains as a profile of one's own, its pop-up's, the name asked as IINA asks it (none, or a preset's or a profile's, cannot be OK'd); `./run.sh video`'s log no longer hangs the app when a dialog stays open over 3 s | works (`tests/mediaplayer_test.php`) |
+| The equalizer's profiles (v1.56): IINA's saving, renaming and removing of the equalizer's gains as a profile of one's own, its pop-up's, the name asked as IINA asks it (none, or a preset's or a profile's, cannot be OK'd); `myphp run -d macos examples/video`'s log no longer hangs the app when a dialog stays open over 3 s | works (`tests/mediaplayer_test.php`) |
 | 10-bit AV1 in software (v1.57): AV1 of 10 bits (HDR's, YouTube's above 1080p) decoded by libdav1d as 8-bit is, given to the display layer as x420 pixel buffers (VideoToolbox's own of HEVC Main 10) with the colors the film says, its thumbnails too; a hardware-decoded film's colors as its container says them (an HDR Matroska AV1 no longer washed out); 60-frame films decoded in software no longer drop frames (the layer asks for each picture as it takes more), and a seek no longer holds the window while libdav1d decodes from the keyframe; a menu button clicked in the player's sidebar no longer keeps Space from play and pause | works (`tests/dav1d_test.php`, `tests/player_test.php`, `tests/media_test.php`, `tests/menu_test.php`) |
 | A slider dragged (v1.58): the video given its renderer 10 ms of the main thread at a time, hardware- and software-decoded alike, the window drawn between; an exact seek asked while the last one lands kept and made once it landed, the last of them, as mpv's; a slider's change reported only when its value changes, as mygo's | works (`tests/player_test.php`, `tests/primitives_test.php`) |
 | An HDR film's metadata (v1.59): its mastering display and light levels (MaxCLL, MaxFALL), a Matroska's or an MP4's, or in software each AV1 picture's own, given the system's tone mapping, as AVFoundation's formats and mpv's frames carry them | works (`tests/media_test.php`, `tests/dav1d_test.php`) |
@@ -296,63 +296,63 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ### Try it
 
 ```sh
-./run.sh webview          # Notes: a page calling a bound PHP service, with events
-./run.sh gen              # writes examples/webview/myphp.ts, the TypeScript client
-./run.sh desktop          # menus and dialogs
-./run.sh form             # text fields, input methods
-./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
-./run.sh titlebar [hidden|hiddenInset] [x,y]   # a hidden title bar: the view draws its own under the traffic lights (moved to x,y) and drags the window by it
-./run.sh files [folder]                # a file manager: places, breadcrumbs, icons or a sortable table, Cmd+F finds, Space previews, Delete… trashes
-./run.sh code-editor                   # a code editor: files of several languages, completions of their words, hovers, TODO diagnostics, changes in the gutter, and their diff
-./run.sh drag                          # draggable nodes: a card, a puck thrown to stops, a sheet; words dragged into a basket
-./run.sh transfer                      # native drag and drop: a note dragged out to other apps; text, links and files dropped in; cards between lists
-./run.sh router                        # a router: a sidebar, Back and Forward, links, notes sliding in, a settings layout
-./run.sh flyout                        # flyouts: a list of colors under its button, a note editor beside its button, an About box in a system popover
+myphp run -d macos examples/webview          # Notes: a page calling a bound PHP service, with events
+myphp generate examples/webview       # writes examples/webview/myphp.ts, the TypeScript client
+myphp run -d macos examples/desktop          # menus and dialogs
+myphp run -d macos examples/form             # text fields, input methods
+myphp run -d macos examples/logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
+myphp run -d macos examples/titlebar [hidden|hiddenInset] [x,y]   # a hidden title bar: the view draws its own under the traffic lights (moved to x,y) and drags the window by it
+myphp run -d macos examples/files [folder]                # a file manager: places, breadcrumbs, icons or a sortable table, Cmd+F finds, Space previews, Delete… trashes
+myphp run -d macos examples/code-editor                   # a code editor: files of several languages, completions of their words, hovers, TODO diagnostics, changes in the gutter, and their diff
+myphp run -d macos examples/drag                          # draggable nodes: a card, a puck thrown to stops, a sheet; words dragged into a basket
+myphp run -d macos examples/transfer                      # native drag and drop: a note dragged out to other apps; text, links and files dropped in; cards between lists
+myphp run -d macos examples/router                        # a router: a sidebar, Back and Forward, links, notes sliding in, a settings layout
+myphp run -d macos examples/flyout                        # flyouts: a list of colors under its button, a note editor beside its button, an About box in a system popover
 php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets and files examples
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
-./run.sh markdown-notes   # Markdown notes: search, toolbar, resizable panes, live preview, autosave
-./run.sh notes            # mygo's notes: rich text notes, a toolbar of their formats, the Format menu, links, Copy Markdown
-./run.sh native           # mygo's native: a page calling PHP for dialogs, the clipboard, notifications, a context menu, the tray, a global shortcut, dark mode
-./run.sh drag-drop        # mygo's drag-drop: notes, a URL and a file dragged between two windows and other apps
-./run.sh richtext         # a rich text editor with a toolbar of its formats
-./run.sh terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
-./run.sh sqlite           # SQLite from a web page through the PHP plugin; Reload shows a connection ends with its page
-./run.sh watch [folder]   # a web page watching a folder through the PHP plugin; the buttons change files
-./run.sh websocket [url]  # a WebSocket from a web page through the PHP plugin, to an echo server
-./run.sh updater --demo   # the update window, with a made-up update to install (--native: in native UI)
-./run.sh game             # a little game: WASD, the arrows or a gamepad, the wheel zooms
-./run.sh charts           # charts: bars, a live line, stacked areas, a scatter plot, a donut
-./run.sh piano            # a piano of synthesized keys: the pointer, the keyboard, a sustain pedal, tunes
-./run.sh services         # the app's services from a page: network, clipboard, Keychain, cookies, find, PDF…
-./run.sh documents [x.md] # document notes: a window per file, the File menu, autosave, crash recovery
-./run.sh protocol         # a frontend at myphp://localhost/, images a scheme draws, a streamed body, a download
-./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
-./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
-./run.sh glass            # Liquid Glass over a photo
-./run.sh widgets          # the small controls on one page
-./run.sh inbox            # native UI, 300-row list, prints fps once a second
-./run.sh inbox 1000       # 9 000 nodes per frame
-./run.sh hello            # mygo's examples, ported: a page greeting through a bound service
-./run.sh counter-native   # a counter in native UI, its buttons and the arrow keys
-./run.sh wavelength       # a GIF looping behind the window's content, paused and played by a button
-./run.sh text-buffer 100000 # a text area over a TextBuffer of 100 000 lines
-./run.sh text-input       # a text field of the app's own drawing, through TextInputClient
-./run.sh frameless        # a frameless, transparent window with vibrancy, its page moving it
-./run.sh clipboard        # the clipboard in several formats, one made lazily; data dragged out and dropped in
-./run.sh timeline         # a timeline of tweens, placed after each other, at times and labels
-./run.sh markdown-chat    # replies streamed token by token as Markdown, revealed word by word
-./run.sh embed-webview    # web views inside native UI, and native popovers, selects and modals over them
-./run.sh menubar-flyout   # a tray icon's flyout in a system popover
-./run.sh menubar-native   # a menu bar app: a window under its tray icon that hides as it loses the focus
-./run.sh launcher         # a launcher: a global shortcut, the installed apps ranked as you type, their icons
-./run.sh vibrancy         # a window of vibrancy: a sidebar of materials sliding out
-./run.sh todo             # a todo list in a Vite page, its typed PHP service and events (needs bun)
-./run.sh confetti         # canvas-confetti's demos, every piece moved by poses that only paint
-./run.sh effort-slider    # an effort slider stepping into Galaxy, letters blurring as they change
-./run.sh farm             # a farming game: till, plant, water, harvest, day and night, music
-./run.sh mayoi            # a survivor game: sing at stage fright, gather stones, find your band
-./run.sh gallery          # the tour of the toolkit: every widget, lists, charts, motion, languages
-./run.sh loading          # loading.dev's 29 indicators, their size, color, easing and caps
+myphp run -d macos examples/markdown-notes   # Markdown notes: search, toolbar, resizable panes, live preview, autosave
+myphp run -d macos examples/notes            # mygo's notes: rich text notes, a toolbar of their formats, the Format menu, links, Copy Markdown
+myphp run -d macos examples/native           # mygo's native: a page calling PHP for dialogs, the clipboard, notifications, a context menu, the tray, a global shortcut, dark mode
+myphp run -d macos examples/drag-drop        # mygo's drag-drop: notes, a URL and a file dragged between two windows and other apps
+myphp run -d macos examples/richtext         # a rich text editor with a toolbar of its formats
+myphp run -d macos examples/terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
+myphp run -d macos examples/sqlite           # SQLite from a web page through the PHP plugin; Reload shows a connection ends with its page
+myphp run -d macos examples/watch [folder]   # a web page watching a folder through the PHP plugin; the buttons change files
+myphp run -d macos examples/websocket [url]  # a WebSocket from a web page through the PHP plugin, to an echo server
+myphp run -d macos examples/updater --demo   # the update window, with a made-up update to install (--native: in native UI)
+myphp run -d macos examples/game             # a little game: WASD, the arrows or a gamepad, the wheel zooms
+myphp run -d macos examples/charts           # charts: bars, a live line, stacked areas, a scatter plot, a donut
+myphp run -d macos examples/piano            # a piano of synthesized keys: the pointer, the keyboard, a sustain pedal, tunes
+myphp run -d macos examples/services         # the app's services from a page: network, clipboard, Keychain, cookies, find, PDF…
+myphp run -d macos examples/documents [x.md] # document notes: a window per file, the File menu, autosave, crash recovery
+myphp run -d macos examples/protocol         # a frontend at myphp://localhost/, images a scheme draws, a streamed body, a download
+myphp run -d macos examples/photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
+myphp run -d macos examples/http             # an HTTP client over curl: requests kept in a list, JSON colored
+myphp run -d macos examples/glass            # Liquid Glass over a photo
+myphp run -d macos examples/widgets          # the small controls on one page
+myphp run -d macos examples/inbox            # native UI, 300-row list, prints fps once a second
+myphp run -d macos examples/inbox 1000       # 9 000 nodes per frame
+myphp run -d macos examples/hello            # mygo's examples, ported: a page greeting through a bound service
+myphp run -d macos examples/counter-native   # a counter in native UI, its buttons and the arrow keys
+myphp run -d macos examples/wavelength       # a GIF looping behind the window's content, paused and played by a button
+myphp run -d macos examples/text-buffer 100000 # a text area over a TextBuffer of 100 000 lines
+myphp run -d macos examples/text-input       # a text field of the app's own drawing, through TextInputClient
+myphp run -d macos examples/frameless        # a frameless, transparent window with vibrancy, its page moving it
+myphp run -d macos examples/clipboard        # the clipboard in several formats, one made lazily; data dragged out and dropped in
+myphp run -d macos examples/timeline         # a timeline of tweens, placed after each other, at times and labels
+myphp run -d macos examples/markdown-chat    # replies streamed token by token as Markdown, revealed word by word
+myphp run -d macos examples/embed-webview    # web views inside native UI, and native popovers, selects and modals over them
+myphp run -d macos examples/menubar-flyout   # a tray icon's flyout in a system popover
+myphp run -d macos examples/menubar-native   # a menu bar app: a window under its tray icon that hides as it loses the focus
+myphp run -d macos examples/launcher         # a launcher: a global shortcut, the installed apps ranked as you type, their icons
+myphp run -d macos examples/vibrancy         # a window of vibrancy: a sidebar of materials sliding out
+myphp dev examples/todo               # a todo list in a Vite page, its typed PHP service and events (needs bun)
+myphp run -d macos examples/confetti         # canvas-confetti's demos, every piece moved by poses that only paint
+myphp run -d macos examples/effort-slider    # an effort slider stepping into Galaxy, letters blurring as they change
+myphp run -d macos examples/farm             # a farming game: till, plant, water, harvest, day and night, music
+myphp run -d macos examples/mayoi            # a survivor game: sing at stage fright, gather stones, find your band
+myphp run -d macos examples/gallery          # the tour of the toolkit: every widget, lists, charts, motion, languages
+myphp run -d macos examples/loading          # loading.dev's 29 indicators, their size, color, easing and caps
 ```
 
 ### Documentation
@@ -491,7 +491,7 @@ App::run();
 | 副字幕与 YouTube 广告（v1.53）：第二条文字字幕显示在画面顶部，纯文本，有独立的延迟和开关，和 mpv 的 secondary-sid 一致（`Player::setSecondarySubtitleTrack`）；YouTube、Twitch 的网页照 mpv 的 ytdl_hook 先交给 yt-dlp；视频前有广告时，等广告时长过去再打开各路格式（yt-dlp 的 `available_at`），不再被拒（HTTP 403）；节点 id 改用 mygo 的规则（父节点 id 与自身位置混合），内容出现或消失只影响其后的兄弟节点，滚动位置、输入焦点不再错乱 | 可用（`tests/player_test.php`、`tests/yt_dlp_test.php`、`tests/ids_test.php`） |
 | 广告倒数（v1.54）：打开前面带广告的网页视频时，加载提示显示广告剩余秒数（「正在跳过广告… 13 秒」），之后显示「正在打开流媒体……」 | 可用（`tests/mediaplayer_test.php`） |
 | Vorbis 与外挂音轨（v1.55）：系统没有 Vorbis 解码器，Matroska、WebM 里的 Vorbis 音频改用音频模块自带的 PHP 解码器（`Audio\Vorbis\Codec`）解码，以 PCM 播放，支持立体声到 7.1；可在侧栏「Load External Audio」加载外部音频文件，与影片同步播放（`Player::loadAudio`，和 IINA 一致）；IINA 的十段均衡器及其预设（`Player::setEqualizer`），只有某段增益不为 0 时才自行解码并滤波，平直时走原来的播放路径 | 可用（`tests/soft_audio_test.php`、`tests/equalizer_test.php`、`tests/player_test.php`） |
-| 均衡器自定义配置（v1.56）：和 IINA 一样，可在均衡器弹出菜单里把当前增益保存为自定义配置，并重命名、删除；命名框与 IINA 相同，名字为空或与预设、已有配置重名时不能确定；修复 `./run.sh video` 的调试日志在弹窗停留超过 3 秒时卡死程序 | 可用（`tests/mediaplayer_test.php`） |
+| 均衡器自定义配置（v1.56）：和 IINA 一样，可在均衡器弹出菜单里把当前增益保存为自定义配置，并重命名、删除；命名框与 IINA 相同，名字为空或与预设、已有配置重名时不能确定；修复 `myphp run -d macos examples/video` 的调试日志在弹窗停留超过 3 秒时卡死程序 | 可用（`tests/mediaplayer_test.php`） |
 | 10-bit AV1 软件解码（v1.57）：10-bit AV1（HDR 片源及 YouTube 1080p 以上常用）和 8-bit 一样由 libdav1d 解码，以 x420 像素缓冲（与 VideoToolbox 解 HEVC Main 10 的格式相同）交给显示层，带上片源标注的色彩信息，缩略图也支持；硬件解码时按容器标注的色彩信息显示（HDR 的 Matroska AV1 不再发灰）；软件解码 60 帧影片不再持续掉帧（显示层能接收时主动要帧），拖动进度时也不再因 libdav1d 从关键帧解码而卡住窗口；修复点过播放器侧栏里的下拉按钮后空格不再播放/暂停 | 可用（`tests/dav1d_test.php`、`tests/player_test.php`、`tests/media_test.php`、`tests/menu_test.php`） |
 | 拖动进度（v1.58）：硬解和软解的视频都分片交给渲染器，每次最多占主线程 10 ms，期间照常绘制窗口；上一次精确跳转还没完成时，新的跳转只保留最后一次，完成后再执行，和 mpv 一致；滑块只在值真正变化时才报告 changed，和 mygo 一致 | 可用（`tests/player_test.php`、`tests/primitives_test.php`） |
 | HDR 元数据（v1.59）：把片源的母版显示参数和亮度信息（MaxCLL、MaxFALL）交给系统做色调映射，来源是 Matroska 或 MP4 容器，软件解码时优先用每帧 AV1 码流自带的，和 AVFoundation、mpv 的做法一致 | 可用（`tests/media_test.php`、`tests/dav1d_test.php`） |
@@ -671,62 +671,62 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ### 运行
 
 ```sh
-./run.sh webview          # Notes：页面调用绑定的 PHP 服务，带事件
-./run.sh gen              # 生成 examples/webview/myphp.ts（TypeScript client）
-./run.sh desktop          # 菜单和对话框
-./run.sh form             # 文本框、输入法
-./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
-./run.sh titlebar [hidden|hiddenInset] [x,y]   # 隐藏标题栏：视图在红绿灯下自己画标题栏（x,y 可挪红绿灯），拖它移动窗口
-./run.sh files [目录]                   # 文件管理器：常用位置、路径面包屑、图标或可排序表格、Cmd+F 查找、空格预览、Delete… 移到废纸篓
-./run.sh drag                          # 可拖动：卡片、甩到吸附点的圆块、底部弹出面板；把词拖进篮子
-./run.sh transfer                      # 系统拖放：把便签拖到其他应用；拖入文本、链接和文件；卡片在两列间拖动
-./run.sh router                        # 路由：侧栏、前进后退、链接、笔记滑入、设置页布局
-./run.sh flyout                        # flyout：按钮下的颜色列表、按钮旁的便签编辑框、系统 popover 里的 About 框
+myphp run -d macos examples/webview          # Notes：页面调用绑定的 PHP 服务，带事件
+myphp generate examples/webview       # 生成 examples/webview/myphp.ts（TypeScript client）
+myphp run -d macos examples/desktop          # 菜单和对话框
+myphp run -d macos examples/form             # 文本框、输入法
+myphp run -d macos examples/logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
+myphp run -d macos examples/titlebar [hidden|hiddenInset] [x,y]   # 隐藏标题栏：视图在红绿灯下自己画标题栏（x,y 可挪红绿灯），拖它移动窗口
+myphp run -d macos examples/files [目录]                   # 文件管理器：常用位置、路径面包屑、图标或可排序表格、Cmd+F 查找、空格预览、Delete… 移到废纸篓
+myphp run -d macos examples/drag                          # 可拖动：卡片、甩到吸附点的圆块、底部弹出面板；把词拖进篮子
+myphp run -d macos examples/transfer                      # 系统拖放：把便签拖到其他应用；拖入文本、链接和文件；卡片在两列间拖动
+myphp run -d macos examples/router                        # 路由：侧栏、前进后退、链接、笔记滑入、设置页布局
+myphp run -d macos examples/flyout                        # flyout：按钮下的颜色列表、按钮旁的便签编辑框、系统 popover 里的 About 框
 php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 和 files 例子
 php tests/bench.php                    # 无窗口压测：一帧的 build / layout / record / paint 耗时
-./run.sh markdown-notes   # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
-./run.sh notes            # mygo 的 notes：富文本笔记、格式工具栏、格式菜单、链接、复制为 Markdown
-./run.sh native           # mygo 的 native：网页调用 PHP，演示对话框、剪贴板、通知、右键菜单、托盘、全局快捷键、深色模式
-./run.sh drag-drop        # mygo 的 drag-drop：笔记、URL 和文件在两个窗口及其他应用之间拖放
-./run.sh richtext         # 富文本编辑器，带格式工具栏
-./run.sh terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
-./run.sh sqlite           # 网页经 PHP 插件用 SQLite；点 Reload 可以看到连接随页面结束
-./run.sh watch [folder]   # 网页经 PHP 插件监视一个文件夹；按钮会改动其中的文件
-./run.sh websocket [url]  # 网页经 PHP 插件连 WebSocket，默认连一个回显服务器
-./run.sh updater --demo   # 更新窗口，用一个虚构的更新演示安装流程（--native：原生 UI 版）
-./run.sh game             # 一个小游戏：WASD、方向键或手柄移动，滚轮缩放
-./run.sh charts           # 图表：柱状图、实时折线、堆叠面积、散点图、环形图
-./run.sh piano            # 合成音色的钢琴：鼠标、键盘、延音踏板、自动演奏曲子
-./run.sh services         # 从网页调用 App 服务：网络、剪贴板、钥匙串、Cookie、页内查找、PDF…
-./run.sh documents [x.md] # 文档型笔记：每个文件一个窗口、文件菜单、自动保存、崩溃恢复
-./run.sh protocol         # myphp://localhost/ 上的前端、自定义 scheme 画的图、流式响应、下载
-./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
-./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
-./run.sh glass            # 照片上的 Liquid Glass
-./run.sh widgets          # 小控件合集
-./run.sh inbox            # 原生 UI，300 行列表，每秒打印一次 fps
-./run.sh inbox 1000       # 每帧 9 000 个节点
-./run.sh hello            # 移植自 mygo 的示例：页面通过绑定的服务打招呼
-./run.sh counter-native   # 原生 UI 计数器：按钮和方向键
-./run.sh wavelength       # 循环播放的 GIF 作窗口背景，按钮暂停和继续
-./run.sh text-buffer 100000 # 基于 TextBuffer 的十万行文本区
-./run.sh text-input       # 应用自己绘制的文本框，经 TextInputClient 接输入法
-./run.sh frameless        # 无边框透明窗口加 vibrancy，页面拖动窗口
-./run.sh clipboard        # 多种格式的剪贴板（其一延迟生成）；数据拖出与拖入
-./run.sh timeline         # tween 时间轴：先后、定时、按标签排布
-./run.sh markdown-chat    # 回复按 token 流式到达，以 Markdown 逐词显现
-./run.sh embed-webview    # 原生 UI 里的 web view，其上叠原生 popover、下拉和模态框
-./run.sh menubar-flyout   # 托盘图标的 flyout，放在系统 popover 里
-./run.sh menubar-native   # 菜单栏应用：托盘图标下的窗口，失去焦点即隐藏
-./run.sh launcher         # 启动器：全局快捷键，边输边排序的已装应用及其图标
-./run.sh vibrancy         # vibrancy 窗口：材质侧栏滑出收起
-./run.sh todo             # Vite 页面里的待办：带类型的 PHP 服务与事件（需要 bun）
-./run.sh confetti         # canvas-confetti 的演示，每片纸屑由只重绘的 pose 驱动
-./run.sh effort-slider    # 力度滑杆，越过 Max 进入 Galaxy，字母变化时模糊
-./run.sh farm             # 种田小游戏：翻地、播种、浇水、收获，昼夜与音乐
-./run.sh mayoi            # 幸存者小游戏：对舞台恐惧唱歌、收集石子、找齐乐队
-./run.sh gallery          # 工具包总览：所有控件、列表、图表、动效、语言
-./run.sh loading          # loading.dev 的 29 个加载指示器，可调尺寸、颜色、缓动、线端
+myphp run -d macos examples/markdown-notes   # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
+myphp run -d macos examples/notes            # mygo 的 notes：富文本笔记、格式工具栏、格式菜单、链接、复制为 Markdown
+myphp run -d macos examples/native           # mygo 的 native：网页调用 PHP，演示对话框、剪贴板、通知、右键菜单、托盘、全局快捷键、深色模式
+myphp run -d macos examples/drag-drop        # mygo 的 drag-drop：笔记、URL 和文件在两个窗口及其他应用之间拖放
+myphp run -d macos examples/richtext         # 富文本编辑器，带格式工具栏
+myphp run -d macos examples/terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
+myphp run -d macos examples/sqlite           # 网页经 PHP 插件用 SQLite；点 Reload 可以看到连接随页面结束
+myphp run -d macos examples/watch [folder]   # 网页经 PHP 插件监视一个文件夹；按钮会改动其中的文件
+myphp run -d macos examples/websocket [url]  # 网页经 PHP 插件连 WebSocket，默认连一个回显服务器
+myphp run -d macos examples/updater --demo   # 更新窗口，用一个虚构的更新演示安装流程（--native：原生 UI 版）
+myphp run -d macos examples/game             # 一个小游戏：WASD、方向键或手柄移动，滚轮缩放
+myphp run -d macos examples/charts           # 图表：柱状图、实时折线、堆叠面积、散点图、环形图
+myphp run -d macos examples/piano            # 合成音色的钢琴：鼠标、键盘、延音踏板、自动演奏曲子
+myphp run -d macos examples/services         # 从网页调用 App 服务：网络、剪贴板、钥匙串、Cookie、页内查找、PDF…
+myphp run -d macos examples/documents [x.md] # 文档型笔记：每个文件一个窗口、文件菜单、自动保存、崩溃恢复
+myphp run -d macos examples/protocol         # myphp://localhost/ 上的前端、自定义 scheme 画的图、流式响应、下载
+myphp run -d macos examples/photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
+myphp run -d macos examples/http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
+myphp run -d macos examples/glass            # 照片上的 Liquid Glass
+myphp run -d macos examples/widgets          # 小控件合集
+myphp run -d macos examples/inbox            # 原生 UI，300 行列表，每秒打印一次 fps
+myphp run -d macos examples/inbox 1000       # 每帧 9 000 个节点
+myphp run -d macos examples/hello            # 移植自 mygo 的示例：页面通过绑定的服务打招呼
+myphp run -d macos examples/counter-native   # 原生 UI 计数器：按钮和方向键
+myphp run -d macos examples/wavelength       # 循环播放的 GIF 作窗口背景，按钮暂停和继续
+myphp run -d macos examples/text-buffer 100000 # 基于 TextBuffer 的十万行文本区
+myphp run -d macos examples/text-input       # 应用自己绘制的文本框，经 TextInputClient 接输入法
+myphp run -d macos examples/frameless        # 无边框透明窗口加 vibrancy，页面拖动窗口
+myphp run -d macos examples/clipboard        # 多种格式的剪贴板（其一延迟生成）；数据拖出与拖入
+myphp run -d macos examples/timeline         # tween 时间轴：先后、定时、按标签排布
+myphp run -d macos examples/markdown-chat    # 回复按 token 流式到达，以 Markdown 逐词显现
+myphp run -d macos examples/embed-webview    # 原生 UI 里的 web view，其上叠原生 popover、下拉和模态框
+myphp run -d macos examples/menubar-flyout   # 托盘图标的 flyout，放在系统 popover 里
+myphp run -d macos examples/menubar-native   # 菜单栏应用：托盘图标下的窗口，失去焦点即隐藏
+myphp run -d macos examples/launcher         # 启动器：全局快捷键，边输边排序的已装应用及其图标
+myphp run -d macos examples/vibrancy         # vibrancy 窗口：材质侧栏滑出收起
+myphp dev examples/todo               # Vite 页面里的待办：带类型的 PHP 服务与事件（需要 bun）
+myphp run -d macos examples/confetti         # canvas-confetti 的演示，每片纸屑由只重绘的 pose 驱动
+myphp run -d macos examples/effort-slider    # 力度滑杆，越过 Max 进入 Galaxy，字母变化时模糊
+myphp run -d macos examples/farm             # 种田小游戏：翻地、播种、浇水、收获，昼夜与音乐
+myphp run -d macos examples/mayoi            # 幸存者小游戏：对舞台恐惧唱歌、收集石子、找齐乐队
+myphp run -d macos examples/gallery          # 工具包总览：所有控件、列表、图表、动效、语言
+myphp run -d macos examples/loading          # loading.dev 的 29 个加载指示器，可调尺寸、颜色、缓动、线端
 ```
 
 ### 文档

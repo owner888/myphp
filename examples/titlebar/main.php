@@ -3,7 +3,7 @@
 // bar the view draws itself, which drags the window (double-click zooms),
 // keeping clear of the lights; a toggle moves to the inset style. In full
 // screen the lights hide and the bar's room goes to zero.
-// Run: ./run.sh titlebar [hidden|hiddenInset] [x,y]   — x,y moves the traffic lights (their top-left corner from the window's)
+// Run: myphp run -d macos examples/titlebar [hidden|hiddenInset] [x,y]   — x,y moves the traffic lights (their top-left corner from the window's)
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

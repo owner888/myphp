@@ -6,7 +6,7 @@
 // a list whose rows drag, a rating, a range slider and a popover: SwiftUI's
 // where it has them, myphp's own (ComboBox, TokenField, Rating…) where it
 // does not. What changed last shows at the bottom.
-// Run: ./run.sh widgets
+// Run: myphp run -d macos examples/widgets
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

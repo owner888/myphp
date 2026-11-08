@@ -68,7 +68,7 @@ megabyte a frame of examples/mobile.
 - `cache()` keeps a still subtree that is dear to draw as one image (see
   [Styling](styling.md)).
 
-Measure the Mac's half with `MYPHP_STATS=1 ./run.sh inbox 1000000`, and a
+Measure the Mac's half with `MYPHP_STATS=1 myphp run -d macos examples/inbox 1000000`, and a
 frame's parts with `MYPHP_FRAME_STATS` (see [Rendering](rendering.md)).
 Compare with the numbers in `docs/architecture.md` after a change to
 `src/UI`.

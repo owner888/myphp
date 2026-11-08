@@ -13,7 +13,7 @@
 // rest is shaders written in PHP (UI\Shader): a glowing focus ring
 // drawn around a field, text filled with a shader (Shader::text), and an
 // avatar drawn by one. The replies are canned; Escape stops one.
-// Run: ./run.sh chat-glow
+// Run: myphp run -d macos examples/chat-glow
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

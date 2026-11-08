@@ -7,7 +7,7 @@
 // overlays, file drops, updates from timers, and languages: a menu of
 // them, numbers and dates formatted in each, and right-to-left layout. Its
 // pages are paths of a router, with a history.
-// Run: ./run.sh gallery
+// Run: myphp run -d macos examples/gallery
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

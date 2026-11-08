@@ -10,7 +10,7 @@
 // fades it, and a spin in a plane tipped away in 3D (rotation3DEffect),
 // which makes it tumble. They move in frames that only paint, so hundreds
 // of pieces fly without building the view again.
-// Run: ./run.sh confetti
+// Run: myphp run -d macos examples/confetti
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

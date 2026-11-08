@@ -1,7 +1,7 @@
 <?php
 // A counter in native UI (mygo's examples/counter-native): a window MyPHP
 // draws itself from PHP, with no web page. The arrow keys count too.
-// Run: ./run.sh counter-native
+// Run: myphp run -d macos examples/counter-native
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};

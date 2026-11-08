@@ -6,7 +6,7 @@
 // Also a tray icon with its own menu, a global shortcut (Cmd+Shift+Space
 // shows the window from anywhere), window events in the log, the window's
 // frame remembered across runs, and a notification (from a built .app).
-// Run: ./run.sh desktop
+// Run: myphp run -d macos examples/desktop
 declare(strict_types=1);
 
 use MyPHP\{App, CloseEvent, Dialog, FileDropEvent, FileFilter, GlobalShortcut, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, SaveDialogOptions, Tray, TrayOptions, Window, WindowOptions};
