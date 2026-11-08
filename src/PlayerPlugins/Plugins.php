@@ -126,7 +126,7 @@ final class Plugins
                 $p->identifier .= '.' . bin2hex(random_bytes(8));
             }
             $ids[$p->identifier] = true;
-            $out[] = $p;
+            $out[] = self::refreshBuiltIn($p);
         }
         usort($out, fn(Plugin $a, Plugin $b): int => ($order[$a->identifier] ?? PHP_INT_MAX) <=> ($order[$b->identifier] ?? PHP_INT_MAX));
         self::saveOrder($out);
@@ -259,16 +259,69 @@ final class Plugins
     }
 
     /**
-     * The official plugins the store lists (IINA's defaultPlugins), myphp's
-     * of PHP in place of IINA's of JavaScript, which do not run.
-     * @var list<array{name: string, url: string, id: string, desc: string}>
+     * The official plugins, built in: myphp's of PHP in place of IINA's of JavaScript (IINA's defaultPlugins, which it
+     * downloads from their repositories), in the framework's plugins/ folder, which the app ships (myphp build); the
+     * store installs them from there, and the app's next version brings their next. Their folders, by identifier.
      */
-    public const OFFICIAL = [
-        ['name' => 'Online Media', 'url' => 'https://github.com/owner888/myphp-plugin-online-media', 'id' => 'io.myphp.ytdl',
-            'desc' => 'Official plugin for playing online media via yt-dlp / youtube-dl. The built-in youtube-dl support will be disabled when this plugin is enabled.'],
-        ['name' => 'Userscript', 'url' => 'https://github.com/owner888/myphp-plugin-userscript', 'id' => 'io.myphp.user-script', 'desc' => 'User Scripts for myphp'],
-        ['name' => 'Online Subtitles', 'url' => 'https://github.com/owner888/myphp-plugin-opensub', 'id' => 'io.myphp.opensub', 'desc' => 'Official OpenSubtitles plugin for myphp'],
-    ];
+    public const BUILT_IN = ['io.myphp.ytdl' => 'online-media', 'io.myphp.user-script' => 'userscript', 'io.myphp.opensub' => 'opensub'];
+
+    /** The folder of the built-in plugins: plugins/ beside the framework's src/, in the checkout or in the app. */
+    public static function builtInDir(): string
+    {
+        return dirname(__DIR__, 2) . '/plugins';
+    }
+
+    /**
+     * The built-in plugins as the store lists them: name and description in the app's language (their Info.json's
+     * localized), identifier; those the app does not ship left out. @return list<array{name: string, url: string, id: string, desc: string, builtIn: true}>
+     */
+    public static function official(): array
+    {
+        $out = [];
+        foreach (self::BUILT_IN as $id => $folder) {
+            $p = is_dir(self::builtInDir() . "/$folder") ? Plugin::load(self::builtInDir() . "/$folder") : null;
+            if ($p !== null) { $out[] = ['name' => $p->name, 'url' => '', 'id' => $id, 'desc' => (string)$p->desc, 'builtIn' => true]; }
+        }
+        return $out;
+    }
+
+    /** Built-in plugin $id copied into a temporary folder of the plugins': the plugin, not yet among them (install() makes it one). */
+    public static function fromBuiltIn(string $id): Plugin
+    {
+        $from = self::builtInDir() . '/' . (self::BUILT_IN[$id] ?? throw new PluginInstallError("$id is no built-in plugin"));
+        if (!is_dir($from)) { throw new PluginInstallError(self::t('iinaPluginInstallErrorFileNotFound')); }
+        $tmp = self::dir() . '/.temp.' . bin2hex(random_bytes(8));
+        self::copyTree($from, $tmp);
+        $p = Plugin::load($tmp);
+        if ($p === null) {
+            self::removeTree($tmp);
+            throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotLoad'));
+        }
+        return $p;
+    }
+
+    /** $p as the app ships it, where it is a built-in plugin the app ships a newer version of: its folder replaced, its preferences and data kept (they are apart). */
+    private static function refreshBuiltIn(Plugin $p): Plugin
+    {
+        $folder = self::BUILT_IN[$p->identifier] ?? null;
+        if ($folder === null || $p->isExternal) { return $p; }
+        $info = json_decode((string)@file_get_contents(self::builtInDir() . "/$folder/Info.json"), true);
+        if (!is_string($info['version'] ?? null) || version_compare($info['version'], $p->version, '<=')) { return $p; }
+        Logger::debug("Updating the built-in plugin {$p->identifier} from {$p->version} to {$info['version']}", self::LOG);
+        $root = $p->root;
+        self::removeTree($root);
+        self::copyTree(self::builtInDir() . "/$folder", $root);
+        return Plugin::load($root) ?? $p;
+    }
+
+    private static function copyTree(string $from, string $to): void
+    {
+        @mkdir($to, 0755, true);
+        foreach (scandir($from) ?: [] as $f) {
+            if ($f === '.' || $f === '..' || $f === '.DS_Store') { continue; }
+            is_dir("$from/$f") ? self::copyTree("$from/$f", "$to/$f") : (copy("$from/$f", "$to/$f") || throw new PluginInstallError("cannot copy $from/$f"));
+        }
+    }
     /** Whether the Online Media plugin is on (IINA's hasYTDL): pages are then the plugin's to read, not yt-dlp's of the player. */
     public static function hasYTDL(): bool
     {

@@ -106,3 +106,25 @@ foreach (['online-media', 'userscript', 'opensub'] as $folder) {
     }
     same([[], []], [$bad, array_values(array_unique(array_diff($used, array_keys($en))))], "$folder: its catalogs whole, and what it says in them");
 }
+
+// Built in: the store lists them from the app's copy (plugins/), installs one from it without the network, and
+// one installed of an older version is replaced by the app's as the plugins are read, its preferences kept.
+$bdir = "$root/built-in";
+@mkdir($bdir, 0777, true);
+$bsettings = new PlayerSettings("$root/built-in.json");
+Plugins::configure($bdir, $bsettings);
+same(['io.myphp.ytdl', 'io.myphp.user-script', 'io.myphp.opensub'], array_column(Plugins::official(), 'id'), 'the store: the three, from the app\'s copy');
+check(array_filter(Plugins::official(), fn(array $p) => $p['name'] === '' || $p['url'] !== '' || !$p['builtIn']) === [], 'each named, no repository');
+same('installed', Plugins::install(Plugins::fromBuiltIn('io.myphp.opensub'), fn() => true, fn() => false), 'installed from the app\'s copy');
+$shipped = json_decode((string)file_get_contents(__DIR__ . '/../plugins/opensub/Info.json'), true)['version'];
+$installed = "$bdir/io.myphp.opensub.iinaplugin";
+same([$shipped], [Plugins::byId('io.myphp.opensub')?->version], 'its version the app\'s');
+$info = json_decode((string)file_get_contents("$installed/Info.json"), true);
+file_put_contents("$installed/Info.json", json_encode(['version' => '0.0.1'] + $info));
+file_put_contents("$installed/stale.txt", 'old');
+Plugins::setEnabled(Plugins::byId('io.myphp.opensub'), true);
+Plugins::configure($bdir, $bsettings);
+same([$shipped, false], [Plugins::byId('io.myphp.opensub')?->version, is_file("$installed/stale.txt")], 'an older one installed: the app\'s in its place');
+check(Plugins::byId('io.myphp.opensub')?->enabled() === true, 'still on');
+Plugins::stop();
+exec('rm -rf ' . escapeshellarg($bdir));

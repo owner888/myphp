@@ -8,8 +8,9 @@ loads subtitles; a provider of Find Online Subtitles, which opens the sidebar.
 
 ## Install
 
-In myphp, Settings > Plugins > Get Plugins…, choose Online Subtitles; or enter
-`owner888/myphp-plugin-opensub`.
+Built into myphp: Settings > Plugins > Get Plugins…, choose it under the
+official plugins, and it is installed from the app. A newer version comes
+with the app's next.
 
 ## Languages
 

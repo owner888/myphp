@@ -106,7 +106,7 @@ final class MediaPlayerPluginStore
               $c->column(0, 2)->fillWidth();
                 $section = function (string $title) use ($c, $t): void { $c->text($title, 11, $t->textMuted, Font::BOLD)->margin(8, 0, 2, 8); };
                 $item = function (array $p) use ($c, $t, $st, $k): void {
-                    $on = ($st->selected['url'] ?? null) === $p['url'];
+                    $on = ($st->selected['id'] ?? null) === $p['id'] && ($st->selected['url'] ?? null) === $p['url'];
                     $r = $c->row(0, 6)->height(26)->paddingX(8)->radius(6)->alignItems(Node::CENTER)->fillWidth()->role(Role::BUTTON)->label($p['name']);
                     if ($on) { $r->background($t->accent, 0.85); }
                       MediaPlayerSettings::sf($c, self::installed($p['id']) ? 'checkmark.circle.fill' : 'square.and.arrow.down', 13, $on ? 0xffffff : $t->text);
@@ -115,7 +115,7 @@ final class MediaPlayerPluginStore
                     if ($c->clicked($r)) { $st->selected = $p; }
                 };
                 $section(MediaPlayerSettings::tr($c, '$OfficialPlugins'));
-                foreach (Plugins::OFFICIAL as $p) { $item($p); }
+                foreach (Plugins::official() as $p) { $item($p); } // built in: the app ships them
                 $section(MediaPlayerSettings::tr($c, '$CommunityPlugins'));
                 if ($st->error !== null) {
                     $c->text(Plugins::t('iinaStoreError', ['message' => $st->error]), 13, $t->textMuted)->fillWidth()->paddingX(8)->maxLines(5);
@@ -153,12 +153,25 @@ final class MediaPlayerPluginStore
         $c->text($p['name'], 14, $t->text, Font::BOLD);
         $c->text($p['id'], 11, $t->text, Font::MONO)->margin(0, 0, 6, 0);
         $c->text($p['desc'], 13, $t->textMuted)->fillWidth()->margin(0, 0, 4, 0);
+        if ($p['builtIn'] ?? false) { // the app's own copy: installed from it, no repository to show
+            self::installButton($c, $st, $p, fn(Closure $done) => MediaPlayerPluginsPage::installBuiltIn($p['id'], $sheet, $done));
+            return;
+        }
         $link = $c->text($p['url'], 11, $t->accent)->fillWidth()->role(Role::LINK);
         if ($c->clicked($link)) { $c->openURL($p['url']); }
         if (preg_match(Plugins::GITHUB_URL, $p['url']) !== 1) {
             $c->text(MediaPlayerSettings::tr($c, '$ThisPluginIsNot'), 11, $t->text)->fillWidth()->margin(8, 0, 0, 0);
             return;
         }
+        self::installButton($c, $st, $p, fn(Closure $done) => App::later(fn() => MediaPlayerPluginsPage::installFromGitHub($p['url'], $sheet, $done)));
+        $c->box(0, 1, MediaPlayerSettings::colors($t)['line'])->fillWidth()->margin(8, 0, 12, 0);
+        self::repo($c, $st, (string)parse_url($p['url'], PHP_URL_PATH), $sheet);
+    }
+
+    /** The Install button of plugin $p, $install(done) run as it is clicked; Installed once it is. */
+    private static function installButton(Context $c, object $st, array $p, Closure $install): void
+    {
+        $t = $c->theme;
         $installed = self::installed($p['id']);
         $rt = $c->runtime;
         $b = $c->row(0, 6)->height(24)->paddingX(12)->radius(8)->alignItems(Node::CENTER)->role(Role::BUTTON)->margin(8, 0, 8, 0)->background($t->accent, $installed || $st->detailInstalling ? 0.45 : 1.0);
@@ -168,10 +181,8 @@ final class MediaPlayerPluginStore
         $c->end();
         if (!$installed && !$st->detailInstalling && $c->clicked($b)) {
             $st->detailInstalling = true;
-            App::later(fn() => MediaPlayerPluginsPage::installFromGitHub($p['url'], $sheet, function () use ($st, $rt): void { $st->detailInstalling = false; $rt?->changed(); }));
+            $install(function () use ($st, $rt): void { $st->detailInstalling = false; $rt?->changed(); });
         }
-        $c->box(0, 1, MediaPlayerSettings::colors($t)['line'])->fillWidth()->margin(8, 0, 12, 0);
-        self::repo($c, $st, (string)parse_url($p['url'], PHP_URL_PATH), $sheet);
     }
 
     /** The repository at $path ("/owner/repo") as GitHub tells it (IINA's RepoDetailView), fetched once. */

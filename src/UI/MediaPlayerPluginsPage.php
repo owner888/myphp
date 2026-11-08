@@ -96,6 +96,19 @@ final class MediaPlayerPluginsPage
         });
     }
 
+    /** Installs built-in plugin $id from the app's copy (Plugins::fromBuiltIn), as installFromGitHub one of a repository. */
+    public static function installBuiltIn(string $id, ?Window $parent, Closure $done): void
+    {
+        try {
+            $p = Plugins::fromBuiltIn($id);
+        } catch (PluginInstallError $e) {
+            Plugins::alert(Plugins::t('iinaAlertPluginInstallError', ['message' => $e->getMessage()]));
+            $done('cancelled');
+            return;
+        }
+        $done(Plugins::install($p, fn(Plugin $p): bool => self::agree($p, $parent), fn(Plugin $p): bool => self::ask($parent, Plugins::t('iinaAlertPluginReinstallTitle', ['name' => $p->name]), Plugins::t('iinaAlertPluginReinstallMessage'))));
+    }
+
     /** @var array<string, bool> whether each plugin has an update, by identifier (IINA's pluginHasUpdate) */
     public static array $hasUpdate = [];
     /** What the update check last said (IINA's PluginUpdateView): 'refreshing', 'error', or the updates found. */
