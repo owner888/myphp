@@ -206,6 +206,17 @@ the window; a `frame(width:)` fixes the width over it.
 2. Collections and navigation: `ListView`, `Section`, `Form`, `ScrollView`,
    `NavigationStack`, `TabView`, `sheet`, `alert`; examples/mobile and
    router (todo is a web example). Done.
-3. Every other view and modifier; every example.
+3. Every other view and modifier; every example. Done (the examples left
+   with a `Content::view` of no views are web pages and tray apps).
 4. The docs (`docs/ui/`, `docs/swiftui.md`), the skill, the template; the
-   builder `@internal`; this file folded in and removed.
+   builder `@internal`; this file folded in and removed. Done: the skill,
+   both templates, `docs/swiftui.md`, `docs/mobile.md`,
+   `docs/getting-started.md`, README, the builder `@internal` (Context,
+   Content), the rule and the engine in `docs/swiftui.md` and
+   `docs/ui/views.md`, and the `docs/ui/` pages of views, layout, text,
+   lists, navigation, testing and the controls; the engine's own pages
+   (custom widgets, drawing, motion, input…) say so at their top. Left:
+   the `docs/ui/` pages still written with the builder (styling, scroll,
+   grid, table, tree, outline, transitions, drag and drop, accessibility,
+   right to left, windows, the documents and media views) and the plugins'
+   pages; then this file goes.

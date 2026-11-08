@@ -1,5 +1,9 @@
 # Motion
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)). For animating views, `->animation()`, `withAnimation()` and `->transition()` ([Coming from SwiftUI](../swiftui.md#animation)).
+
 A node animates values for you: you give the target, it returns the value
 to show in this frame, and draws frames until the value gets there. The
 view says where things are; the animation finds the way:

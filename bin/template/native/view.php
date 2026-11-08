@@ -5,15 +5,11 @@
 // or function here waits for a restart (R).
 declare(strict_types=1);
 
-use MyPHP\UI\Context;
-
-return function (Context $c): void {
-    $c->column(24, 12, 1);
-      $c->text("Count: {$this->count}", 24);
-      $c->row(0, 8);
-        if ($c->clicked($c->button('Increment'))) { $this->count++; }
-        if ($c->clicked($c->button('Reset'))) { $this->count = 0; }
-      $c->end();
-      $c->muted('Native UI drawn by MyPHP on the GPU. Edit view.php and save: it hot reloads.');
-    $c->end();
-};
+return fn() => VStack(spacing: 12)(
+    Text("Count: {$this->count}")->font(Font::title),
+    HStack(spacing: 8)(
+        Button('Increment', action: fn() => $this->count++)->buttonStyle(ButtonStyle::borderedProminent),
+        Button('Reset', action: fn() => $this->count = 0)->disabled($this->count === 0),
+    ),
+    Text('Native UI drawn by MyPHP on the GPU. Edit view.php and save: it hot reloads.')->foregroundStyle(Color::secondary),
+)->padding(24);

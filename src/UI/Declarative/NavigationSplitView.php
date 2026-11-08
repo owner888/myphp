@@ -31,7 +31,7 @@ final class NavigationSplitView extends View
     {
         $t = $env->theme;
         $selection = &$this->sidebar->selection();
-        $chosen = $selection ?? '';
+        $chosen = (string)($selection ?? ''); // the sidebar's items are keyed by their tags as strings
         $vibrant = $c->vibrancy(); // the window's material shows through the sidebar, as a Mac's
         $bar = $c->titleBar(); // a hidden title bar: the content goes under it, the window controls over the sidebar
         $inset = $bar['height'] > 0;
@@ -52,7 +52,7 @@ final class NavigationSplitView extends View
               if ($vibrant) { $list->color = null; }
             $c->end();
           $c->end();
-          if ($chosen !== ($selection ?? '')) { $selection = $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar: before the detail, whose actions may choose too
+          if ($chosen !== (string)($selection ?? '')) { $selection = self::tagOf($this->sidebar->content(), $chosen) ?? $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar, the tag itself (an int id stays an int, as SwiftUI's Hashable): before the detail, whose actions may choose too
           if ($w > 0) { $c->box(1, 0, $t->border); }
           $detail = $c->column(0, 0, 1)->minWidth(0)->minHeight(0)->alignSelf(Node::STRETCH);
             $views = is_array($this->detail) ? $this->detail : [$this->detail];
@@ -93,6 +93,16 @@ final class NavigationSplitView extends View
     }
 
     /** The sidebar's rows of $content: Sections fold, Labels and Texts are items choosing their tags. @param array<mixed> $content */
+    /** The tag of the item of $content keyed $key, null for none. @param array<mixed> $content */
+    private static function tagOf(array $content, string $key): mixed
+    {
+        foreach (ListView::flat($content) as $v) {
+            if ($v instanceof Section) { $t = self::tagOf($v->content(), $key); if ($t !== null) { return $t; } continue; }
+            if ($v->hasTag && (string)$v->tagValue === $key) { return $v->tagValue; }
+        }
+        return null;
+    }
+
     private static function items(Context $c, Env $env, array $content): void
     {
         foreach (ListView::flat($content) as $v) {

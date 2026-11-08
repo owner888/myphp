@@ -9,12 +9,10 @@ assertions, and so do the examples of these pages.
 
 ```php
 $app = new class { public int $n = 0; };
-$view = function (Context $c) use ($app) {
-    $c->text((string)$app->n);
-    if ($c->clicked($c->primaryButton('Increment'))) {
-        $app->n++;
-    }
-};
+$view = fn() => VStack()(
+    Text("{$app->n}"),
+    Button('Increment', action: fn() => $app->n++),
+);
 $h = new Headless($view, 320, 240);
 $h->frame();
 $h->clickText('Increment');
@@ -23,9 +21,13 @@ same(1, $app->n, 'one click counts one');
 check($h->byText('1') !== null, 'the count shows: ' . json_encode($h->texts()));
 ```
 
-Nodes are found by their text, or by their `label()` for those without, as
-an icon button: `$h->byText('Close')`, `$h->byLabel('Volume')`;
-`$h->focused()` is the node with the focus.
+`Headless` takes what a view file returns (a closure of no arguments,
+returning views), or `Content::file(__DIR__ . '/view.php', $app)->view`
+for the app's own file. Nodes are found by their text, or by their
+`accessibilityLabel()` for those without, as an icon button:
+`$h->byText('Close')`, `$h->byLabel('Volume')`; `$h->focused()` is the node
+with the focus. For a phone's look, set `$h->rt->touch = true` and
+`$h->theme = Theme::phone(false)` before the first frame.
 
 `byLabel()` and `clickLabel()` take the first node in the order of the
 tree whose `label()`, or the name its [field](form.md) gives it, or its
@@ -65,17 +67,15 @@ as apps only log it.
   it all and type over it:
 
   ```php
-  $name = new TextState('Old name');
-  $h = new Headless(function (Context $c) use ($name) {
-      $c->form(fn() => $c->field('Name', fn() => $c->input($name)));
-  });
+  $app = new class { public string $name = 'Old name'; };
+  $h = new Headless(fn() => Form()(TextField('Name', text: $app->name)));
   $h->frame();
-  $h->clickLabel('Name');               // the label focuses its field
+  $h->clickLabel('Name');               // the field, named by its title, takes the focus
   $h->shortcut('a', Key::COMMAND);      // Select All
   $h->type('New name');                 // typed over the selection
-  same('New name', $name->text, 'the field holds what was typed');
+  same('New name', $app->name, 'the field holds what was typed');
   ```
-  Or set it from the test, `$name->text = 'New name'`, when typing is not
+  Or set it from the test, `$app->name = 'New name'`, when typing is not
   what is tested.
 - **Menus.** `rightClick()` opens a context menu, which `menuLabels()`
   lists and `chooseMenuItem('Move to', 'Archive')` chooses from.
@@ -121,7 +121,7 @@ frame to see what it changed:
 
 ```php
 $app = new class { public string $status = 'loading'; };
-$h = new Headless(fn(Context $c) => $c->text($app->status));
+$h = new Headless(fn() => Text(verbatim: $app->status));
 $h->frame();
 App::after(0.05, function () use ($app) { $app->status = 'loaded'; }); // as the app's own code would
 App::wait(fn() => $app->status !== 'loading');

@@ -1,5 +1,9 @@
 # Input
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)). For views, `->onKeyPress()`, `->keyboardShortcut()`, `->focused()` and `->onTapGesture()`.
+
 Nodes report what the user did to them since the last frame, as you build
 them: ask, and handle it where the node is built.
 

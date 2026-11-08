@@ -1,5 +1,9 @@
 # Rendering
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)).
+
 MyPHP draws on the GPU with Metal on macOS, and with OpenGL on Linux, in
 the GtkGLArea GTK shows. One shader computes rounded rectangles, borders,
 gradients and shadows from the distance to their edges, so they stay sharp

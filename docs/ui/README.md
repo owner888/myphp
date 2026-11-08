@@ -40,35 +40,28 @@ App::run();
 <?php // view.php: the window's interface from the state, for every frame; $this is the Counter
 declare(strict_types=1);
 
-use MyPHP\UI\Context;
-
-return function (Context $c): void {
-    $c->column(gap: 12)->fill()->center();
-      $c->text((string)$this->n)->fontSize(40)->bold();
-      if ($c->clicked($c->primaryButton('Increment'))) {
-          $this->n++;
-      }
-    $c->end();
-};
+return fn() => VStack(spacing: 12)(
+    Text("{$this->n}")->font(Font::largeTitle)->bold(),
+    Button('Increment', action: fn() => $this->n++)->buttonStyle(ButtonStyle::borderedProminent),
+);
 ```
 
 Saved while `myphp dev` or `myphp run` runs the app, `view.php` hot
 reloads: the window shows the new code with the count as it was ([views:
 view files](views.md#view-files-and-hot-reload)).
 
-**Reading the examples.** The examples in these guides are parts of a view
-such as `view.php`'s: `$c` is the view's `Context`. Containers
-(`$c->column()`, `$c->row()`, `$c->scroll()`…) take what is built after
-them until `$c->end()`; every builder returns its `Node`, which calls
-after it style (`->padding(8)->radius(6)`), and `$c->clicked($node)`,
-`$c->changed($node)` and the like ask what the user did to it. Widgets
-that edit a value take it by reference (`$c->checkbox('Sync',
-$app->sync)`), and text widgets a `TextState`. State lives outside the
-view, made once: the examples make it first, as an object `$app` of an
-anonymous class, and give it to the view with `use`; a `$view` closure is
-what `Content::view()` takes. Every example on these pages runs, headless,
-in `tests/docs_examples_test.php`; those marked `<!-- no-test -->` need a
-window.
+**Reading the examples.** The views are SwiftUI's, in PHP syntax
+([Coming from SwiftUI](../swiftui.md)): global functions (`VStack`,
+`Text`, `Button`…) whose second parentheses hold the children, modifiers
+chained after them, controls bound to the state's properties by reference
+(`Toggle('Sync', isOn: $app->sync)`), actions as closures. State lives
+outside the view, made once: the examples make it first, as an object
+`$app` of an anonymous class, and `$view` is what a view file returns.
+Every example on these pages runs, headless, in
+`tests/docs_examples_test.php`; those marked `<!-- no-test -->` need a
+window. A page about the engine itself (custom widgets, drawing, the text
+input client, rendering) shows its builder, `$c` a `Context`: an app
+reaches it only inside a `Representable` or a `Canvas`.
 
 `myphp init -template native my-app` starts a native UI project (see
 [the CLI](../cli.md#myphp-init)). The [counter

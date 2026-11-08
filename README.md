@@ -19,30 +19,29 @@ Each window shows one of two kinds of interface:
 - **A web page** in the webview the OS already has (WKWebView on macOS). The
   page calls PHP services through a typed bridge.
 - **Native UI**, written in PHP alone and drawn by MyPHP on the GPU: no HTML,
-  no JavaScript, no webview. The view is a function of the app's state and
-  runs every frame (immediate mode), as in mygo's `ui` package.
+  no JavaScript, no webview. Views are written as SwiftUI's, in PHP syntax
+  ([Coming from SwiftUI](docs/swiftui.md)), built from the app's state every
+  frame.
 
-A window with native UI, whose view is a function of the app's state:
+A window with native UI, its view built from the app's state:
 
 ```php
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
-$n = 0;
-App::whenReady(function () use (&$n) {
+$app = new class { public int $n = 0; };
+App::whenReady(function () use ($app) {
     new Window(new WindowOptions(title: 'Counter', width: 320, height: 200,
-        content: Content::view(function (Context $c) use (&$n) {
-            $c->column(24, 12, 1);
-              $c->text("Count: $n", 20);
-              if ($c->clicked($c->button('Increment'))) { $n++; }
-            $c->end();
-        })));
+        content: Content::view(fn() => VStack(spacing: 12)(
+            Text("Count: {$app->n}")->font(Font::title),
+            Button('Increment', action: fn() => $app->n++),
+        ))));
 });
 App::run();
 ```
 
 In an app the view is a file of its own, `view.php`, returning that closure
-with `$this` for the state (`Content::file(__DIR__ . '/view.php', $app)`):
+(`return fn() => VStack()(…);`) with `$this` for the state (`Content::file(__DIR__ . '/view.php', $app)`):
 saved under `myphp dev` or `myphp run`, it hot reloads as Flutter's does,
 the state kept ([view files](docs/ui/views.md#view-files-and-hot-reload)).
 
@@ -403,23 +402,21 @@ MyPHP 把 [mygo](https://github.com/egoist/mygo) 的思路搬到 PHP 8 上：
 
 - **网页**：用系统自带的 webview（macOS 上是 WKWebView），页面通过类型化的桥接调用 PHP 服务。
 - **原生 UI**：纯 PHP 编写，由 MyPHP 自己画到 GPU 上，没有 HTML、JavaScript 和 webview。
-  视图是应用状态的函数，每帧重跑（immediate mode），与 mygo 的 `ui` 包同一思路。
+  视图按 SwiftUI 的写法用 PHP 语法声明（见 [从 SwiftUI 过来](docs/swiftui.md)），每帧由应用状态构建。
 
-一个原生 UI 窗口，视图是应用状态的函数：
+一个原生 UI 窗口，视图由应用状态构建：
 
 ```php
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
-$n = 0;
-App::whenReady(function () use (&$n) {
+$app = new class { public int $n = 0; };
+App::whenReady(function () use ($app) {
     new Window(new WindowOptions(title: 'Counter', width: 320, height: 200,
-        content: Content::view(function (Context $c) use (&$n) {
-            $c->column(24, 12, 1);
-              $c->text("Count: $n", 20);
-              if ($c->clicked($c->button('Increment'))) { $n++; }
-            $c->end();
-        })));
+        content: Content::view(fn() => VStack(spacing: 12)(
+            Text("Count: {$app->n}")->font(Font::title),
+            Button('Increment', action: fn() => $app->n++),
+        ))));
 });
 App::run();
 ```

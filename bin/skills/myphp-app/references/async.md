@@ -42,9 +42,11 @@ App::go(function () use ($app, $win, $query, $seq) {
 - Number every request (`$app->seq++` as it is sent) and drop answers
   whose number is not the latest: answers can arrive out of order, and
   the window may have closed (`$win->isDestroyed()`).
-- Debounce typing by the clock: on `$c->changed($field)` set
-  `$app->dueAt = microtime(true) + 0.35`; at the top of the view, start the
-  search once it is due, else `$c->after($app->dueAt - microtime(true))`.
+- Debounce typing: `TextField('Search', text: $this->query)->onChange(of:
+  $this->query, action: fn() => $this->typed())`, where `typed()` numbers
+  the query (`$seq = ++$this->seq`) and starts `App::go(function () use
+  ($seq) { App::sleep(0.35); if ($seq !== $this->seq) { return; } … })`:
+  a newer keystroke makes the waiting one give up.
 - Show every state the work can be in: idle, loading, an error with a way
   to retry, empty results, results.
 

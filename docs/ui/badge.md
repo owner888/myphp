@@ -1,22 +1,21 @@
 # Badge
 
-`$c->badge()` creates a short text in a pill, as a count of unread messages
-beside a [sidebar](sidebar.md)'s item, which builds it in its trailing
-closure:
+`->badge()` shows a short count or word in a pill at the end of a row, as
+the unread messages of a mailbox, or on a tab, as SwiftUI's:
 
 ```php
-$app = new class { public string $section = 'inbox'; public int $unread = 4; };
-$view = function (Context $c) use ($app) {
-    $c->sidebar($app->section, function () use ($c, $app) {
-        $c->sidebarItem('inbox', 'Inbox', null, fn() => $c->badge((string)$app->unread));
-        $c->sidebarItem('sent', 'Sent');
-    });
-};
+$app = new class { public string $box = 'inbox'; };
+$view = fn() => ListView()(
+    Label('Inbox', systemImage: 'tray')->badge(3),
+    Label('Drafts', systemImage: 'doc')->badge('new'),
+    Label('Sent', systemImage: 'paperplane'),
+);
 ```
 
-The pill is the text color at a tenth behind the text, two points smaller
-than the theme's font size.
+A `Tab`'s badge shows in the sidebar of a `TabView(.sidebarAdaptable)`. The
+pill is the text color at a tenth behind the text, two points smaller than
+the text.
 
 ## Accessibility
 
-Assistive technology reads its text with the item it is in.
+Assistive technology reads its text with the row it is on.

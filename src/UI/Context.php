@@ -7,7 +7,14 @@ use Closure;
 use MyPHP\{App, DateFormatter, DateOptions, I18n, L10n, Menu, MenuItem, NumberOptions, Region, Width};
 use MyPHP\Window;
 
-/** Builds a frame's tree. The view function calls these in order, as code. */
+/**
+ * Builds a frame's tree: the engine under the declarative views, which
+ * render into it (View::render). @internal An app writes views
+ * (VStack, Text, Button…, docs/swiftui.md); it reaches the builder only
+ * inside a Representable(fn(Context $c) => …), for a control no view
+ * gives, as SwiftUI's NSViewRepresentable, and the framework's own
+ * components are written on it.
+ */
 final class Context
 {
     use ContextMotion;

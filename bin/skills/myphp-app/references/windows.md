@@ -49,10 +49,13 @@ In `app.php`: `new Windows(fn(WindowOptions $o) => new Window($o), $lib)`.
 ## Asking before a window closes
 
 The `close` event comes before the window goes; `$e->cancel()` keeps it.
-Show the question in that window, as `$c->alertDialog($open, $title,
-$message, 'Save', "Don't Save", 'Cancel')`, which returns the button
-chosen; on Save or Don't Save set `mayClose` and call `$win->close()`
-again (or `destroy()`, which closes without asking).
+Show the question in that window: set a property the view binds,
+`->alert('Save the changes?', isPresented: $this->asking, actions:
+[Button('Save', action: …), Button("Don't Save", role:
+ButtonRole::destructive, action: …), Button('Cancel', role:
+ButtonRole::cancel)])`; in Save's and Don't Save's actions set `mayClose`
+and call `$win->close()` again (or `destroy()`, which closes without
+asking).
 
 ## Settings every window shows
 

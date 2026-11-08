@@ -1,5 +1,9 @@
 # Drawing and animation
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)). For drawing in a view, `Canvas(fn(GraphicsContext $g, CGSize $size) => …)`.
+
 `draw()` paints on a node after its background, and `drawOver()` after its
 children, with a `Painter` in points of the window and the node's box,
 `[x, y, w, h]`: rectangles with `fill()`, `fillGradient()`,

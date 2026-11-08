@@ -6,14 +6,17 @@ namespace MyPHP\UI;
 use Closure;
 
 /**
- * Native UI for a window: a view function of the app's state, run every
- * frame with a Context to build into. One Content can serve several windows.
+ * Native UI for a window: a view of the app's state, built every frame, as
+ * SwiftUI's body: a closure returning the root View (VStack, Text…), or a
+ * view file (Content::file). One Content can serve several windows. A
+ * closure taking a Context builds with the engine's builder, @internal: the
+ * framework's own windows.
  */
 final class Content
 {
     private function __construct(public readonly Closure $view) {}
 
-    /** @param Closure(Context): void $view */
+    /** A window's view: fn() => VStack()(…), as a view file returns it. @param Closure(): mixed $view */
     public static function view(Closure $view): self
     {
         return new self($view);

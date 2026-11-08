@@ -1,99 +1,99 @@
-# Choosing widgets by need
+# Choosing views by need
 
-Start from what the user asked for, not from the widget list: find the
-need below, take the widget it names, then read that widget's page in
-`docs/ui/` for the call shape (every example there runs in the tests).
-Signatures are abridged; `&$v` means the widget edits your property in
-place. When two fit, take the first: it is the simpler one.
+Start from what the user asked for, not from the list of views: find the
+need below, take the view it names, then read its page in `docs/ui/` and
+its row in `docs/swiftui.md` for the call shape (every example there runs
+in the tests). Signatures are abridged; a property passed to a control
+(`isOn: $this->wifi`) is bound by reference, the control writes it. When
+two fit, take the first: it is the simpler one.
 
 ## Show text and pictures
 
-| Need | Widget | Page |
+| Need | View | Page |
 |---|---|---|
-| A line or paragraph of text | `$c->text($s, $size, $color)` + `->bold()`, `->textColor()`, `->maxLines(n)` | text.md |
-| Text with links, bold runs, headings | `$c->richText()`; `$c->markdown()` for Markdown, streaming too | text.md, markdown.md |
-| An icon in the text's color | `$c->icon($svg, $size)`; `Image::symbol('name', $size)` for an SF Symbol | icon.md |
-| A photo, screenshot, SVG in its own colors | `$c->image($img, $w, $h, $radius)` | image.md |
-| A person | `$c->avatar($name, $image)` | avatar.md |
-| A count or status pill | `$c->badge($text)` | badge.md |
-| Progress, waiting, a level | `$c->progress($f)`, `$c->spinner()`, `$c->meter($v, $lo, $hi)` | progress.md, spinner.md, meter.md |
-| Numbers as bars, lines, donuts | `Chart` with `Axes`, `Linear`, `Band` | chart.md |
-| A video or animated GIF | `$c->video($player)` | video.md |
+| A line or paragraph of text | `Text('…')` + `->font(Font::headline)`, `->foregroundStyle(Color::secondary)`, `->lineLimit(2)`, `->bold()` | text.md |
+| Text with links, bold runs | `Text([...runs])`, `Markdown($md)` for Markdown, `streaming: true` while it arrives | text.md, markdown.md |
+| An icon | `Image(systemName: 'gearshape')` (an SF Symbol, mapped on Linux and Android), `Label('Settings', systemImage: 'gearshape')` with a title | icon.md |
+| A photo, screenshot, SVG | `Image(file: $path)`, `Image($image)`, `->resizable()`… | image.md |
+| A person | `Avatar($name, $image)` | avatar.md |
+| A count on a tab or row | `->badge(3)` | badge.md |
+| Progress, waiting, a level | `ProgressView(value: $f)`, `ProgressView()` (spinning), `Gauge(value: $v, in: [$lo, $hi])` | progress.md, spinner.md, meter.md |
+| Numbers as bars, lines, donuts | `Chart($data)(fn($row) => BarMark(x: …, y: …))`, `LineMark`, `SectorMark`… | chart.md |
+| A video | `VideoPlayer($player)` | video.md |
 
 ## Let the user act
 
-| Need | Widget | Page |
+| Need | View | Page |
 |---|---|---|
-| Do something now | `if ($c->clicked($c->button('Save')))`; `primaryButton` for the main one | button.md |
-| A button with an icon | your row on `$c->buttonBase()` | icon.md (In buttons) |
-| Open a URL or a page | `$c->link($s, $url)` | link.md |
-| A choice from a short menu | `$c->menuButton('Sort', fn(Menu $m) => …)`; `$node->contextMenu()` on right click | menu-button.md, context-menu.md |
-| Several buttons along the top | `$c->toolbar(fn() => …)` overflows into a menu | toolbar.md |
-| On/off | `$c->switch($label, &$on)` for a setting; `$c->checkbox($label, &$on)` in a form or list | switch.md, checkbox.md |
-| A pressed/unpressed button (bold, italic) | `$c->toggle(&$on, $label)`, `toggleGroup` | toggle.md |
-| One of a few, all visible | `$c->segmented($options, &$index)`; `radioGroup` with labels | segmented.md, radio.md |
-| One of many | `$c->select($options, &$index)`; `combobox` when typing filters | select.md, combobox.md |
-| A number in a range | `$c->slider(&$v, $lo, $hi)`; `stepper`, `numberInput` to type it; `rangeSlider` for low–high | slider.md, stepper.md, number-input.md |
-| Stars | `$c->rating(&$n)` | rating.md |
-| A date, a time, a color | `dateInput(&$d)`, `calendar(&$d)`, `timeInput(&$t)`, `colorPicker(&$rgb, &$a)` | date-input.md, calendar.md, time-input.md, color-picker.md |
+| Do something now | `Button('Save', action: fn() => $this->save())`; `->buttonStyle(ButtonStyle::borderedProminent)` for the main one; `role: ButtonRole::destructive` | button.md |
+| A button with an icon | `Button('Add', action: …, systemImage: 'plus')`, or `label: Label(…)` | button.md |
+| Open a URL | `WebLink('Docs', destination: $url)` | link.md |
+| A choice from a short menu | `Menu('Sort')(Button(…), …)`; `->contextMenu(Button(…), …)` on right click or a long press | menu-button.md, context-menu.md |
+| Buttons along the top | `->toolbar(Button(…), …)` on the page | toolbar.md |
+| On/off | `Toggle('Sync', isOn: $this->sync)`: a switch on a phone, a checkbox on a Mac; `->toggleStyle(ToggleStyle::switch)` to choose | switch.md, checkbox.md |
+| A pressed/unpressed button (bold, italic) | `Toggle(…)->toggleStyle(ToggleStyle::button)` | toggle.md |
+| One of a few, all visible | `Picker('View', selection: $this->mode)(Text('A')->tag('a'), …)->pickerStyle(PickerStyle::segmented)`; `::radioGroup` | segmented.md, radio.md |
+| One of many | `Picker(…)` (a pop-up menu); `ComboBox('City', text: $this->city, items: $cities)` when typing filters | select.md, combobox.md |
+| A number in a range | `Slider(value: $this->v, in: [0, 100])`; `Stepper('Copies', value: $this->n, in: [1, 9])`; `RangeSlider(lower:, upper:, in:)` | slider.md, stepper.md, range-slider.md |
+| Stars | `Rating('Rating', value: $this->stars)` | rating.md |
+| A date, a time, a color | `DatePicker('Due', selection: $this->due)`, `->datePickerStyle(DatePickerStyle::graphical)` for the calendar; `ColorPicker('Tint', selection: $this->rgb)` | date-input.md, calendar.md, color-picker.md |
 
 ## Take text
 
-| Need | Widget | Page |
+| Need | View | Page |
 |---|---|---|
-| One line (name, URL, search) | `$c->input($textState, $placeholder)`; `->password()`; `$c->submitted($f)` for Enter | text-input.md |
-| Search that Escape clears | `$c->searchField($textState)` | search-field.md |
-| Several lines, plain | `$c->textarea($textState, $placeholder, $w, $h)` | text-input.md |
-| Notes with formatting (headings, lists, links, images) | `RichText` editor on a `Document` | rich-text-editor.md |
-| Code | `Editor\State` + `Buffer` + `Languages` | code-editor.md |
-| Two versions side by side | `DiffState` | diff-viewer.md |
-| Suggestions while typing | `$c->autocomplete($state, $suggestions)` | autocomplete.md |
-| Tags, recipients | `$c->tokenField(&$tokens, $suggestions)` | token-field.md |
-| Rename in place | `$c->editableText(&$name)` | editable-text.md |
-| Find in a document | `$c->findBar(&$open, $query, $matches, &$current)` | find-bar.md |
-| Labeled fields with errors | `$c->form(fn() => $c->field('Name', fn() => …))` | form.md |
+| One line (name, URL) | `TextField('Name', text: $this->name)`, `->onSubmit(fn() => …)` for Return; `SecureField` for a password | text-input.md |
+| Search | `->searchable(text: $this->query)` on a list or page; `SearchField(text: $this->query)` on its own | search-field.md |
+| Several lines, plain | `TextEditor(text: $this->body)`; `TextField(…, axis: Axis::vertical)` for a field that grows | text-input.md |
+| Notes with formatting (headings, lists, links, images) | `TextEditor(document: $this->doc)` on a `RichText\Document` | rich-text-editor.md |
+| Code | `CodeEditor($state)` | code-editor.md |
+| Two versions side by side | `DiffView($diff)` | diff-viewer.md |
+| Suggestions while typing | `TextField(…)->textInputSuggestions($suggestions)` | autocomplete.md |
+| Tags, recipients | `TokenField('To', tokens: $this->to, suggestions: $people)` | token-field.md |
+| Find in a document | `->findNavigator(isPresented: $this->finding, text: $this->find)` | find-bar.md |
+| Labeled fields | `Form()(Section('Account')(TextField(…), Toggle(…), LabeledContent('Version', '1.0')))` | form.md |
 
 ## Show many things
 
-| Need | Widget | Page |
+| Need | View | Page |
 |---|---|---|
-| Rows, any number, selectable | `$c->list($listState, $n, fn(int $i) => …)` — the default for collections | list.md |
-| A few rows that never scroll | `foreach` with `$c->key($id)->row()` in a `column` | views.md |
-| Columns the user sorts and resizes | `$c->table($listState, $columns, $n, $cell)` | table.md |
-| Thumbnails in a grid | `$c->gridView($gridState, $n, $minW, $h, $item)` | grid-view.md |
-| Nested items that open and close | `$c->tree()` for a few; `$c->outline($state, …)` for many | tree.md, outline.md |
-| Fixed columns and rows (a dashboard) | `$c->grid($cols, $gap)` | grid.md |
-| Rows that animate in, out and when sorted | `$c->transition($row, $elementTransition)` | transitions.md |
-| Pull down to refresh | `$c->refreshable($scrollState, $app->refreshing, fn() => …)` | ../mobile.md |
-| A large page title that goes under the bar (Mail's, Settings') | `$c->largeTitle($title)` first in the scroll, the `ScrollState` to `navigationBar()` | ../mobile.md |
-| Rows swiped to flag or delete (Mail's) | `$c->swipeActions($action, fn() => …, 'Flag', '!Delete')` in a `list` row | ../mobile.md |
-| A settings page: grouped rows with a title, a value and a chevron | `$c->insetGroupedList(fn() => $c->section($header, fn() => $c->cell($title, $detail, $disclosure)))` | ../mobile.md |
+| Rows, any number, selectable | `ListView($items, id: 'id', selection: $this->chosen)(fn(array $item) => …)` — the default for collections | list.md |
+| A few rows that never scroll | `VStack()(Each($items, id: 'id')(fn($item) => …))` | views.md |
+| Columns the user sorts and resizes | `Table($rows, id: 'id')(TableColumn('Name', value: 'name'), …)` | table.md |
+| Thumbnails in a grid | `LazyVGrid(columns: [GridItem::adaptive(minimum: 120)])(Each(…))` | grid-view.md |
+| Items that open and close | `DisclosureGroup('Advanced', isExpanded: $this->open)(…)` | collapsible.md, outline.md |
+| Rows that animate in, out and when sorted | `->animation(Animation::smooth(), value: $this->items)`, `->transition(…)` | transitions.md |
+| Pull down to refresh | `->refreshable(fn() => $this->reload())` | ../mobile.md |
+| Rows swiped to flag or delete (Mail's) | `->swipeActions(Button('Delete', role: ButtonRole::destructive, action: …))` on a row | ../mobile.md |
+| A settings page: grouped rows | `Form()(Section(…)(…))` | form.md, ../mobile.md |
 
 ## Organize the window
 
-| Need | Widget | Page |
+| Need | View | Page |
 |---|---|---|
-| Content taller than the window | `$c->scroll(); … $c->end();` with a `ScrollState` to control it | scroll.md |
-| A source list on the left (Finder, Notes, Mail) | `$c->sidebar(&$selected, fn() => $c->sidebarItem($id, $label, $icon))` | sidebar.md |
-| Two panes the user resizes | `$c->split(&$size, $first, $second)` | split.md |
-| Pages with a history, Back | `new Router('/')` + `$router->view($c, ['/notes' => __DIR__ . '/pages/notes.php', '/notes/{id}' => …])`, a page a file; `->push()`, `->back()` | navigation.md |
-| A few pages switched by tabs | `$c->tabs($labels, &$index)` on the desktop; `$c->tabView($items, &$index, $content)` adapts to phones and tablets | tabs.md, ../mobile.md |
-| An app's top-level pages, on every screen (desktop, tablet, phone) | In the declarative views, `TabView(selection:)( Tab(title, systemImage:, value:)( page ) … )->tabViewStyle(TabViewStyle::sidebarAdaptable)`: a sidebar (NavigationSplitView) on the desktop and a tablet on its side, tabs across the top of an upright tablet, the bottom tab bar on a phone. Write it once; never branch on the platform for it | ../declarative.md "One app, every screen" |
-| Where am I | `$c->breadcrumbs($items, &$chosen)`; `$c->backButton()` | breadcrumbs.md, history-buttons.md |
-| Sections that fold | `$c->collapsible($label, &$open, $fn)`; `accordion` for several | collapsible.md, accordion.md |
-| A card, a panel | `$c->column(16, 8)->background($t->surface)->radius(12)->border(1, $t->border)` | styling.md |
-| A frosted or glass panel | `->systemMaterial('sidebar')`, `->systemMaterial('glass')` | styling.md |
-| A web page inside | `$c->webView($webView)` | web-view.md |
+| Content taller than the window | `ScrollView()(…)`; `ScrollViewReader` to scroll to an id | scroll.md |
+| An app's top-level pages, on every screen | `TabView(selection: $this->page)(Tab('Home', systemImage: 'house', value: 'home')(…), …)->tabViewStyle(TabViewStyle::sidebarAdaptable)`: a sidebar on the desktop, tabs on a tablet, the tab bar on a phone. Write it once; never branch on the platform for it | tabs.md, ../mobile.md |
+| A source list of the app's data on the left (Notes, Mail) | `NavigationSplitView(ListView($notes, selection: $this->chosen)(…), $detail)` | sidebar.md |
+| Two panes the user resizes | `HSplitView()(…, …)` | split.md |
+| Pages with a history, Back | `NavigationStack(path: $this->path)(…)->navigationDestination(for: '/notes/{id}', destination: __DIR__ . '/pages/note.php')`, `NavigationLink('Note', value: "/notes/$id")` | navigation.md |
+| Where am I | `Breadcrumbs($path, selection: $this->at)` | breadcrumbs.md |
+| A card, a panel | `GroupBox('Title')(…)`, or `VStack()(…)->padding()->background(Color::secondarySystemBackground)->cornerRadius(12)` | styling.md |
+| A frosted or glass panel | `->glassEffect(…)`; a window's `vibrancy: 'sidebar'` | styling.md, ../plugins/glass.md |
+| A web page inside | `WebView($page)` | web-view.md |
+| A terminal | `TerminalView($terminal)` | ../plugins/terminal.md |
+| A drawing of your own | `Canvas(fn(GraphicsContext $g, CGSize $size) => …)` | drawing.md |
+| A control of your own | `Representable(fn(Context $c) => …)`, the engine inside one view | custom-widgets.md |
 
 ## Interrupt, ask, tell
 
-| Need | Widget | Page |
+| Need | View | Page |
 |---|---|---|
-| A question with buttons | `$i = $c->alertDialog(&$open, $title, $message, 'Cancel', 'Delete')` | alert-dialog.md |
-| A form or picker over the window | `$c->modal(&$open, $fn)`; `$c->sheet(&$open, $fn)` on phones | dialog.md, ../mobile.md |
-| A small panel by a button | `$c->popover($anchor, &$open, $fn)` | popover.md |
-| Something saved, undone | `$c->toast('Saved')`, `toastAction` | toast.md |
-| A hint on hover | `->tooltip($s)` | tooltip.md |
+| A question with buttons | `->alert('Delete the note?', isPresented: $this->asking, actions: [Button('Delete', role: ButtonRole::destructive, action: …), Button('Cancel', role: ButtonRole::cancel)])` | alert-dialog.md |
+| Choices from the bottom (a phone's action sheet) | `->confirmationDialog($title, isPresented:, actions: […])` | ../mobile.md |
+| A form or picker over the window | `->sheet(isPresented: $this->editing, content: fn() => …)`, `->presentationDetents([…])` on a phone | dialog.md, ../mobile.md |
+| A small panel by a button | `->popover(isPresented: $this->open, content: fn() => …)` | popover.md |
+| Something saved, undone | `->toast($this->message)` | toast.md |
+| A hint on hover | `->help('…')` | tooltip.md |
 | Choose files, save as | `Dialog::open()`, `Dialog::save()` (the system's) | ../native.md |
 | The system's menus, notifications, tray, clipboard | `App::setMenu()`, `Notification`, `Tray`, `Clipboard` | ../menus.md, ../native.md |
 
@@ -112,27 +112,27 @@ place. When two fit, take the first: it is the simpler one.
 What the user means: several notes, a list of them, one open for
 editing, saved between runs. Decide in this order:
 
-1. **Window shape**: a list on the left and the note on the right — a
-   `sidebar` (titles are short, one section) in a `row` with a `column`
-   for the editor. On a phone the same becomes a `tabView` or a `Router`
-   with `navigationBar`; the desktop first.
-2. **The list**: notes are few — `sidebarItem` per note, keyed by its id,
-   the selected id as `&$selected`. Thousands of notes would be a `list`.
-3. **The editor**: plain text → `textarea` with a `TextState` per note;
-   formatting, images, Markdown export → the `RichText` editor on a
-   `Document` per note. Make the state when the note is made, never in
-   the view.
-4. **Actions**: `primaryButton('New')` and a `Cmd+N` shortcut; delete
-   through `contextMenu` on the item, confirmed by `alertDialog`.
+1. **Window shape**: the notes on the left and the note on the right — a
+   `NavigationSplitView` of a `ListView` of the notes and the editor. On
+   a phone the same app is a `NavigationStack`: the list, a note pushed
+   over it.
+2. **The list**: `ListView($this->notes, id: 'id', selection:
+   $this->chosen)`, each row the note's title and a muted first line.
+3. **The editor**: plain text → `TextEditor(text: $this->notes[$i]['body'])`;
+   formatting, images, Markdown export → `TextEditor(document: …)` on a
+   `Document` per note, made when the note is made, never in the view.
+4. **Actions**: `->toolbar(Button('New', action: …, systemImage:
+   'square.and.pencil')->keyboardShortcut('n'))`; delete from
+   `->contextMenu(Button('Delete', role: ButtonRole::destructive, …))`
+   on the row, confirmed by `->alert`.
 5. **Saving**: notes as JSON in `App::path(PathName::UserData)`, loaded in
-   the constructor, saved from `save()` after each change; a `toast` is
-   not needed for autosave.
-6. **Search**: a `searchField` above the sidebar filtering the titles,
-   once there is more than a screen of notes.
+   the constructor, saved from the class's methods after each change.
+6. **Search**: `->searchable(text: $this->query)` on the list, filtering
+   the titles, once there is more than a screen of notes.
 
-`examples/notes` is exactly this app: `main.php` its state (the notes,
-JSON saving, the Format menu) and `view.php` its view, with the rich-text
-editor and the toolbar as a closure: copy its shape, then cut what the
-user did not ask for. Test it as `SKILL.md` says: a headless test that adds a
-note, types, and finds the title in the sidebar; then `myphp screenshot`
-in light and dark.
+`examples/notes` is this app: `main.php` its state (the notes, JSON
+saving, the Format menu) and `view.php` its view, with the rich-text
+editor and the toolbar: copy its shape, then cut what the user did not
+ask for. Test it as `SKILL.md` says: a headless test that adds a note,
+types, and finds the title in the list; then `myphp screenshot` in light
+and dark.

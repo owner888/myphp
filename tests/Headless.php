@@ -124,7 +124,7 @@ final class Headless
         $this->rt->playHaptic = function (string $kind): void { $this->haptics[] = $kind; }; // recorded, not played
         \MyPHP\UI\Editor\Editor::$text = $this->metrics;
         $this->theme = Theme::dark();
-        $this->view = $view;
+        $this->view = (new \ReflectionFunction($view))->getNumberOfParameters() === 0 ? static fn(Context $c) => \MyPHP\UI\Content::render($view, $c) : $view; // a declarative view (what a view file returns), rendered as a window renders it; or the engine's builder
         $this->rt->onAccess = function (AccessTree $t) { array_push($this->told, ...$t->announcements); };
         $this->rt->startDataDrag = function (\MyPHP\Transfer\Data $data, mixed $local, \MyPHP\Transfer\DragOptions $o, float $x, float $y): ?\Throwable {
             $this->dataDrag = ['data' => $data->snapshot(), 'local' => $local, 'options' => $o, 'x' => $x, 'y' => $y];

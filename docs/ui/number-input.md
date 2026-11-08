@@ -1,25 +1,23 @@
-# Number input
+# Number field
 
-`$c->numberInput()` creates a text input editing an `int` or a `float` (by
-reference) as a number between two bounds, which Up and Down, and the
-buttons beside it, change by a step. What is typed applies as soon as it is
-a number in range, and shows rounded to the decimals of the step once the
-input loses the focus. `$c->changed()` reports a new value.
+A `NumberField` edits an `int` or a `float` (bound by reference) as a
+number between two bounds, which Up and Down, and the arrows beside it,
+change by a step. What is typed applies as soon as it is a number in range,
+and shows rounded to the decimals of the step once the field loses the
+focus. SwiftUI writes it `TextField(value:format:)`; this is myphp's own,
+SwiftUI-shaped.
 
 ```php
 $app = new class { public int $copies = 1; public float $opacity = 0.5; };
-$view = function (Context $c) use ($app) {
-    $c->numberInput($app->copies, 1, 99, 1)->label('Copies');
-    $c->numberInput($app->opacity, 0, 1, 0.05)->label('Opacity');
-};
+$view = fn() => Form()(
+    NumberField('Copies', value: $app->copies, in: [1, 99]),
+    NumberField('Opacity', value: $app->opacity, in: [0, 1], step: 0.05),
+);
 ```
 
-For a value the user only steps, use a [stepper](stepper.md); for one
-chosen roughly, a [slider](slider.md); for an amount of money, which a
-`float` cannot hold exactly, a [decimal input](decimal-input.md).
+For amounts of money, a [decimal field](decimal-input.md); for a number
+without typing, a [stepper](stepper.md) or a [slider](slider.md).
 
 ## Accessibility
 
-Assistive technology sees a spin button of the value, named by its
-`label()` or its [field](form.md), which it increments and decrements by
-the step.
+Assistive technology sees a spin button of the value, named by its title.

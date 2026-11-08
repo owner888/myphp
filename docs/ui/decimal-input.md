@@ -1,56 +1,23 @@
-# Decimal input
+# Decimal field
 
-`$c->decimalInput()` is a [number input](number-input.md) for amounts of
-money: it edits a string (by reference) holding an exact decimal between
-two bounds, which Up and Down, and the buttons beside it, change by a step.
-The value is written with exactly the decimals of the step, as
-`"1234.50"`; the bounds are written the same way, `''` for no limit.
-Inside, it counts in integers of units of the step's last decimal, so no
-amount is ever held in binary floating point.
+A `DecimalField` is a [number field](number-input.md) for amounts of money:
+it edits a string (bound by reference) holding an exact decimal between two
+bounds, which Up and Down, and the arrows beside it, change by a step. The
+value is written with exactly the decimals of the step, as `"1234.50"`; the
+bounds are written the same way, `''` for no limit. Inside, it counts in
+integers of units of the step's last decimal, so no amount is ever held in
+binary floating point.
 
 ```php
-$app = new class {
-    public string $amount = '0.00';
-    public int $saves = 0;
-    public function save(): void { $this->saves++; }
-};
-$view = function (Context $c) use ($app) {
-    $c->field('Amount', function () use ($c, $app) {
-        if ($c->changed($c->decimalInput($app->amount, '0', '', '0.01'))) {
-            $app->save();
-        }
-    });
-};
+$app = new class { public string $price = '19.99'; public string $total = '0'; };
+$view = fn() => Form()(
+    DecimalField('Price', value: $app->price, in: ['0', '100000'], step: '0.01'),
+    LabeledContent('Price with tax', bcadd($app->price, bcmul($app->price, '0.09', 4), 2)),
+);
 ```
 
-What is typed applies as soon as it is a number in range, with `.` before
-its decimals, `,` between groups of three digits, and an optional `-`:
-`1,234.5` sets `"1234.50"`, and shows so once the input loses the focus.
-Amounts as strings convert to whatever decimal type the app uses
-(`bcmath`, `brick/math`), and fit a database's TEXT columns.
-
-## Nothing is rounded
-
-At a step of `0.01`, `1.500` is `1.50`, but `1.005` is not a number the
-input takes: rather than round it, it keeps the value as it was and marks
-the input with an error, whose message a [field](form.md) around it shows
-below, until the text is corrected. Text that is not a number, or out of
-range, is marked the same way, and stays when the input loses the focus, so
-that a typo is never silently replaced. Emptying the input leaves the value
-as it was, and shows it again once the input loses the focus.
-
-A value the app sets replaces what was typed, a mistake included. A value
-the app sets with more decimals than the step's, or out of range, shows as
-it is, marked. `$c->changed()` reports a new value: one written another
-way, as `1.5` for `1.50`, is not.
-
-As `numberInput()`, it reads `.` and `,` the same way in every language
-the window shows: `1,50` is not one and a half, but text that is not a
-number, which the input marks rather than read as 150.
+Compute with the value as a string (`bcadd`, `bcmul`), never with `float`.
 
 ## Accessibility
 
-Assistive technology sees a spin button of the value, named by its
-`label()` or its field, which it increments and decrements by the step,
-and reads the value as the input's text, exactly. An error's message
-describes the input, which it reads as invalid.
+Assistive technology sees a spin button of the value, named by its title.

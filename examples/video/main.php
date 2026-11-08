@@ -22,7 +22,7 @@ declare(strict_types=1);
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
 use MyPHP\Media\{PlayerSettings, Subtitles};
 use MyPHP\Plugins\Updater\{Options, Updater};
-use MyPHP\UI\{Content, Context, TextState, MediaPlayerFilters, MediaPlayerInspector, MediaPlayerMenus, MediaPlayerState};
+use MyPHP\UI\{Content, Context, MediaPlayerFilters, MediaPlayerInspector, MediaPlayerMenus, MediaPlayerState};
 
 // MyPHP from inside the built app, else from this checkout.
 require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
@@ -261,31 +261,30 @@ final class Players
     {
         if (self::$welcome !== null && !self::$welcome->isDestroyed()) { self::$welcome->focus(); return; }
         self::$welcome = new Window(new WindowOptions(title: 'Welcome', width: 560, height: 440, disableResize: true, disableMaximize: true, titleBarStyle: 'hidden', vibrancy: 'under-window',
-            content: Content::view(function (Context $c): void {
-                $c->mediaPlayerWelcome(fn(string $path) => self::open([$path]), fn() => self::askURL());
-            })));
+            content: Content::view(fn() => Representable(fn(Context $c) => $c->mediaPlayerWelcome(fn(string $path) => self::open([$path]), fn() => self::askURL()), fills: true)))); // the player's own welcome, as IINA's
     }
 
     /** File > Open URL…: IINA's Open URL window, a URL and Open. */
     public static function askURL(bool $alternative = false): void
     {
         if (self::$url !== null && !self::$url->isDestroyed()) { self::$url->focus(); return; }
-        $field = new TextState();
+        $ask = new class { public string $url = ''; };
         $w = self::$url = new Window(new WindowOptions(title: 'Open URL', width: 480, height: 150, disableResize: true, disableMaximize: true, disableMinimize: true,
-            content: Content::view(function (Context $c) use ($field, $alternative, &$w): void {
-                $c->column(20, 12, 1);
-                  $c->text('Enter the URL of a video (http or https):', 13);
-                  $f = $c->input($field, 'https://example.com/film.mkv', 0)->fillWidth();
-                  $c->row(0, 8)->alignSelf(\MyPHP\UI\Node::END);
-                    $cancel = $c->button('Cancel');
-                    $open = $c->button('Open');
-                  $c->end();
-                $c->end();
-                if ($c->clicked($cancel) || $c->shortcut(\MyPHP\UI\Key::ESCAPE)) { App::later(fn() => $w->close()); }
-                elseif (($c->clicked($open) || $c->submitted($f)) && preg_match('~^https?://\S+$~i', trim($field->text)) === 1) {
-                    $url = trim($field->text);
+            content: Content::view(function () use ($ask, $alternative, &$w) {
+                $open = function () use ($ask, $alternative, &$w): void { // a URL of the web only, as IINA's
+                    $url = trim($ask->url);
+                    if (preg_match('~^https?://\S+$~i', $url) !== 1) { return; }
                     App::later(function () use ($url, $alternative, &$w): void { $w->close(); self::open([$url], $alternative); });
-                }
+                };
+                return VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+                    Text('Enter the URL of a video (http or https):')->font(Font::system(size: 13)),
+                    TextField('URL', text: $ask->url, prompt: 'https://example.com/film.mkv')->onSubmit($open),
+                    HStack(spacing: 8)(
+                        Spacer(),
+                        Button('Cancel', action: fn() => App::later(fn() => $w->close()))->keyboardShortcut(KeyEquivalent::escape, modifiers: []),
+                        Button('Open', action: $open)->buttonStyle(ButtonStyle::borderedProminent)->keyboardShortcut(KeyEquivalent::return, modifiers: []),
+                    ),
+                )->padding(20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::top);
             })));
     }
 
@@ -294,9 +293,7 @@ final class Players
     {
         if (self::$history !== null && !self::$history->isDestroyed()) { self::$history->focus(); return; }
         self::$history = new Window(new WindowOptions(title: 'Playback History', width: 800, height: 600, minWidth: 500, minHeight: 300, stateKey: 'video history', titleBarStyle: 'hiddenInset',
-            content: Content::view(function (Context $c): void {
-                $c->mediaPlayerHistory(fn(array $paths, bool $newWindow) => self::open($paths, $newWindow !== PlayerSettings::default()->get('alwaysOpenInNewWindow')));
-            })));
+            content: Content::view(fn() => Representable(fn(Context $c) => $c->mediaPlayerHistory(fn(array $paths, bool $newWindow) => self::open($paths, $newWindow !== PlayerSettings::default()->get('alwaysOpenInNewWindow'))), fills: true))));
     }
 
     /** Video > Settings…: the settings window, as IINA's (600 by 480, the sidebar's material under a hidden title bar). */
@@ -306,7 +303,7 @@ final class Players
         $s = self::$settingsState ??= new MediaPlayerState(); // the settings are the app's, whatever player; this one logs in to OpenSubtitles from them
         self::$settings = new Window(new WindowOptions(title: 'Settings', width: 600, height: 480, minWidth: 600, minHeight: 300, stateKey: 'video settings v2',
             titleBarStyle: 'hiddenInset', trafficLightPosition: [18, 18], vibrancy: 'sidebar',
-            content: Content::view(function (Context $c) use ($s): void { $c->mediaPlayerSettings($s); })));
+            content: Content::view(fn() => Representable(fn(Context $c) => $c->mediaPlayerSettings($s), fills: true))));
     }
 
     /** A new player's window for a plugin's global instance (its createPlayerInstance). */

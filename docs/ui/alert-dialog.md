@@ -1,48 +1,24 @@
-# Alert dialog
+# Alert
 
-`$c->alertDialog()` asks about something important over the window while a
-`bool` (by reference) is true, as AppKit's alerts: a title, a message, and
-buttons, the last of which is the default, in the accent color, with the
-focus, which Enter clicks. Escape closes the alert choosing no button, as
-canceling does, whatever the buttons say, in any language; a click outside
-the alert does nothing. It returns the index of the button clicked, in the
-frame it is, which closes the alert, `Context::ALERT_DISMISSED` in the
-frame Escape closes it, and -1 otherwise.
+`->alert()` asks a question while a `bool` (bound by reference) is true, as
+SwiftUI's: a title, a message, and its actions, each a `Button`, which
+closes it as it runs. A `ButtonRole::cancel` button is the alert's Cancel,
+Escape's; a `ButtonRole::destructive` one is red.
 
 ```php
-$app = new class {
-    public bool $asking = false;
-    public bool $deleted = false;
-    public function delete(): void { $this->deleted = true; }
-};
-$view = function (Context $c) use ($app) {
-    if ($c->clicked($c->button('Delete'))) {
-        $app->asking = true;
-    }
-    switch ($c->alertDialog($app->asking, 'Delete “Notes”?', "You can't undo this.", 'Cancel', 'Delete')) {
-        case 1:
-            $app->delete();
-            break;
-    }
-};
+$app = new class { public bool $asking = true; public int $deleted = 0; };
+$view = fn() => Text('A note')->padding()->alert('Delete the note?', isPresented: $app->asking, actions: [
+    Button('Delete', role: ButtonRole::destructive, action: fn() => $app->deleted++),
+    Button('Cancel', role: ButtonRole::cancel),
+], message: 'This cannot be undone.');
 ```
 
-An alert that must be answered stays open by setting the `bool` back to
-true as Escape dismisses it:
-
-```php
-$app = new class { public bool $updating = true; };
-$view = function (Context $c) use ($app) {
-    if ($c->alertDialog($app->updating, 'Update required', 'Restart to finish updating.', 'Restart') === Context::ALERT_DISMISSED) {
-        $app->updating = true;
-    }
-};
-```
-
-For a dialog of your own content, use a [dialog](dialog.md); for a choice
-the user can undo, act at once and offer it in a [toast](toast.md).
+What is behind it takes no input while it shows; the focus goes to its
+default button and comes back as it closes. On a phone it is UIKit's alert,
+its buttons across or stacked; for choices from the bottom of a phone, a
+`->confirmationDialog()` ([mobile](../mobile.md)).
 
 ## Accessibility
 
-Assistive technology sees an alert dialog named by its title and described
-by its message, with the focus on its default button.
+Assistive technology sees an alert dialog named by its title, described by
+its message.

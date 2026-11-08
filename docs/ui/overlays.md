@@ -1,5 +1,9 @@
 # Overlays
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)). For views, `->sheet()`, `->alert()`, `->popover()` and `->contextMenu()`.
+
 Overlays show above the window's content: [dialogs](dialog.md) over the
 dimmed window, [alert dialogs](alert-dialog.md), [popovers](popover.md)
 below a node, the popups of [selects](select.md) and

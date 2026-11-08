@@ -1,5 +1,9 @@
 # Native UI performance
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)).
+
 `php tests/bench.php [frames]` times the PHP half of a frame — build,
 layout, record (the runtime's hit-test rectangles) and paint (quads into a
 buffer) — for the examples' views and a few dense ones, headless. What it

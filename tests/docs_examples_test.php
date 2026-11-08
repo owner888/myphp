@@ -2,9 +2,12 @@
 // The documentation's examples (docs/ui/*.md, docs/plugins/*.md and
 // docs/getting-started.md) built headlessly, so the
 // pages cannot drift from the API: every ```php block is run as it stands.
-// A block that sets $view (a Closure(Context)) is run and its view built;
-// one that does not is the body of a view, $c its Context; one that only
-// declares (a class, a function) is declared. Classes are imported by the
+// A block that sets $view is run and its view built: a declarative view
+// (`$view = fn() => VStack()(…)`, what a view file returns), or the engine's
+// builder (a Closure(Context), for a Representable's inside); one that does
+// not is the body of a builder view, $c its Context; one that only declares
+// (a class, a function) is declared. In a declarative block the global
+// views and enums (Font, Color, Image…) win over MyPHP\UI's classes. Classes are imported by the
 // short names the block uses (MyPHP\UI first, then MyPHP, MyPHP\Transfer,
 // then PHP's own),
 // each block in a namespace of its own. A block that needs a window or the
@@ -62,11 +65,13 @@ function docProgram(string $code, int $n, array $classes): string
     preg_match_all('/\b(?:class|enum|interface|trait)\s+(\w+)/', $code, $decl);
     foreach ($decl[1] as $d) { $own[$d] = true; }
     $declares = preg_match('/^(?:final |abstract |readonly )*(?:class|enum|interface|trait|function)\s+\w/m', $code) === 1;
+    $declarative = preg_match('/^\$view\s*=\s*(?:static\s+)?(?:fn|function)\s*\(\s*\)/m', $code) === 1; // a view file's closure, of no Context
     $hasView = preg_match('/^\$view\s*=/m', $code) === 1;
     if (!$hasView && !$declares) { $code = "\$view = function (Context \$c) {\n$code\n};"; }
     preg_match_all('/(?<![\\\\$\w>:])([A-Z]\w*)\b/', $code . ' Context', $names);
     foreach (array_unique($names[1]) as $name) {
         if (isset($own[$name])) { continue; }
+        if ($declarative && (class_exists('\\' . $name, false) || enum_exists('\\' . $name, false))) { $uses[] = "use $name;"; continue; } // the global views' enums and classes (Font, Color, Binding…) of functions.php
         if (isset($classes[$name])) { $uses[] = "use {$classes[$name]};"; }
         elseif (class_exists($name, false) || interface_exists($name, false) || enum_exists($name, false)) { $uses[] = "use $name;"; } // PHP's own: DateTimeImmutable, Closure
     }
@@ -76,17 +81,19 @@ function docProgram(string $code, int $n, array $classes): string
     return "namespace MyPHP\\DocExamples\\B$n;\n" . implode("\n", $uses) . "\nreturn function () {\n$code\nreturn \$view ?? null;\n};";
 }
 
+require_once dirname(__DIR__) . '/src/UI/Declarative/functions.php'; // the global views and enums, which declarative blocks use
 $docClasses = docClasses();
 $docCwd = getcwd();
 chdir(__DIR__ . '/testdata/docs');
 $docs = dirname(__DIR__) . '/docs';
-$docBlocks = docBlocks("$docs/ui/*.md", "$docs/plugins/*.md", "$docs/getting-started.md", "$docs/swiftui.md");
+$docBlocks = docBlocks("$docs/ui/*.md", "$docs/plugins/*.md", "$docs/getting-started.md", "$docs/swiftui.md", "$docs/mobile.md");
 foreach ($docBlocks as $i => $b) {
     $where = "{$b['file']}:{$b['line']}";
     $errors = count($failures);
     try {
         $view = (eval(docProgram($b['code'], $i, $docClasses)))();
         if ($view instanceof \Closure) {
+            if ((new \ReflectionFunction($view))->getNumberOfParameters() === 0) { $declared = $view; $view = static fn(Context $c) => \MyPHP\UI\Content::render($declared, $c); } // a view file's: rendered as Content::file renders it
             $h = new Headless($view, 600, 400);
             $h->frame();
             $h->paint();

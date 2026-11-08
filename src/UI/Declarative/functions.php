@@ -1,6 +1,6 @@
 <?php
 // The views, modifiers' enums and colors of myphp's declarative UI, as SwiftUI's, in the global namespace as
-// SwiftUI's need no import: VStack, Text, Button… (docs/declarative.md). Loaded with the first view file
+// SwiftUI's need no import: VStack, Text, Button… (docs/swiftui.md). Loaded with the first view file
 // (ViewFile), and by what renders views; their classes are MyPHP\UI\Declarative's.
 declare(strict_types=1);
 
@@ -594,6 +594,24 @@ function RangeSlider(float|int &$lower, float|int &$upper, array $in = [0.0, 1.0
 function Breadcrumbs(array $path, int &$selection): D\Control
 {
     return new D\Control('', static function (MyPHP\UI\Context $c) use ($path, &$selection): Node { return $c->breadcrumbs($path, $selection); });
+}
+
+/** A field of a number between the ends of $in, Up, Down and its arrows stepping by $step, as AppKit's NSTextField with a number formatter and a stepper: NumberField('Copies', value: $this->copies, in: [1, 99]). */
+function NumberField(string $title, int|float &$value, array $in = [PHP_INT_MIN, PHP_INT_MAX], float $step = 1): D\Control
+{
+    return new D\Control($title, static function (MyPHP\UI\Context $c) use (&$value, $in, $step): Node { return $c->numberInput($value, (float)$in[0], (float)$in[1], $step); });
+}
+
+/** A field of an exact decimal amount held as a string ("1234.50"), the decimals of $step, between the ends of $in ('' for no end), never in binary floating point: DecimalField('Price', value: $this->price, in: ['0', ''], step: '0.01'). */
+function DecimalField(string $title, string &$value, array $in = ['', ''], string $step = '0.01'): D\Control
+{
+    return new D\Control($title, static function (MyPHP\UI\Context $c) use (&$value, $in, $step): Node { return $c->decimalInput($value, $in[0], $in[1], $step); });
+}
+
+/** $text shown as text the user edits in place, as a file's name in Finder: a double click or Enter edits it, Enter keeps it, Escape goes back: EditableText(text: $this->name). */
+function EditableText(string &$text): D\Control
+{
+    return new D\Control('', static function (MyPHP\UI\Context $c) use (&$text): Node { return $c->editableText($text); });
 }
 
 /** A circle of a person's $image, or their initials on a color of their name: Avatar('Ada Lovelace'). */
