@@ -339,7 +339,9 @@ trait ContextMobile
      * below it or above where there is no room; an item 44 high, a
      * destructive one in the danger color, a disabled one muted, a checked
      * one marked; a group's line a wider gap. A tap on an item chooses it,
-     * a tap beside closes it. Build it last, over the view (Window does).
+     * a tap beside closes it; it fades in as it opens and out as it closes
+     * (closing: the window under it takes the taps again). Build it last,
+     * over the view (Window does).
      * Not mygo's.
      */
     public function touchMenu(): void
@@ -359,10 +361,22 @@ trait ContextMobile
         if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = max($this->windowSafeArea[0] + 16, $m['y'] - 12 - $high); } // no room below: above the finger
         $chosen = null;
         $back = $panel = null;
-        $this->overlay(function () use (&$chosen, &$back, &$panel, $items, $t, $w, $x, $y): void {
-            $back = $this->key('touchMenu')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->block();
-            $back->alpha = 0.15;
-              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(14)->clip()->shadow(0, 8, 30, 0, 0x000000, 0.25)->role(Role::MENU);
+        $shown = !($m['closing'] ?? false);
+        $gone = false;
+        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, $shown, $rt, $items, $t, $w, $x, $y): void {
+            $this->key('touchMenu');
+            $fade = $rt->motions[$this->upcomingId()]['fade'] ?? null;
+            if (!$shown && ($fade === null || ($fade->value <= 0.001 && !$fade->moving))) { // closed, and faded out
+                $this->nextKey = null;
+                $gone = true;
+                return;
+            }
+            $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height);
+            if ($shown) { $back->block(); } else { $back->passThrough(); }
+            if (!isset($rt->motions[$back->id]['fade'])) { $this->jump($back, 'fade', 0.0); } // opened now: from nothing
+            $p = $this->animate($back, 'fade', $shown ? 1 : 0, $shown ? 0.2 : 0.25);
+            $back->alpha = 0.15 * $p;
+              $panel = $this->column(0, 0, 0, $t->dark ? 0x2c2c2e : 0xffffff)->absolute()->top($y)->start($x)->size($w, 0)->radius(14)->clip()->shadow(0, 8, 30, 0, 0x000000, 0.25)->role(Role::MENU)->opacity($p);
                 $last = null;
                 foreach ($items as $it) {
                     if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a wider gap, as UIKit's
@@ -382,18 +396,20 @@ trait ContextMobile
                       $this->text($it->label, $t->fontSize, $off ? $t->textMuted : ($it->role === 'destructive' ? $t->danger : $t->text))->singleLine()->grow(1)->shrink(1)->minWidth(0);
                       if ($it->checked) { $this->text('✓', $t->fontSize, $t->accent)->shrink(0); }
                     $this->end();
-                    if (!$off && $this->clicked($row)) { $chosen = (int)$it->id; }
+                    if ($shown && !$off && $this->clicked($row)) { $chosen = (int)$it->id; }
                     $last = $row;
                 }
               $this->end();
             $this->end();
         });
-        if ($chosen !== null) { // chosen: it closes, the choice reaching the item in the next frame (chosen())
+        if ($gone) {
             $rt->touchMenu = null;
+        } elseif ($chosen !== null) { // chosen: it fades out, the choice reaching the item in the next frame (chosen())
+            $rt->touchMenu['closing'] = true;
             ($m['chosen'])($chosen);
             $rt->changed();
-        } elseif ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // a tap beside, Escape, Back: closed, nothing chosen
-            $rt->touchMenu = null;
+        } elseif ($shown && ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel)))) { // a tap beside, Escape, Back: it fades out, nothing chosen
+            $rt->touchMenu['closing'] = true;
             $rt->changed();
         }
     }

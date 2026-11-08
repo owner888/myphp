@@ -8645,6 +8645,13 @@ changed, which no hot reload can take.
   right click (`Runtime::hasContextMenuAt`), and on touch the menu is the
   view's own, built over the window (`Runtime::$touchMenu`,
   `Context::touchMenu`), destructive items in red (`MenuItem::destructive`).
+- The context menu opened in the middle of a swipe, the row left half
+  open under it. Cause: the long press's timer looked only at scrolling,
+  not at a swipe that had taken the touch. Rule: as UIKit's gestures, the
+  long press fails once the finger moves 10 points or another gesture
+  takes the touch; once the menu opens the touch is the menu's (its moves
+  and lift reach nothing else). The menu fades in and out, never gone
+  between two frames (that read as a flash).
 
 ## Open items
 
