@@ -113,7 +113,7 @@ return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
         Button('Add', action: fn() => $this->add())->buttonStyle(ButtonStyle::borderedProminent)->disabled(trim($this->draft) === ''),
     ),
     ListView($this->items, id: 'id')($row),
-    Text("{$this->left()} left")->foregroundStyle(Color::secondary),
+    Text('{n} left', ['n' => $this->left()])->foregroundStyle(Color::secondary), // a key and its placeholder, translatable; Text(verbatim:) for what the user wrote
 )->padding(16);
 ```
 

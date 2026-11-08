@@ -13,8 +13,10 @@ outside `myphp dev`). A project with a web frontend also needs
 the system's webview: on Linux, GTK 3 and WebKitGTK 4.1, e.g. `sudo apt
 install libwebkit2gtk-4.1-0` on Debian and Ubuntu.
 
-Native UI needs nothing more: it runs on what the system has (GTK 3 on
-Linux).
+Native UI needs nothing more on macOS. On Linux it needs GTK 3 and
+libepoxy, which a desktop usually has; a server or a container may not:
+`sudo apt install libgtk-3-0 libepoxy0` on Debian and Ubuntu. `myphp
+doctor` says what is missing.
 
 The `myphp` command line tool creates, runs and packages apps. It is a PHP
 script, `bin/myphp` in a checkout of MyPHP:

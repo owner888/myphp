@@ -139,10 +139,31 @@ editing, saved between runs. Decide in this order:
    filtering by `shown()`; with nothing found, a `ListView()(Text('No note
    matches.'))` in its place, the same modifier on it, so the field stays.
 
-`examples/notes` is this app: `main.php` its state (the notes, JSON
-saving, search, delete, the Format menu) and `view.php` its view, with
-the rich-text editor and the toolbars: copy its shape, then cut what the
-user did not ask for. Test it as `SKILL.md` says: a headless test that
+`examples/notes` is this app, laid out as `SKILL.md` says: `src/Notes.php`
+its state (the notes, JSON saving, search, delete), `view.php` its view
+with the rich-text editor and the toolbars, `main.php` the window and the
+Format menu, `tests/ui_test.php` its headless test: copy its shape, then
+cut what the user did not ask for.
+
+For plain text, the view binds the editor to the body of the note shown,
+by its index, and saves an edit, not a change of note:
+
+```php
+return function () {
+    $i = $this->index(); // the index of the note chosen, the first without one
+    $shown = $this->shown();
+    return NavigationSplitView(
+        sidebar: ($shown === []
+            ? ListView()(Text('No note matches.')->foregroundStyle(Color::secondary))
+            : ListView($shown, id: 'id', selection: $this->chosen)(fn(array $n) => Text(verbatim: $this->title($n)))
+        )->searchable(text: $this->query),
+        detail: TextEditor(text: $this->notes[$i]['body'])->accessibilityLabel('Note') // its label: a test clicks it by that
+            ->onChange(of: [$this->chosen, $this->notes[$i]['body']], action: fn(array $was, array $now) => $was[0] === $now[0] ? $this->save() : null),
+    );
+};
+```
+
+A test focuses that editor with `$h->clickLabel('Note')` before it types. Test it as `SKILL.md` says: a headless test that
 adds a note, types, finds the title in the list, searches and deletes
 (`clickText('Delete')` over the alert clicks the alert's button); then
 `myphp screenshot` in light and dark.

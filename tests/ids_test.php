@@ -43,7 +43,7 @@ foreach ($cases as $what => $build) {
     $h->hover($x + 5, $y + $wh / 2); $h->frame(); $ids[] = $sid;
     $h->click($x + 5, $y + $wh / 2); $h->frame(); $ids[] = $sid;
     $h->click($x + $ww - 5, $y + $wh / 2); $h->frame(); $ids[] = $sid;
-    $h->type('p'); $h->frame(); $ids[] = $sid;
+    if ($h->rt->focus !== null) { $h->type('p'); } $h->frame(); $ids[] = $sid; // typed into it, where it takes the focus
     check(count(array_unique($ids)) === 1, "$what opening, closing, typed into: what is built after it keeps its id " . json_encode($ids));
 }
 

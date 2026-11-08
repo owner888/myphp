@@ -26,6 +26,7 @@ final class Gtk
         if (self::$f !== null) {
             return self::$f;
         }
+        try {
         self::$f = FFI::cdef('
             typedef int gboolean; typedef unsigned int guint; typedef unsigned long gulong; typedef void* gpointer;
             typedef int (*CbEvent)(void*, void*, void*);
@@ -328,6 +329,9 @@ final class Gtk
             int cairo_region_subtract_rectangle(void*, GdkRectangle*); int cairo_region_union_rectangle(void*, GdkRectangle*);
             void cairo_region_destroy(void*);
         ', 'libgtk-3.so.0');
+        } catch (FFI\Exception $e) { // the system's GTK 3 missing: say what to install, not only that a library did not load
+            throw new RuntimeException('native UI on Linux needs GTK 3, which is not installed: sudo apt install libgtk-3-0 (Debian, Ubuntu) or sudo dnf install gtk3 (Fedora); myphp doctor checks it (' . $e->getMessage() . ')', 0, $e);
+        }
         self::$slot = self::$f->new('void*[1]');
         self::$slotInt = self::$f->cast('unsigned long[1]', self::$slot);
         return self::$f;

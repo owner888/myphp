@@ -2608,6 +2608,17 @@ function doctor(array $args): void
         ]);
     }
 
+    // The system libraries of the Linux desktop: GTK 3 draws the windows (native UI), WebKitGTK the web pages
+    if (PHP_OS_FAMILY === 'Linux') {
+        $libs = (string)@shell_exec('/sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null');
+        $has = fn(string $so): bool => str_contains($libs, $so);
+        $section("Linux Desktop Libraries", [
+            [$has('libgtk-3.so.0'), $has('libgtk-3.so.0') ? 'GTK 3 (windows, native UI)' : 'GTK 3 not found: no window opens', 'sudo apt install libgtk-3-0 (Debian, Ubuntu) or sudo dnf install gtk3 (Fedora)'],
+            [$has('libepoxy.so.0'), $has('libepoxy.so.0') ? 'libepoxy (the GPU renderer)' : 'libepoxy not found', 'sudo apt install libepoxy0, or sudo dnf install libepoxy'],
+            [$has('libwebkit2gtk-4.1.so.0'), $has('libwebkit2gtk-4.1.so.0') ? 'WebKitGTK 4.1 (web pages)' : 'WebKitGTK 4.1 not found: only apps without a web page run', 'sudo apt install libwebkit2gtk-4.1-0, or sudo dnf install webkit2gtk4.1'],
+        ]);
+    }
+
     // 3. Android Toolchain
     $adb = trim((string)@shell_exec('command -v adb 2>/dev/null'));
     $javac = trim((string)@shell_exec('command -v javac 2>/dev/null'));
@@ -2619,7 +2630,7 @@ function doctor(array $args): void
     $ndkOk = $ndk !== '' && is_dir("$ndk/toolchains/llvm");
     $section("Android Toolchain", [
         [$adb !== '', $adb !== '' ? "Android Debug Bridge ($adb)" : "adb not found", "Install platform-tools or add adb to PATH"],
-        [$javac !== '', $javac !== '' ? "Java Development Kit ($javac)" : "JDK javac not found", "Install OpenJDK 17+ (brew install openjdk@17)"],
+        [$javac !== '', $javac !== '' ? "Java Development Kit ($javac)" : "JDK javac not found", PHP_OS_FAMILY === 'Darwin' ? "Install OpenJDK 17+ (brew install openjdk@17)" : "Install OpenJDK 17+ (sudo apt install openjdk-17-jdk, or sudo dnf install java-17-openjdk-devel)"],
         [$sdkOk, $sdkOk ? "Android SDK ($androidSdk)" : "Android SDK not found", "Set ANDROID_HOME environment variable"],
         [$aapt2 !== '', $aapt2 !== '' ? "Android Build-Tools (aapt2, d8, zipalign)" : "Android Build-Tools missing", "Install build-tools via sdkmanager"],
         [$ndkOk, $ndkOk ? "Android NDK ($ndk)" : "Android NDK not found", "Install the NDK via sdkmanager, or set ANDROID_NDK_HOME"],

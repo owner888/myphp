@@ -59,10 +59,15 @@ as apps only log it.
   and `$c->shortcut(Key::N, Key::COMMAND)` both take `$h->shortcut('n',
   Key::COMMAND)`; Command with A, C, X, V, Z or Y goes as the Edit menu's
   command (Select All, Copy, …), which a focused field takes. `type()` types
-  text into the focused node. Rather than `key()` with its selector,
-  `tab()`, `enter()`, `escape()`, `up()`, `down()`, `left()`, `right()`,
+  text into the focused node, and throws with nothing focused: click the
+  field first, by its title or placeholder (`clickText`) or its
+  accessibility label (`clickLabel`). A `TextEditor(text:)` has neither,
+  so give it `->accessibilityLabel('Note')`, which assistive technology
+  needs too. Rather than `key()` with its selector, `tab()`, `enter()`,
+  `escape()`, `backspace()`, `up()`, `down()`, `left()`, `right()`,
   `home()`, `end()`, `pageDown()` and `space()` press those keys (`up()`
-  and `down()` take `Key::SHIFT` to select). `compose()` shows the
+  and `down()` take `Key::SHIFT` to select; `backspace()` is
+  `Key::DELETE`, as the Mac names it). `compose()` shows the
   composition of an input method. To replace what a field holds, select
   it all and type over it:
 
