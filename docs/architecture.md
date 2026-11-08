@@ -8657,6 +8657,12 @@ changed, which no hot reload can take.
   `setText()`), and no test loads it (FFI). Rule: a platform's clipboard
   reads and writes through `Data::read(Format::TEXT)` and `Data::text()`,
   as Android's.
+- A swiped row sometimes performed Delete with its button only half out.
+  Cause: the snap chose from where the flick would carry the row
+  (`Motion::project`), so a quick short swipe reached the full swipe's
+  48 points past the buttons. Rule: as UIKit's, the full swipe is decided
+  by where the finger let go, past half the row, its crossing felt and
+  shown (the first button across the room); a flick only opens or closes.
 
 ## Open items
 

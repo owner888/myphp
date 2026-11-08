@@ -597,9 +597,13 @@ trait ContextMobile
      * (draggable, along that axis alone, so the list still scrolls); the
      * buttons of $actions, each as wide as its label and 74 points at least,
      * show in the room it leaves, the first nearest the content, gray, or
-     * red for one marked "!Delete"; let go past half their width the row
-     * stays open, else it closes; swiped on 48 points past them it performs
-     * the first action (UIKit's full swipe). A tap on an open row closes it;
+     * red for one marked "!Delete"; let go (or flicked) past half their
+     * width the row stays open, else it closes. Dragged past half the
+     * row's width (48 points past the buttons at least) the first button
+     * takes the whole room, with a tap felt as it crosses; let go there it
+     * performs the first action (UIKit's full swipe), decided by where the
+     * finger let go, not by where a flick would carry it: a flick only
+     * opens or closes. A tap on an open row closes it;
      * a tap on a closed one is the row's clicked(). $action is the index of
      * the action tapped this frame, -1 for none. Returns the content's node,
      * the one dragged, which clicked() and focused() ask about; a key given
@@ -617,27 +621,36 @@ trait ContextMobile
             $widths[] = max(74.0, $this->measureText(0, new Span(ltrim($label, '!'), 17))[0] + 32);
         }
         $total = array_sum($widths);
-        $full = $total + 48; // swiped on this far, the first action is performed
         $sign = $rtl ? 1.0 : -1.0; // the content moves toward the start
         $n = $this->row(0, 0)->alignSelf(Node::STRETCH)->clip();
         $this->swipedRow = $n;
+        $width = max($rt?->rectOf($n->id)[2] ?? $this->width, $total + 48); // the row's, last laid out
+        $full = max($total + 48, $width * 0.5); // let go past this, the first action is performed
+        $kept = $rt?->local($n->id, fn() => (object)['past' => false]) ?? (object)['past' => false]; // whether the finger last held it past $full
           $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->alignItems(Node::START)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its; its content at the start, as a row's
             $content();
           $this->end();
           $offset = $rt?->dragRecs[$inner->id]->own ?? [0.0, 0.0]; // where the row rests, kept with its drag record between frames
           $this->draggable($inner, $offset, new DraggableOptions(Node::HORIZONTAL,
-              bounds: $rtl ? [0, 0, $full, 0] : [-$full, 0, $full, 0],
-              snap: fn(array $p) => abs($p[0]) >= $full ? [$sign * $full, 0.0] : (abs($p[0]) > $total / 2 ? [$sign * $total, 0.0] : [0.0, 0.0])));
+              bounds: $rtl ? [0, 0, $width, 0] : [-$width, 0, $width, 0],
+              snap: fn(array $p) => $kept->past ? [$sign * $width, 0.0] : (abs($p[0]) > $total / 2 ? [$sign * $total, 0.0] : [0.0, 0.0]))); // the full swipe by where the finger was, open or closed by where the flick carries it
           $shown = $this->dragOffset($inner);
           $open = abs($shown[0]) > 0.5;
+          if ($this->dragging($inner)) {
+              $past = abs($shown[0]) >= $full;
+              if ($past !== $kept->past) { $rt?->haptic('medium'); } // crossing it, either way, as UIKit's full swipe
+              $kept->past = $past;
+          }
           $buttons = [];
           if ($open) { // the room the content leaves at its end, the buttons in it, the first nearest the content; closed, there is nothing of them to tap or read
-              $strip = $this->row(0, 0)->absolute()->top(0)->bottom(0)->end(0)->size(min(abs($shown[0]), $full), 0)->clip()->justify(Node::END)->alignItems(Node::STRETCH);
+              $room = min(abs($shown[0]), $width);
+              $strip = $this->row(0, 0)->absolute()->top(0)->bottom(0)->end(0)->size($room, 0)->clip()->justify(Node::END)->alignItems(Node::STRETCH);
               foreach ($actions as $i => $label) {
+                  if ($kept->past && $i > 0) { continue; } // past it, the first button alone, across the room
                   $destructive = $label !== '' && $label[0] === '!';
                   if ($destructive) { $label = substr($label, 1); }
                   $bg = $destructive ? $t->danger : $t->textMuted;
-                  $b = $this->column(0, 0, 0, $bg)->size($widths[$i], 0)->shrink(0)->center()->focusable()->role(Role::BUTTON)->label($label);
+                  $b = $this->column(0, 0, 0, $bg)->size($kept->past ? max($room, $widths[$i]) : $widths[$i], 0)->shrink(0)->center()->focusable()->role(Role::BUTTON)->label($label);
                   if ($this->hovered($b) && ($rt?->input->mouseDown ?? false)) { $b->color = Theme::mix($bg, 0x000000, 0.15); }
                     $this->text($label, $t->fontSize, (Theme::luminance($bg) & 255) > 165 ? $t->text : 0xffffff)->singleLine(); // white on the gray and the red, as UIKit's; the theme's text, 17 on a phone
                   $this->end();
@@ -647,8 +660,9 @@ trait ContextMobile
           }
         $this->end();
         $close = static function () use (&$offset, $rt): void { $offset = [0.0, 0.0]; $rt?->changed(); };
-        if (abs($offset[0]) == $full) { // let go past the buttons by 48: the full swipe performs the first action
-            $action = 0; $close(); $rt?->haptic('medium'); // the full swipe's tap, as UIKit's
+        if (abs($offset[0]) == $width) { // let go past $full: the full swipe performs the first action
+            $action = 0; $close();
+            $kept->past = false;
         }
         foreach ($buttons as $i => $b) {
             if ($this->clicked($b)) { $action = $i; $close(); }
