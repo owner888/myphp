@@ -67,7 +67,7 @@ final class NavigationSplitView extends View
             $views = is_array($this->detail) ? $this->detail : [$this->detail];
             $title = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['title'] ?? null) : null;
             $toolbar = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['toolbar'] ?? null) : null; // the detail's toolbar, at the end of the window's toolbar, as SwiftUI's on a Mac
-            $items = $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless]), $toolbar); };
+            $items = $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); };
             // A background of the detail reaches under the title bar too, as SwiftUI's backgrounds go into the safe area.
             $bg = null;
             if (count($views) === 1 && $views[0] instanceof View) { foreach ($views[0]->mods as [$name, $m]) { if ($name === 'background') { $bg = $m[0]; } } }

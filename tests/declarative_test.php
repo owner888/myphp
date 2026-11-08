@@ -942,6 +942,16 @@ $h->frame(2); $one = $h->texts(); $countApp->n = 4; $h->frame(2);
 try { Text('{n}', [], null, 3); $said = false; } catch (\LogicException) { $said = true; }
 same([['1 word', 'x and y'], ['4 words', 'x and y'], true], [$one, $h->texts(), $said], 'named placeholders, plural forms, args: alongside; a placeholder by place throws');
 
+// A desktop's context menu shows a Button's systemImage as its item's icon, as macOS 26's menus; a toolbar's Labels show
+// their icon alone, their title on hover and to assistive technology.
+$h = new Headless(fn() => Text('Row')->contextMenu(Button('Copy', action: fn() => null, systemImage: 'doc.on.doc')), 300, 200);
+$h->frame(2);
+[$x, $y] = $h->middle($h->byText('Row')); $h->rightClick($x, $y); $h->frame(2);
+$icon = $h->menu['items'][0]->icon ?? null;
+$h = new Headless(fn() => HSplitView()(Text('List'), Text('Editor'))->toolbar(Button('New note', systemImage: 'square.and.pencil', action: fn() => null)), 600, 400);
+$h->frame(2);
+same([true, false, true], [$icon !== null && str_starts_with($icon->png, "\x89PNG"), in_array('New note', $h->texts(), true), $h->byLabel('New note') !== null], 'a menu item\'s symbol; a toolbar\'s icon alone');
+
 // A LabeledContent too long for its row keeps its title whole and shortens its value, as UIKit's value1 cell.
 $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(LabeledContent('JNI constructor', str_repeat('Legacy(type,auth,enc,Device,psm,uuid)', 2)))), $c), 393, 300);
 $h->frame(2);

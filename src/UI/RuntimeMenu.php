@@ -345,6 +345,15 @@ trait RuntimeMenu
         }
     }
 
+    /** The items' systemImage as their icons, as a desktop's menu shows them (SwiftUI's menus on macOS 26), where they have none of their own. @param list<NativeItem> $items */
+    private static function symbolIcons(array $items): void
+    {
+        foreach ($items as $it) {
+            if ($it->icon === null && $it->systemImage !== '') { $it->setIcon(\MyPHP\MenuIcon::symbol($it->systemImage)); }
+            if ($it->submenu !== []) { self::symbolIcons($it->submenu); }
+        }
+    }
+
     /** Hands the menu built in the frame to the window, which shows it after the frame (mygo's showMenu). */
     private function showMenu(): void
     {
@@ -353,6 +362,7 @@ trait RuntimeMenu
             return;
         }
         $this->menuPending = null;
+        if (!$this->touch) { self::symbolIcons($p['items']); } // a phone's own menu draws them (Context::touchMenu)
         ($this->popupMenu)($p['items'], $p['x'] * $this->frameZoom, $p['y'] * $this->frameZoom, $p['rtl'], fn(int $choice) => $this->menuChosen($p, $choice)); // in the window's points
     }
 

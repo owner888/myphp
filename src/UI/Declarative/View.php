@@ -64,6 +64,9 @@ abstract class View
 
     public function buttonStyle(\ButtonStyle $style): static { $this->sets['buttonStyle'] = $style; return $this; }
 
+    /** How the Labels inside show, as SwiftUI's .labelStyle: their icon alone (a toolbar's), their title alone, or both. */
+    public function labelStyle(\LabelStyle $style): static { $this->sets['labelStyle'] = $style; return $this; }
+
     public function multilineTextAlignment(\TextAlignment $a): static { $this->sets['textAlign'] = $a; return $this; }
 
     public function lineLimit(?int $n, bool $reservesSpace = false): static { $this->sets['lineLimit'] = $n; $this->sets['linesReserved'] = $reservesSpace; return $this; }
@@ -499,7 +502,7 @@ abstract class View
             $col = $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
               $c->row(0, 8)->alignSelf(Node::STRETCH)->shrink(0)->padding(6, 12)->alignItems(Node::CENTER);
                 $c->spacer();
-                $c->toolbar(function () use ($c, $env, $bar): void { self::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless]), $bar); });
+                $c->toolbar(function () use ($c, $env, $bar): void { self::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $bar); });
               $c->end();
               $c->divider();
               $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);

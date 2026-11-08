@@ -19,6 +19,7 @@ final class Env
     public bool $italic = false, $mono = false, $disabled = false, $underline = false, $strikethrough = false;
     public ?ColorValue $color = null, $tint = null;
     public ?\ButtonStyle $buttonStyle = null;
+    public ?\LabelStyle $labelStyle = null;
     public ?\PickerStyle $pickerStyle = null;
     public ?\TextFieldStyle $textFieldStyle = null;
     public ?\ListStyle $listStyle = null;

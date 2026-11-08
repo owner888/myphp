@@ -232,6 +232,9 @@ enum TextFieldStyle { case automatic; case roundedBorder; case plain; }
 /** How a Toggle draws: a switch, a checkbox, a button that stays pressed; automatic is a switch on a phone and a checkbox on a Mac, as SwiftUI's. */
 enum ToggleStyle { case automatic; case switch; case checkbox; case button; }
 
+/** How a Label shows, as SwiftUI's: its icon and title (automatic, but its icon alone in a toolbar), or one of them. */
+enum LabelStyle { case automatic; case titleAndIcon; case iconOnly; case titleOnly; }
+
 /** How a Picker draws: a pop-up menu (automatic, menu), a segmented control, radio buttons (radioGroup, inline). */
 enum PickerStyle { case automatic; case menu; case segmented; case radioGroup; case inline; }
 
