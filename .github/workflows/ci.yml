@@ -59,7 +59,7 @@ jobs:
   # through a renderer of PHP's.
   windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - name: Install PHP

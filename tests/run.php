@@ -7,14 +7,26 @@ declare(strict_types=1);
 // php tests/run.php --each: each test in a process of its own, the failures gathered, one that crashes its process
 // among them; on GitHub Actions all of them in one annotation, as a step shows ten at most (CI's windows job).
 if (($argv[1] ?? '') === '--each') {
+    $timeout = 120; // seconds a test may take
     $byTest = []; $checks = 0; $failed = 0;
     foreach (glob(__DIR__ . '/*_test.php') as $file) {
         $name = basename($file, '_test.php');
         echo "$name\n";
-        $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __FILE__, $name], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, getenv() + ['MYPHP_TEST_CHILD' => '1']);
-        fclose($pipes[0]);
-        $out = (string)stream_get_contents($pipes[1]); $err = (string)stream_get_contents($pipes[2]);
-        $code = proc_close($p);
+        // Its output to files, which a process that hangs leaves readable (Windows selects no pipes): ended after TIMEOUT seconds.
+        $logs = [tempnam(sys_get_temp_dir(), 'myphp-out'), tempnam(sys_get_temp_dir(), 'myphp-err')];
+        $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __FILE__, $name], [0 => ['file', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null', 'r'], 1 => ['file', $logs[0], 'w'], 2 => ['file', $logs[1], 'w']], $pipes, null, getenv() + ['MYPHP_TEST_CHILD' => '1']);
+        $start = microtime(true);
+        while (($st = proc_get_status($p))['running'] && microtime(true) - $start < $timeout) { usleep(50000); }
+        $hung = $st['running'];
+        if ($hung) { proc_terminate($p); }
+        $code = $hung ? -1 : $st['exitcode'];
+        proc_close($p);
+        $out = (string)file_get_contents($logs[0]); $err = (string)file_get_contents($logs[1]);
+        array_map('unlink', $logs);
+        if ($hung) {
+            $err .= sprintf("timed out after %d s", $timeout);
+            if (getenv('GITHUB_ACTIONS') === 'true') { echo "::warning title=Timed out::$name\n"; }
+        }
         $lines = explode("\n", trim($out));
         echo implode("\n", array_slice($lines, 1)), "\n", $err;
         $fails = array_values(array_map(fn(string $l) => substr(ltrim($l), 6), array_filter($lines, fn(string $l) => str_starts_with(ltrim($l), 'FAIL: '))));
@@ -22,7 +34,7 @@ if (($argv[1] ?? '') === '--each') {
         foreach (array_reverse($lines) as $l) { if (preg_match('/^(\d+) checks, (\d+) failed$/', $l, $m) === 1) { break; } }
         $checks += (int)($m[1] ?? 0);
         if ($m === [] || $code !== 0 && $fails === []) {
-            $fails[] = "crashed (exit $code): " . substr(trim($err !== '' ? $err : $out), -400);
+            $fails[] = ($code === -1 ? 'hung' : "crashed (exit $code)") . ': ' . substr(trim($err !== '' ? $err : $out), -400);
         }
         if ($fails !== []) { $byTest[$name] = $fails; $failed += count($fails); }
     }
