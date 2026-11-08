@@ -1,5 +1,9 @@
 # Transforms
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)). For views, `->scaleEffect()`, `->rotationEffect()` and `->offset()`.
+
 `translate()`, `scale()`, and `rotate()` change a node and everything
 inside it visually, while layout reserves its original space. They work on
 boxes, text, images, controls, and custom drawings. The pointer follows

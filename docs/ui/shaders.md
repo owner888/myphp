@@ -1,5 +1,9 @@
 # Shaders
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)). For views, `->colorEffect()`, `->distortionEffect()` and `->layerEffect()`.
+
 A shader computes the color of every pixel of a rectangle, on the GPU,
 from its position, values the app passes it each frame and images it
 reads: noise and gradients that move, a texture lit pixel by pixel, a

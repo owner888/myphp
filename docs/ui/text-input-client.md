@@ -1,5 +1,9 @@
 # Text-input primitives
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)).
+
 `$c->textInputBase()` and `$c->textAreaBase()` provide ordinary editable
 text controls without a look. For a control with its own storage,
 selections, rendering or editing policy, attach a `TextInputClient` to a

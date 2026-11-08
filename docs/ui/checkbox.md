@@ -1,9 +1,9 @@
 # Checkbox
 
-`$c->checkbox()` creates a check box with a label toggling a `bool` (by
-reference): a click on the box or its label checks it or unchecks it, as
-does Space while it has the keyboard focus, and `$c->changed()` reports a
-click.
+A `Toggle` with `->toggleStyle(ToggleStyle::checkbox)` (what it is on a
+Mac by default) is a check box with a title, toggling a `bool` bound by
+reference: a click on the box or its title checks it or unchecks it, as
+does Space while it has the keyboard focus.
 
 ```php
 $app = new class {
@@ -12,44 +12,33 @@ $app = new class {
     public int $reloads = 0;
     public function reload(): void { $this->reloads++; }
 };
-$view = function (Context $c) use ($app) {
-    $c->checkbox('Sync across devices', $app->sync);
-    if ($c->changed($c->checkbox('Show hidden files', $app->showHidden))) {
-        $app->reload();
-    }
-};
+$view = fn() => VStack(alignment: HorizontalAlignment::leading)(
+    Toggle('Sync with iCloud', isOn: $app->sync)->toggleStyle(ToggleStyle::checkbox),
+    Toggle('Show hidden files', isOn: $app->showHidden)->toggleStyle(ToggleStyle::checkbox)
+        ->onChange(of: $app->showHidden, action: fn() => $app->reload()),
+)->padding();
 ```
 
 The check box changes the value itself, the moment the user clicks: read
-it, or ask `$c->changed()` for work that follows.
+it, or `onChange(of:)` for work that follows.
 
 ## Groups
 
-`$c->checkboxGroup()` creates a check box over the check boxes built inside
-it, indented below it, as a list of permissions: it is checked when they
-all are, mixed when some are, and a click, or Space while it has the focus,
-checks them all, or none when they all are. `$c->changed()` reports a
-click.
+A `Toggle` given `sources:`, the values it stands for, is checked when they
+all are, mixed when some are, and a click checks them all, or none when
+they all are, as SwiftUI's:
 
 ```php
-$app = new class { public bool $mail = true; public bool $calendar = false; public bool $messages = true; };
-$view = function (Context $c) use ($app) {
-    $c->checkboxGroup('Notifications', function () use ($c, $app) {
-        $c->checkbox('Mail', $app->mail);
-        $c->checkbox('Calendar', $app->calendar);
-        $c->checkbox('Messages', $app->messages);
-    });
-};
+$app = new class { public bool $read = true; public bool $write = false; public bool $delete = false; };
+$view = fn() => VStack(alignment: HorizontalAlignment::leading)(
+    Toggle('All permissions', sources: [&$app->read, &$app->write, &$app->delete])->toggleStyle(ToggleStyle::checkbox),
+    Toggle('Read', isOn: $app->read)->toggleStyle(ToggleStyle::checkbox)->padding(Edge::leading, 20),
+    Toggle('Write', isOn: $app->write)->toggleStyle(ToggleStyle::checkbox)->padding(Edge::leading, 20),
+    Toggle('Delete', isOn: $app->delete)->toggleStyle(ToggleStyle::checkbox)->padding(Edge::leading, 20),
+)->padding();
 ```
-
-## Without a look
-
-`$c->checkboxBase()` is a check box without a look: a row that toggles its
-`bool` when clicked, which you draw from the value: see
-[custom widgets](custom-widgets.md).
 
 ## Accessibility
 
-Assistive technology sees a check box named by its label, checked or not,
-which it toggles as a click does. A check box group is a check box, mixed
-while some are checked, and a group of the others named by its label.
+Assistive technology sees a check box named by its title, checked, unchecked
+or mixed, which it toggles as a click does.

@@ -1,30 +1,18 @@
-# Back and forward buttons
+# Back and forward
 
-`$c->backButton()` and `$c->forwardButton()` create buttons going back and
-forward in a [router](navigation.md)'s history, as in the toolbar of Finder
-or a browser: disabled at the ends of the history, and showing a chevron.
-Give them the router, a `Router` in your state:
+A `NavigationStack` has its way back built in: on a phone the back button
+of its bar and the swipe from the screen's start edge, on the desktop Back
+in its toolbar, ⌘[ and the back button of a mouse. Code goes back with
+`$app->path->back()` and forward with `->forward()`, `$app->path` the
+stack's `Router` ([navigation](navigation.md)).
 
 ```php
-$router = new Router('/');
-$view = function (Context $c) use ($router) {
-    $c->toolbar(function () use ($c, $router) {
-        $c->backButton($router);
-        $c->forwardButton($router);
-        $c->text($router->title())->bold();
-    });
+$app = new class {
+    public Router $path;
+    public function __construct() { $this->path = new Router('/'); }
 };
+$view = fn() => NavigationStack(path: $app->path)(
+    ListView()(NavigationLink('Note', value: '/note'))->navigationTitle('Notes')
+        ->toolbar(Button('Back', action: fn() => $app->path->back(), systemImage: 'chevron.left')->disabled(!$app->path->canGoBack())),
+)->navigationDestination(for: '/note', destination: fn() => Text('A note')->navigationTitle('Note'));
 ```
-
-A right click lists the pages to go back or forward to, nearest first, by
-their titles (a route's `title`), or their paths without one; choosing one
-goes there at once.
-
-The buttons are a shortcut for what the keys already do: Cmd+[ and Cmd+]
-on macOS, Alt+Left and Alt+Right elsewhere, and the side buttons of a
-mouse.
-
-## Accessibility
-
-Assistive technology sees buttons named "Back" and "Forward", unavailable at
-the ends of the history.

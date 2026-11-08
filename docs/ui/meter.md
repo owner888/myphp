@@ -1,31 +1,20 @@
-# Meter
+# Gauge
 
-`$c->meter()` creates a bar showing a value between two bounds, as AppKit's
-level indicator and the web's `meter`: in the theme's `success` color, or
-`warning` and `danger` from the levels given, null for none.
-
-```php
-$disk = new class { public float $used = 410; public float $size = 500; };
-$view = function (Context $c) use ($disk) {
-    $size = $disk->size;
-    $c->meter($disk->used, 0, $size, new MeterLevels(warning: 0.8 * $size, critical: 0.95 * $size))->label('Disk');
-};
-```
-
-`MeterLevels` are the levels from which the value shows it is worse: the
-`warning` color from `warning`, the `danger` color from `critical`. A
-`critical` below `warning` makes low values the bad ones, as a battery's:
+A `Gauge` shows a value between two bounds as a level, as AppKit's level
+indicator and SwiftUI's gauge; its title leads it in a `Form`:
 
 ```php
-$battery = 15.0;
-$c->meter($battery, 0, 100, new MeterLevels(warning: 20, critical: 10))->label('Battery');
+$app = new class { public float $used = 182; };
+$view = fn() => Form()(
+    Gauge(value: $app->used, in: [0, 256], title: 'Disk'),
+    Gauge(value: 0.9, title: 'Memory')->tint(Color::orange),
+);
 ```
 
-The bar is 160 points wide unless the last argument says otherwise.
-
-For work going on, use a [progress bar](progress.md).
+`->tint()` colors it, as a warning. For work going on, a
+[progress bar](progress.md).
 
 ## Accessibility
 
 Assistive technology sees a level indicator of the value, named by its
-`label()`.
+title.

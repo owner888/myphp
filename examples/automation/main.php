@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\Plugins\Automation\Automation;
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
 
@@ -41,7 +41,7 @@ App::whenReady(function () use ($s) {
     new Window(new WindowOptions(title: 'Automation', width: 420, height: 400, content: Content::file(__DIR__ . '/view.php', $s)));
     // Made hidden, it shows once its first frame is drawn (mygo 0cb6d05).
     $hidden = new Window(new WindowOptions(title: 'Shown when ready', width: 260, height: 120, hidden: true,
-        content: Content::view(fn(Context $c) => $c->text('Drawn while hidden, then shown'))));
+        content: Content::view(fn() => Text('Drawn while hidden, then shown'))));
     $hidden->on('readyToShow', fn() => $hidden->show());
     new Window(new WindowOptions(title: 'Automation page', width: 320, height: 200, html: '<!doctype html><title>Automation page</title><p>A page'));
 });

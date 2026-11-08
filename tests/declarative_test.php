@@ -1,5 +1,5 @@
 <?php
-// The declarative views, as SwiftUI's (docs/declarative.md): stacks, text, buttons running their actions, a toggle
+// The declarative views, as SwiftUI's (docs/swiftui.md): stacks, text, buttons running their actions, a toggle
 // and a field bound to the state, Each keeping rows by id, modifiers in order (a padding after a background pads
 // outside it), the environment flowing down, onAppear and onDisappear, keyboardShortcut.
 declare(strict_types=1);

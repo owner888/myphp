@@ -149,25 +149,22 @@ can take and return, errors, events and security.
 ### From native UI
 
 Native UI is PHP, so it calls your code directly, with no bindings. The
-view is a function of your app's state that MyPHP calls to build each
-frame; it asks its elements what happened since the last one:
+view is written as SwiftUI's is ([Coming from SwiftUI](swiftui.md)): a
+value built from your app's state for every frame, its controls bound to
+the state's properties, its actions closures that call your code:
 
 ```php
 $app = new class {
-    public TextState $name;
+    public string $name = '';
     public string $greeting = '';
-    public function __construct() { $this->name = new TextState(); }
+    public function greet(): void { $this->greeting = "Hello, {$this->name}!"; } // your PHP code
 };
 
-$view = function (Context $c) use ($app) {
-    $c->column(0, 16, 1)->fill()->alignItems(Node::CENTER)->justify(Node::CENTER);
-      $c->input($app->name, 'Your name', 240);
-      if ($c->clicked($c->primaryButton('Greet'))) {
-          $app->greeting = 'Hello, ' . $app->name->text . '!'; // your PHP code
-      }
-      $c->text($app->greeting);
-    $c->end();
-};
+$view = fn() => VStack(spacing: 16)(
+    TextField('Your name', text: $app->name)->frame(width: 240)->onSubmit(fn() => $app->greet()),
+    Button('Greet', action: fn() => $app->greet())->buttonStyle(ButtonStyle::borderedProminent),
+    Text(verbatim: $app->greeting),
+);
 ```
 
 `tests/Headless.php` clicks and types into a view without a window, as

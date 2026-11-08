@@ -1,5 +1,9 @@
 # Custom widgets
 
+> This page is about the engine under the views: its builder, `$c` a
+> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
+> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)).
+
 Every widget is built on a base, the same widget without a look: the base
 handles the pointer, the keyboard and the focus, and tells assistive
 technology what it is, and leaves every color, size and shape to the

@@ -1,27 +1,14 @@
 # Coming from SwiftUI
 
 A guide for people and coding agents who know SwiftUI and are about to
-write a myphp view. Left is SwiftUI, right is the same thing in myphp;
-every PHP block runs headless in `tests/docs_examples_test.php` (see
-[Native UI](ui/README.md) for how to read the examples: `$c` is the view's
-`Context`, `$app` your state). `docs/mobile.md` covers what a phone adds;
-`docs/mygo-deviations.md` lists where myphp differs from mygo, the Go
-framework it ports.
+write a myphp view. myphp's views are SwiftUI's: the same names, argument
+labels and order, in PHP syntax. Left is SwiftUI, right is myphp; every PHP
+block runs headless in `tests/docs_examples_test.php`. In the blocks,
+`$app` is the state and `$view` what a view file returns. `docs/mobile.md`
+covers what a phone adds; `docs/mygo-deviations.md` lists where myphp
+differs from mygo, the Go framework it ports.
 
-## Three things to unlearn first
-
-SwiftUI keeps a tree of views with identity, diffs it, and calls back into
-your closures. myphp is **immediate mode**: the view function runs again
-for every frame, builds the tree from scratch, and the controls report what
-happened as return values.
-
-| SwiftUI | myphp |
-|---|---|
-| `body` returns a value; SwiftUI diffs it against the last one. | The view *builds*: `$c->column(); … $c->end();` adds nodes as it runs. Nothing is diffed; the whole tree is cheap to rebuild. |
-| `@State` lives on the view; SwiftUI owns it by the view's identity. | State is yours, in a plain object made once before the window opens. The view only reads and writes it. |
-| `Button("Save") { save() }` — an action closure, called later. | `if ($c->clicked($c->button('Save'))) { save(); }` — the click is this frame's return value; ordinary `if`, `return`, `break` work around it. |
-| A view's identity comes from its position, or `.id()`. | The same: a node is the one at the same place among its siblings, or `$c->key($id)->…` for rows that reorder. |
-| Modifiers return new views: `Text("a").bold()`. | Modifiers mutate and return the same node: `$c->text('a')->bold()`. Call them on the node the builder returned, in the same build. |
+## The shape of an app
 
 ```swift
 struct Counter: View {
@@ -37,394 +24,345 @@ struct Counter: View {
 
 ```php
 $app = new class { public int $n = 0; };
-$view = function (Context $c) use ($app) {
-    $c->column(gap: 12)->fill()->center();
-      $c->text((string)$app->n)->fontSize(34)->bold();
-      if ($c->clicked($c->primaryButton('Increment'))) {
-          $app->n++;
-      }
-    $c->end();
-};
+$view = fn() => VStack(spacing: 12)(
+    Text("{$app->n}")->font(Font::largeTitle)->bold(),
+    Button('Increment', action: fn() => $app->n++),
+);
 ```
 
-Indent what is inside a container by two spaces more, as above: the
-indentation is the view hierarchy, since there are no braces.
+In an app the state is a class of its own, and the view a file,
+`view.php`, that returns that closure with `$this` for `$app`
+(`Content::file(__DIR__ . '/view.php', $app)`): saved, it hot reloads with
+the state kept, as SwiftUI's previews and Flutter's hot reload do
+([view files](ui/views.md)). The view runs for every frame, as SwiftUI's
+body runs for every change: it reads the state and returns views; actions
+change the state.
 
-In an app the view is a file of its own, `view.php`, which returns that
-closure with `$this` for `$app` (`Content::file(__DIR__ . '/view.php',
-$app)`): saved, it hot reloads with the state kept, as SwiftUI's previews
-and Flutter's hot reload do ([view files](ui/views.md#view-files-and-hot-reload)).
+## Where PHP differs (the only differences)
+
+The rule: every SwiftUI view, modifier and pattern is written as SwiftUI
+writes it, in PHP syntax: the same names, the same argument labels, the
+same order. A difference needs a reason in PHP itself, listed here. A myphp
+view SwiftUI has no counterpart of (a terminal, a video player, a rating…)
+takes a SwiftUI-shaped name and its arguments as SwiftUI would name them.
+
+| SwiftUI | myphp | Why |
+|---|---|---|
+| `VStack(spacing: 12) { … }` | `VStack(spacing: 12)( … )` | No trailing closures; the second parentheses are the braces |
+| Children on lines, no separators | Children separated by commas | A PHP argument list |
+| `if cond { Text("a") }` in a builder | `$cond ? Text('a') : null` | No result builders: `null` is no view, an array is several |
+| `ForEach(items, id: \.id) { … }` | `Each($items, id: 'id')(fn(array $item) => …)` | `foreach` is a PHP keyword, any case |
+| `List { … }` | `ListView( … )` | `list` is a PHP keyword |
+| `Link("Docs", destination: url)` | `WebLink('Docs', destination: $url)` | PHP has a built-in `link()` |
+| `@State var n = 0` in the view | A property of the state class | A view is a closure, rebuilt every frame: state lives in the state object |
+| `$binding` | The property itself: `Toggle('Wi-Fi', isOn: $app->wifi)` | PHP passes by reference |
+| `.font(.largeTitle)` | `->font(Font::largeTitle)` | No implicit member expressions: the enum is named |
+| `"\(n)"` | `"{$app->n}"` | PHP's interpolation |
+| `struct Row: View` | `$row = fn(Todo $t) => …` in the view file | A class cannot be loaded twice: a closure hot reloads |
+
+`VStack`, `Text`, `Button`… are global functions and `Font`, `Color`,
+`Alignment`… global enums (`src/UI/Declarative/functions.php`, loaded with
+the framework): no `use` line, as SwiftUI needs no import beyond
+`SwiftUI`.
 
 ## State and data flow
 
 | SwiftUI | myphp |
 |---|---|
-| `@State var on = false` | A property on your state object: `public bool $on = false;` |
-| `@Binding var on: Bool`, passed as `$on` | Pass by reference: controls take `&$ref` (`$c->switch('Wi-Fi', $app->on)` writes through). A helper that edits a value takes `bool &$on`. |
-| `@StateObject` / `@ObservedObject` | An object held by your state, made once: `ListState`, `TextState`, `Router`, your own classes. Nothing to observe: the next frame reads it. |
-| `@Environment(\.colorScheme)` | `$c->theme->dark`; the theme is the environment: `$c->theme->accent`, `->text`, `->surface`. |
-| `.environment(\.theme, t)` for a subtree | `$c->themed($t); … $c->end();` |
-| `@FocusState` | `$c->focused($node)`; `Handle` + `->bind($h)` to move the focus from outside (see [Input](ui/input.md)). |
-| `onChange(of: value) { }` | `if ($c->changed($node)) { }` right after the control, or compare with the value before. |
-| `@AppStorage` | Read and write a file under `App::path(PathName::UserData)` yourself; nothing is magic. |
-
-The control writes the user's edit through the reference **before its
-builder returns**, so the next statement already sees the new value:
+| `@State var on = false` | A property of the state class: `public bool $on = false;` |
+| `@Binding var on: Bool`, passed as `$on` | The property itself, by reference: `Toggle('Wi-Fi', isOn: $app->on)`; `Binding(get:, set:)` for a computed one |
+| `@StateObject`, `@Observable` | An object your state holds. Nothing to observe: the next frame reads it |
+| `@Environment(\.colorScheme)` | `->preferredColorScheme()` to set it; the theme follows the system |
+| `@FocusState` | `->focused($app->editing)`, `->defaultFocus()` |
+| `onChange(of: value) { }` | `->onChange(of: $app->value, action: fn() => …)` |
+| `@AppStorage` | A file under `App::path(PathName::UserData)`, read when the state is made, written from its methods |
 
 ```php
-$app = new class { public bool $wifi = true; public float $volume = 0.5; };
-$view = function (Context $c) use ($app) {
-    $c->column(16, 8);
-      $c->switch('Wi-Fi', $app->wifi);
-      if ($app->wifi) {                       // sees this frame's edit
-          $c->slider($app->volume, 0, 1);
-      }
-      if ($c->changed($c->slider($app->volume, 0, 1))) {
-          // like onChange(of: volume)
-      }
-    $c->end();
-};
+$app = new class { public bool $wifi = true; public float $volume = 0.5; public int $changes = 0; };
+$view = fn() => Form()(
+    Toggle('Wi-Fi', isOn: $app->wifi),
+    $app->wifi ? Slider(value: $app->volume, in: [0, 1])->onChange(of: $app->volume, action: fn() => $app->changes++) : null,
+);
 ```
-
-A model object the view cannot reach by reference (an array element) is
-edited through a local, then stored back: see "Local copies" in
-[Views](ui/views.md).
 
 ## Layout
 
 | SwiftUI | myphp |
 |---|---|
-| `VStack(spacing: 8) { }` | `$c->column(gap: 8); … $c->end();` |
-| `HStack(spacing: 8) { }` | `$c->row(gap: 8); … $c->end();` |
-| `ZStack { }` | A container with `->absolute()` children, or a `->draw()` callback; there is no stacking container (see [Layout](ui/layout.md)). |
-| `Spacer()` | `$c->spacer()`; or `->grow(1)` on the child that should take the room. |
-| `.frame(width: 200, height: 44)` | `->size(200, 44)`; `->width(200)`, `->height(44)` alone. |
-| `.frame(maxWidth: .infinity)` | `->fillWidth()`; `->fill()` both ways; `->maxWidth(600)` a cap. |
-| `.frame(minWidth: 100)` | `->minWidth(100)` |
-| `.padding()` / `.padding(16)` / `.padding(.horizontal, 12)` | `->padding(8)` / `->padding(16)` / `->paddingX(12)`; `->padding($top, $right, $bottom, $left)` |
-| `alignment: .leading` on a VStack | `->alignItems(Node::START)`; `CENTER`, `END`, `STRETCH`, `BASELINE` |
-| `Spacer()` between to push apart | `->justify(Node::SPACE_BETWEEN)` on the container |
-| `.aspectRatio(16/9)` | `->aspectRatio(16 / 9)` |
-| `.offset(x: 10)` | `->translate(10, 0)` (visual only, as offset) |
-| `.overlay(alignment: .topTrailing) { Badge() }` | A child with `->absolute()->top(-4)->right(-6)` |
-| `.clipped()` | `->clip()` |
-| `GeometryReader` | `$c->width`, `$c->height` for the window; `$c->bounds($node)` for a node's last-frame rectangle. |
-| `LazyVGrid(columns:)` | `$c->grid(3, gap: 8)`, or `$c->gridView()` for thousands of items. |
-| `ScrollView { }` | `$c->scroll(); … $c->end();`, with a `ScrollState` to control the position. |
+| `VStack(alignment: .leading, spacing: 8) { }` | `VStack(alignment: HorizontalAlignment::leading, spacing: 8)( … )` |
+| `HStack`, `ZStack(alignment:)` | `HStack(alignment: VerticalAlignment::top)( … )`, `ZStack(alignment: Alignment::topTrailing)( … )` |
+| `Spacer()`, `Divider()` | `Spacer()`, `Divider()` |
+| `.frame(width: 200, height: 44)` | `->frame(width: 200, height: 44)` |
+| `.frame(maxWidth: .infinity, alignment: .leading)` | `->frame(maxWidth: INF, alignment: Alignment::leading)` |
+| `.padding()`, `.padding(.horizontal, 12)` | `->padding()`, `->padding(Edge::horizontal, 12)` |
+| `.offset(x: 10)` | `->offset(x: 10)` |
+| `.overlay(alignment: .topTrailing) { Badge() }` | `->overlay(Text('3'), alignment: Alignment::topTrailing)` |
+| `GeometryReader { proxy in }` | `GeometryReader(fn(GeometryProxy $proxy) => …)` |
+| `LazyVGrid(columns:)` | `LazyVGrid(columns: [GridItem::adaptive(minimum: 120)])( … )` |
+| `ScrollView { }` | `ScrollView()( … )`; `ScrollViewReader` to scroll to an id |
 
 ```php
-$view = function (Context $c) {
-    $c->row(12, 12)->alignItems(Node::CENTER)->fillWidth();
-      $c->text('Title')->bold();
-      $c->spacer();
-      $c->button('Edit');
-    $c->end();
-};
+$view = fn() => HStack(spacing: 12)(
+    Text('Title')->bold(),
+    Spacer(),
+    Button('Edit', action: fn() => null),
+)->padding()->frame(maxWidth: INF);
 ```
 
 ## Text and fonts
 
 | SwiftUI | myphp |
 |---|---|
-| `Text("Hi")` | `$c->text('Hi')` |
-| `.font(.title)`, `.font(.caption)` | `->preferredFont(Font::TITLE1)`, `->preferredFont(Font::CAPTION1)`: UIKit's names (`LARGE_TITLE`, `TITLE1`–`TITLE3`, `HEADLINE`, `BODY`, `CALLOUT`, `SUBHEADLINE`, `FOOTNOTE`, `CAPTION1`, `CAPTION2`), at the HIG's size for the platform, scaled with the system's text size; `->fontSize(28)` for a size in points |
-| `.bold()` / `.fontWeight(.semibold)` | `->bold()` / `->fontWeight(600)` |
-| `.italic()`, `.underline()`, `.strikethrough()` | the same names |
-| `.foregroundStyle(.secondary)` | `->textColor($c->theme->textMuted)` |
-| `.foregroundStyle(.red)` | `->textColor(0xff3b30)`; prefer the theme's `danger`. |
-| `.multilineTextAlignment(.center)` | `->textAlign(Node::CENTER)` |
-| `.lineLimit(2)` | `->maxLines(2)`; `->singleLine()` cuts with an ellipsis. |
-| `.monospaced()` | `$c->text($s, style: Font::MONO)` |
-| `.fontDesign(.rounded)`, custom fonts | `->font('Family')` after `Font::register()` (see [Text](ui/text.md)). |
-| `.kerning(1)` | `->letterSpacing(1)` |
-| `Text` with markdown / attributed strings | `$c->richText()` (see [Text](ui/text.md#rich-text)) |
-| `Label("Save", systemImage: "square.and.arrow.down")` | A row of `$c->icon($svg)` and `$c->text()`; `Image::symbol('square.and.arrow.down', 17)` is the SF Symbol itself on Apple platforms, the GTK theme's icon on Linux. |
+| `Text("Hi")`, `Text(verbatim:)` | `Text('Hi')` (looked up in the app's strings), `Text(verbatim: $s)` |
+| `.font(.title)`, `.font(.caption)` | `->font(Font::title)`, `->font(Font::caption)`: the text styles, at the platform's size, scaled with the system's text size; `->font(Font::system(size: 28))` |
+| `.bold()`, `.fontWeight(.semibold)` | `->bold()`, `->fontWeight(Weight::semibold)` |
+| `.italic()`, `.underline()`, `.strikethrough()`, `.monospaced()` | the same names |
+| `.foregroundStyle(.secondary)` | `->foregroundStyle(Color::secondary)` |
+| `.multilineTextAlignment(.center)`, `.lineLimit(2)` | `->multilineTextAlignment(TextAlignment::center)`, `->lineLimit(2)` |
+| `.textSelection(.enabled)` | `->textSelection(TextSelectability::enabled)` |
+| Markdown | `Markdown($text)` (and `streaming: true` while it arrives) |
+| `Label("Save", systemImage: "square.and.arrow.down")` | the same: an SF Symbol on Apple platforms, the GTK theme's icon on Linux, a Material Symbol on Android |
 
 ```php
-$view = function (Context $c) {
-    $t = $c->theme;
-    $c->column(gap: 4);
-      $c->text('Settings')->fontSize(28)->bold();
-      $c->text('12 files, 3.4 MB')->fontSize(15)->textColor($t->textMuted);
-      $c->text('A long description that wraps and is cut after two lines.')->maxLines(2);
-    $c->end();
-};
+$view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+    Text('Settings')->font(Font::largeTitle)->bold(),
+    Text('12 files, 3.4 MB')->foregroundStyle(Color::secondary),
+    Text('A long description that wraps and is cut after two lines.')->lineLimit(2),
+);
 ```
 
 ## Colors, backgrounds and materials
 
 | SwiftUI | myphp |
 |---|---|
-| `Color.accentColor` | `$c->theme->accent` (follows the system's accent) |
-| `Color(.label)` / `.secondaryLabel` | `$c->theme->text` / `->textMuted` |
-| `Color(.systemBackground)` / `.secondarySystemBackground` | `$c->theme->background` / `->surface` |
-| `Color(.separator)` | `$c->theme->border` |
-| `.red`, `.orange`, `.green` as meaning | `->danger`, `->warning`, `->success` |
-| `.background(.blue)` | `->background(0x0a84ff)`; colors are `0xRRGGBB` ints, alpha a second argument. |
-| `.background(.regularMaterial)` / `.glassEffect()` | `->systemMaterial('sidebar')`, `'popover'`, `'hud'`… (an NSVisualEffectView on macOS), `->systemMaterial('glass')` (Liquid Glass on macOS 26; myphp's own glass elsewhere) |
-| `.cornerRadius(12)` / `.clipShape(RoundedRectangle(cornerRadius: 12))` | `->radius(12)`; `->radius($tl, $tr, $br, $bl)` per corner |
-| `.border(.gray)` | `->border(1, $c->theme->border)` |
-| `.shadow(radius: 8, y: 4)` | `->shadow(0, 4, 8, 0, 0x000000, 0.2)` |
-| `.opacity(0.5)` | `->opacity(0.5)` |
-| `LinearGradient(...)` | `->gradient($from, $to, $angle)`, `->linearGradient(new LinearGradient(…))` |
-| `preferredColorScheme(.dark)` | the same in a declarative view, or `App::setColorScheme(true)` (null follows the system): the platform's theme in that appearance; `$c->themed(Theme::dark())` for a part. |
-| `dynamicTypeSize(.xxLarge)` | the same in a declarative view, or `App::setTextScale(DynamicTypeSize::xxLarge->scale())` (null follows the system's text size). |
-| `tabBarMinimizeBehavior(.onScrollDown)` | the same on a `TabView`: a phone's tab bar shrinks to the chosen tab as the page scrolls down, a tap brings it back (iOS 26's). |
-| `Tab(value:role: .search)` | `Tab(value: 'search', role: TabRole::search)`: titled Search with a magnifying glass, in the tab bar with the others (iOS 27's). |
-| `Tab(_:systemImage:value:role: .prominent)` | `role: TabRole::prominent`: apart at the end of a phone's tab bar, a circle of glass (iOS 27's; iOS 26's search tab). |
-| `Button("Copy", systemImage: "doc.on.doc") { … }` | `Button('Copy', action: …, systemImage: 'doc.on.doc')`: its label a Label of the title and the symbol; in a phone's context menu the item's icon at its start. |
-| `.searchScopes($scope) { … }` | `->searchable($this->query)->searchScopes($this->scope, Text('All')->tag('all'), …)`: a segmented control across under the search field. |
-| `.presentationDetents([.medium, .large])` | the same on a sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]`, `::fraction(0.3)`, `::height(200)`; a drag moves the sheet between them, down past the smallest closes it. |
-
-Take colors from `$c->theme` rather than literals: the theme switches with
-the system's appearance, accent, contrast and text size (see
-[Styling](ui/styling.md#themes)).
+| `Color.accentColor`, `.primary`, `.secondary` | `Color::accentColor`, `Color::primary`, `Color::secondary` |
+| `Color(.systemBackground)`, `Color(.secondarySystemBackground)` | `Color::systemBackground`, `Color::secondarySystemBackground` (and the grouped ones, `::label`, `::separator`, `::systemGray`…) |
+| `.red`, `.orange`, `.green` | `Color::red`, `Color::orange`, `Color::green` |
+| A color of the app's own | `Color::rgb(0x336699)` |
+| `.background(.blue)`, `.background { … }` | `->background(Color::blue)`, `->background($view)` |
+| `.glassEffect()`, `.background(.regularMaterial)` | `->glassEffect($material)`; a window's `vibrancy:` for the window's material |
+| `.cornerRadius(12)`, `.clipShape(RoundedRectangle(cornerRadius: 12))` | the same |
+| `.border(.gray)`, `.shadow(radius: 8, y: 4)`, `.opacity(0.5)` | `->border(Color::separator)`, `->shadow(radius: 8, y: 4)`, `->opacity(0.5)` |
+| `preferredColorScheme(.dark)` | the same: `->preferredColorScheme(ColorScheme::dark)`, or `App::setColorScheme(true)` (null follows the system) |
+| `dynamicTypeSize(.xxLarge)` | the same, or `App::setTextScale(DynamicTypeSize::xxLarge->scale())` |
 
 ```php
-$view = function (Context $c) {
-    $t = $c->theme;
-    $c->column(16, 8)->background($t->surface)->radius(12)->border(1, $t->border);
-      $c->text('Card')->bold();
-      $c->text('Follows light and dark mode')->textColor($t->textMuted);
-    $c->end();
-};
+$view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+    Text('Card')->bold(),
+    Text('Follows light and dark mode')->foregroundStyle(Color::secondary),
+)->padding()->background(Color::secondarySystemBackground)->cornerRadius(12);
 ```
+
+The named colors follow the system's appearance, accent and contrast (see
+[Styling](ui/styling.md)); take a literal only for data, a chart's series
+or a user's tag.
 
 ## Controls
 
 | SwiftUI | myphp |
 |---|---|
-| `Button("Save") { }` | `if ($c->clicked($c->button('Save'))) { }` |
-| `Button("Save") { }.buttonStyle(.borderedProminent)` | `$c->primaryButton('Save')` |
-| `.disabled(busy)` | `->disabled($busy)` |
-| `Toggle("Wi-Fi", isOn: $on)` | `$c->switch('Wi-Fi', $app->on)`; `$c->checkbox()` for a check box |
-| `Slider(value: $v, in: 0...1)` | `$c->slider($app->v, 0, 1)` |
-| `Stepper(value: $n, in: 1...10)` | `$c->stepper($app->n, 1, 10)` |
-| `Picker(selection:) { }.pickerStyle(.segmented)` | `$c->segmented(['Day', 'Week'], $app->index)` |
-| `Picker(selection:) { }.pickerStyle(.menu)` | `$c->select(['Small', 'Large'], $app->index)` |
-| `TextField("Name", text: $name)` | `$c->input($app->name, 'Name')` with a `TextState` (its `->text` is the string) |
-| `.onSubmit { }` | `if ($c->submitted($field)) { }` |
-| `SecureField` | `$c->input($state)->password()` |
-| `TextEditor(text:)` | `$c->textarea($app->notes)` |
-| `DatePicker` | `$c->dateInput()`, `$c->calendar()`, `$c->timeInput()` |
-| `ColorPicker` | `$c->colorPicker()`, `$c->colorWell()` |
-| `ProgressView()` / `ProgressView(value:)` | `$c->spinner()` / `$c->progress($fraction)` |
-| `Link("Site", destination:)` | `$c->link('Site', 'https://…')` |
-| `Menu("Sort") { Button("Name") { } }` | `$c->menuButton('Sort', function (Menu $m) { if ($m->item('Name')->chosen()) { … } })` |
-| `.contextMenu { }` | `$node->contextMenu(function (Menu $m) { … })` |
-| `Image(systemName:)` / `Image("asset")` | `$c->icon($svg)` for an SVG in the text's color; `$c->image(Image::fromFile(…))` for a picture |
-| `.help("tip")` | `->tooltip('tip')` |
-| `.accessibilityLabel("Close")` | `->label('Close')`; `->role(Role::BUTTON)` (see [Accessibility](ui/accessibility.md)) |
-| `Form { Section("Account") { } }` | `$c->form(fn() => …)`, `$c->field('Label', fn() => …)`, `$c->fieldset()` (see [Form](ui/form.md)) |
+| `Button("Save") { save() }` | `Button('Save', action: fn() => $app->save())` |
+| `Button("Copy", systemImage: "doc.on.doc") { }` | `Button('Copy', action: …, systemImage: 'doc.on.doc')`: a Label of the title and the symbol; in a phone's context menu the item's icon |
+| `Button(role: .destructive)`, `.buttonStyle(.borderedProminent)` | `role: ButtonRole::destructive`, `->buttonStyle(ButtonStyle::borderedProminent)` (`::bordered`, `::borderless`, `::plain`) |
+| `.disabled(busy)`, `.keyboardShortcut("s")` | `->disabled($busy)`, `->keyboardShortcut('s')`; `->keyboardShortcut(KeyEquivalent::return, modifiers: [])` |
+| `Toggle("Wi-Fi", isOn: $on)` | `Toggle('Wi-Fi', isOn: $app->on)`: a switch on a phone, a checkbox on a Mac; `->toggleStyle(ToggleStyle::switch)` |
+| `Slider(value: $v, in: 0...1)` | `Slider(value: $app->v, in: [0, 1])` |
+| `Stepper("Copies", value: $n, in: 1...10)` | `Stepper('Copies', value: $app->n, in: [1, 10])` |
+| `Picker("Plan", selection: $plan) { Text("Free").tag(0) }` | `Picker('Plan', selection: $app->plan)(Text('Free')->tag(0), …)`, `->pickerStyle(PickerStyle::segmented)` (`::menu`, `::radioGroup`, `::inline`) |
+| `TextField("Name", text: $name)`, `.onSubmit { }` | `TextField('Name', text: $app->name)->onSubmit(fn() => …)`; `prompt:`, `axis: Axis::vertical` |
+| `SecureField`, `TextEditor(text:)` | `SecureField('Password', text: $app->password)`, `TextEditor(text: $app->notes)` |
+| `DatePicker`, `ColorPicker` | `DatePicker('Due', selection: $app->due)`, `ColorPicker('Tint', selection: $app->rgb)` |
+| `ProgressView()`, `ProgressView(value:)`, `Gauge` | the same |
+| `Link("Site", destination:)` | `WebLink('Site', destination: 'https://…')` |
+| `Menu("Sort") { Button("Name") { } }` | `Menu('Sort')(Button('Name', action: …), …)` |
+| `.contextMenu { }` | `->contextMenu(Button(…), Divider(), …)`: a right click on a Mac, a long press on a phone |
+| `Image(systemName:)`, `Image("asset")` | `Image(systemName: 'gearshape')`, `Image(file: $path)`, `Image($svg)` |
+| `.help("tip")`, `.accessibilityLabel("Close")` | the same names |
+| `Form { Section("Account") { LabeledContent("Version", value: "1.0") } }` | `Form()(Section('Account')(LabeledContent('Version', '1.0')))` |
 
 ```php
-$app = new class {
-    public TextState $name; public int $plan = 0; public bool $news = false;
-    public function __construct() { $this->name = new TextState(); }
-};
-$view = function (Context $c) use ($app) {
-    $c->form(function () use ($c, $app) {
-        $c->field('Name', fn() => $c->input($app->name, 'Your name'));
-        $c->field('Plan', fn() => $c->segmented(['Free', 'Pro'], $app->plan));
-        $c->field('', fn() => $c->checkbox('Send me news', $app->news));
-    });
-};
+$app = new class { public string $name = ''; public int $plan = 0; public bool $news = false; };
+$view = fn() => Form()(
+    Section('Account')(
+        TextField('Name', text: $app->name, prompt: 'Your name'),
+        Picker('Plan', selection: $app->plan)(Text('Free')->tag(0), Text('Pro')->tag(1))->pickerStyle(PickerStyle::segmented),
+        Toggle('Send me news', isOn: $app->news),
+    ),
+);
 ```
+
+myphp's own controls AppKit has and SwiftUI has not, SwiftUI-shaped:
+`ComboBox(title, text:, items:)`, `TokenField(title, tokens:,
+suggestions:)`, `Rating(title, value:)`, `RangeSlider(lower:, upper:,
+in:)`, `Breadcrumbs(path, selection:)`, `Avatar(name)`, `SearchField(text:)`;
+and the views of what the framework does: `VideoPlayer`, `WebView`,
+`TerminalView`, `CodeEditor`, `DiffView`, `Markdown`, `SpriteView`.
 
 ## Lists and collections
 
 | SwiftUI | myphp |
 |---|---|
-| `List(items) { Row($0) }` | `$c->list($state, count($items), fn(int $i) => …)` builds only the rows in view, for millions of rows |
-| `ForEach(items, id: \.id) { }` in a `VStack` | `foreach ($items as $it) { $c->key($it['id'])->row(); … $c->end(); }` — the key keeps identity as rows reorder |
-| `.swipeActions { Button(role: .destructive) }`, `.onDelete` | `$c->swipeActions($action, fn() => …, 'Flag', '!Delete')` on the row; `$action` is the index tapped, a full swipe performs the first (see [mobile.md](mobile.md)) |
-| `List` selection | `ListState::$selected` and the state's selection methods (see [List](ui/list.md)) |
-| `Section("Today") { }` in a `List`/`Form` | `$c->section('Today', fn() => …, $footer)`: the inset grouped section of Settings, with `$c->cell($title, $detail, $disclosure)` rows (see [mobile.md](mobile.md)) |
-| `LabeledContent("Size", value: "2 KB")`, a `NavigationLink` row | `$c->cell('Size', '2 KB')`; `$c->cell('About', disclosure: true)` and `$c->clicked()` on it |
-| `LazyVGrid` of photos | `$c->gridView($gridState, $n, 140, 120, fn(int $i) => …)` |
-| `.refreshable { await load() }` | `$c->refreshable($scrollState, $app->refreshing, fn() => …)`: pulled down past 60 points it sets `$refreshing`, the app clears it when its work is done (see [mobile.md](mobile.md)) |
-| `.searchable(text:)` | `$c->searchField($state)` above the list |
-| `Table(rows) { TableColumn("Name") }` | `$c->table()` (see [Table](ui/table.md)) |
-| `OutlineGroup` / `DisclosureGroup` | `$c->tree()`, `$c->outline()`, `$c->collapsible()` |
+| `List(items) { Row($0) }` | `ListView($items, id: 'id')(fn(array $item, int $i) => …)`: only the rows in view are built, for millions of rows |
+| `List(selection: $chosen)` | `ListView($items, id: 'id', selection: $app->chosen)` |
+| `ForEach(items, id: \.id) { }` | `Each($items, id: 'id')(fn(array $item) => …)` |
+| `.swipeActions { Button(role: .destructive) }` | `->swipeActions(Button('Delete', role: ButtonRole::destructive, action: …))` on a row: a full swipe performs the first |
+| `.onMove` | `->onMove(fn(array $from, int $to) => …)` on the list |
+| `Section("Today") { }`, `.listStyle(.plain)` | `Section('Today')( … )`, `->listStyle(ListStyle::plain)` |
+| `.refreshable { await load() }` | `->refreshable(fn() => $app->reload())` |
+| `.searchable(text:)`, `.searchScopes` | `->searchable($app->query)`, `->searchScopes($app->scope, Text('All')->tag('all'), …)` |
+| `Table(rows) { TableColumn("Name", value: \.name) }` | `Table($rows, id: 'id')(TableColumn('Name', value: 'name'), …)` |
+| `DisclosureGroup`, `OutlineGroup` | `DisclosureGroup('More', isExpanded: $app->open)( … )`, nested for an outline |
+| `LazyVGrid` of photos | `LazyVGrid(columns: [GridItem::adaptive(minimum: 140)])(Each($photos)(…))` |
 
 ```php
 $app = new class {
-    public ListState $list; public array $files;
-    public function __construct() { $this->list = new ListState(); $this->files = array_map(fn($i) => "file-$i.txt", range(1, 10_000)); }
+    public array $files;
+    public function __construct() { $this->files = array_map(fn($i) => ['id' => $i, 'name' => "file-$i.txt"], range(1, 10_000)); }
 };
-$view = function (Context $c) use ($app) {
-    $c->list($app->list, count($app->files), function (int $i) use ($c, $app) {
-        $c->row(gap: 8)->padding(6, 12);
-          $c->text($app->files[$i])->grow(1);
-          $c->text('2 KB')->textColor($c->theme->textMuted);
-        $c->end();
-    })->grow(1);
-};
+$view = fn() => ListView($app->files, id: 'id')(fn(array $f) => HStack()(
+    Text(verbatim: $f['name']),
+    Spacer(),
+    Text('2 KB')->foregroundStyle(Color::secondary),
+));
 ```
 
 ## Navigation
 
 | SwiftUI | myphp |
 |---|---|
-| `NavigationStack(path: $path) { }` | `new Router('/')` held in your state; `$router->view($c, ['/notes' => …, '/notes/{id}' => …])` builds the page shown |
-| `.navigationDestination(for:) { NoteView(id: $0) }` | A row of that table: `'/notes/{id}' => __DIR__ . '/pages/note.php'`, the file returning `function (Context $c, Route $r, int $id): void`, as a `View` struct of its own; `{id}` comes by name, typed |
-| `NavigationLink(value:)` / `path.append()` | `$router->push('/note/42')` |
-| `dismiss()` / the back button | `$router->back()`; `$c->backButton()` draws one; `navigationBar()` on phones |
-| `.navigationTitle("Notes")` | `$r->title('Notes')` |
-| `.navigationBarTitleDisplayMode(.large)` | `$c->largeTitle('Notes')` first in the page's scroll, and that scroll's `ScrollState` as `navigationBar()`'s fourth argument |
-| The edge swipe back | Built in: on a touch screen a `Router` with a page to go back to follows a finger from the start edge |
-| `NavigationSplitView { sidebar } detail: { }` | A row of `$c->sidebar($selected, fn() => $c->sidebarItem('/notes', 'Notes'))` and `$router->view()` (see [Navigation](ui/navigation.md)) |
-| `TabView { }` | `$c->tabs(['A', 'B'], $index)` on the desktop; `$c->tabView($items, $index, $content)` adapts as `TabView(.sidebarAdaptable)` does: bottom bar on a phone, top on an iPad upright, sidebar otherwise |
-| `.transition(.slide)` on pages | Built in: pages slide from the right and the one behind dims; `$router->transition`, `$router->animation` change it |
+| `NavigationStack(path: $path) { root }` | `NavigationStack(path: $app->path)( root )`, `$app->path` a `Router` |
+| `.navigationDestination(for:) { NoteView(id: $0) }` | `->navigationDestination(for: '/notes/{id}', destination: __DIR__ . '/pages/note.php')`, the file returning `fn(int $id) => …`; `{id}` comes by name, typed |
+| `NavigationLink("Note", value: note)` | `NavigationLink('Note', value: "/notes/$id")`; `$app->path->push(…)` from an action |
+| `dismiss()`, the back button | `$app->path->back()`; the bar's back button and the edge swipe are built in |
+| `.navigationTitle("Notes")`, `.toolbar { }` | the same: `->navigationTitle('Notes')`, `->toolbar(Button(…), …)` |
+| `.navigationBarTitleDisplayMode(.large)` | `->navigationBarTitleDisplayMode(TitleDisplayMode::large)` |
+| `NavigationSplitView { sidebar } detail: { }` | `NavigationSplitView(ListView(…), $detail)`, for a sidebar of the app's data |
+| `TabView { Tab("A", systemImage:, value:) { } }` | `TabView(selection: $app->tab)(Tab('A', systemImage: 'house', value: 'a')( … ), …)`; `->tabViewStyle(TabViewStyle::sidebarAdaptable)` for every screen; `->tabBarMinimizeBehavior(TabBarMinimizeBehavior::onScrollDown)` |
+| `Tab(value:role: .search)`, `role: .prominent` | `Tab(value: 'search', role: TabRole::search)`: titled Search, in the bar with the others (iOS 27's); `TabRole::prominent` apart at the bar's end |
 
 ```php
 $app = new class {
-    public Router $router;
-    public function __construct() { $this->router = new Router('/notes'); }
+    public Router $path; public array $notes = [42 => 'Groceries', 7 => 'Ideas'];
+    public function __construct() { $this->path = new Router('/'); }
 };
-$view = function (Context $c) use ($app) {
-    $app->router->view($c, [ // in an app each page a file of pages/, which hot reloads (ui/navigation.md)
-        '/notes' => function (Context $c, Route $r) use ($app) {
-            $r->title('Notes');
-            if ($c->clicked($c->button('Open note 42'))) { $app->router->push('/notes/42'); }
-        },
-        '/notes/{id}' => function (Context $c, Route $r, int $id) use ($app) {
-            $r->title("Note $id");
-            if ($c->clicked($c->button('Back'))) { $app->router->back(); }
-        },
-    ]);
-};
+$view = fn() => NavigationStack(path: $app->path)(
+    ListView()(Each($app->notes)(fn(string $title, int $id) => NavigationLink($title, value: "/notes/$id")))->navigationTitle('Notes'),
+)->navigationDestination(for: '/notes/{id}', destination: fn(int $id) => Text($app->notes[$id] ?? '')->navigationTitle('Note'));
 ```
 
 ## Sheets, alerts, popovers and menus
 
-A SwiftUI presentation is driven by an `isPresented` binding; so is
-myphp's, as `bool &$open`. The control sets it back to false when the user
-dismisses it.
+A presentation is driven by an `isPresented` binding, as SwiftUI's: a
+property the control sets back to false when the user dismisses it.
 
 | SwiftUI | myphp |
 |---|---|
-| `.sheet(isPresented: $open) { }` | `$c->modal($open, fn() => …)` on the desktop; `$c->sheet($open, fn() => …)` rises from the bottom on phones |
-| `.fullScreenCover` | A page of the router |
-| `.alert("Title", isPresented:) { Button("OK") {} }` | `$c->alertDialog($open, 'Title', 'Message', 'Cancel', 'Delete')` returns the index of the button pressed, −1 while open |
-| `.confirmationDialog` | `$c->actionSheet($open, 'Title', 'Save', '!Delete')` on phones (`!` marks destructive) |
-| `.popover(isPresented:)` | `$c->popover($anchor, $open, fn() => …)` |
-| `Menu { }` | `$c->menuButton()`, `$node->menu()`, `$node->contextMenu()` |
-| A toast / banner (no SwiftUI equivalent) | `$c->toast('Saved')` |
-| `.interactiveDismissDisabled()` | Not yet. |
+| `.sheet(isPresented: $open) { }` | `->sheet(isPresented: $app->open, content: fn() => …)`: a dialog on the desktop, a sheet from the bottom on a phone, a page sheet on an iPad |
+| `.presentationDetents([.medium, .large])` | the same on the sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]` |
+| `.alert("Title", isPresented:) { Button("OK") {} } message: { }` | `->alert('Title', isPresented: $app->asking, actions: [Button(…), …], message: '…')` |
+| `.confirmationDialog` | `->confirmationDialog('Title', isPresented: $app->asking, actions: [Button(…), Button('Cancel', role: ButtonRole::cancel)])` |
+| `.popover(isPresented:)` | `->popover(isPresented: $app->open, content: fn() => …)` |
+| A toast (no SwiftUI equivalent) | `->toast($app->message)`: shows while the message is set |
 
 ```php
-$app = new class { public bool $confirm = false; public int $deleted = 0; };
-$view = function (Context $c) use ($app) {
-    if ($c->clicked($c->button('Delete…'))) { $app->confirm = true; }
-    $choice = $c->alertDialog($app->confirm, 'Delete the note?', 'This cannot be undone.', 'Cancel', 'Delete');
-    if ($choice === 1) { $app->deleted++; }
-};
+$app = new class { public bool $asking = false; public int $deleted = 0; };
+$view = fn() => Button('Delete…', role: ButtonRole::destructive, action: fn() => $app->asking = true)
+    ->alert('Delete the note?', isPresented: $app->asking, actions: [
+        Button('Delete', role: ButtonRole::destructive, action: fn() => $app->deleted++),
+        Button('Cancel', role: ButtonRole::cancel),
+    ], message: 'This cannot be undone.');
 ```
 
 ## Animation
 
-SwiftUI animates the difference between two states. myphp does the same
-in two ways: a **transition** on a node animates its position, size and
-colors as the layout changes them; an **animated value** eases a number
-you then use anywhere.
-
 | SwiftUI | myphp |
 |---|---|
-| `withAnimation { open.toggle() }` | Set the state; put `$c->transition($node, $t)` on the nodes that should move smoothly |
-| `.animation(.spring, value: x)` | `$c->animateTo($node, 'x', $target, Animation::snappy())` returns this frame's value |
-| `.spring(duration: 0.5, bounce: 0.2)` | `new Animation(spring: new SpringOptions(duration: 0.5, bounce: 0.2))` — the same parameters |
-| `.easeOut(duration: 0.2)` | `new Animation(duration: 0.2, ease: Easing::easeOut(...))`; `$c->animate($n, 'k', $target, 0.2)` for short |
+| `withAnimation { open.toggle() }` | `withAnimation(Animation::snappy(), fn() => $app->open = !$app->open)` |
+| `.animation(.spring, value: x)` | `->animation(Animation::smooth(), value: $app->x)` |
+| `.spring(duration: 0.5, bounce: 0.2)` | `new Animation(spring: new SpringOptions(duration: 0.5, bounce: 0.2))` |
 | `.smooth`, `.snappy`, `.bouncy` | `Animation::smooth()`, `::snappy()`, `::bouncy()` |
-| `.transition(.move(edge:))` / `.opacity` | `new ElementTransition(enter: new TransitionMotion(collapse: true), exit: …)` (see [Transitions](ui/transitions.md)) |
-| `.matchedGeometryEffect` | A `$c->key()` kept across two places and a transition on the node |
-| `.scaleEffect`, `.rotationEffect`, `.offset` | `->scale()`, `->rotate()`, `->translate()`, fed an animated value |
-| `TimelineView`, `.phaseAnimator`, `.keyframeAnimator` | `Timeline`, `KeyframeSequence` (see [Motion](ui/motion.md)) |
-| `UIAccessibility.isReduceMotionEnabled` | Honored by every built-in motion; your own reads `$c->runtime->reduceMotion` |
-| `.sensoryFeedback(.success, trigger: saved)` | `Haptics::success()` in the action that saved; `Haptics::impact('light')`, `::selection()`, `::warning()`, `::error()` |
+| `.transition(.opacity)`, `.matchedGeometryEffect` | `->transition(AnyTransition::opacity())`, `->matchedGeometryEffect(id: 'card', in: 'ns')` |
+| `.scaleEffect`, `.rotationEffect`, `.offset` | the same names |
+| `TimelineView(.animation)`, `.keyframeAnimator` | `TimelineView()(fn(TimelineViewContext $context) => …)`, `KeyframeAnimator(…)` |
+| Reduce Motion | Honored by every built-in motion |
+| `.sensoryFeedback(.success, trigger: saved)` | `Haptics::success()` in the action that saved; `Haptics::impact('light')`, `::selection()` |
 
 ```php
 $app = new class { public bool $open = false; };
-$view = function (Context $c) use ($app) {
-    if ($c->clicked($c->button('Toggle'))) { $app->open = !$app->open; }
-    $card = $c->column()->size(120, 80)->radius(12)->background($c->theme->accent);
-    $c->end();
-    $x = $c->animateTo($card, 'x', $app->open ? 200 : 0, Animation::snappy());
-    $card->translate($x, 0);
-};
+$view = fn() => VStack(spacing: 12)(
+    Button('Toggle', action: fn() => $app->open = !$app->open),
+    RoundedRectangle(cornerRadius: 12)->fill(Color::accentColor)->frame(width: 120, height: 80)
+        ->offset(x: $app->open ? 100 : 0)->animation(Animation::snappy(), value: $app->open),
+);
 ```
 
 ## Lifecycle, time and async
 
 | SwiftUI | myphp |
 |---|---|
-| `.onAppear { }` | The first frame the node is built: keep a flag in your state, or do the work when the state is made. |
-| `.task { await load() }` | `App::go(function () { $data = Http::get($url); … })` runs in a fiber; what waits yields to the run loop. Start it from an action or when the state is made, not from the view, which runs every frame. |
-| `Timer.publish` / `.task` with `sleep` | `$c->after(1.0)` asks for a frame in a second; `$c->now()` is the frame's time in ms; `$c->animationFrame()` the next frame. |
-| `@MainActor` | Everything already is: PHP runs the app on one thread. Never block it; what waits goes in `App::go()`, heavy CPU work in a child process (see [app.md](app.md#one-thread)). |
-| `URLSession` | `Http::get()`, `Http::post()`, whose response has `->status`, `->body`, `->json()`; the fetch plugin for a browser-like API |
+| `.onAppear { }`, `.onDisappear { }` | the same |
+| `.task { await load() }` | `->task(fn() => $app->load())`: a fiber, started as the view appears; inside it `Http::get()` waits without stopping the window |
+| `Timer.publish`, `TimelineView(.periodic)` | `TimelineView()(fn(TimelineViewContext $context) => …)` |
+| `@MainActor` | Everything already is: PHP runs the app on one thread. What waits goes in a fiber (`App::go()`), heavy CPU work in a child process (see [app.md](app.md)) |
+| `URLSession` | `Http::get()`, `Http::post()`, whose response has `->status`, `->body`, `->json()` |
 | `scenePhase` | `App::onActivate()`, the window's events (see [The application](app.md)) |
 
 <!-- no-test -->
 ```php
-$app = new class { public array $items = []; public bool $loading = false; };
-$view = function (Context $c) use ($app) {
-    if ($c->clicked($c->button('Reload')) && !$app->loading) {
-        $app->loading = true;
-        App::go(function () use ($app) {
-            $app->items = Http::get('https://example.com/items')->json();
-            $app->loading = false;              // the next frame shows it
-        });
-    }
-    if ($app->loading) { $c->spinner(); }
+$app = new class {
+    public array $items = []; public bool $loading = false;
+    public function load(): void { $this->loading = true; $this->items = Http::get('https://example.com/items')->json(); $this->loading = false; }
 };
+$view = fn() => VStack()(
+    $app->loading ? ProgressView() : ListView($app->items)(fn(string $item) => Text(verbatim: $item)),
+)->task(fn() => $app->load());
 ```
+
+## Beyond the views
+
+What no view does: `Canvas(fn(GraphicsContext $g, CGSize $size) => …)`
+draws, as SwiftUI's; `Representable(fn(Context $c) => …)` is a control of
+your own, made with the engine's builder inside one view, as
+`NSViewRepresentable` (see [Custom widgets](ui/custom-widgets.md)).
 
 ## Platform behavior you get for free
 
 - **Light and dark mode**, the system's accent, higher contrast and larger
-  text: the theme follows them (`Theme::follow`). On phones, Dynamic Type
-  (iOS's Text Size, Android's Font size) scales the theme's text and every
-  `preferredFont()` style as the setting changes.
+  text: the named colors and the text styles follow them. On phones,
+  Dynamic Type (iOS's Text Size, Android's Font size) scales every
+  `Font` style as the setting changes.
 - **Reduce Motion** (iOS; Android's "Remove animations"): springs,
   transitions and page slides settle at once.
-- **Right to left**: `paddingStart()`, `marginEnd()`, `Node::START` are
-  logical; rows mirror (see [Right to left](ui/right-to-left.md)).
-- **Accessibility**: nodes with a role and label are read by VoiceOver on
-  macOS (see [Accessibility](ui/accessibility.md)).
-- **On phones**: touch, the safe area, the keyboard, Back, the pickers
-  (see [Android and iOS](mobile.md)).
+- **Right to left**: `leading` and `trailing` follow the language; rows
+  mirror (see [Right to left](ui/right-to-left.md)).
+- **Accessibility**: views are read by VoiceOver and TalkBack by their
+  text and `accessibilityLabel` (see [Accessibility](ui/accessibility.md)).
+- **On phones**: touch, the safe area, the keyboard, Back, the pickers,
+  long press and swipes (see [Android and iOS](mobile.md)).
 
 ## Not in myphp yet
 
-What a SwiftUI developer will reach for and not find, and what to do
-instead. Each is a candidate for the framework; until then:
-
 | SwiftUI | Instead |
 |---|---|
-| `ZStack` | `->absolute()` children, `->draw()` |
-| `.interactiveDismissDisabled`, `.presentationDetents` | A `modal()`/`sheet()` has one size and dismisses on tap outside |
-| `Canvas` | `->draw(fn(Painter $p, array $rect) => …)` and `Canvas` (see [Drawing](ui/drawing.md)) |
-| `Chart` | `MyPHP\UI\Chart` (see [Chart](ui/chart.md)) |
+| `.interactiveDismissDisabled` | A sheet dismisses on a tap outside or a drag down |
 | `PhotosPicker`, `fileImporter` | `Dialog::open()` with filters: pictures open the photo picker on phones |
 | `ShareLink` | Not yet |
 | `WidgetKit`, `App Intents`, `Live Activities` | Out of scope |
 
 ## Checklist for an agent writing a myphp view
 
-1. State is a class made once; the view is `view.php`, a file of
-   closures returning `function (Context $c): void`, `$this` the state
-   (`Content::file()`). Never make a `TextState`, `ListState` or `Router`
-   inside the view, nor a named class or function in `view.php`.
-2. Open containers with `$c->column()` / `row()` / `scroll()`, close each
-   with `$c->end()`, indent the inside by two spaces.
-3. Controls that edit take `&$ref`; ask `$c->clicked()`, `changed()`,
-   `submitted()`, `dismissed()` on the node the builder returned, in the
-   same build.
-4. Rows that reorder get `$c->key($id)` before the builder.
-5. Colors and sizes come from `$c->theme`; literal hex only for data (a
-   chart's series, a user's tag color).
-6. Mobile-only widgets (`tabView`, `navigationBar`, `sheet`,
-   `actionSheet`, `safeArea`) are named and sized after UIKit; check
-   `docs/mobile.md` before inventing one.
+1. State is a class made once; the view is `view.php`, returning `fn() =>
+   …`, `$this` the state (`Content::file()`). No named class or function
+   in `view.php`.
+2. Write SwiftUI's views and modifiers with SwiftUI's names and labels;
+   the second parentheses hold the children, commas between them, `null`
+   for no view.
+3. Controls bind to the property itself (`isOn: $this->wifi`); actions
+   change the state through its methods.
+4. What repeats gets an id: `Each($items, id: 'id')`, `ListView($items,
+   id: 'id')`.
+5. Colors are the named ones (`Color::secondary`,
+   `Color::secondarySystemBackground`); a literal only for data.
+6. Before a view you have not seen, `grep -n "function Name("
+   src/UI/Declarative/functions.php`; what is not there does not exist.
 7. Run on a device with the CLI only: `myphp run -d macos|ios|android <app>`.
