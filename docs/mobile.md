@@ -93,10 +93,12 @@ $tabs = $c->tabView([[$home, '首页'], [$search, '搜索'], [$me, '我的']], $
 if ($c->changed($tabs)) { $this->router->replace(['/home', '/search', '/me'][$this->tab]); }
 ```
 
-The same code is a tab bar on a phone, tabs across the top on an iPad held
-upright, and a sidebar on an iPad on its side or on the Mac, as SwiftUI's
-`TabView` adapts; `tabBar()` alone is the bar for an app that wants it
-everywhere.
+The same code is a tab bar on a phone, a capsule of the tabs' titles
+centered at the top on an iPad held upright (iPadOS 26's), and a sidebar
+on an iPad on its side or on the Mac, as SwiftUI's `TabView` adapts;
+`tabBar()` alone is the bar for an app that wants it everywhere. A sheet
+is a phone's from the bottom (with its detents), and on an iPad a page
+sheet centered over the dimmed window.
 
 Each tab keeps a router of its own when its pages must survive a switch.
 

@@ -170,7 +170,8 @@ $view = function (Context $c) {
 | `preferredColorScheme(.dark)` | the same in a declarative view, or `App::setColorScheme(true)` (null follows the system): the platform's theme in that appearance; `$c->themed(Theme::dark())` for a part. |
 | `dynamicTypeSize(.xxLarge)` | the same in a declarative view, or `App::setTextScale(DynamicTypeSize::xxLarge->scale())` (null follows the system's text size). |
 | `tabBarMinimizeBehavior(.onScrollDown)` | the same on a `TabView`: a phone's tab bar shrinks to the chosen tab as the page scrolls down, a tap brings it back (iOS 26's). |
-| `Tab(value:role: .search)` | `Tab(value: 'search', role: TabRole::search)`: apart at the end of a phone's tab bar, a circle of glass, titled Search with a magnifying glass (iOS 26's). |
+| `Tab(value:role: .search)` | `Tab(value: 'search', role: TabRole::search)`: titled Search with a magnifying glass, in the tab bar with the others (iOS 27's). |
+| `Tab(_:systemImage:value:role: .prominent)` | `role: TabRole::prominent`: apart at the end of a phone's tab bar, a circle of glass (iOS 27's; iOS 26's search tab). |
 | `Button("Copy", systemImage: "doc.on.doc") { … }` | `Button('Copy', action: …, systemImage: 'doc.on.doc')`: its label a Label of the title and the symbol; in a phone's context menu the item's icon at its start. |
 | `.searchScopes($scope) { … }` | `->searchable($this->query)->searchScopes($this->scope, Text('All')->tag('all'), …)`: a segmented control across under the search field. |
 | `.presentationDetents([.medium, .large])` | the same on a sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]`, `::fraction(0.3)`, `::height(200)`; a drag moves the sheet between them, down past the smallest closes it. |

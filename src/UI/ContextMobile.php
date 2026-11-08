@@ -96,9 +96,20 @@ trait ContextMobile
         if ($where === self::TABS_TOP) {
             $top = $this->safeArea[0];
             $n = $this->column(0, 0, 1)->fill();
-              $this->row(0, 0, 0, $t->background)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 44 + $top)->padding($top, 16, 0, 16)->alignItems(Node::CENTER)->justify(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
-                $seg = $this->segmented(array_map(static fn(array $it): string => $it[1], $items), $index);
-                if ($seg->changed) { $n->changed = true; }
+              // iPadOS 26's: a capsule of glass centered over the page under the status bar, each tab's title in it, the chosen one on a capsule of its own
+              $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 52 + $top)->padding($top + 4, 16, 4, 16)->alignItems(Node::CENTER)->justify(Node::CENTER)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
+                $pill = $this->row(0, 0)->size(0, 44)->padding(4)->radius(22)->systemMaterial('glass')->alignItems(Node::STRETCH)->shrink(1)->minWidth(0);
+                  if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.72; }
+                  foreach ($items as $i => [, $label]) {
+                      $on = $i === $index;
+                      $tab = $this->row(0, 0)->padding(0, 16)->radius(18)->alignItems(Node::CENTER)->focusable()->role(Role::TAB)->label($label);
+                      if ($on) { $tab->background($t->text, 0.08); }
+                      $tab->on = $on; $tab->checked($on);
+                        $this->text($label, 15, $on ? $t->accent : $t->text)->singleLine()->fontWeight($on ? 600 : 500);
+                      $this->end();
+                      if ($this->clicked($tab) && !$on) { $index = $i; $n->changed = true; }
+                  }
+                $this->end();
               $this->end();
               $this->safeArea[0] = 0.0; // the tabs took the top: the page's navigationBar sits under them
               $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
@@ -161,10 +172,11 @@ trait ContextMobile
      * page's content growing above it (a Router's view); tabBarInset() is
      * the height the band takes. $small, from 0 to 1, shrinks it to the
      * chosen tab alone, a capsule at its start (iOS 26's minimized bar);
-     * a tap on that sets $expand. An item marked search (its third, true)
-     * is apart at the bar's end, a circle of glass 56 wide holding its
-     * icon, as iOS 26's search tab; minimized, it stays. Not mygo's.
-     * @param list<array{0: SVG|Closure(int): Image|null, 1: string, 2?: bool}> $items an icon (an SVG, or a function of the color drawing one), a label, and whether it is the search tab
+     * a tap on that sets $expand. An item marked prominent (its third,
+     * true) is apart at the bar's end, a circle of glass 56 wide holding its
+     * icon, as iOS 27's TabRole.prominent (iOS 26's search tab); minimized,
+     * it stays. Not mygo's.
+     * @param list<array{0: SVG|Closure(int): Image|null, 1: string, 2?: bool}> $items an icon (an SVG, or a function of the color drawing one), a label, and whether it is apart (prominent)
      */
     public function tabBar(array $items, int &$index, float $small = 0.0, ?bool &$expand = null): Node
     {
@@ -289,7 +301,11 @@ trait ContextMobile
      * presentationDetents), the panel is as high as the largest, shows as
      * high as the smallest at first, and a drag moves it between them,
      * coming to rest at the nearest where the throw carries it; dragged
-     * down past the smallest it goes, as a tap outside does. Not mygo's.
+     * down past the smallest it goes, as a tap outside does. On a tablet
+     * (tabsPlacement() not TABS_BOTTOM) it is iPadOS's page sheet instead:
+     * centered, 700 wide at most and as high as the window less 40 under
+     * its safe area, rounded all round, rising from the bottom; detents are
+     * a phone's, as UIKit's in a regular width. Not mygo's.
      * @param list<float> $detents
      */
     public function sheet(bool &$open, Closure $fn, array $detents = []): ?Node
@@ -300,7 +316,9 @@ trait ContextMobile
         $gone = false;
         $shown = $open;
         $key = 'sheet' . $this->sheets++; // each sheet of the frame its own, open or closed: two (one going, one coming) do not share a state
-        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key): void {
+        $tablet = ($rt?->touch ?? false) && $this->tabsPlacement() !== self::TABS_BOTTOM;
+        if ($tablet) { $detents = []; } // a page sheet has no detents
+        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet): void {
             $this->key($key);
             $rise = $rt?->motions[$this->upcomingId()]['rise'] ?? null;
             if (!$shown && ($rise === null || ($rise->value <= 0.001 && !$rise->moving))) { // closed, and gone below the window
@@ -311,6 +329,11 @@ trait ContextMobile
             if ($shown) { $back->block(); } else { $back->passThrough(); } // going down, the window under it takes the pointer again
               $large = $this->height - $this->windowSafeArea[0] - 10;
               $panel = $this->column(0, 0)->alignSelf(Node::STRETCH)->maxHeight($large)->role(Role::DIALOG);
+              if ($tablet) { // iPadOS's page sheet: centered, as high as the window less 40 under its top
+                  $page = $this->height - $this->windowSafeArea[0] - 40 - max($this->windowSafeArea[2], 20.0);
+                  $back->justify(Node::CENTER)->alignItems(Node::CENTER);
+                  $panel->alignSelf(Node::CENTER)->size(min(700.0, $this->width - 40), 0)->minHeight($page)->maxHeight($page)->margin($this->windowSafeArea[0] + 20, 0, 0, 0);
+              }
               $down = 0.0; // how far a drag moved it down from the largest
               if ($detents !== []) { // as high as the largest, moved down to show the others: the offset of each its height short of the largest
                   $heights = array_values(array_unique(array_map(fn(float $h) => min(max($h, 0.0), $large), $detents)));
@@ -327,18 +350,20 @@ trait ContextMobile
               }
               // iOS 26's: short of the whole window, a sheet floats, 8 in from the window's sides and bottom, rounded all round; at the whole, it meets them
               $float = ($rt?->touch ?? false) ? ($detents === [] ? 1.0 : min(1.0, max(0.0, $down / 30))) : 0.0;
-              $panel->margin(0, 8 * $float, 8 * $float, 8 * $float);
+              if (!$tablet) { $panel->margin(0, 8 * $float, 8 * $float, 8 * $float); }
               $corner = ($rt?->touch ?? false) ? 32.0 : 10.0;
               $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
               if ($rt !== null && !isset($rt->motions[$back->id]['rise'])) { $this->jump($back, 'rise', 0.0); } // shown now: from below the window, not at its place
               $p = $this->animate($back, 'rise', $shown ? 1 : 0, $shown ? 0.35 : 0.3); // up as it shows, back down as it closes
-              $panel->translate(0, (1 - $p) * $h - $down); // rises from below the window; the drag's move is its height's
+              $panel->translate(0, (1 - $p) * ($tablet ? $this->height : $h) - $down); // rises from below the window; the drag's move is its height's
               $back->alpha = 0.4 * $p; // the window dims as it rises
               $panel->draw(static fn(Painter $pt, array $r) => $pt->displayList()->box($r[0], $r[1], $r[2], $r[3], [$corner, $corner, $corner * $float, $corner * $float], $pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background, 1.0)); // in the dark UIKit's elevated background, a gray over the black
-                $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
-                  $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
-                $this->end();
-                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding(16, 16, 16 + max(0.0, $this->windowSafeArea[2] - 8 * $float), 16);
+                if (!$tablet) { // a page sheet has none
+                    $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
+                      $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
+                    $this->end();
+                }
+                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding($tablet ? 20 : 16, $tablet ? 20 : 16, $tablet ? 20 : 16 + max(0.0, $this->windowSafeArea[2] - 8 * $float), $tablet ? 20 : 16);
                   $fn();
                 $this->end();
               $this->end();
@@ -452,7 +477,8 @@ trait ContextMobile
                   })->color = null;
               }
               $panel = $this->column(0, 0)->absolute()->top($y)->left($x)->size($w, 0)->padding(8, 0)->radius(32)->systemMaterial('glass')->clip()->role(Role::MENU)->opacity($p); // iOS 26's: of glass, rounded 32, its items apart by no line, a group's by a hairline
-                $this->box(0, 0, $t->dark ? 0x1c1c1e : 0xffffff)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(32)->role(Role::NONE)->bgAlpha = 0.6; // tinted, as the system's menu, its items read over any page
+                $tint = $this->box(0, 0, $t->dark ? 0x1c1c1e : 0xffffff)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(32)->role(Role::NONE)->borderWidth(1)->borderColor($t->dark ? 0x000000 : 0xd1d1d6); // tinted, as the system's menu, its items read over any page; a darker edge, floating, as iOS 27's
+                $tint->bgAlpha = 0.6;
                 foreach ($items as $it) {
                     if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a hairline 24 in, 8 apart from the items, as iOS 26's
                         $this->box(0, 1 / max($this->scale, 1.0), $t->border)->alignSelf(Node::STRETCH)->margin(8, 24)->shrink(0);

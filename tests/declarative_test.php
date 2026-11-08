@@ -609,18 +609,30 @@ $below = array_values(array_filter(range(0, 29), function (int $i) use ($h, $y):
 $h->clickOn($tabB); $h->frame(3);
 same([true, 'b', []], [$below !== [], $underApp->tab, array_keys(array_filter($underApp->on))], 'a tap on the tab bar chooses its tab, the switch under it untouched');
 
-// Tab(role: .search): apart at the bar's end, a circle 56 wide, titled Search; a tap on it chooses it.
+// Tab(role: .search), as iOS 27's: titled Search, in the bar with the others; Tab(role: .prominent): apart at the bar's
+// end, a circle 56 wide; a tap on either chooses it.
 $searchApp = new class { public string $tab = 'home'; };
+$tabs = fn(\TabRole $role) => fn(Context $c) => Content::render(fn() => TabView(selection: $searchApp->tab)(
+    Tab('Home', systemImage: 'house', value: 'home')(Text('Home page')),
+    Tab('Library', systemImage: 'folder', value: 'library')(Text('Library page')),
+    Tab(value: 'search', role: $role)(Text('Search page')),
+), $c);
+$h = new Headless($tabs(\TabRole::search), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
+$rs = $h->rect($h->byLabel('Search')); $rl = $h->rect($h->byLabel('Library'));
+$h->clickOn($h->byLabel('Search')); $h->frame(3);
+same([true, 'search'], [$rs[3] < 56 && abs($rs[1] - $rl[1]) < 1 && $rs[0] > $rl[0], $searchApp->tab], 'the search tab in the bar after the others, chosen by a tap');
+$searchApp->tab = 'home';
 $h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $searchApp->tab)(
     Tab('Home', systemImage: 'house', value: 'home')(Text('Home page')),
     Tab('Library', systemImage: 'folder', value: 'library')(Text('Library page')),
-    Tab(value: 'search', role: \TabRole::search)(Text('Search page')),
+    Tab('Search', systemImage: 'magnifyingglass', value: 'search', role: \TabRole::prominent)(Text('Search page')),
 ), $c), 393, 852);
 $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
 $circle = $h->byLabel('Search'); $lib = $h->byLabel('Library');
 $rc = $h->rect($circle); $rl = $h->rect($lib);
 $h->clickOn($circle); $h->frame(3);
-same([[56.0, 56.0], true, true, 'search', true], [[$rc[2], $rc[3]], abs($rc[0] + $rc[2] - (393 - 16)) < 1, $rl[0] + $rl[2] < $rc[0], $searchApp->tab, in_array('Search page', $h->texts(), true)], 'the search tab apart at the bar\'s end, chosen by a tap');
+same([[56.0, 56.0], true, true, 'search', true], [[$rc[2], $rc[3]], abs($rc[0] + $rc[2] - (393 - 16)) < 1, $rl[0] + $rl[2] < $rc[0], $searchApp->tab, in_array('Search page', $h->texts(), true)], 'a prominent tab apart at the bar\'s end, chosen by a tap');
 
 // preferredColorScheme and dynamicTypeSize choose the app's appearance and text size over the system's, as SwiftUI's:
 // the platform's theme in that appearance (a phone's stays UIKit's), its text DynamicTypeSize's times larger; null
@@ -684,6 +696,27 @@ $tabsShown = function (\TabBarMinimizeBehavior $b, bool $tapBack = false) use ($
 };
 same([[true, false], [true, true], [true, true]], [$tabsShown(\TabBarMinimizeBehavior::onScrollDown), $tabsShown(\TabBarMinimizeBehavior::onScrollDown, true), $tabsShown(\TabBarMinimizeBehavior::automatic)],
     'the tab bar shrunk to the chosen tab as the page scrolls down, whole again on a tap, whole without the behavior');
+
+// On a tablet held upright, the tabs are iPadOS 26's capsule centered at the top, their titles in it; a tap chooses.
+$padTabs = new class { public string $tab = 'home'; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $padTabs->tab)(
+    Tab('Home', systemImage: 'house', value: 'home')(Text('Home page')),
+    Tab('Library', systemImage: 'folder', value: 'library')(Text('Library page')),
+), $c), 820, 1180);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false); $h->frame(3);
+$hr = $h->rect($h->byLabel('Home')); $lr2 = $h->rect($h->byLabel('Library'));
+$h->clickOn($h->byLabel('Library')); $h->frame(3);
+same([true, 'library'], [abs(($hr[0] + $lr2[0] + $lr2[2]) / 2 - 410) < 6, $padTabs->tab], 'a tablet\'s tabs centered at the top, chosen by a tap');
+
+// On a tablet a sheet is iPadOS's page sheet: centered, 700 wide, as high as the window less its margins, its detents a phone's.
+$padApp = new class { public bool $open = true; };
+$h = new Headless(fn(Context $c) => Content::render(fn() => Text('Page')->sheet(isPresented: $padApp->open, content: fn() => Text('Pad sheet')
+    ->presentationDetents([\PresentationDetent::medium()])), $c), 1024, 1366);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+for ($k = 0; $k < 5; $k++) { usleep(100_000); $h->frame(2); }
+$pad = null; $find = function (Node $n) use (&$find, &$pad) { if ($n->role === \MyPHP\UI\Role::DIALOG) { $pad = $n; } foreach ($n->kids as $k) { $find($k); } }; $find($h->root);
+$pr = $h->rect($pad);
+same([700.0, 512.0, true], [$pr[2], $pr[0] + $pr[2] / 2, $pr[3] > 1200], 'a tablet\'s sheet: centered, 700 wide, nearly the window high');
 
 // presentationDetents([.medium, .large]), as SwiftUI's: the sheet opens at half the window, a drag up takes it to the
 // whole, a drag down past the smallest closes it.
