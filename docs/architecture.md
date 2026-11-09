@@ -8359,6 +8359,14 @@ tells curl. The first attempt loaded `libgtk-3.so.0` on Android and threw
 from inside curl's socket callback, which PHP forbids ("Throwing from FFI
 callbacks is not allowed") and which ended the app.
 
+**Pinyin in the iOS Simulator stopped after a letter** (v1.178): typed
+from the Mac's keyboard while the Mac's own Chinese input source was on,
+every app of the simulator, Notes and Safari too, took the first letter
+as marked text and no more key after it. A hand-made `UITextInput`, a
+hidden `UITextView` and the scene setup were each suspected and changed in
+turn for it, and none was the cause: the input method is switched inside
+the simulator (iOS's keyboard), and a system app is tried first.
+
 **An app's autoloader on a phone**: the launcher requires the framework's
 `src/autoload.php` before `app.php`, so an app needs none. The examples'
 `require __DIR__ . '/../../src/autoload.php'` (since v1.178) named a file
