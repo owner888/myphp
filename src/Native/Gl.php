@@ -384,7 +384,10 @@ final class Gl
         if ($err !== 0) {
             Logger::error("GL error after drawList: 0x" . dechex($err), "opengl");
         }
-        $this->frame++;
+        // a new frame's list is the last from now; the last drawn again (the render signal's) stays so
+        if ($list === $this->lists[$this->frame % 2]) {
+            $this->frame++;
+        }
     }
 
     /**
