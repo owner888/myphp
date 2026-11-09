@@ -1,6 +1,7 @@
 <?php
-// The mouse and the wheel on Windows (windows_input_test.php): Win32's messages sent to a window
-// of native UI and what its core window's Input heard of them, in points; a click tapping a view.
+// The mouse, the wheel and the keys on Windows (windows_input_test.php): Win32's messages sent to a
+// window of native UI and what its core window's Input heard of them, in points; a click tapping a
+// view.
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
@@ -37,8 +38,8 @@ App::whenReady(function () use (&$r) {
         'down', 'up' => [$e[0], round($e[1]), round($e[2]), $e[3], $e[4], $e[5]],
         'scroll' => [$e[0], round($e[1]), round($e[2]), round($e[3], 3), round($e[4], 3), $e[5]],
         'magnify' => [$e[0], round($e[1]), round($e[2]), round($e[3], 4)],
-        'key' => [$e[0], $e[2], $e[3]],
-        default => [$e[0]],
+        'key', 'keyup' => [$e[0], $e[1], $e[2], $e[3]],
+        default => [$e[0], $e[1] ?? null],
     };
     // A message sent, and what the Input heard of it: by its name, for the test to tell each apart.
     $step = function (string $name, int $m, int $wp, int $lp) use ($w, $send, $plain, &$r): void {
@@ -71,6 +72,26 @@ App::whenReady(function () use (&$r) {
             $step('forward', Win32::WM_XBUTTONUP, 2 << 16, $at(80, 90));
             $step('leave', Win32::WM_MOUSELEAVE, 0, 0);
             $r['left'] = $in->mouseInside;
+            // A key's lParam: one press, its scancode, whether it is extended, whether it was down, whether it goes up.
+            $key = fn(int $scan, bool $extended = false, bool $up = false): int => 1 | ($scan << 16) | ($extended ? 1 << 24 : 0) | ($up ? (1 << 30) | (1 << 31) : 0);
+            $step('A down', Win32::WM_KEYDOWN, 0x41, $key(0x1E));
+            $step('a typed', Win32::WM_CHAR, 0x61, $key(0x1E));
+            $step('A up', Win32::WM_KEYUP, 0x41, $key(0x1E, up: true));
+            $step('a control character', Win32::WM_CHAR, 0x08, $key(0x0E));
+            $send(Win32::WM_CHAR, 0xD83D, 0);
+            $step('an emoji, of two halves', Win32::WM_CHAR, 0xDE00, 0);
+            $step('left', Win32::WM_KEYDOWN, 0x25, $key(0x4B, extended: true));
+            $step('its character, none', Win32::WM_CHAR, 0x25, 0);
+            // Ctrl held, as the thread's keyboard state has it, which the window reads.
+            $kb = FFI::cdef('int32_t GetKeyboardState(uint8_t *s); int32_t SetKeyboardState(uint8_t *s);', 'user32.dll');
+            $state = $kb->new('uint8_t[256]');
+            $kb->GetKeyboardState($state);
+            $state[0x11] = 0x80; $state[0xA2] = 0x80;
+            $kb->SetKeyboardState($state);
+            $step('Ctrl+C', Win32::WM_KEYDOWN, 0x43, $key(0x2E));
+            $step('Ctrl+C\'s character, none', Win32::WM_CHAR, 0x03, $key(0x2E));
+            $state[0x11] = 0; $state[0xA2] = 0;
+            $kb->SetKeyboardState($state);
             $n = $u->new('uint32_t');
             $r['lines'] = $u->SystemParametersInfoW(0x68, 0, FFI::addr($n), 0) !== 0 && $n->cdata > 0 && $n->cdata < 100 ? $n->cdata : 3;
             $w->close();

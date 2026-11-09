@@ -53,10 +53,16 @@ final class Keys
     {
         $code = self::KEYVALS[$keyval] ?? self::CODES[$xcode] ?? ($keyval >= 0xffbe && $keyval <= 0xffc9 ? [Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6, Key::F7, Key::F8, Key::F9, Key::F10, Key::F11, Key::F12][$keyval - 0xffbe] : -1);
         if (isset(self::KEYVALS[$keyval]) || ($keyval >= 0xffbe && $keyval <= 0xffc9)) {
-            return [$code, isset(self::CHARS[$code]) ? mb_chr(self::CHARS[$code], 'UTF-8') : ''];
+            return [$code, self::functionChars($code)];
         }
         $u = Gtk::ffi()->gdk_keyval_to_unicode($keyval);
         return [$code, $u === 0 ? '' : mb_chr($u, 'UTF-8')];
+    }
+
+    /** AppKit's characters of a key that types none, by its macOS key code (and Return's, Tab's, Delete's and Escape's); '' for another. Windows's keys share them. */
+    public static function functionChars(int $code): string
+    {
+        return isset(self::CHARS[$code]) ? mb_chr(self::CHARS[$code], 'UTF-8') : '';
     }
 
     public static function isModifier(int $keyval): bool

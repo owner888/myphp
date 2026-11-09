@@ -25,6 +25,7 @@ final class Win32
     public const WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205, WM_RBUTTONDBLCLK = 0x0206, WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208, WM_MBUTTONDBLCLK = 0x0209;
     public const WM_MOUSEWHEEL = 0x020A, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C, WM_XBUTTONDBLCLK = 0x020D, WM_MOUSEHWHEEL = 0x020E;
     public const WM_CAPTURECHANGED = 0x0215, WM_MOUSELEAVE = 0x02A3, WM_APPCOMMAND = 0x0319;
+    public const WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_CHAR = 0x0102, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105, WM_SYSCHAR = 0x0106;
     /** HKEY_CURRENT_USER: (HKEY)(ULONG_PTR)(LONG)0x80000001, sign-extended. */
     public const HKCU = -0x7FFFFFFF;
 
@@ -126,6 +127,9 @@ final class Win32
             int16_t GetKeyState(int32_t key);
             int32_t GetMessageTime(void);
             int32_t GetSystemMetricsForDpi(int32_t index, uint32_t dpi);
+            int32_t GetKeyboardState(uint8_t *state);
+            void *GetKeyboardLayout(uint32_t thread);
+            int32_t ToUnicodeEx(uint32_t vk, uint32_t scan, const uint8_t *state, uint16_t *buf, int32_t n, uint32_t flags, void *layout);
             intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
             int32_t EnumDisplaySettingsW(const void *device, uint32_t mode, void *devmode);
             C, 'user32.dll');

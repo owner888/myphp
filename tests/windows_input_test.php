@@ -1,9 +1,11 @@
 <?php
-// The mouse and the wheel on Windows (Platform\Windows\Window), in an app of its own
+// The mouse, the wheel and the keys on Windows (Platform\Windows\Window), in an app of its own
 // (testdata/windows_input_app.php): Win32's messages into the core window's Input as Linux's
 // window gives them, in points: moves, a drag, presses and their clicks, the right button, the
 // wheel both ways by the system's lines, a touchpad's scroll and pinch, the side buttons as
-// keys, the pointer leaving; a click tapping a view.
+// keys, the pointer leaving; a click tapping a view; the keys: a key's code by its place and what
+// it types, then its WM_CHAR's text, a surrogate pair's whole, control characters none, an arrow's
+// command, Ctrl and C the Edit menu's copy and no text.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -51,9 +53,18 @@ use MyPHP\UI\Key;
         'wheel across' => [['scroll', 80, 90, -$notch, 0, false]],
         'touchpad' => [['scroll', 80, 90, 0, round($notch / 3, 3), true]],
         'pinch' => [['magnify', 80, 90, round(exp(0.5 * M_LN2 / 3) - 1, 4)]],
-        'back' => [['key', Key::BACK, 0]],
-        'forward' => [['key', Key::FORWARD, 0]],
+        'back' => [['key', '', Key::BACK, 0]],
+        'forward' => [['key', '', Key::FORWARD, 0]],
         'leave' => [],
+        'A down' => [['key', 'a', Key::A, 0]],
+        'a typed' => [['insert', 'a']],
+        'A up' => [['keyup', 'a', Key::A, 0]],
+        'a control character' => [],
+        'an emoji, of two halves' => [['insert', "\u{1F600}"]],
+        'left' => [['key', "\u{F702}", Key::LEFT, 0], ['command', 'moveLeft:']],
+        'its character, none' => [],
+        'Ctrl+C' => [['edit', 'copy']],
+        'Ctrl+C\'s character, none' => [],
     ];
     // One check a message, each failure short enough to read in full.
     foreach ($r['steps'] as [$name, $heard]) {
