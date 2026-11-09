@@ -21,6 +21,10 @@ final class Win32
     public const WM_POWERBROADCAST = 0x0218, WM_WTSSESSION_CHANGE = 0x02B1, WM_QUIT = 0x0012, WM_APP = 0x8000;
     public const WM_MOVE = 0x0003, WM_SIZE = 0x0005, WM_ACTIVATE = 0x0006, WM_PAINT = 0x000F, WM_CLOSE = 0x0010, WM_ERASEBKGND = 0x0014;
     public const WM_GETMINMAXINFO = 0x0024, WM_SETCURSOR = 0x0020, WM_DPICHANGED = 0x02E0;
+    public const WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_LBUTTONDBLCLK = 0x0203;
+    public const WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205, WM_RBUTTONDBLCLK = 0x0206, WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208, WM_MBUTTONDBLCLK = 0x0209;
+    public const WM_MOUSEWHEEL = 0x020A, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C, WM_XBUTTONDBLCLK = 0x020D, WM_MOUSEHWHEEL = 0x020E;
+    public const WM_CAPTURECHANGED = 0x0215, WM_MOUSELEAVE = 0x02A3, WM_APPCOMMAND = 0x0319;
     /** HKEY_CURRENT_USER: (HKEY)(ULONG_PTR)(LONG)0x80000001, sign-extended. */
     public const HKCU = -0x7FFFFFFF;
 
@@ -52,6 +56,7 @@ final class Win32
             typedef struct { uint32_t length, flags, showCmd; POINT ptMinPosition, ptMaxPosition; RECT rcNormalPosition; RECT rcDevice; } WINDOWPLACEMENT;
             typedef struct { uint32_t cbSize; void *hwnd; uint32_t dwFlags, uCount, dwTimeout; } FLASHWINFO;
             typedef struct { void *hdc; int32_t fErase; RECT rcPaint; int32_t fRestore, fIncUpdate; uint8_t rgbReserved[32]; } PAINTSTRUCT;
+            typedef struct { uint32_t cbSize, dwFlags; void *hwndTrack; uint32_t dwHoverTime; } TRACKMOUSEEVENT;
             uint16_t RegisterClassExW(const WNDCLASSEXW *wc);
             void *CreateWindowExW(uint32_t exStyle, const void *cls, const void *title, uint32_t style, int32_t x, int32_t y, int32_t w, int32_t h, void *parent, void *menu, void *inst, void *param);
             int32_t DestroyWindow(void *hwnd);
@@ -115,6 +120,12 @@ final class Win32
             int32_t FillRect(void *dc, const RECT *r, void *brush);
             int32_t InvalidateRect(void *hwnd, const RECT *r, int32_t erase);
             int32_t ReleaseCapture(void);
+            void *SetCapture(void *hwnd);
+            int32_t TrackMouseEvent(TRACKMOUSEEVENT *e);
+            int32_t ScreenToClient(void *hwnd, POINT *p);
+            int16_t GetKeyState(int32_t key);
+            int32_t GetMessageTime(void);
+            int32_t GetSystemMetricsForDpi(int32_t index, uint32_t dpi);
             intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
             int32_t EnumDisplaySettingsW(const void *device, uint32_t mode, void *devmode);
             C, 'user32.dll');

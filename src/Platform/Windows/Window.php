@@ -9,7 +9,7 @@ use MyPHP\Native\{D3d, Mem};
 use MyPHP\{App, Rectangle, WindowOptions};
 use MyPHP\Platform;
 use MyPHP\Platform\Unsupported;
-use MyPHP\UI\{Cursor, Image};
+use MyPHP\UI\{Cursor, Image, Key};
 
 /**
  * A top-level window of Win32 (mygo's windows window): its frame in
@@ -17,7 +17,12 @@ use MyPHP\UI\{Cursor, Image};
  * WM_DPICHANGED moving it to the size Windows suggests); its title bar
  * dark with the app's appearance (DWM); its events to the core: closing
  * asked (WM_CLOSE), closed, focus and blur (WM_ACTIVATE), moved, resized,
- * minimized and restored (WM_SIZE). Native UI's frames are built when
+ * minimized and restored (WM_SIZE); the mouse and the wheel into the
+ * core window's Input as Linux's window gives them (mygo's surface): Ctrl
+ * as the shortcut modifier (Command), the Windows key as Control, a press's
+ * clicks counted by the double-click time and rectangle, a touchpad's pinch
+ * (the wheel with Ctrl, not by notches) a magnification, the side buttons
+ * keys back and forward. Native UI's frames are built when
  * asked for, from the queue (requestFrame), drawn by Direct3D 11 into the
  * window's swap chain (Native\D3d) and presented at the display's
  * refresh; WM_PAINT shows the last one again. Web pages come with
@@ -61,6 +66,13 @@ final class Window implements Platform\Window
     private bool $topmost = false;
     private bool $shadow = true;
     private ?Cursor $cursorShown = null;
+    /** Whether the pointer's leaving is asked for (TrackMouseEvent); the buttons held, a bit each (0 left, 1 right, 2 middle), the window capturing the mouse while any is. */
+    private bool $tracking = false;
+    private int $buttons = 0;
+    /** @var array{button: int, x: int, y: int, ms: int, clicks: int} the last press, in pixels and GetMessageTime's milliseconds: the next counts on from it */
+    private array $lastPress = ['button' => -1, 'x' => 0, 'y' => 0, 'ms' => 0, 'clicks' => 0];
+    /** The system's lines a wheel's notch scrolls (SPI_GETWHEELSCROLLLINES), asked once. */
+    private static ?int $wheelLines = null;
     /** @var ?array{0: int, 1: int, 2: CData} the style, the extended one and the placement before full screen */
     private ?array $beforeFullScreen = null;
 
@@ -144,6 +156,12 @@ final class Window implements Platform\Window
             case Win32::WM_PAINT:
                 $this->paint();
                 return 0;
+            case Win32::WM_MOUSEMOVE: case Win32::WM_MOUSELEAVE: case Win32::WM_CAPTURECHANGED:
+            case Win32::WM_LBUTTONDOWN: case Win32::WM_LBUTTONDBLCLK: case Win32::WM_RBUTTONDOWN: case Win32::WM_RBUTTONDBLCLK: case Win32::WM_MBUTTONDOWN: case Win32::WM_MBUTTONDBLCLK:
+            case Win32::WM_LBUTTONUP: case Win32::WM_RBUTTONUP: case Win32::WM_MBUTTONUP:
+            case Win32::WM_XBUTTONDOWN: case Win32::WM_XBUTTONDBLCLK: case Win32::WM_XBUTTONUP: case Win32::WM_APPCOMMAND:
+            case Win32::WM_MOUSEWHEEL: case Win32::WM_MOUSEHWHEEL:
+                return $this->pointer($m, $wp, $lp);
             case Win32::WM_SETCURSOR:
                 if (($lp & 0xFFFF) === 1 && $this->cursorShown !== null) { // HTCLIENT: the content's cursor
                     $u->SetCursor($this->cursorShown === Cursor::None ? null : $u->LoadCursorW(null, self::CURSORS[$this->cursorShown->value] ?? 32512));
@@ -152,6 +170,147 @@ final class Window implements Platform\Window
                 return null;
         }
         return null;
+    }
+
+    /**
+     * The mouse's messages into the core window's Input (mygo's surface's):
+     * where in points, the modifiers held, a press's clicks; the mouse
+     * captured while a button is held, so its release comes outside the
+     * window too; its leaving asked for as it moves in. A right button's
+     * release goes on to DefWindowProc, which sends WM_CONTEXTMENU.
+     */
+    private function pointer(int $m, int $wp, int $lp): ?int
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return null;
+        }
+        $u = Win32::user32();
+        $s = $this->scale();
+        $result = 0;
+        switch ($m) {
+            case Win32::WM_MOUSELEAVE:
+                $this->tracking = false;
+                $input->mouseInside = false;
+                break;
+            case Win32::WM_CAPTURECHANGED:
+                $this->buttons = 0;
+                return 0;
+            case Win32::WM_MOUSEMOVE:
+                if (!$this->tracking) {
+                    $t = $u->new('TRACKMOUSEEVENT');
+                    $t->cbSize = FFI::sizeof($t);
+                    $t->dwFlags = 0x2; // TME_LEAVE
+                    $t->hwndTrack = $this->hwnd;
+                    $u->TrackMouseEvent(FFI::addr($t));
+                    $this->tracking = true;
+                }
+                [$x, $y] = [self::low($lp) / $s, self::high($lp) / $s];
+                $input->mouse($x, $y);
+                $input->mods = self::mods();
+                $input->push(($wp & 0x1) !== 0 ? ['drag', $x, $y, hrtime(true)] : ['move', $x, $y]); // MK_LBUTTON
+                break;
+            case Win32::WM_LBUTTONDOWN: case Win32::WM_LBUTTONDBLCLK: case Win32::WM_RBUTTONDOWN: case Win32::WM_RBUTTONDBLCLK: case Win32::WM_MBUTTONDOWN: case Win32::WM_MBUTTONDBLCLK:
+                $button = match ($m) { Win32::WM_RBUTTONDOWN, Win32::WM_RBUTTONDBLCLK => 1, Win32::WM_MBUTTONDOWN, Win32::WM_MBUTTONDBLCLK => 2, default => 0 };
+                $u->SetFocus($this->hwnd);
+                if ($this->buttons === 0) { $u->SetCapture($this->hwnd); }
+                $this->buttons |= 1 << $button;
+                [$px, $py] = [self::low($lp), self::high($lp)];
+                $mods = self::mods();
+                $input->mouse($px / $s, $py / $s);
+                $input->mods = $mods;
+                $input->push(['down', $px / $s, $py / $s, $button, $this->clicks($button, $px, $py), $mods, hrtime(true)]);
+                break;
+            case Win32::WM_LBUTTONUP: case Win32::WM_RBUTTONUP: case Win32::WM_MBUTTONUP:
+                $button = match ($m) { Win32::WM_RBUTTONUP => 1, Win32::WM_MBUTTONUP => 2, default => 0 };
+                $this->buttons &= ~(1 << $button);
+                if ($this->buttons === 0) { $u->ReleaseCapture(); }
+                [$x, $y] = [self::low($lp) / $s, self::high($lp) / $s];
+                $mods = self::mods();
+                $input->mouse($x, $y);
+                $input->mods = $mods;
+                $input->push(['up', $x, $y, $button, $this->lastPress['clicks'], $mods, hrtime(true)]);
+                $result = $m === Win32::WM_RBUTTONUP ? null : 0;
+                break;
+            case Win32::WM_XBUTTONDOWN: case Win32::WM_XBUTTONDBLCLK: case Win32::WM_XBUTTONUP:
+                // The side buttons go back and forward as they are let go, as Windows's apps do (DefWindowProc's WM_APPCOMMAND, which taking them leaves out).
+                if ($m === Win32::WM_XBUTTONUP) {
+                    $input->push(['key', '', (($wp >> 16) & 0xFFFF) === 2 ? Key::FORWARD : Key::BACK, self::mods()]); // XBUTTON2
+                }
+                $result = 1;
+                break;
+            case Win32::WM_APPCOMMAND: // devices that send commands for back and forward rather than buttons
+                $key = match (($lp >> 16) & 0x0FFF) { 1 => Key::BACK, 2 => Key::FORWARD, default => null }; // APPCOMMAND_BROWSER_BACKWARD, _FORWARD
+                if ($key === null) {
+                    return null;
+                }
+                $input->push(['key', '', $key, self::mods()]);
+                $result = 1;
+                break;
+            case Win32::WM_MOUSEWHEEL: case Win32::WM_MOUSEHWHEEL:
+                $pt = $u->new('POINT');
+                $pt->x = self::low($lp); $pt->y = self::high($lp);
+                $u->ScreenToClient($this->hwnd, FFI::addr($pt));
+                [$x, $y] = [$pt->x / $s, $pt->y / $s];
+                $delta = self::high($wp);
+                $precise = $delta % 120 !== 0;
+                $mods = self::mods();
+                $input->mouse($x, $y);
+                $input->mods = $mods;
+                if ($m === Win32::WM_MOUSEWHEEL && $precise && ($wp & 0x8) !== 0) { // MK_CONTROL: a touchpad's pinch, which Windows sends as scrolling with Ctrl; three notches' worth zoom twice as large
+                    $input->push(['magnify', $x, $y, exp($delta / 120 * M_LN2 / 3) - 1, 0]);
+                    break;
+                }
+                // A line of the system's lines a notch is 33 points, as browsers scroll about 100 a notch at the default 3; up and left positive, as the content moves.
+                $dist = $delta / 120 * self::wheelLines() * 33;
+                $input->push($m === Win32::WM_MOUSEWHEEL ? ['scroll', $x, $y, 0.0, $dist, $precise, false] : ['scroll', $x, $y, -$dist, 0.0, $precise, false]);
+                break;
+        }
+        $this->requestFrame();
+        return $result;
+    }
+
+    /** A press's clicks: one more than the last's of the same button within the double-click time and rectangle, centered on it, at the window's DPI; one otherwise. */
+    private function clicks(int $button, int $x, int $y): int
+    {
+        $u = Win32::user32();
+        $dpi = $u->GetDpiForWindow($this->hwnd);
+        $ms = $u->GetMessageTime();
+        $p = $this->lastPress;
+        $near = abs($x - $p['x']) <= $u->GetSystemMetricsForDpi(36, $dpi) / 2 && abs($y - $p['y']) <= $u->GetSystemMetricsForDpi(37, $dpi) / 2; // SM_CXDOUBLECLK, SM_CYDOUBLECLK
+        $clicks = $p['clicks'] > 0 && $p['button'] === $button && (($ms - $p['ms']) & 0xFFFFFFFF) <= $u->GetDoubleClickTime() && $near ? $p['clicks'] + 1 : 1;
+        $this->lastPress = ['button' => $button, 'x' => $x, 'y' => $y, 'ms' => $ms, 'clicks' => $clicks];
+        return $clicks;
+    }
+
+    /** The modifiers held, as Linux's window gives them: Ctrl the shortcut modifier (Command), Alt Option, the Windows key Control. */
+    private static function mods(): int
+    {
+        $u = Win32::user32();
+        $down = fn(int $vk): bool => ($u->GetKeyState($vk) & 0x8000) !== 0;
+        return ($down(0x10) ? Key::SHIFT : 0) | ($down(0x11) ? Key::COMMAND : 0) | ($down(0x12) ? Key::OPTION : 0) | ($down(0x5B) || $down(0x5C) ? Key::CONTROL : 0); // VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN
+    }
+
+    /** A message's low and high words, signed (a point's x and y, a wheel's delta). */
+    private static function low(int $v): int
+    {
+        $v &= 0xFFFF;
+        return $v >= 0x8000 ? $v - 0x10000 : $v;
+    }
+
+    private static function high(int $v): int
+    {
+        return self::low($v >> 16);
+    }
+
+    private static function wheelLines(): int
+    {
+        if (self::$wheelLines === null) {
+            $n = Win32::user32()->new('uint32_t');
+            $ok = Win32::user32()->SystemParametersInfoW(0x68 /* SPI_GETWHEELSCROLLLINES */, 0, FFI::addr($n), 0) !== 0;
+            self::$wheelLines = $ok && $n->cdata > 0 && $n->cdata < 100 ? $n->cdata : 3;
+        }
+        return self::$wheelLines;
     }
 
     /**
