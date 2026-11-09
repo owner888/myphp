@@ -2869,8 +2869,9 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   document is the marked text alone (as Android's `BaseInputConnection`):
   what a Chinese or Japanese keyboard composes shows in the field,
   underlined (`TextState::setMarked`), a backspace edits the composition,
-  and the candidate chosen commits as typed text. No caret geometry: the
-  candidates sit over the keyboard.
+  and the candidate chosen commits as typed text. Its caret geometry is
+  the field's caret, which the window tells each frame, so a hardware
+  keyboard's candidates show by it.
 - **`tabView($items, &$index, $content)`**: SwiftUI's TabView with the
   sidebarAdaptable style — the tabs where Apple puts them, by the screen
   being touched and the window's size (`tabsPlacement()`): a `tabBar`
