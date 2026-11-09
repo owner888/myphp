@@ -110,7 +110,7 @@ final class CoreMedia
     /** A pointer of ObjC's (or another instance's) as one of this instance's. */
     public static function ptr($p): CData
     {
-        return self::c()->cast('void*', ObjC::addr($p));
+        return self::c()->cast('void*', Mem::addr($p));
     }
 
     /** A FourCC as the integer CoreMedia takes. */
@@ -495,7 +495,7 @@ final class CoreMedia
             return true;
         }
         $v = $c->CFDictionaryGetValue($c->CFArrayGetValueAtIndex($arr, 0), $c->kCMSampleAttachmentKey_NotSync);
-        return $v === null || ObjC::addr($v) !== ObjC::addr($c->kCFBooleanTrue);
+        return $v === null || Mem::addr($v) !== Mem::addr($c->kCFBooleanTrue);
     }
 
     /** How many bytes sample buffer $sb holds, as stored. */

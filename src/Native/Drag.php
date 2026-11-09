@@ -137,9 +137,9 @@ final class Drag
         }
         self::define();
         $obj = ObjC::msg('p:', ObjC::alloc('MyPHPDragSource'), 'init');
-        $key = ObjC::addr($obj);
-        self::$sources[$key] = ['request' => $r, 'view' => ObjC::addr($view), 'providers' => [], 'session' => null, 'error' => null, 'obj' => $obj, 'escaped' => false, 'end' => null];
-        self::$viewDrags[ObjC::addr($view)] = $key;
+        $key = Mem::addr($obj);
+        self::$sources[$key] = ['request' => $r, 'view' => Mem::addr($view), 'providers' => [], 'session' => null, 'error' => null, 'obj' => $obj, 'escaped' => false, 'end' => null];
+        self::$viewDrags[Mem::addr($view)] = $key;
         [$width, $height] = [$r['width'], $r['height']];
         if ($r['preview'] !== null) {
             $rep = ObjC::msg('p:pllllbbpLll', ObjC::alloc('NSBitmapImageRep'), 'initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:',
@@ -185,10 +185,10 @@ final class Drag
     /** Cancels the drag $view sources, posting Escape to AppKit's tracking loop, as NSDraggingSession has no cancel (mygo's CancelDataDrag). */
     public static function cancel($view): void
     {
-        if (!isset(self::$viewDrags[ObjC::addr($view)])) {
+        if (!isset(self::$viewDrags[Mem::addr($view)])) {
             return;
         }
-        self::$sources[self::$viewDrags[ObjC::addr($view)]]['escaped'] = true;
+        self::$sources[self::$viewDrags[Mem::addr($view)]]['escaped'] = true;
         $escape = ObjC::str("\e");
         $e = ObjC::msg('p:LqLdlpppbS', ObjC::cls('NSEvent'), 'keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:',
             10 /* key down */, ObjC::point(0, 0), 0, 0.0, ObjC::msg('l:', ObjC::msg('p:', $view, 'window'), 'windowNumber'), null, $escape, $escape, false, 53);
@@ -315,7 +315,7 @@ final class Drag
         foreach ($r['data']->items as $item) {
             $pb = ObjC::msg('p:', ObjC::msg('p:', ObjC::alloc('NSPasteboardItem'), 'init'), 'autorelease');
             $provider = ObjC::msg('p:', ObjC::alloc('MyPHPDragProvider'), 'init');
-            self::$providers[ObjC::addr($provider)] = [$key, $item];
+            self::$providers[Mem::addr($provider)] = [$key, $item];
             self::$sources[$key]['providers'][] = $provider;
             $types = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
             foreach ($item->formats() as $f) {
@@ -340,7 +340,7 @@ final class Drag
             unset(self::$viewDrags[$src['view']]);
         }
         foreach ($src['providers'] as $p) {
-            unset(self::$providers[ObjC::addr($p)]);
+            unset(self::$providers[Mem::addr($p)]);
             ObjC::msg('v:', $p, 'release');
         }
         if ($src['session'] !== null) { ObjC::msg('v:', $src['session'], 'release'); }
@@ -375,11 +375,11 @@ final class Drag
         self::$defined = true;
         ObjC::defineClass('MyPHPDragSource', 'NSObject', [
             'draggingSession:sourceOperationMaskForDraggingContext:' => ['Q@:@q', 'L(pppl)', function ($self, $cmd, $session, $context) {
-                $src = self::$sources[ObjC::addr($self)] ?? null;
+                $src = self::$sources[Mem::addr($self)] ?? null;
                 return $src === null ? 0 : self::macOperations($src['request']['operations']);
             }],
             'draggingSession:endedAtPoint:operation:' => ['v@:@{CGPoint=dd}Q', 'v(pppqL)', function ($self, $cmd, $session, $point, $operation) {
-                if (isset(self::$sources[$key = ObjC::addr($self)])) {
+                if (isset(self::$sources[$key = Mem::addr($self)])) {
                     // AppKit's tracking loop takes Escape itself: the event that ended the session tells it from letting go.
                     $ev = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
                     if ($ev !== null && ObjC::msg('L:', $ev, 'type') === 10 && ObjC::msg('S:', $ev, 'keyCode') === 53) { self::$sources[$key]['escaped'] = true; }
@@ -390,7 +390,7 @@ final class Drag
         ], ['NSDraggingSource']);
         ObjC::defineClass('MyPHPDragProvider', 'NSObject', [
             'pasteboard:item:provideDataForType:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $board, $item, $type) {
-                [$key, $it] = self::$providers[ObjC::addr($self)] ?? [null, null];
+                [$key, $it] = self::$providers[Mem::addr($self)] ?? [null, null];
                 if ($key === null || !isset(self::$sources[$key])) {
                     return;
                 }

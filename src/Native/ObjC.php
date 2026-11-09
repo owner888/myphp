@@ -33,9 +33,6 @@ final class ObjC
     private static array $blocks = [];
     /** @var list<int> once-blocks that fired and can go at the next block() */
     private static array $spentBlocks = [];
-    /** One void* slot and an integer view of the same bytes, for addr(). */
-    private static $slot;
-    private static $slotInt;
 
     /** Objective-C type encodings of the MAP letters, for block signatures. */
     private const ENCODING = [
@@ -100,8 +97,6 @@ final class ObjC
         self::$msgSendSuper = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSendSuper');
         self::$globalBlockIsa = self::$c->dlsym(self::$c->dlopen('/usr/lib/libSystem.B.dylib', 2), '_NSConcreteGlobalBlock')
             ?? throw new RuntimeException('_NSConcreteGlobalBlock');
-        self::$slot = self::$c->new('void*[1]');
-        self::$slotInt = self::$c->cast('unsigned long[1]', self::$slot);
     }
 
     /** @param list<string> $frameworks system frameworks to dlopen: their classes register with the runtime */
@@ -185,7 +180,7 @@ final class ObjC
         $type = self::MAP[$ret] . '(*)(' . implode(',', $params) . ')';
         $holder = self::$c->new('struct { ' . str_replace('(*)', '(*fn)', $type) . '; }');
         $literal = self::$c->new('BlockLiteral');
-        $addr = self::addr(FFI::addr($literal));
+        $addr = Mem::addr(FFI::addr($literal));
         $holder->fn = function ($block, ...$a) use ($fn, $once, $addr) {
             try {
                 return $fn(...$a);
@@ -262,22 +257,6 @@ final class ObjC
     }
 
     /**
-     * The integer value of a pointer, for use as an array key.
-     * Not FFI::cast('unsigned long', $p): casting a pointer CData to a scalar
-     * dereferences it (for an object that reads the isa, whose inline
-     * refcount bits change). Storing the pointer in a void* slot and reading
-     * the slot's bytes as an integer gives the pointer itself.
-     */
-    public static function addr($p): int
-    {
-        if ($p === null) {
-            return 0;
-        }
-        self::$slot[0] = $p;
-        return self::$slotInt[0];
-    }
-
-    /**
      * A fresh void* CData in this bridge's scope holding the same address.
      * Pointers returned by another FFI instance must pass through here: a
      * CData keeps a type pointer into the instance that made it, and such
@@ -285,7 +264,7 @@ final class ObjC
      */
     public static function import($p)
     {
-        return self::$c->cast('void*', self::addr($p));
+        return self::$c->cast('void*', Mem::addr($p));
     }
 
     public static function str(string $s)

@@ -100,7 +100,7 @@ final class Pasteboard
         $array = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
         foreach ($data->items as $item) {
             $pb = ObjC::msg('p:', ObjC::msg('p:', ObjC::alloc('NSPasteboardItem'), 'init'), 'autorelease');
-            $byItem[ObjC::addr($pb)] = $item;
+            $byItem[Mem::addr($pb)] = $item;
             $types = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
             foreach (self::types($item) as $t) {
                 ObjC::msg('v:p', $types, 'addObject:', ObjC::str($t));
@@ -265,12 +265,12 @@ final class Pasteboard
         ObjC::defineClass('MyPHPClipboardProvider', 'NSObject', [
             'pasteboard:item:provideDataForType:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $board, $item, $type) {
                 $s = self::$source;
-                if ($s === null || ObjC::addr($s['obj']) !== ObjC::addr($self) || !isset($s['items'][ObjC::addr($item)])) {
+                if ($s === null || Mem::addr($s['obj']) !== Mem::addr($self) || !isset($s['items'][Mem::addr($item)])) {
                     return;
                 }
                 $name = ObjC::phpStr($type);
                 try {
-                    $b = $s['items'][ObjC::addr($item)]->read(self::format($name));
+                    $b = $s['items'][Mem::addr($item)]->read(self::format($name));
                 } catch (\Throwable) {
                     return;
                 }
@@ -280,7 +280,7 @@ final class Pasteboard
                 ObjC::msg('b:pp', $item, 'setData:forType:', ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $b, strlen($b)), $type);
             }],
             'pasteboardFinishedWithDataProvider:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $board) {
-                if (self::$source !== null && ObjC::addr(self::$source['obj']) === ObjC::addr($self)) {
+                if (self::$source !== null && Mem::addr(self::$source['obj']) === Mem::addr($self)) {
                     self::release();
                 }
             }],

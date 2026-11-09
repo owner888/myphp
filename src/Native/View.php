@@ -43,7 +43,7 @@ final class View
     {
         self::define();
         $view = $metal->createView($frame, $draw, 'MyPHPView');
-        self::$inputs[ObjC::addr($view)] = $input;
+        self::$inputs[Mem::addr($view)] = $input;
         Access::attach($view, $input); // the container of the elements assistive technology sees
         $area = ObjC::msg('p:rLpp', ObjC::alloc('NSTrackingArea'), 'initWithRect:options:owner:userInfo:',
             ObjC::rect(0, 0, 0, 0), self::TRACKING, $view, null);
@@ -54,13 +54,13 @@ final class View
     /** The last left press on $view, which a native drag starts from (Drag::start); null before one. */
     public static function lastDown($view)
     {
-        return self::$lastDown[ObjC::addr($view)] ?? null;
+        return self::$lastDown[Mem::addr($view)] ?? null;
     }
 
     /** Lets the last press on $view go, once it closed. */
     public static function forget($view): void
     {
-        $key = ObjC::addr($view);
+        $key = Mem::addr($view);
         unset(self::$passThrough[$key]);
         if (isset(self::$lastDown[$key])) { ObjC::msg('v:', self::$lastDown[$key], 'release'); }
         unset(self::$lastDown[$key]);
@@ -84,7 +84,7 @@ final class View
      */
     public static function scrollWheel($view, $event): void
     {
-        $input = self::$inputs[ObjC::addr($view)];
+        $input = self::$inputs[Mem::addr($view)];
         $p = ObjC::msg('q:qp', $view, 'convertPoint:fromView:', ObjC::msg('q:', $event, 'locationInWindow'), null);
         $dx = ObjC::msg('d:', $event, 'scrollingDeltaX');
         $dy = ObjC::msg('d:', $event, 'scrollingDeltaY');
@@ -109,7 +109,7 @@ final class View
             return [$p->x, $p->y];
         };
         $mouse = fn(string $kind) => function ($self, $cmd, $event) use ($kind, $point) {
-            $input = self::$inputs[ObjC::addr($self)];
+            $input = self::$inputs[Mem::addr($self)];
             [$x, $y] = $point($self, $event);
             $input->mouse($x, $y);
             $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
@@ -119,11 +119,11 @@ final class View
                 $button = ObjC::msg('l:', $event, 'buttonNumber');
                 $mods = ObjC::msg('L:', $event, 'modifierFlags');
                 if ($button === 0 && $kind === 'down') {
-                    self::$ctrlClick[ObjC::addr($self)] = ($mods & Key::CONTROL) !== 0; // a Control-click is a secondary click, until its release (mygo's ctrlClick)
+                    self::$ctrlClick[Mem::addr($self)] = ($mods & Key::CONTROL) !== 0; // a Control-click is a secondary click, until its release (mygo's ctrlClick)
                 }
-                $secondary = $button === 0 && (self::$ctrlClick[ObjC::addr($self)] ?? false);
+                $secondary = $button === 0 && (self::$ctrlClick[Mem::addr($self)] ?? false);
                 if ($kind === 'up' && $button === 0) {
-                    unset(self::$ctrlClick[ObjC::addr($self)]);
+                    unset(self::$ctrlClick[Mem::addr($self)]);
                 }
                 $input->push([$kind, $x, $y, $secondary ? 1 : $button, ObjC::msg('l:', $event, 'clickCount'), $mods, self::time($event)]);
             }
@@ -133,7 +133,7 @@ final class View
             'isFlipped' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
             // Where a web view under the content takes the pointer, the view is not hit: AppKit looks under it, at the web view (mygo's surface hitTest:).
             'hitTest:' => ['@@:{CGPoint=dd}', 'p(ppq)', function ($self, $cmd, $point) {
-                $pass = self::$passThrough[ObjC::addr($self)] ?? null;
+                $pass = self::$passThrough[Mem::addr($self)] ?? null;
                 if ($pass !== null) {
                     $p = ObjC::msg('q:qp', $self, 'convertPoint:fromView:', $point, ObjC::msg('p:', $self, 'superview'));
                     if ($pass($p->x, $p->y)) {
@@ -143,13 +143,13 @@ final class View
                 return ObjC::msgSuper('p:q', $self, 'MTKView', 'hitTest:', $point);
             }],
             'acceptsFirstResponder' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
-            'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => self::$firstMouse[ObjC::addr($self)] ?? true], // a click on the window behind clicks too, unless its content says not (setAcceptsFirstMouse)
+            'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => self::$firstMouse[Mem::addr($self)] ?? true], // a click on the window behind clicks too, unless its content says not (setAcceptsFirstMouse)
             // A press in the title bar region of a hidden title bar reaches the view, not AppKit's window move and double-click zoom: Node::dragWindow handles do those.
             'mouseDownCanMoveWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
             // The layer's changes are not animated, as layers do by default (mygo's fit): a resize would show the last frame stretched to the new size, catching up over the animation.
             'actionForLayer:forKey:' => ['@@:@@', 'p(pppp)', fn($self, $cmd, $layer, $key) => ObjC::msg('p:', ObjC::cls('NSNull'), 'null')],
             'mouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($mouse) {
-                $key = ObjC::addr($self);
+                $key = Mem::addr($self);
                 if (isset(self::$lastDown[$key])) { ObjC::msg('v:', self::$lastDown[$key], 'release'); }
                 self::$lastDown[$key] = ObjC::msg('p:', $event, 'retain');
                 if (($win = ObjC::msg('p:', $self, 'window')) !== null) { WindowDrag::pressed($win, $event); } // native UI's drag regions move the window with it
@@ -167,32 +167,32 @@ final class View
             // A trackpad's pinch (its magnification since the last, and the gesture's phase) and a Force Touch's press (its stage), as they come.
             'magnifyWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
                 [$x, $y] = $point($self, $event);
-                self::$inputs[ObjC::addr($self)]->push(['magnify', $x, $y, ObjC::msg('d:', $event, 'magnification'), ObjC::msg('L:', $event, 'phase')]);
+                self::$inputs[Mem::addr($self)]->push(['magnify', $x, $y, ObjC::msg('d:', $event, 'magnification'), ObjC::msg('L:', $event, 'phase')]);
                 Metal::requestFrame($self);
             }],
             // A swipe goes back and forward, as the side buttons do: the buttons of mice whose makers' software sends swipes for them (Logi Options+), and touchpads set to swipe between pages; deltaX positive, a swipe to the left, goes back, as Safari reads it (mygo's 4b839bc).
             'swipeWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 $dx = ObjC::msg('d:', $event, 'deltaX');
                 if ($dx != 0) {
-                    self::$inputs[ObjC::addr($self)]->push(['key', '', $dx > 0 ? Key::BACK : Key::FORWARD, ObjC::msg('L:', $event, 'modifierFlags')]);
+                    self::$inputs[Mem::addr($self)]->push(['key', '', $dx > 0 ? Key::BACK : Key::FORWARD, ObjC::msg('L:', $event, 'modifierFlags')]);
                     Metal::requestFrame($self);
                 }
             }],
             'pressureChangeWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
                 [$x, $y] = $point($self, $event);
-                self::$inputs[ObjC::addr($self)]->push(['pressure', $x, $y, ObjC::msg('l:', $event, 'stage')]);
+                self::$inputs[Mem::addr($self)]->push(['pressure', $x, $y, ObjC::msg('l:', $event, 'stage')]);
                 Metal::requestFrame($self);
             }],
             'otherMouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($mouse) {
                 if (ObjC::msg('l:', $event, 'buttonNumber') === 2) { $mouse('down')($self, $cmd, $event); return; }
                 $key = match (ObjC::msg('l:', $event, 'buttonNumber')) { 3 => Key::BACK, 4 => Key::FORWARD, default => null };
                 if ($key !== null) {
-                    self::$inputs[ObjC::addr($self)]->push(['key', '', $key, ObjC::msg('L:', $event, 'modifierFlags')]);
+                    self::$inputs[Mem::addr($self)]->push(['key', '', $key, ObjC::msg('L:', $event, 'modifierFlags')]);
                     Metal::requestFrame($self);
                 }
             }],
             'mouseDragged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 [$x, $y] = $point($self, $event);
                 $input->mouse($x, $y);
                 $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
@@ -200,18 +200,18 @@ final class View
                 Metal::requestFrame($self);
             }],
             'mouseExited:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
-                self::$inputs[ObjC::addr($self)]->mouseInside = false;
+                self::$inputs[Mem::addr($self)]->mouseInside = false;
                 Metal::requestFrame($self);
             }],
             'scrollWheel:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::scrollWheel($self, $event)],
             'keyDown:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::keyDown($self, $event, true)],
             // A key without Command or Control types in the field focused, the client or a node taking text before a menu's key equivalent takes it (IINA's player menus have keys alone: Space, the arrows).
             'performKeyEquivalent:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $event): bool {
-                $input = self::$inputs[ObjC::addr($self)] ?? null;
+                $input = self::$inputs[Mem::addr($self)] ?? null;
                 $window = ObjC::msg('p:', $self, 'window');
                 $typing = $input !== null && ($input->focus !== null || $input->client !== null || $input->textCaret !== null)
                     && ObjC::msg('L:', $event, 'type') === self::KEY_DOWN && (ObjC::msg('L:', $event, 'modifierFlags') & (Key::COMMAND | Key::CONTROL)) === 0
-                    && $window !== null && ObjC::addr(ObjC::msg('p:', $window, 'firstResponder')) === ObjC::addr($self);
+                    && $window !== null && Mem::addr(ObjC::msg('p:', $window, 'firstResponder')) === Mem::addr($self);
                 if (!$typing) {
                     return ObjC::msgSuper('b:p', $self, 'MTKView', 'performKeyEquivalent:', $event);
                 }
@@ -220,7 +220,7 @@ final class View
             }],
             // The release of a key, for a node taking its input as it comes (mygo's KeyReleased) and the frame's (Context::keysReleased).
             'keyUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 $mods = ObjC::msg('L:', $event, 'modifierFlags');
                 $input->mods = $mods & Key::MODIFIERS;
                 $plain = ObjC::msg('p:', $event, 'charactersIgnoringModifiers');
@@ -229,7 +229,7 @@ final class View
             }],
             // The modifiers held, as Context::modifiers() reports them with the pointer still (mygo's ModifiersChanged).
             'flagsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
-                self::$inputs[ObjC::addr($self)]->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
+                self::$inputs[Mem::addr($self)]->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
                 Metal::requestFrame($self);
             }],
             // Edit menu roles reach the first responder: as commands, the node taking its input, else the focused field or the selectable text (mygo's SurfaceCommand).
@@ -241,7 +241,7 @@ final class View
             'redo:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'redo')],
             'delete:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'delete')],
             // A frame some time from now (caret blink): see wake().
-            'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self, 1, self::$wakeRepaints[ObjC::addr($self)] ?? false); }],
+            'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self, 1, self::$wakeRepaints[Mem::addr($self)] ?? false); }],
             'selectAll:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'selectAll')],
             // An editing role's item is enabled while the focus would act on it (mygo's SurfaceCommandEnabled); native UI does not speak.
             'validateMenuItem:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $item): bool {
@@ -249,18 +249,18 @@ final class View
                 if ($action === 'startSpeaking:' || $action === 'stopSpeaking:') { return false; }
                 $name = self::EDIT_SELECTORS[$action] ?? null;
                 if ($name === null) { return true; }
-                $enabled = self::$inputs[ObjC::addr($self)]->commandEnabled ?? null;
+                $enabled = self::$inputs[Mem::addr($self)]->commandEnabled ?? null;
                 return $enabled !== null && $enabled($name);
             }],
             // NSTextInputClient
             'hasMarkedText' => ['B@:', 'b(pp)', function ($self, $cmd) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 if ($input->client !== null) { return $input->client->markedRange() !== null; }
                 if ($input->focus === null) { return $input->composing !== ''; } // a node taking text (Node::textCaret)
                 return $input->focus->marked !== null;
             }],
             'markedRange' => ['{_NSRange=QQ}@:', 'n(pp)', function ($self, $cmd) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 if ($input->client !== null) {
                     $r = $input->client->markedRange()?->normalized();
                     return $r === null ? ObjC::range(self::NOT_FOUND, 0) : ObjC::range($r->start, $r->end - $r->start);
@@ -276,7 +276,7 @@ final class View
                 return ObjC::range($f->password ? 0 : TextState::utf16Index($f->text, $f->cursor), TextState::utf16Index($f->marked, strlen($f->marked)));
             }],
             'selectedRange' => ['{_NSRange=QQ}@:', 'n(pp)', function ($self, $cmd) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 if ($input->client !== null) {
                     $r = $input->client->selection()->range->normalized();
                     return ObjC::range($r->start, $r->end - $r->start);
@@ -296,7 +296,7 @@ final class View
                 return ObjC::range($ua, TextState::utf16Index($f->text, $b) - $ua);
             }],
             'setMarkedText:selectedRange:replacementRange:' => ['v@:@{_NSRange=QQ}{_NSRange=QQ}', 'v(pppnn)', function ($self, $cmd, $text, $selected, $replacement) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 $s = self::plainString($text);
                 if ($input->client !== null) {
                     $input->client->setMarkedText(self::clientRange($replacement), $s, new TextInputRange((int)$selected->location, (int)$selected->location + (int)$selected->length));
@@ -316,7 +316,7 @@ final class View
                 Metal::requestFrame($self);
             }],
             'unmarkText' => ['v@:', 'v(pp)', function ($self, $cmd) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 if ($input->client !== null) { $input->client->unmarkText(); Metal::requestFrame($self); return; }
                 if ($input->focus === null && $input->composing !== '') { // what a node taking text had composed is committed
                     $s = $input->composing; $input->composing = '';
@@ -333,7 +333,7 @@ final class View
                 self::insertText($self, $text, self::NOT_FOUND, 0);
             }],
             'attributedSubstringForProposedRange:actualRange:' => ['@@:{_NSRange=QQ}^{_NSRange=QQ}', 'p(ppnp)', function ($self, $cmd, $range, $actual) {
-                $client = self::$inputs[ObjC::addr($self)]->client;
+                $client = self::$inputs[Mem::addr($self)]->client;
                 if ($client === null) { return null; }
                 [$text, $used] = $client->textForRange(new TextInputRange(min((int)$range->location, 1 << 31), min((int)$range->location + (int)$range->length, 1 << 31)));
                 if (!mb_check_encoding($text, 'UTF-8')) { // NSString takes none of it, and NSAttributedString throws at nil: past this callback, which may not throw, the app would abort
@@ -345,7 +345,7 @@ final class View
             }],
             'validAttributesForMarkedText' => ['@@:', 'p(pp)', fn($self, $cmd) => ObjC::msg('p:', ObjC::cls('NSArray'), 'array')],
             'firstRectForCharacterRange:actualRange:' => ['{CGRect={CGPoint=dd}{CGSize=dd}}@:{_NSRange=QQ}^{_NSRange=QQ}', 'r(ppnp)', function ($self, $cmd, $range, $actual) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 if ($input->client !== null) {
                     [[$x, $y, $w, $h], $used] = $input->clientRect(new TextInputRange((int)$range->location, (int)$range->location + (int)$range->length));
                     if ($used !== null) { self::setRange($actual, $used); }
@@ -358,10 +358,10 @@ final class View
             'characterIndexForPoint:' => ['Q@:{CGPoint=dd}', 'L(ppq)', function ($self, $cmd, $p) { // a point of the screen
                 $inWindow = ObjC::msg('r:r', ObjC::msg('p:', $self, 'window'), 'convertRectFromScreen:', ObjC::rect($p->x, $p->y, 0, 0));
                 $at = ObjC::msg('r:rp', $self, 'convertRect:fromView:', $inWindow, null);
-                return self::$inputs[ObjC::addr($self)]->clientIndex($at->x, $at->y) ?? self::NOT_FOUND;
+                return self::$inputs[Mem::addr($self)]->clientIndex($at->x, $at->y) ?? self::NOT_FOUND;
             }],
             'doCommandBySelector:' => ['v@::', 'v(ppp)', function ($self, $cmd, $selector) {
-                $input = self::$inputs[ObjC::addr($self)];
+                $input = self::$inputs[Mem::addr($self)];
                 if ($input->client !== null) { return; } // the keys go to the node taking its input, as mygo's surface leaves them
                 $name = ObjC::selName($selector);
                 if ($input->focus === null || !$input->focus->command($name)) {
@@ -376,7 +376,7 @@ final class View
     /** @internal Window: whether a click on $view's window while another is in front clicks it too, or only brings the window forward (NSView's acceptsFirstMouse:). */
     public static function setAcceptsFirstMouse($view, bool $on): void
     {
-        self::$firstMouse[ObjC::addr($view)] = $on;
+        self::$firstMouse[Mem::addr($view)] = $on;
     }
 
     /** @var array<int, bool> by view, whether the frame its wake asks for only paints again (wake's $repaint) */
@@ -385,7 +385,7 @@ final class View
     /** A frame of $view in $seconds; $repaint: one that only paints the last frame's nodes again, as a drawing asked (Painter::after), unless something else asks for one built anew meanwhile. */
     public static function wake($view, float $seconds, bool $repaint = false): void
     {
-        self::$wakeRepaints[ObjC::addr($view)] = $repaint;
+        self::$wakeRepaints[Mem::addr($view)] = $repaint;
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('wake:'), null);
         ObjC::msg('v:ppd', $view, 'performSelector:withObject:afterDelay:', ObjC::sel('wake:'), null, $seconds);
     }
@@ -393,14 +393,14 @@ final class View
     /** A command of a menu role (Copy, Paste, Undo…, or the Format menu's for a rich text editor) to the runtime: the node taking the view's input, else the focused field or the selectable text with the focus (mygo's SurfaceCommand and contentCommand). */
     public static function command($view, string $command): void
     {
-        self::$inputs[ObjC::addr($view)]->push(['edit', $command]);
+        self::$inputs[Mem::addr($view)]->push(['edit', $command]);
         Metal::requestFrame($view);
     }
 
     /** A selector of the text system for the content, as Tab leaving a web view's page moves the focus on (mygo's WebViewTabOut). */
     public static function keyCommand($view, string $selector): void
     {
-        self::$inputs[ObjC::addr($view)]->push(['command', $selector]);
+        self::$inputs[Mem::addr($view)]->push(['command', $selector]);
         Metal::requestFrame($view);
     }
 
@@ -428,7 +428,7 @@ final class View
      */
     private static function keyDown($self, $event, bool $type): void
     {
-        $input = self::$inputs[ObjC::addr($self)];
+        $input = self::$inputs[Mem::addr($self)];
         $chars = ObjC::phpStr(ObjC::msg('p:', $event, 'characters')); $code = ObjC::msg('S:', $event, 'keyCode'); $mods = ObjC::msg('L:', $event, 'modifierFlags');
         if ($input->textKey($code, $chars, $mods)) { // the app took the key: the field and the view see nothing of it
             Metal::requestFrame($self);
@@ -459,7 +459,7 @@ final class View
 
     private static function insertText($self, $text, int $location, int $length): void
     {
-        $input = self::$inputs[ObjC::addr($self)];
+        $input = self::$inputs[Mem::addr($self)];
         $s = self::plainString($text);
         if ($input->client !== null) {
             $input->client->replaceText($location === self::NOT_FOUND ? null : new TextInputRange($location, $location + $length), $s);

@@ -341,7 +341,7 @@ final class SoftVideo
         ObjC::msg('v:pp', $a, 'setObject:forKey:', $num($h), ObjC::import($c->kCVPixelBufferHeightKey));
         ObjC::msg('v:pp', $a, 'setObject:forKey:', ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary'), ObjC::import($c->kCVPixelBufferIOSurfacePropertiesKey));
         $pool = $c->new('void*');
-        if ($c->CVPixelBufferPoolCreate(null, null, $c->cast('void*', ObjC::addr($a)), FFI::addr($pool)) !== 0) {
+        if ($c->CVPixelBufferPoolCreate(null, null, $c->cast('void*', Mem::addr($a)), FFI::addr($pool)) !== 0) {
             throw new RuntimeException('myphp: CVPixelBufferPoolCreate');
         }
         $this->pool = $pool;

@@ -9,6 +9,7 @@ use MyPHP\Platform;
 use MyPHP\Transfer\Data;
 use MyPHP\UI\{DataDragEvent, DisplayList, Image, Painter};
 use RuntimeException;
+use MyPHP\Native\Mem;
 
 /**
  * A window of the macOS backend (mygo's darwin window.go and surface.go):
@@ -100,7 +101,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     /** The core window of the NSWindow $ns, or of the popover, or null. */
     public static function core(mixed $ns): ?\MyPHP\Window
     {
-        return $ns === null ? null : (self::$open[ObjC::addr($ns)] ?? null)?->w;
+        return $ns === null ? null : (self::$open[Mem::addr($ns)] ?? null)?->w;
     }
 
     /** @internal the window that has the keyboard (mygo's FocusedWindow) */
@@ -139,11 +140,11 @@ final class Window implements Platform\Window, Platform\NativeTips
             $frame($list, (float)$bounds->w, (float)$bounds->h);
         });
         if ($afterPresent !== null) {
-            Metal::$afterPresent[ObjC::addr($this->view)] = $afterPresent;
+            Metal::$afterPresent[Mem::addr($this->view)] = $afterPresent;
         }
         Metal::setClearColor($this->view, App::theme()->background);
         $view = $this->view;
-        Metal::$afterFrame[ObjC::addr($this->view)] = function (): void { // the layer under the materials drawn in the same turn as the frame, the list it used let go
+        Metal::$afterFrame[Mem::addr($this->view)] = function (): void { // the layer under the materials drawn in the same turn as the frame, the list it used let go
             if ($this->under !== null && ($this->w->runtime->underPaints !== [] || $this->underShown)) { ObjC::msg('v:', $this->under, 'draw'); }
             $this->w->runtime->framePresented();
         };
@@ -177,24 +178,24 @@ final class Window implements Platform\Window, Platform\NativeTips
         $delegate = self::delegate();
         if ($flyout !== null && $flyout['popover']) {
             $this->createPopover($delegate);
-            $this->key = ObjC::addr($this->popover);
+            $this->key = Mem::addr($this->popover);
         } else {
             ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
             ObjC::msg('v:p', $this->ns, 'setDelegate:', $delegate);
-            $this->key = ObjC::addr($this->ns);
+            $this->key = Mem::addr($this->ns);
         }
         self::$open[$this->key] = $this;
         if ($this->trafficLights !== null && ($container = $this->titleBarContainer()) !== null) { // AppKit lays the title bar out at each step of a zoom's animation: the lights follow each
             ObjC::msg('v:b', $container, 'setPostsFrameChangedNotifications:', true);
             ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('titleBarLaidOut:'), ObjC::str('NSViewFrameDidChangeNotification'), $container);
         }
-        self::$byView[ObjC::addr($this->view)] = $this;
+        self::$byView[Mem::addr($this->view)] = $this;
         Drag::handle(function ($view, string $kind, DataDragEvent $d, float $x, float $y): bool {
-            $win = self::$byView[ObjC::addr($view)] ?? null;
+            $win = self::$byView[Mem::addr($view)] ?? null;
             return $win !== null && $win->w->dataEvent($kind, $d, $x, $y);
         });
         Drop::handle(function ($view, array $paths, float $x, float $y) {
-            (self::$byView[ObjC::addr($view)] ?? null)?->w->filesDropped($paths, $x, $y);
+            (self::$byView[Mem::addr($view)] ?? null)?->w->filesDropped($paths, $x, $y);
         });
     }
 
@@ -271,7 +272,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     {
         if (!self::$delegateDefined) {
             self::$delegateDefined = true;
-            $of = fn($note): ?Window => self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+            $of = fn($note): ?Window => self::$open[Mem::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
             $fire = fn(string $event) => function ($self, $cmd, $note) use ($event, $of) {
                 $win = $of($note);
                 if ($win === null) {
@@ -288,14 +289,14 @@ final class Window implements Platform\Window, Platform\NativeTips
             };
             ObjC::defineClass('MyPHPWindowDelegate', 'NSObject', [
                 'windowShouldClose:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $sender) {
-                    return (self::$open[ObjC::addr($sender)] ?? null)?->w->shouldClose() ?? true;
+                    return (self::$open[Mem::addr($sender)] ?? null)?->w->shouldClose() ?? true;
                 }],
                 'windowWillClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($of) {
                     $of($note)?->w->closed();
                 }],
                 // The user clicked elsewhere, in a transient popover: a press on its own tray icon leaves it to the icon's click, which toggles it, rather than closing it for the click to open it again.
                 'popoverShouldClose:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $popover) {
-                    $win = self::$open[ObjC::addr($popover)] ?? null;
+                    $win = self::$open[Mem::addr($popover)] ?? null;
                     if ($win === null) {
                         return true;
                     }
@@ -321,7 +322,7 @@ final class Window implements Platform\Window, Platform\NativeTips
                 'windowDidResignKey:' => ['v@:@', 'v(ppp)', $fire('blur')],
                 'windowDidResize:' => ['v@:@', 'v(ppp)', $fire('resize')],
                 'windowDidMove:' => ['v@:@', 'v(ppp)', $fire('move')],
-                'windowWillMove:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $note) => \MyPHP\Native\WindowDrag::the()->willMove(ObjC::addr(ObjC::msg('p:', $note, 'object')))], // the window server begins to move it: a drag region's press is its
+                'windowWillMove:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $note) => \MyPHP\Native\WindowDrag::the()->willMove(Mem::addr(ObjC::msg('p:', $note, 'object')))], // the window server begins to move it: a drag region's press is its
                 'windowDidMiniaturize:' => ['v@:@', 'v(ppp)', $fire('minimize')],
                 'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
@@ -333,13 +334,13 @@ final class Window implements Platform\Window, Platform\NativeTips
                 'customWindowsToEnterFullScreenForWindow:' => ['@@:@', 'p(ppp)', fn($self, $cmd, $ns) => self::ownAnimation($ns)],
                 'customWindowsToExitFullScreenForWindow:' => ['@@:@', 'p(ppp)', fn($self, $cmd, $ns) => self::ownAnimation($ns)],
                 'window:startCustomAnimationToEnterFullScreenWithDuration:' => ['v@:@d', 'v(pppd)', function ($self, $cmd, $ns, $duration) {
-                    $win = self::$open[ObjC::addr($ns)] ?? null;
+                    $win = self::$open[Mem::addr($ns)] ?? null;
                     if ($win === null) { return; }
                     $win->windowedFrame = ObjC::msg('r:', $ns, 'frame'); // where it goes back to
                     $win->animateFrame(ObjC::msg('r:', ObjC::msg('p:', $ns, 'screen'), 'frame'), $duration);
                 }],
                 'window:startCustomAnimationToExitFullScreenWithDuration:' => ['v@:@d', 'v(pppd)', function ($self, $cmd, $ns, $duration) {
-                    $win = self::$open[ObjC::addr($ns)] ?? null;
+                    $win = self::$open[Mem::addr($ns)] ?? null;
                     if ($win?->windowedFrame !== null) { $win->animateFrame($win->windowedFrame, $duration); }
                 }],
                 'windowDidChangeOcclusionState:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($of) {
@@ -348,7 +349,7 @@ final class Window implements Platform\Window, Platform\NativeTips
                 }],
                 'windowDidChangeBackingProperties:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { App::rescale(); }],
                 'titleBarLaidOut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // the title bar container's frame changed: AppKit laid it out
-                    $win = self::$open[ObjC::addr(ObjC::msg('p:', ObjC::msg('p:', $note, 'object'), 'window'))] ?? null;
+                    $win = self::$open[Mem::addr(ObjC::msg('p:', ObjC::msg('p:', $note, 'object'), 'window'))] ?? null;
                     $win?->layoutTrafficLights();
                 }],
             ], ['NSWindowDelegate', 'NSPopoverDelegate']);
@@ -368,12 +369,12 @@ final class Window implements Platform\Window, Platform\NativeTips
         unset(self::$open[$this->key]);
         $this->blackOut(false); // its black windows go with it, the menu bar and the Dock back
         if ($this->legacy !== null) { ObjC::msg('v:L', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'setPresentationOptions:', $this->legacy[2]); }
-        if ($this->view !== null) { unset(Metal::$afterPresent[ObjC::addr($this->view)]); }
+        if ($this->view !== null) { unset(Metal::$afterPresent[Mem::addr($this->view)]); }
         if ($this->popover !== null) {
             $this->cleanupPopover();
         }
         if ($this->attention !== 0) { $this->flashFrame(false); }
-        unset(self::$byView[ObjC::addr($this->view)]);
+        unset(self::$byView[Mem::addr($this->view)]);
         if ($this->ns !== null) { \MyPHP\Native\WindowDrag::forget($this->ns); }
         if ($this->w->runtime !== null) { Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
         if ($this->under !== null) {
@@ -578,7 +579,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     /** How the last frame was drawn, for FrameStats: whole, in rectangles, or nothing (FrameDamage). */
     public function lastDraw(): string
     {
-        return 'Metal, drew ' . (Metal::$redrew[ObjC::addr($this->view)] ?? 'whole');
+        return 'Metal, drew ' . (Metal::$redrew[Mem::addr($this->view)] ?? 'whole');
     }
 
     public function backingScale(): float
@@ -613,7 +614,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     /** Lets clicks through native UI to the web views where $at says they are. @param \Closure(float, float): bool $at */
     public function passThrough(\Closure $at): void
     {
-        View::$passThrough[ObjC::addr($this->view)] = $at;
+        View::$passThrough[Mem::addr($this->view)] = $at;
     }
 
     /** The last frame native UI drew: premultiplied BGRA, its width and height in pixels. @return array{0: string, 1: int, 2: int} */
@@ -1013,7 +1014,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     /** The windows to go full screen by an animation of their own for $ns, a window of a video: itself; else nil, AppKit's animation. */
     private static function ownAnimation($ns)
     {
-        $w = self::$open[ObjC::addr($ns)] ?? null;
+        $w = self::$open[Mem::addr($ns)] ?? null;
         return $w === null || $w->videoHosts === [] ? null : ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $ns);
     }
 
@@ -1145,7 +1146,7 @@ final class Window implements Platform\Window, Platform\NativeTips
         $screens = ObjC::msg('p:', ObjC::cls('NSScreen'), 'screens');
         for ($i = 0, $n = ObjC::msg('L:', $screens, 'count'); $i < $n; $i++) {
             $screen = ObjC::msg('p:L', $screens, 'objectAtIndex:', $i);
-            if (ObjC::addr($screen) === ObjC::addr($mine)) { continue; }
+            if (Mem::addr($screen) === Mem::addr($mine)) { continue; }
             $b = ObjC::msg('p:rLlb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', ObjC::msg('r:', $screen, 'frame'), 0, 2, false); // borderless, buffered
             ObjC::msg('v:b', $b, 'setReleasedWhenClosed:', false);
             ObjC::msg('v:p', $b, 'setBackgroundColor:', ObjC::msg('p:', ObjC::cls('NSColor'), 'blackColor'));
@@ -1488,12 +1489,12 @@ final class Window implements Platform\Window, Platform\NativeTips
     private function stackUnder(): void
     {
         $clips = [];
-        foreach ($this->videoHosts as $h) { $clips[ObjC::addr($h['clip'])] = true; }
+        foreach ($this->videoHosts as $h) { $clips[Mem::addr($h['clip'])] = true; }
         $subviews = ObjC::msg('p:', $this->container, 'subviews');
         $top = null;
         for ($i = 0, $n = ObjC::msg('L:', $subviews, 'count'); $i < $n; $i++) {
             $v = ObjC::msg('p:L', $subviews, 'objectAtIndex:', $i);
-            if (isset($clips[ObjC::addr($v)])) { $top = $v; }
+            if (isset($clips[Mem::addr($v)])) { $top = $v; }
         }
         ObjC::msg('v:', $this->under, 'retain');
         ObjC::msg('v:', $this->under, 'removeFromSuperview');
@@ -1756,7 +1757,7 @@ final class Window implements Platform\Window, Platform\NativeTips
             $subs = ObjC::msg('p:', $this->container, 'subviews');
             $at = 0;
             for ($i = 0, $n = ObjC::msg('L:', $subs, 'count'); $i < $n && $at < count($order); $i++) {
-                if (ObjC::addr(ObjC::msg('p:L', $subs, 'objectAtIndex:', $i)) === ObjC::addr($order[$at][1])) { $at++; }
+                if (Mem::addr(ObjC::msg('p:L', $subs, 'objectAtIndex:', $i)) === Mem::addr($order[$at][1])) { $at++; }
             }
             if ($at === count($order)) {
                 return;
@@ -1769,7 +1770,7 @@ final class Window implements Platform\Window, Platform\NativeTips
             ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $v, -1, $this->view); // NSWindowBelow: right under the native view
             ObjC::msg('v:', $v, 'release');
         }
-        if ($first !== null && ObjC::addr($first) !== ObjC::addr(ObjC::msg('p:', $this->ns, 'firstResponder'))) {
+        if ($first !== null && Mem::addr($first) !== Mem::addr(ObjC::msg('p:', $this->ns, 'firstResponder'))) {
             ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $first);
         }
     }
@@ -1865,7 +1866,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     private static function flyoutAnchoredAt($ev): ?Window
     {
         $evWin = ObjC::msg('p:', $ev, 'window');
-        $p = $evWin === null ? null : (self::$open[ObjC::addr($evWin)] ?? null);
+        $p = $evWin === null ? null : (self::$open[Mem::addr($evWin)] ?? null);
         if ($p === null || $p->w->isDestroyed()) {
             return null;
         }
@@ -2044,7 +2045,7 @@ final class Window implements Platform\Window, Platform\NativeTips
         self::$panelsDefined = true;
         // WebKit moves the keyboard out of a page past its ends through the window's key view loop: a web view in native UI gives it back to the content (mygo's tabOut).
         $keyView = fn(string $class, bool $back) => function ($self, $cmd, $view) use ($class, $back): void {
-            if ((self::$open[ObjC::addr($self)] ?? null)?->tabOut($view, $back)) {
+            if ((self::$open[Mem::addr($self)] ?? null)?->tabOut($view, $back)) {
                 return;
             }
             ObjC::msgSuper('v:p', $self, $class, $back ? 'selectKeyViewPrecedingView:' : 'selectKeyViewFollowingView:', $view);
@@ -2062,7 +2063,7 @@ final class Window implements Platform\Window, Platform\NativeTips
             'cancelOperation:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {}],
         ]);
         ObjC::defineClass('MyPHPFlyout', 'NSPanel', [
-            'canBecomeKeyWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => (self::$open[ObjC::addr($self)] ?? null)?->w->flyoutState()['focusable'] ?? false],
+            'canBecomeKeyWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => (self::$open[Mem::addr($self)] ?? null)?->w->flyoutState()['focusable'] ?? false],
             'canBecomeMainWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
         ]);
     }

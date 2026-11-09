@@ -41,7 +41,7 @@ final class PictureInPicture
     {
         self::define();
         $this->delegate = ObjC::msg('p:', ObjC::alloc('MyPHPPictureInPicture'), 'init');
-        self::$of[ObjC::addr($this->delegate)] = $this;
+        self::$of[Mem::addr($this->delegate)] = $this;
         $this->source = ObjC::msg('p:pp', ObjC::alloc('AVPictureInPictureControllerContentSource'), 'initWithSampleBufferDisplayLayer:playbackDelegate:', $player->out->layer, $this->delegate);
         $this->controller = ObjC::msg('p:p', ObjC::alloc('AVPictureInPictureController'), 'initWithContentSource:', $this->source);
         ObjC::msg('v:p', $this->controller, 'setDelegate:', $this->delegate);
@@ -81,7 +81,7 @@ final class PictureInPicture
         $out = [];
         $all = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'windows');
         for ($i = 0, $n = ObjC::msg('L:', $all, 'count'); $i < $n; $i++) {
-            $out[ObjC::addr(ObjC::msg('p:L', $all, 'objectAtIndex:', $i))] = true;
+            $out[Mem::addr(ObjC::msg('p:L', $all, 'objectAtIndex:', $i))] = true;
         }
         return $out;
     }
@@ -102,7 +102,7 @@ final class PictureInPicture
         $all = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'windows');
         for ($i = 0, $n = ObjC::msg('L:', $all, 'count'); $i < $n; $i++) {
             $w = ObjC::msg('p:L', $all, 'objectAtIndex:', $i);
-            if (isset($this->before[ObjC::addr($w)]) || !ObjC::msg('b:', $w, 'isVisible') || !ObjC::msg('b:p', $w, 'isKindOfClass:', ObjC::cls('NSPanel'))) {
+            if (isset($this->before[Mem::addr($w)]) || !ObjC::msg('b:', $w, 'isVisible') || !ObjC::msg('b:p', $w, 'isKindOfClass:', ObjC::cls('NSPanel'))) {
                 continue;
             }
             $b = ObjC::msg('r:', ObjC::msg('p:', $w, 'contentView'), 'bounds');
@@ -167,7 +167,7 @@ final class PictureInPicture
             return;
         }
         $defined = true;
-        $of = fn($delegate): ?self => self::$of[ObjC::addr($delegate)] ?? null;
+        $of = fn($delegate): ?self => self::$of[Mem::addr($delegate)] ?? null;
         ObjC::defineClass('MyPHPPictureInPicture', 'NSObject', [
             // AVPictureInPictureSampleBufferPlaybackDelegate: how the player plays, and the window's buttons.
             'pictureInPictureController:setPlaying:' => ['v@:@B', 'v(pppb)', function ($self, $cmd, $ctl, $playing) use ($of) {
@@ -228,7 +228,7 @@ final class PictureInPicture
         if ($this->active) { $this->stop(); }
         $this->losePanel();
         ObjC::msg('v:p', $this->controller, 'setDelegate:', null);
-        unset(self::$of[ObjC::addr($this->delegate)]);
+        unset(self::$of[Mem::addr($this->delegate)]);
         foreach ([$this->controller, $this->source, $this->delegate] as $o) {
             ObjC::msg('v:', $o, 'release');
         }

@@ -8,6 +8,7 @@ use MyPHP\Platform;
 use MyPHP\Platform\{Menu, TrayHandler};
 use MyPHP\Rectangle;
 use RuntimeException;
+use MyPHP\Native\Mem;
 
 /** An icon in the menu bar, an NSStatusItem (mygo's darwin tray). */
 final class Tray implements Platform\Tray
@@ -50,7 +51,7 @@ final class Tray implements Platform\Tray
         if ($font !== null) { ObjC::msg('v:p', $this->button(), 'setFont:', $font); }
         self::define();
         $button = $this->button();
-        self::$byButton[ObjC::addr($button)] = $this;
+        self::$byButton[Mem::addr($button)] = $this;
         ObjC::msg('v:p', $button, 'setTarget:', self::$target); // a menu, while there is one, takes the clicks instead
         ObjC::msg('v:p', $button, 'setAction:', ObjC::sel('trayClicked:'));
         ObjC::msg('l:L', $button, 'sendActionOn:', self::LEFT_UP | self::RIGHT_UP);
@@ -74,7 +75,7 @@ final class Tray implements Platform\Tray
         self::$defined = true;
         ObjC::defineClass('MyPHPTrayTarget', 'NSObject', [
             'trayClicked:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                $tray = self::$byButton[ObjC::addr($sender)] ?? null;
+                $tray = self::$byButton[Mem::addr($sender)] ?? null;
                 if ($tray === null) {
                     return;
                 }
@@ -85,7 +86,7 @@ final class Tray implements Platform\Tray
             }],
             // The menu bar under the button turned dark or light: with the system's appearance, or the wallpaper under a translucent bar.
             'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(ppppppp)', function ($self, $cmd, $path, $object, $change, $context) {
-                $tray = self::$byButton[ObjC::addr($object)] ?? null;
+                $tray = self::$byButton[Mem::addr($object)] ?? null;
                 if ($tray === null || ($dark = $tray->dark()) === $tray->wasDark) {
                     return;
                 }
@@ -242,7 +243,7 @@ final class Tray implements Platform\Tray
     {
         $win = ObjC::msg('p:', $this->button(), 'window');
         $evWin = $ev === null ? null : ObjC::msg('p:', $ev, 'window');
-        if ($win === null || $evWin === null || ObjC::addr($evWin) !== ObjC::addr($win)) { return; }
+        if ($win === null || $evWin === null || Mem::addr($evWin) !== Mem::addr($win)) { return; }
         $f = ObjC::msg('r:', $win, 'frame');
         $at = ObjC::msg('q:', ObjC::cls('NSEvent'), 'mouseLocation');
         $in = ObjC::msg('q:', $ev, 'locationInWindow');
@@ -296,7 +297,7 @@ final class Tray implements Platform\Tray
         if ($win === null) { return false; }
         $ev = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
         $evWin = $ev === null ? null : ObjC::msg('p:', $ev, 'window');
-        if ($evWin !== null && ObjC::addr($evWin) === ObjC::addr($win) && in_array(ObjC::msg('L:', $ev, 'type'), [1, 3], true)) { // NSEventTypeLeftMouseDown, RightMouseDown
+        if ($evWin !== null && Mem::addr($evWin) === Mem::addr($win) && in_array(ObjC::msg('L:', $ev, 'type'), [1, 3], true)) { // NSEventTypeLeftMouseDown, RightMouseDown
             $p = ObjC::msg('q:qp', $button, 'convertPoint:fromView:', ObjC::msg('q:', $ev, 'locationInWindow'), null);
             return self::inRect($p, ObjC::msg('r:', $button, 'bounds'));
         }
@@ -321,7 +322,7 @@ final class Tray implements Platform\Tray
         }
         if ($this->owner !== null) { $this->menus->dropOwner($this->owner); }
         ObjC::msg('v:pp', $this->button(), 'removeObserver:forKeyPath:', self::$target, ObjC::str('effectiveAppearance'));
-        unset(self::$byButton[ObjC::addr($this->button())]);
+        unset(self::$byButton[Mem::addr($this->button())]);
         ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar'), 'removeStatusItem:', $this->item);
         ObjC::msg('v:', $this->item, 'release');
         $this->item = null;

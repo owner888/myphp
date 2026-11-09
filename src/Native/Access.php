@@ -76,13 +76,13 @@ final class Access
     public static function attach($view, Input $input): void
     {
         self::define();
-        self::$surfaces[ObjC::addr($view)] = new self($view, $input);
+        self::$surfaces[Mem::addr($view)] = new self($view, $input);
     }
 
     /** The methods of the view that make it the container of the elements, for View's class. @return array<string, array> */
     public static function viewMethods(): array
     {
-        $surface = fn($view) => self::$surfaces[ObjC::addr($view)] ?? null;
+        $surface = fn($view) => self::$surfaces[Mem::addr($view)] ?? null;
         return [
             'isAccessibilityElement' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
             'accessibilityChildren' => ['@@:', 'p(pp)', function ($self, $cmd) use ($surface) {
@@ -111,16 +111,16 @@ final class Access
     /** Gives the frame's tree of the view to AppKit. */
     public static function update($view, AccessTree $tree): void
     {
-        $s = self::$surfaces[ObjC::addr($view)] ?? null;
+        $s = self::$surfaces[Mem::addr($view)] ?? null;
         $s?->apply($tree);
     }
 
     /** Releases the elements of the view, which is going (mygo's destroyAccess). */
     public static function detach($view): void
     {
-        $s = self::$surfaces[ObjC::addr($view)] ?? null;
+        $s = self::$surfaces[Mem::addr($view)] ?? null;
         if ($s === null) { return; }
-        unset(self::$surfaces[ObjC::addr($view)]);
+        unset(self::$surfaces[Mem::addr($view)]);
         foreach ($s->elements as $id => $el) { $s->drop($id); }
         if ($s->topLevel !== null) { ObjC::msg('v:', $s->topLevel, 'release'); }
     }
@@ -146,7 +146,7 @@ final class Access
     /** The element of the node of $obj, an element, and its surface; null for one gone. @return ?array{0: self, 1: array} */
     private static function of($obj): ?array
     {
-        [$s, $id] = self::$byObj[ObjC::addr($obj)] ?? [null, 0];
+        [$s, $id] = self::$byObj[Mem::addr($obj)] ?? [null, 0];
         return $s === null || !isset($s->elements[$id]) ? null : [$s, $s->elements[$id]];
     }
 
@@ -333,7 +333,7 @@ final class Access
     {
         $obj = $this->elements[$id]['obj'];
         self::post($obj, 'AXUIElementDestroyed');
-        unset(self::$byObj[ObjC::addr($obj)], $this->elements[$id]);
+        unset(self::$byObj[Mem::addr($obj)], $this->elements[$id]);
         ObjC::msg('v:', $obj, 'release');
     }
 
@@ -349,7 +349,7 @@ final class Access
                     $fresh[$n->id] = true;
                     $obj = ObjC::msg('p:', ObjC::alloc('MyPHPAccessibilityElement'), 'init');
                     $this->elements[$n->id] = ['obj' => $obj, 'node' => $n, 'parent' => 0, 'children' => [], 'chosen' => [], 'count' => -1];
-                    self::$byObj[ObjC::addr($obj)] = [$this, $n->id];
+                    self::$byObj[Mem::addr($obj)] = [$this, $n->id];
                     $this->set($this->elements[$n->id], $n, true);
                     $changed = true;
                 } elseif ($this->set($this->elements[$n->id], $n, false)) {
@@ -366,14 +366,14 @@ final class Access
             foreach ($tree->nodes as $i => $n) {
                 $el = &$this->elements[$n->id];
                 $parent = $n->parent >= 0 && isset($tree->nodes[$n->parent]) ? $objs[$n->parent] : $this->view;
-                if ($el['parent'] !== ObjC::addr($parent)) {
-                    $el['parent'] = ObjC::addr($parent);
+                if ($el['parent'] !== Mem::addr($parent)) {
+                    $el['parent'] = Mem::addr($parent);
                     ObjC::msg('v:p', $el['obj'], 'setAccessibilityParent:', $parent);
                 }
                 $ids = $children[$i] ?? []; $kids = $childObjs[$i] ?? [];
                 if ($n->webView !== null && !$n->webView->isDestroyed()) { // the page of a web view inside the element showing it (mygo's)
                     $web = $n->webView->page()->web->ns;
-                    array_unshift($kids, $web); array_unshift($ids, 'web:' . ObjC::addr($web));
+                    array_unshift($kids, $web); array_unshift($ids, 'web:' . Mem::addr($web));
                 }
                 if ($el['children'] !== $ids) {
                     $el['children'] = $ids;

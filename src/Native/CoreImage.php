@@ -37,7 +37,7 @@ final class CoreImage
         ', '/System/Library/Frameworks/CoreImage.framework/CoreImage');
         self::$format = self::$c->kCIFormatRGBA8;
         self::$orientKey = ObjC::import(self::$c->kCIImageApplyOrientationProperty);
-        self::$colorSpace = ObjC::addr(self::$c->CGColorSpaceCreateDeviceRGB()); // passed to render by its address, kept for the process
+        self::$colorSpace = Mem::addr(self::$c->CGColorSpaceCreateDeviceRGB()); // passed to render by its address, kept for the process
         self::$context = ObjC::msg('p:', ObjC::msg('p:p', ObjC::cls('CIContext'), 'contextWithOptions:', null), 'retain');
         self::$queue = ObjC::msg('p:', ObjC::alloc('NSOperationQueue'), 'init');
     }
@@ -107,7 +107,7 @@ final class CoreImage
         foreach ($args as $i => [$type, $v]) {
             $slot = match ($type) { 'p', 'L' => $c->new('unsigned long'), 'l' => $c->new('long'), 'i' => $c->new('int'), 'r' => $v }; // a pointer as its address: a void* CData takes no cdata
             if ($type !== 'r') {
-                $slot->cdata = $type === 'p' ? ObjC::addr($v) : $v;
+                $slot->cdata = $type === 'p' ? Mem::addr($v) : $v;
             }
             ObjC::msg('v:pl', $inv, 'setArgument:atIndex:', FFI::addr($slot), $i); // copied by the invocation
         }

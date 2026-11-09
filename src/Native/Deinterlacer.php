@@ -101,14 +101,14 @@ final class Deinterlacer
     public function send(CData $sb, float $time, float $duration, bool $show, $layer): void
     {
         $vt = self::vt();
-        $sb = $vt->cast('void*', ObjC::addr($sb)); // CoreMedia's, through this library's declarations
+        $sb = $vt->cast('void*', Mem::addr($sb)); // CoreMedia's, through this library's declarations
         $format = $vt->CMSampleBufferGetFormatDescription($sb);
         if ($this->session !== null && ($format === null || !$vt->VTDecompressionSessionCanAcceptFormatDescription($this->session, $format))) {
             $this->close(); // another format (a resolution change): a session of it
         }
         if ($this->session === null) {
             $session = $vt->new('void*');
-            $st = $vt->VTDecompressionSessionCreate(null, $format, null, $vt->cast('void*', ObjC::addr(self::attributes())), FFI::addr($this->record), FFI::addr($session));
+            $st = $vt->VTDecompressionSessionCreate(null, $format, null, $vt->cast('void*', Mem::addr(self::attributes())), FFI::addr($this->record), FFI::addr($session));
             if ($st !== 0) {
                 throw new RuntimeException("myphp: a decoder to deinterlace: VideoToolbox error $st");
             }
@@ -253,7 +253,7 @@ final class Deinterlacer
         ObjC::msg('v:pp', $a, 'setObject:forKey:', $num($w), ObjC::import($vt->kCVPixelBufferWidthKey));
         ObjC::msg('v:pp', $a, 'setObject:forKey:', $num($h), ObjC::import($vt->kCVPixelBufferHeightKey));
         $pool = $vt->new('void*');
-        if ($vt->CVPixelBufferPoolCreate(null, null, $vt->cast('void*', ObjC::addr($a)), FFI::addr($pool)) !== 0) {
+        if ($vt->CVPixelBufferPoolCreate(null, null, $vt->cast('void*', Mem::addr($a)), FFI::addr($pool)) !== 0) {
             throw new RuntimeException('myphp: CVPixelBufferPoolCreate');
         }
         $this->pool = $pool;

@@ -134,7 +134,7 @@ final class WindowDrag
     {
         self::watch();
         self::$window = $window;
-        self::the()->down(ObjC::addr($window), self::point());
+        self::the()->down(Mem::addr($window), self::point());
     }
 
     /** Moves $window (an NSWindow) with the press of a drag region, while the button is down; $down is the press. */
@@ -142,7 +142,7 @@ final class WindowDrag
     {
         if (!ObjC::msg('b:', $window, 'isMovable')) { return; }
         $f = ObjC::msg('r:', $window, 'frame');
-        match (self::the()->start(ObjC::addr($window), [$f->x, $f->y])) {
+        match (self::the()->start(Mem::addr($window), [$f->x, $f->y])) {
             self::START_NATIVE => ObjC::msg('v:p', $window, 'performWindowDragWithEvent:', $down),
             self::START_MANUAL => self::move(),
             default => null,
@@ -152,7 +152,7 @@ final class WindowDrag
     /** Forgets the press of window $window, which closes. */
     public static function forget($window): void
     {
-        if (self::$the !== null && self::$the->win === ObjC::addr($window)) {
+        if (self::$the !== null && self::$the->win === Mem::addr($window)) {
             self::$the->up();
             self::$window = null;
         }
@@ -175,7 +175,7 @@ final class WindowDrag
             if ($d->phase === self::IDLE) { return $ev; }
             if (ObjC::msg('L:', $ev, 'type') === 6) { // NSEventTypeLeftMouseDragged
                 $w = ObjC::msg('p:', $ev, 'window');
-                if ($w === null || ObjC::addr($w) !== $d->win) { return $ev; }
+                if ($w === null || Mem::addr($w) !== $d->win) { return $ev; }
                 $f = ObjC::msg('r:', $w, 'frame');
                 [$eat, $move] = $d->dragged(self::point(), [$f->x, $f->y]);
                 if ($move) { self::move(); }

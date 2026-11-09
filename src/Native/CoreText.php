@@ -179,7 +179,7 @@ final class CoreText implements \MyPHP\Platform\Fonts
         }
         if ($style & Font::MONO) { // the system's monospaced font, SF Mono, its weight bold or regular, as the text system's "monospace" (mygo's systemFont)
             $ns = ObjC::msg('p:dd', ObjC::cls(\MyPHP\App::isIOS() ? 'UIFont' : 'NSFont'), 'monospacedSystemFontOfSize:weight:', $size, $style & Font::BOLD ? 0.4 : 0.0) ?? throw new RuntimeException('monospaced system font'); // UIFont and NSFont are toll-free CTFonts alike
-            $font = $this->c->CFRetain($this->c->cast('void*', ObjC::addr($ns)));
+            $font = $this->c->CFRetain($this->c->cast('void*', Mem::addr($ns)));
             $style &= ~Font::BOLD;
         } else {
             $font = $this->c->CTFontCreateUIFontForLanguage(self::UI_FONT_SYSTEM, $size, null) ?? throw new RuntimeException('system font');

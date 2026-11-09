@@ -149,11 +149,11 @@ final class ContextMenus
     /** Whether $menu is WebKit's context menu, rather than a menu of the app's popped up over the web view: an item of it does what WebKit does, or bears one of its identifiers. */
     public static function isWebKits($menu): bool
     {
-        $forward = ObjC::addr(ObjC::sel('forwardContextMenuAction:'));
+        $forward = Mem::addr(ObjC::sel('forwardContextMenuAction:'));
         for ($i = 0, $n = ObjC::msg('l:', $menu, 'numberOfItems'); $i < $n; $i++) {
             $item = ObjC::msg('p:l', $menu, 'itemAtIndex:', $i);
             $action = ObjC::msg('p:', $item, 'action');
-            if ($action !== null && ObjC::addr($action) === $forward || str_starts_with(self::identifier($item), 'WKMenuItemIdentifier')) {
+            if ($action !== null && Mem::addr($action) === $forward || str_starts_with(self::identifier($item), 'WKMenuItemIdentifier')) {
                 return true;
             }
         }

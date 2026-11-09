@@ -1,8 +1,8 @@
 <?php
-// A pointer's address is ObjC::addr's (v1.28): FFI's cast of a void* to an
+// A pointer's address is Mem::addr's (v1.28): FFI's cast of a void* to an
 // integer type reads what the pointer points to, not the pointer, which
 // crashed farm at its first step (an AudioQueueRef points to nothing
-// readable). ObjC::addr reads the pointer's own bytes through a slot; no
+// readable). Mem::addr reads the pointer's own bytes through a slot; no
 // source casts a pointer to an integer.
 declare(strict_types=1);
 
@@ -14,7 +14,7 @@ $cell->cdata = 42;
 $slot = $ffi->new('void*[1]');
 $slot[0] = \FFI::addr($cell);
 same(42, $ffi->cast('int64_t', $slot[0])->cdata, "FFI's cast reads through a void*");
-$bytes = $ffi->cast('unsigned long[1]', $slot); // ObjC::addr's slot
+$bytes = $ffi->cast('unsigned long[1]', $slot); // Mem::addr's slot
 check($bytes[0] !== 42 && $bytes[0] !== 0, 'the slot\'s bytes are the address');
 
 $casts = [];

@@ -5,6 +5,7 @@ namespace MyPHP\Plugins\Game\Gamepad;
 
 use FFI;
 use MyPHP\Native\ObjC;
+use MyPHP\Native\Mem;
 
 /**
  * A pad of GameController.framework (mygo's gamepad_darwin.go): a
@@ -83,7 +84,7 @@ final class GameController implements Device
                 if (ObjC::msg('p:', $c, 'extendedGamepad') === null) {
                     continue; // a remote or a micro gamepad
                 }
-                $k = dechex(ObjC::addr($c));
+                $k = dechex(Mem::addr($c));
                 if (isset($known[$k])) {
                     $found[] = $known[$k];
                     continue;
@@ -103,7 +104,7 @@ final class GameController implements Device
 
     public function key(): string
     {
-        return dechex(ObjC::addr($this->ctl));
+        return dechex(Mem::addr($this->ctl));
     }
 
     public function name(): string
@@ -126,7 +127,7 @@ final class GameController implements Device
         return self::withPool(function (): ?State {
             $present = self::$present ?? function (mixed $ctl): bool {
                 foreach (self::controllers() as $c) {
-                    if (ObjC::addr($c) === ObjC::addr($ctl)) {
+                    if (Mem::addr($c) === Mem::addr($ctl)) {
                         return true;
                     }
                 }

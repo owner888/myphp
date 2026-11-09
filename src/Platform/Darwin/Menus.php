@@ -5,6 +5,7 @@ namespace MyPHP\Platform\Darwin;
 
 use MyPHP\Native\ObjC;
 use MyPHP\Platform\{Menu, MenuItem};
+use MyPHP\Native\Mem;
 
 /**
  * NSMenus built of menu snapshots (mygo's darwin menu.go). Native items are
@@ -203,7 +204,7 @@ final class Menus
             if ($it->opens) {
                 $this->delegate ??= $this->defineDelegate();
                 ObjC::msg('v:p', $sub, 'setDelegate:', $this->delegate);
-                $this->opening[ObjC::addr($sub)] = [$it->id, $owner];
+                $this->opening[Mem::addr($sub)] = [$it->id, $owner];
             }
             ObjC::msg('v:p', $ns, 'setSubmenu:', $sub);
             ObjC::msg('v:', $sub, 'release');
@@ -278,7 +279,7 @@ final class Menus
             if ($sub === null) {
                 continue;
             }
-            $addr = ObjC::addr($sub);
+            $addr = Mem::addr($sub);
             $was = $this->opening[$addr] ?? null;
             $prev = $this->subOwners[$addr] ?? null;
             if ($prev !== null) { $this->dropOwner($prev); }
@@ -337,7 +338,7 @@ final class Menus
         $h = $this->b->h;
         ObjC::defineClass('MyPHPMenuDelegate', 'NSObject', [
             'menuWillOpen:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $menu) use ($h) {
-                $o = $this->opening[ObjC::addr($menu)] ?? null;
+                $o = $this->opening[Mem::addr($menu)] ?? null;
                 if ($o !== null) { $h->menuWillOpen($o[0]); }
             }],
         ]);
