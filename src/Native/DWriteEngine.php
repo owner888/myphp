@@ -259,7 +259,8 @@ final class DWriteEngine implements \MyPHP\Text\Engine
         $vt->GetPixelsPerDip = function ($self, $context, $ppd) { $ppd[0] = 1.0; return 0; };
         $vt->DrawGlyphRun = function ($self, $context, $x, $y, $measuring, $run, $desc, $effect) {
             $n = $run->glyphCount;
-            $r = ['x' => (float)$x, 'face' => $this->d->typed($run->fontFace, 'void *'), // its own: the run is DirectWrite's, gone once Draw returns 'size' => $run->fontEmSize, 'rtl' => ($run->bidiLevel & 1) !== 0,
+            // The face a pointer of its own: the run is DirectWrite's, gone once Draw returns.
+            $r = ['x' => (float)$x, 'face' => $this->d->typed($run->fontFace, 'void *'), 'size' => $run->fontEmSize, 'rtl' => ($run->bidiLevel & 1) !== 0,
                 'pos' => $desc->textPosition, 'n' => $desc->stringLength, 'glyphs' => [], 'advances' => [], 'offsets' => [], 'clusters' => []];
             for ($i = 0; $i < $n; $i++) {
                 $r['glyphs'][] = $run->glyphIndices[$i];
