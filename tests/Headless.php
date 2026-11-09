@@ -792,7 +792,7 @@ function check(bool $cond, string $what): void
 {
     global $checks, $failures;
     $checks++;
-    if (!$cond) { $failures[] = $what; echo "  FAIL: $what\n"; annotate($what); }
+    if (!$cond) { $failures[] = $what; echo '  FAIL: ' . str_replace(["\r\n", "\n"], ' / ', $what) . "\n"; annotate($what); } // a line each, as run.php --each reads them
 }
 
 /** A failure also as a GitHub Actions error, which the run's summary and its API show without its log. */

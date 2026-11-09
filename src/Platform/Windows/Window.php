@@ -37,6 +37,8 @@ final class Window implements Platform\Window
 
     public CData $hwnd;
     private bool $dead = false;
+    /** Whether the window is being made: Windows sends its sizes and moves at once, while the core has no native of it yet, to hear them. */
+    private bool $making = true;
     private bool $minimized = false;
     private ?\Closure $frame = null;
     private ?\Closure $afterPresent = null;
@@ -72,6 +74,7 @@ final class Window implements Platform\Window
         if ($o->maxWidth > 0 || $o->maxHeight > 0) { $this->setMaximumSize($o->maxWidth, $o->maxHeight); }
         if ($o->opacity > 0 && $o->opacity < 1) { $this->setOpacity($o->opacity); }
         $this->themeChanged();
+        $this->making = false;
     }
 
     /** The open windows' natives. @return list<self> */
@@ -90,6 +93,9 @@ final class Window implements Platform\Window
     private function message(int $m, int $wp, int $lp): ?int
     {
         $u = Win32::user32();
+        if ($this->making && in_array($m, [Win32::WM_MOVE, Win32::WM_SIZE, Win32::WM_ACTIVATE], true)) {
+            return null; // the core has no native of the window yet
+        }
         switch ($m) {
             case Win32::WM_CLOSE:
                 if ($this->w->shouldClose()) { $u->DestroyWindow($this->hwnd); }

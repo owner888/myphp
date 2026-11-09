@@ -19,10 +19,11 @@ namespace MyPHP\Tests;
     if ($st['running']) { proc_terminate($p); }
     proc_close($p);
     $out = (string)file_get_contents($logs[0]); $err = substr((string)file_get_contents($logs[1]), -1500);
+    $oneLine = fn(string $s): string => str_replace(["\r\n", "\n"], ' / ', trim($s)); // a failure's message is one line (run.php --each reads them so)
     array_map('unlink', $logs);
     $line = array_values(array_filter(explode("\n", $out), fn(string $l) => str_starts_with($l, '{')))[0] ?? '';
     $r = json_decode($line, true);
-    if (!is_array($r)) { check(false, "the app's report: $out | its log: $err"); return; }
+    if (!is_array($r)) { check(false, "the app's report: {$oneLine($out)} | its log: {$oneLine($err)}"); return; }
     echo "  $line\n";
     check(!$st['running'], 'the app ends as it quits');
     check($r['scale'] >= 1, 'its scale, of its display\'s DPI');
