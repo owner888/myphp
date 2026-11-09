@@ -8833,8 +8833,15 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   what TranslateMessage makes of it, WM_CHAR, types, unless the press was
   taken; a surrogate pair types once whole, control characters none. With
   Alt they go on to DefWindowProc, so Alt+F4, Alt+Space and F10 keep
-  working. `windows_input_test` sends a window the messages and reads what
-  its Input heard.
+  working. An input method (IMM32, mygo's surface's) composes into the
+  content as Linux's preedit does (the method's own composition window
+  hidden: WM_IME_SETCONTEXT without ISC_SHOWUICOMPOSITIONWINDOW), what it
+  settles on typed (GCS_RESULTSTR), its composition and candidate windows
+  at the caret after each frame; the window has an input context only
+  while a node takes text with input methods (ImmAssociateContextEx), so
+  shortcuts and a field without them get the layout's keys, and one taken
+  away completes what it composed. `windows_input_test` sends a window the
+  messages and reads what its Input heard, and types into a field.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

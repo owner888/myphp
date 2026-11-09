@@ -1,7 +1,7 @@
 <?php
 // The mouse, the wheel and the keys on Windows (windows_input_test.php): Win32's messages sent to a
 // window of native UI and what its core window's Input heard of them, in points; a click tapping a
-// view.
+// view; the input context the window's only while a field takes text, which WM_CHAR types into.
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
@@ -94,9 +94,29 @@ App::whenReady(function () use (&$r) {
             $kb->SetKeyboardState($state);
             $n = $u->new('uint32_t');
             $r['lines'] = $u->SystemParametersInfoW(0x68, 0, FFI::addr($n), 0) !== 0 && $n->cdata > 0 && $n->cdata < 100 ? $n->cdata : 3;
+            // No node takes text: the window has no input context, so keys type the layout's characters.
+            $r['imeOff'] = Win32::imm32()->ImmGetContext($w->native()->hwnd) === null;
             $w->close();
-            echo json_encode($r), "\n";
-            App::quit();
+            // A field focused: the window has its input context, and WM_CHAR types into the field.
+            $name = '';
+            $field = Content::view(function () use (&$name) { return TextField('Name', text: $name)->defaultFocus()->frame(width: 200); });
+            $w2 = new Window(new WindowOptions(title: 'Field', width: 300, height: 100, content: $field));
+            $w2->show();
+            App::after(0.4, function () use ($w2, $u, &$name, &$r) {
+                $hwnd = $w2->native()->hwnd;
+                $imm = Win32::imm32();
+                $himc = $imm->ImmGetContext($hwnd);
+                $r['imeOn'] = $himc !== null;
+                if ($himc !== null) { $imm->ImmReleaseContext($hwnd, $himc); }
+                $r['focused'] = $w2->input->focus !== null;
+                foreach ([0x68, 0x69, 0xD83D, 0xDE00] as $c) { $u->SendMessageW($hwnd, Win32::WM_CHAR, $c, 0); }
+                App::after(0.3, function () use ($w2, &$name, &$r) {
+                    $r['typed'] = $name;
+                    $w2->close();
+                    echo json_encode($r), "\n";
+                    App::quit();
+                });
+            });
         });
     });
 });

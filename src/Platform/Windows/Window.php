@@ -10,7 +10,7 @@ use MyPHP\{App, Rectangle, WindowOptions};
 use MyPHP\Platform;
 use MyPHP\Platform\Linux\Keys as LinuxKeys;
 use MyPHP\Platform\Unsupported;
-use MyPHP\UI\{Cursor, Image, Key};
+use MyPHP\UI\{Cursor, Image, Key, TextInputRange, TextState};
 
 /**
  * A top-level window of Win32 (mygo's windows window): its frame in
@@ -26,7 +26,10 @@ use MyPHP\UI\{Cursor, Image, Key};
  * keys back and forward; the keys as Linux's window gives them too (Keys:
  * macOS's codes by their place, what the layout types), then the text
  * WM_CHAR types (TranslateMessage's of the key), a key taken first typing
- * nothing. Native UI's frames are built when
+ * nothing; an input method's composition shown by the content (its own
+ * window hidden), its candidates by the caret, its text typed, the input
+ * context the window's only while a node takes text. Native UI's frames
+ * are built when
  * asked for, from the queue (requestFrame), drawn by Direct3D 11 into the
  * window's swap chain (Native\D3d) and presented at the display's
  * refresh; WM_PAINT shows the last one again. Web pages come with
@@ -78,6 +81,8 @@ final class Window implements Platform\Window
     /** Whether the last key pressed was taken (a command, the node taking its input, a key hook), so that its WM_CHAR types nothing; a high surrogate of WM_CHAR waiting for its pair. */
     private bool $keyTaken = false;
     private int $high = 0;
+    /** Whether the window has its input context (a node takes text with input methods). */
+    private bool $ime = true;
     /** The system's lines a wheel's notch scrolls (SPI_GETWHEELSCROLLLINES), asked once. */
     private static ?int $wheelLines = null;
     /** @var ?array{0: int, 1: int, 2: CData} the style, the extended one and the placement before full screen */
@@ -171,6 +176,19 @@ final class Window implements Platform\Window
                 return $this->pointer($m, $wp, $lp);
             case Win32::WM_KEYDOWN: case Win32::WM_SYSKEYDOWN: case Win32::WM_KEYUP: case Win32::WM_SYSKEYUP: case Win32::WM_CHAR: case Win32::WM_SYSCHAR:
                 return $this->key($m, $wp, $lp);
+            case Win32::WM_IME_SETCONTEXT: // the composition the content shows, not the input method's own window (ISC_SHOWUICOMPOSITIONWINDOW)
+                return $u->DefWindowProcW($this->hwnd, $m, $wp, $lp & ~0x80000000);
+            case Win32::WM_IME_STARTCOMPOSITION:
+                $this->placeCaret();
+                return 0;
+            case Win32::WM_IME_COMPOSITION:
+                $this->composition($lp);
+                return 0;
+            case Win32::WM_IME_ENDCOMPOSITION:
+                $this->composed('', 0);
+                return 0;
+            case Win32::WM_IME_CHAR:
+                return 0; // WM_IME_COMPOSITION's result typed it
             case Win32::WM_SETCURSOR:
                 if (($lp & 0xFFFF) === 1 && $this->cursorShown !== null) { // HTCLIENT: the content's cursor
                     $u->SetCursor($this->cursorShown === Cursor::None ? null : $u->LoadCursorW(null, self::CURSORS[$this->cursorShown->value] ?? 32512));
@@ -391,6 +409,119 @@ final class Window implements Platform\Window
         $this->requestFrame();
     }
 
+    /**
+     * WM_IME_COMPOSITION (mygo's surface's): the text it settled on typed
+     * (GCS_RESULTSTR), then the composition, its caret, shown
+     * (GCS_COMPSTR, GCS_CURSORPOS); the candidates moved to the caret.
+     */
+    private function composition(int $lp): void
+    {
+        $imm = Win32::imm32();
+        $himc = $imm->ImmGetContext($this->hwnd);
+        if ($himc === null) {
+            return;
+        }
+        try {
+            if (($lp & 0x800) !== 0 && ($text = self::imeString($himc, 0x800)) !== '') {
+                $this->typed($text);
+            }
+            if (($lp & 0x8) !== 0) {
+                $text = self::imeString($himc, 0x8);
+                $units = max(0, $imm->ImmGetCompositionStringW($himc, 0x80, null, 0)); // its caret, in UTF-16 units
+                $u16 = (string)iconv('UTF-8', 'UTF-16LE', $text);
+                $this->composed($text, mb_strlen((string)iconv('UTF-16LE', 'UTF-8', substr($u16, 0, min($units, strlen($u16) >> 1) * 2)), 'UTF-8'));
+            }
+        } finally {
+            $imm->ImmReleaseContext($this->hwnd, $himc);
+        }
+        $this->placeCaret();
+    }
+
+    /** A string of the input context's composition, of GCS_ $which. */
+    private static function imeString(CData $himc, int $which): string
+    {
+        $imm = Win32::imm32();
+        $n = $imm->ImmGetCompositionStringW($himc, $which, null, 0);
+        if ($n <= 0) {
+            return '';
+        }
+        $buf = $imm->new("uint8_t[$n]");
+        $imm->ImmGetCompositionStringW($himc, $which, $buf, $n);
+        return (string)iconv('UTF-16LE', 'UTF-8', FFI::string($buf, $n));
+    }
+
+    /** The input method's composition, $caret characters into it, shown, as Linux's preedit: by the client of the node taking text, the field focused, or the node taking it; '' ends it. */
+    private function composed(string $s, int $caret): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        $caret = min($caret, mb_strlen($s, 'UTF-8'));
+        $byte = strlen(mb_substr($s, 0, $caret, 'UTF-8'));
+        if ($input->client !== null) {
+            $u = TextState::utf16Index($s, $byte);
+            $input->client->setMarkedText(null, $s, new TextInputRange($u, $u));
+        } elseif ($input->focus === null) {
+            if ($input->textCaret !== null) {
+                $input->composing = $s;
+                $input->push(['compose', $s, $caret]);
+            }
+        } elseif ($s === '') {
+            if ($input->focus->marked !== null) { $input->focus->setMarked('', 0); }
+        } else {
+            $input->focus->setMarked($s, $byte);
+        }
+        $this->requestFrame();
+    }
+
+    /**
+     * The input context the window's while a node takes text with input
+     * methods, none otherwise, so keys type the layout's characters
+     * (mygo's SetTextInput; one taken away completes what it composed);
+     * its composition and candidates by the caret of the node taking text,
+     * in pixels, as Linux's placeCaret.
+     */
+    private function placeCaret(): void
+    {
+        $input = $this->w->input;
+        if ($input === null || $this->dead) {
+            return;
+        }
+        $imm = Win32::imm32();
+        $active = ($input->focus !== null || $input->client !== null || $input->textCaret !== null) && ($input->client === null || $input->inputMethod);
+        if ($active !== $this->ime) {
+            $this->ime = $active;
+            if (!$active && ($himc = $imm->ImmGetContext($this->hwnd)) !== null) {
+                $imm->ImmNotifyIME($himc, 0x15, 0x1, 0); // NI_COMPOSITIONSTR, CPS_COMPLETE
+                $imm->ImmReleaseContext($this->hwnd, $himc);
+            }
+            $imm->ImmAssociateContextEx($this->hwnd, null, $active ? 0x10 : 0); // IACE_DEFAULT, or none
+        }
+        if (!$active || ($himc = $imm->ImmGetContext($this->hwnd)) === null) {
+            return;
+        }
+        if ($input->client !== null) {
+            $r = $input->client->selection()->range->normalized();
+            [[$x, $y, $w, $h]] = $input->clientRect(new TextInputRange($r->start, $r->start));
+        } else {
+            $f = $input->focus;
+            [$x, $y, $w, $h] = $input->caretRect($f === null ? 0 : TextState::utf16Index($f->text, $f->cursor));
+        }
+        $s = $this->scale();
+        [$px, $py, $ph] = [(int)round($x * $s), (int)round($y * $s), max(1, (int)round($h * $s))];
+        $cf = $imm->new('COMPOSITIONFORM');
+        $cf->dwStyle = 0x2; // CFS_POINT
+        $cf->ptCurrentPos->x = $px; $cf->ptCurrentPos->y = $py;
+        $imm->ImmSetCompositionWindow($himc, FFI::addr($cf));
+        $cand = $imm->new('CANDIDATEFORM');
+        $cand->dwStyle = 0x80; // CFS_EXCLUDE: below the caret, never over it
+        $cand->ptCurrentPos->x = $px; $cand->ptCurrentPos->y = $py + $ph;
+        $cand->rcArea->left = $px; $cand->rcArea->top = $py; $cand->rcArea->right = $px + 1; $cand->rcArea->bottom = $py + $ph;
+        $imm->ImmSetCandidateWindow($himc, FFI::addr($cand));
+        $imm->ImmReleaseContext($this->hwnd, $himc);
+    }
+
     /** A press's clicks: one more than the last's of the same button within the double-click time and rectangle, centered on it, at the window's DPI; one otherwise. */
     private function clicks(int $button, int $x, int $y): int
     {
@@ -499,6 +630,7 @@ final class Window implements Platform\Window
             $this->drawn = [$pw, $ph, $scale * $list->zoom, $clear];
             $this->afterPresent?->__invoke();
             $this->w->runtime?->framePresented();
+            $this->placeCaret();
         } finally {
             $this->rendering = false;
         }

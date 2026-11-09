@@ -34,6 +34,10 @@ use MyPHP\UI\Key;
     same(1, $r['tapped'], 'a click on the view tapped it (the Input after the press ' . json_encode($r['afterDown']) . ', the release ' . json_encode($r['afterUp']) . ', the window ' . json_encode($r['window']) . ')');
     same([true, 60, 70], $r['inside'], 'the pointer inside, where it is in points');
     same(false, $r['left'], 'and gone as it leaves');
+    check($r['imeOff'], 'no input context while no node takes text');
+    check($r['focused'], 'a field focused by default');
+    check($r['imeOn'], 'the input context the window\'s while the field takes text');
+    same("hi\u{1F600}", $r['typed'], 'WM_CHAR typed into the field');
     $notch = 33 * $r['lines'];
     // Numbers as floats to three places, whole or not, on both sides: JSON keeps no difference.
     $num = function (array $a) use (&$num): array {
