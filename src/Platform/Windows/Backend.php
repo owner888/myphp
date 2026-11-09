@@ -13,9 +13,9 @@ use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
  * loop is the thread's message queue; a hidden window of the app's
  * (mygo's appHwnd) gets what it posts itself (ready, dispatch, a function
  * to run), the timers, and what Windows tells every top-level window: the
- * settings, the displays, power and the session. Windows of native UI,
- * pages, the text, menus and the rest come stage by stage; what is not
- * here yet throws Unsupported.
+ * settings, the displays, power and the session. Its windows are
+ * Windows\Window; native UI's renderer and text, pages, menus and the rest
+ * come stage by stage; what is not here yet throws Unsupported.
  */
 final class Backend implements Platform\Backend
 {
@@ -202,7 +202,8 @@ final class Backend implements Platform\Backend
 
     public function newWindow(\MyPHP\Window $w, \MyPHP\WindowOptions $o, bool $panel): Platform\Window
     {
-        throw new Unsupported('myphp: windows are not on Windows yet');
+        $this->start();
+        return new Window($this, $w, $o, $panel);
     }
 
     public function newPage(int $width, int $height, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
@@ -212,7 +213,7 @@ final class Backend implements Platform\Backend
 
     public function focusedWindow(): ?\MyPHP\Window
     {
-        return null;
+        return Window::active()?->w;
     }
 
     public function doubleClickInterval(): float
@@ -254,7 +255,7 @@ final class Backend implements Platform\Backend
 
     public function theme(): Platform\Theme
     {
-        return $this->theme ??= new Theme;
+        return $this->theme ??= new Theme($this);
     }
 
     public function power(): Platform\Power
