@@ -30,8 +30,6 @@ final class Backend implements Platform\Backend
     /** @var array<int, Closure> the timers' closures, by their ids */
     private array $timers = [];
     private int $nextTimer = 0;
-    /** @var list<array{0: float, 1: Closure}> timers asked for before init: their due time, their closure */
-    private array $early = [];
     private ?App $app = null;
     private ?Screen $screen = null;
     private ?Theme $theme = null;
@@ -54,21 +52,24 @@ final class Backend implements Platform\Backend
 
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
+        $this->start();
+    }
+
+    /**
+     * The thread's COM and DPI awareness, and the app's window, once: at
+     * init, or before it as a timer, a signal or a wait asks for them (a
+     * test's App::wait without the app running), as GLib's loop runs
+     * before GTK's init on Linux. @return CData the app's window
+     */
+    private function start(): CData
+    {
         if ($this->hwnd !== null) {
-            return;
+            return $this->hwnd;
         }
         Win32::ole32()->CoInitializeEx(null, 2); // apartment threaded, as a UI thread's COM
         Win32::user32()->SetProcessDpiAwarenessContext(-4); // per monitor v2: the windows' sizes in pixels, scaled by their display's DPI
         Win32::registerClass('MyPHPApp');
-        $this->hwnd = Win32::createWindow('MyPHPApp', '', 0, 0, fn(int $msg, int $wp, int $lp): ?int => $this->message($msg, $wp, $lp));
-        $now = microtime(true);
-        foreach ($this->early as [$due, $fn]) {
-            $this->timer(max(0.0, $due - $now), $fn);
-        }
-        $this->early = [];
-        if ($this->signaled) {
-            Win32::user32()->PostMessageW($this->hwnd, self::WM_APP_DISPATCH, 0, 0);
-        }
+        return $this->hwnd = Win32::createWindow('MyPHPApp', '', 0, 0, fn(int $msg, int $wp, int $lp): ?int => $this->message($msg, $wp, $lp));
     }
 
     /** The app window's messages. */
@@ -146,18 +147,13 @@ final class Backend implements Platform\Backend
             return;
         }
         $this->signaled = true;
-        if ($this->hwnd !== null) {
-            Win32::user32()->PostMessageW($this->hwnd, self::WM_APP_DISPATCH, 0, 0);
-        }
+        Win32::user32()->PostMessageW($this->start(), self::WM_APP_DISPATCH, 0, 0);
     }
 
     /** A timer of the app window's (SetTimer: 10 ms at the least), or, for none, the queue's next turn. */
     public function timer(float $seconds, Closure $fn): void
     {
-        if ($this->hwnd === null) {
-            $this->early[] = [microtime(true) + $seconds, $fn];
-            return;
-        }
+        $this->start();
         if ($seconds <= 0) {
             $this->posted[] = $fn;
             if (count($this->posted) === 1) { Win32::user32()->PostMessageW($this->hwnd, self::WM_APP_RUN, 0, 0); }
@@ -171,6 +167,7 @@ final class Backend implements Platform\Backend
     /** Waits 50 ms at most for a message, then handles those there are (mygo's Step); WM_QUIT is posted again for the loop outside. */
     public function step(): void
     {
+        $this->start();
         $u = Win32::user32();
         $u->MsgWaitForMultipleObjectsEx(0, null, 50, 0x04FF /* QS_ALLINPUT */, 0x0004 /* MWMO_INPUTAVAILABLE */);
         $m = $u->new('MSG');

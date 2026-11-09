@@ -304,7 +304,7 @@ same(['plugin:io.test.a:subs' => 'Subs — Alpha'], MediaPlayerState::pluginProv
 same('Subs', MediaPlayerState::providerName('plugin:io.test.a:subs'), 'its name');
 $items = $iina->subtitle->search('subs');
 same([['name' => 'One', 'left' => 'en', 'right' => '1 KB'], ['name' => 'Two', 'left' => 'zh', 'right' => '']], array_map(fn($i) => $i->desc, $items), 'found; one of no desc described by description()');
-same(["{$pa->tmpDir()}/sub2.srt"], $iina->subtitle->download('subs', $items[1]), 'downloaded: its files, as paths');
+same([Plugin::normalize("{$pa->tmpDir()}/sub2.srt")], array_map(Plugin::normalize(...), $iina->subtitle->download('subs', $items[1])), 'downloaded: its files, as paths');
 
 // Turned off: its instance unloaded, its listeners gone, its provider not a source.
 Plugins::setEnabled($pa, false);
@@ -342,12 +342,15 @@ $pkg = "$root/pkg";
 @mkdir($pkg, 0777, true);
 file_put_contents("$pkg/Info.json", json_encode(['name' => 'Delta', 'author' => ['name' => 'A'], 'identifier' => 'io.test.d', 'version' => '2.0', 'entry' => 'main.php', 'permissions' => ['show-alert']]));
 file_put_contents("$pkg/main.php", '<?php return function ($iina) {};');
-exec('cd ' . escapeshellarg($pkg) . ' && zip -q -r ' . escapeshellarg("$root/delta.iinaplgz") . ' .');
+$zip = fn(string $to) => PHP_OS_FAMILY === 'Windows' // no zip there: its tar writes one
+    ? exec(escapeshellarg(getenv('SystemRoot') . '\\System32\\tar.exe') . ' --format zip -cf ' . escapeshellarg($to) . ' -C ' . escapeshellarg($pkg) . ' .')
+    : exec('cd ' . escapeshellarg($pkg) . ' && zip -q -r ' . escapeshellarg($to) . ' .');
+$zip("$root/delta.iinaplgz");
 $asked = [];
 $agree = function (Plugin $p) use (&$asked): bool { $asked[] = $p->permissions; return true; };
 same('installed', Plugins::install(Plugins::unpack("$root/delta.iinaplgz"), $agree, fn() => false), 'installed');
 $d = Plugins::byId('io.test.d');
-same([[['show-alert']], "$dir/io.test.d.iinaplugin", true], [$asked, $d->root, $d->enabled()], 'its permissions agreed to, in its folder, on');
+same([[['show-alert']], Plugin::normalize("$dir/io.test.d.iinaplugin"), true], [$asked, Plugin::normalize($d->root), $d->enabled()], 'its permissions agreed to, in its folder, on');
 same('cancelled', Plugins::install(Plugins::unpack("$root/delta.iinaplgz"), $agree, fn() => false), 'again, not replaced');
 same('reinstalled', Plugins::install(Plugins::unpack("$root/delta.iinaplgz"), $agree, fn() => true), 'replaced');
 same([1, []], [count(array_filter(Plugins::all(), fn(Plugin $p) => $p->identifier === 'io.test.d')), glob("$dir/.temp.*")], 'once, no temporary folder left');
@@ -356,7 +359,7 @@ try { Plugins::unpack("$root/nothing.iinaplgz"); } catch (\MyPHP\PlayerPlugins\P
 same('Cannot find the package file.', $threw, 'no package: IINA\'s error');
 // An update put in place of the plugin (Plugins::replace): more permissions agreed to, its place and its being on kept; refused, nothing changes.
 file_put_contents("$pkg/Info.json", json_encode(['name' => 'Delta', 'author' => ['name' => 'A'], 'identifier' => 'io.test.d', 'version' => '3.0', 'entry' => 'main.php', 'permissions' => ['show-alert', 'show-osd']]));
-@unlink("$root/delta3.iinaplgz"); exec('cd ' . escapeshellarg($pkg) . ' && zip -q -r ' . escapeshellarg("$root/delta3.iinaplgz") . ' .');
+@unlink("$root/delta3.iinaplgz"); $zip("$root/delta3.iinaplgz");
 $old = Plugins::byId('io.test.d'); $at = array_search($old, Plugins::all(), true);
 $offered = [];
 check(!Plugins::replace($old, Plugins::unpack("$root/delta3.iinaplgz"), function (Plugin $new, Plugin $was) use (&$offered) { $offered[] = [$new->version, $was->version]; return false; }), 'more permissions refused: not updated');

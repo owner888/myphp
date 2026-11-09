@@ -241,7 +241,7 @@ final class Plugins
         $tmp = self::dir() . '/.temp.' . bin2hex(random_bytes(8));
         $unzipped = "$tmp-1";
         @mkdir($tmp); @mkdir($unzipped);
-        $out = self::run(['/usr/bin/unzip', '-q', $file, '-d', $unzipped]);
+        $out = self::unzip($file, $unzipped);
         if ($out !== null) {
             self::removeTree($unzipped); self::removeTree($tmp);
             throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotUnpackage', ['output' => $out]));
@@ -379,7 +379,7 @@ final class Plugins
         file_put_contents($file, $zip);
         @mkdir($tmp); @mkdir($unzipped);
         try {
-            $out = self::run(['/usr/bin/unzip', '-q', $file, '-d', $unzipped]);
+            $out = self::unzip($file, $unzipped);
             $top = array_values(array_filter(array_map(fn(string $f) => "$unzipped/$f", array_diff(scandir($unzipped) ?: [], ['.', '..', '__MACOSX'])), 'is_dir')); // the archive's folder ("repo-main")
             if ($out !== null || count($top) !== 1) {
                 self::removeTree($tmp);
@@ -462,6 +462,14 @@ final class Plugins
     }
 
     /** Runs $argv: null if it went well, else what it wrote. @param list<string> $argv */
+    /** Unzips $file into $dir: unzip, as IINA does, or Windows's tar (bsdtar, which reads zips); what it said where it failed. */
+    private static function unzip(string $file, string $dir): ?string
+    {
+        return self::run(PHP_OS_FAMILY === 'Windows'
+            ? [getenv('SystemRoot') . '\\System32\\tar.exe', '-xf', $file, '-C', $dir]
+            : ['/usr/bin/unzip', '-q', $file, '-d', $dir]);
+    }
+
     private static function run(array $argv): ?string
     {
         $proc = proc_open($argv, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
