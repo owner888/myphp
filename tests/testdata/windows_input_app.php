@@ -12,7 +12,9 @@ require __DIR__ . '/../../src/autoload.php';
 $r = ['taps' => 0, 'window' => [], 'steps' => []];
 App::setName('InputTest');
 App::whenReady(function () use (&$r) {
-    $w = new Window(new WindowOptions(title: 'Input', width: 400, height: 300, content: Content::view(fn() => Color(Color::rgb(0xff0000))->frame(width: 100, height: 100)->onTapGesture(function () use (&$r) { $r['taps']++; })->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading))));
+    // Made out here: the view's arrow function would hold a copy of $r, which the tap would count in.
+    $tap = function () use (&$r) { $r['taps']++; };
+    $w = new Window(new WindowOptions(title: 'Input', width: 400, height: 300, content: Content::view(fn() => Color(Color::rgb(0xff0000))->frame(width: 100, height: 100)->onTapGesture($tap)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading))));
     $w->show();
     $u = Win32::user32();
     $hwnd = $w->native()->hwnd;

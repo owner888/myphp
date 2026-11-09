@@ -38,7 +38,8 @@ use MyPHP\UI\Key;
         return array_map(fn($v) => is_array($v) ? $num($v) : (is_int($v) || is_float($v) ? round((float)$v, 3) : $v), $a);
     };
     $want = [
-        'move' => [['move', 60, 70]],
+        // A move goes to the node under the pointer at once, never queued (Runtime::deliver): the pointer's place is what it leaves.
+        'move' => [],
         'press' => [['down', 60, 70, 0, 1, 0]],
         'drag' => [['drag', 61, 70]],
         'release' => [['up', 61, 70, 0, 1, 0]],
