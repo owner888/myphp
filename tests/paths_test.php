@@ -13,6 +13,7 @@ if (PHP_OS_FAMILY === 'Windows') {
     same([true, true, true, true, false, false], array_map(fn(string $p) => Paths::isAbsolute($p), ['C:\\x', 'c:/x', '\\\\server\\share', '\\x', 'x\\y', 'C:x']), 'a drive\'s, a share\'s, the current drive\'s root; not a relative one, nor C:x');
     same('C:\\base\\x\\y', Paths::absolute('x\\y', 'C:\\base\\'), 'a relative path under its base');
     same(['C:\\Users\\Ada\\a b.txt', '\\\\server\\share\\c.txt'], Data::files('C:\\Users\\Ada\\a b.txt', '\\\\server\\share\\c.txt')->paths(), 'a drive\'s and a share\'s file through file URLs and back');
+    same([], Data::url('file://server/share/c.txt')->paths(), 'a URL of a host is none, as mygo has it');
 } else {
     same([true, false, false], array_map(fn(string $p) => Paths::isAbsolute($p), ['/x', 'x/y', 'C:\\x']), 'from / alone');
     same('/base/x/y', Paths::absolute('x/y', '/base/'), 'a relative path under its base');
