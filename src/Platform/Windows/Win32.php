@@ -131,6 +131,8 @@ final class Win32
             int32_t GetMessageTime(void);
             int32_t GetSystemMetricsForDpi(int32_t index, uint32_t dpi);
             int32_t GetKeyboardState(uint8_t *state);
+            void *CreateIconFromResourceEx(const char *bits, uint32_t size, int32_t icon, uint32_t version, int32_t cx, int32_t cy, uint32_t flags);
+            int32_t DestroyIcon(void *icon);
             void *CreateMenu(void);
             void *CreatePopupMenu(void);
             int32_t AppendMenuW(void *menu, uint32_t flags, uintptr_t id, const void *text);

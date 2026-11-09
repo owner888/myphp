@@ -20,7 +20,9 @@ use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
  */
 final class Backend implements Platform\Backend
 {
-    private const WM_APP_READY = Win32::WM_APP, WM_APP_DISPATCH = Win32::WM_APP + 1, WM_APP_RUN = Win32::WM_APP + 2;
+    private const WM_APP_READY = Win32::WM_APP, WM_APP_DISPATCH = Win32::WM_APP + 1, WM_APP_RUN = Win32::WM_APP + 2, WM_APP_TRAY_ADD = Win32::WM_APP + 4;
+    /** @internal the notification area's callback message for the trays */
+    public const WM_APP_TRAY = Win32::WM_APP + 3;
 
     /** The app's hidden window, null before init. */
     private ?CData $hwnd = null;
@@ -39,6 +41,9 @@ final class Backend implements Platform\Backend
     private ?Power $power = null;
     private ?Media $media = null;
     private ?Menus $menus = null;
+    /** @var array<int, Tray> the trays, by their numbers; the number of the last one counted */
+    private array $trays = [];
+    private int $nextTray = 0;
     /** The system's icons, none yet (Headless stands them in through this property). */
     private ?Platform\Symbols $symbols = null;
 
@@ -77,7 +82,19 @@ final class Backend implements Platform\Backend
     /** The app window's messages. */
     private function message(int $msg, int $wp, int $lp): ?int
     {
+        if ($this->menus !== null && ($r = MenuDraw::message($this->hwnd, $msg, $wp, $lp)) !== null) {
+            return $r; // a tray's menu's items, drawn here
+        }
         switch ($msg) {
+            case self::WM_APP_TRAY:
+                ($this->trays[$wp] ?? null)?->event($lp & 0xFFFF);
+                return 0;
+            case self::WM_APP_TRAY_ADD:
+                foreach ($this->trays as $t) { $t->add(); }
+                return 0;
+            case Win32::WM_INITMENUPOPUP:
+                if ((($lp >> 16) & 0xFFFF) === 0) { $this->menus?->opening($wp); }
+                return null;
             case self::WM_APP_READY:
                 $this->h->ready();
                 return 0;
@@ -98,7 +115,10 @@ final class Backend implements Platform\Backend
                 return 0;
             case Win32::WM_SETTINGCHANGE:
                 $what = Win32::strAt($lp);
-                if ($what === 'ImmersiveColorSet') { $this->h->themeChanged(); }
+                if ($what === 'ImmersiveColorSet') {
+                    $this->h->themeChanged();
+                    foreach ($this->trays as $t) { $t->appearance(); }
+                }
                 elseif ($what === 'intl') { $this->h->localeChanged(); }
                 return 0;
             case Win32::WM_DISPLAYCHANGE:
@@ -190,7 +210,13 @@ final class Backend implements Platform\Backend
 
     public function menus(): Menus
     {
-        return $this->menus ??= new Menus($this->h);
+        if ($this->menus === null) {
+            $this->menus = new Menus($this->h);
+            $this->menus->trayMenus = function (MenuItem $it): void {
+                foreach ($this->trays as $t) { $t->menu()?->apply($it); }
+            };
+        }
+        return $this->menus;
     }
 
     /** Shows $m in the menu bar of every window that shows the application menu, and of those to come (mygo's SetApplicationMenu). */
@@ -247,9 +273,36 @@ final class Backend implements Platform\Backend
         return Win32::user32()->GetDoubleClickTime() / 1000;
     }
 
+    /**
+     * A notification area icon (mygo's NewTray), added once the call that
+     * made it gave it its number, image and tooltip: the notification area
+     * keeps the user's choices for an icon by its number and names it by its
+     * first tooltip, and keeps none for one added blank.
+     */
     public function newTray(TrayHandler $h): Platform\Tray
     {
-        throw new Unsupported('myphp: the tray is not on Windows yet');
+        $this->start();
+        $t = new Tray($this, $h, ++$this->nextTray);
+        $this->trays[$t->id] = $t;
+        Win32::user32()->PostMessageW($this->hwnd, self::WM_APP_TRAY_ADD, 0, 0);
+        return $t;
+    }
+
+    /** @internal $t numbered $n, unless another icon has it */
+    public function renumberTray(Tray $t, int $n): bool
+    {
+        if (isset($this->trays[$n])) {
+            return false;
+        }
+        unset($this->trays[$t->id]);
+        $this->trays[$n] = $t;
+        return true;
+    }
+
+    /** @internal $t gone */
+    public function forgetTray(Tray $t): void
+    {
+        unset($this->trays[$t->id]);
     }
 
     /** DirectWrite's fonts at the primary display's scale. */
