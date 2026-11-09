@@ -34,7 +34,11 @@ Xcode's Devices window.
 The app's `main.php` becomes the package's `app.php`, with the framework
 under `src/` beside it; the launcher requires `src/autoload.php` before
 it, so the app registers no autoloader of its own (its desktop one, if it
-has one, is never reached for MyPHP's classes).
+has one, is never reached for MyPHP's classes). An entry that loads the
+framework itself on the desktop does it only where it is not loaded yet:
+`class_exists(\MyPHP\App::class) || require …/src/autoload.php`, as the
+examples and the template's `boot.php` do; the path it requires is not in
+the phone's package.
 
 Text is the system's: `TextRunShaper` and `Canvas.drawGlyphs` on Android,
 CoreText on iOS, so Chinese, Japanese and emoji come with the system's

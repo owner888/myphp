@@ -11,7 +11,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\Content;
 use MyPHP\UI\RichText\{Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** The text the editor starts with. */
 function sampleNote(): Text

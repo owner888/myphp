@@ -11,7 +11,8 @@ declare(strict_types=1);
 use MyPHP\{App, Clipboard, Cookie, Cookies, Event, FindOptions, Ipc, Network, NetworkStatus, PDFOptions, PageSize, SecretNotFound, Secrets, Window, WindowOptions};
 use MyPHP\Transfer\Data;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 App::setName('Services');
 if (!App::requestSingleInstanceLock()) {

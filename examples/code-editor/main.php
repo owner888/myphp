@@ -11,7 +11,8 @@ use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\UI\Content;
 use MyPHP\UI\Editor\{Buffer, Completion, CompletionKind, CompletionRequest, Diagnostic, DiffState, HoverRequest, Languages, Pos, Severity, State};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** A file of the example: its text as it was, and the buffer and editor state editing it, and the diff of its changes, kept across frames. */
 final class File

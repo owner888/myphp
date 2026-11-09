@@ -12,7 +12,8 @@ use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window
 use MyPHP\Native\Pasteboard;
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** The log being viewed: its lines, how far it was read, and what the filter leaves of it. */
 final class Log

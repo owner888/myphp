@@ -10,7 +10,8 @@ declare(strict_types=1);
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 require_once __DIR__ . '/locales/Locales.php'; // the catalogs, which myphp dev writes from locales/*.json
 
 final class Profile

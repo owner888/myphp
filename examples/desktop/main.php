@@ -12,7 +12,8 @@ declare(strict_types=1);
 use MyPHP\{App, CloseEvent, Dialog, FileDropEvent, FileFilter, GlobalShortcut, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, SaveDialogOptions, Tray, TrayOptions, Window, WindowOptions};
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** The window's state: its log, the line wrapping, the window, and what its buttons and context menu do (set below). */
 $s = (object)['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null, 'closing' => false, 'actions' => [], 'open' => null, 'save' => null];

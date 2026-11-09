@@ -9,7 +9,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Loading\Loading;
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** What the window shows: the options chosen. */
 final class Gallery

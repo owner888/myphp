@@ -16,7 +16,8 @@ use MyPHP\{App, Theme as AppTheme, ThemeSource, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Image, LinearGradient, Node, Painter, Path, TextStyle};
 use MyPHP\UI\Svg\Path as SvgPath;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 // The window shows the demo's frame: the card a little above the middle.
 const WINDOW_W = 472;

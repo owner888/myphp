@@ -16,7 +16,8 @@ use MyPHP\UI\{Content, Context, Font, GridState, Key, ListState, Motion, Node, O
 use MyPHP\UI\Markdown\{Markdown, Options as MarkdownOptions, RevealUnit};
 use MyPHP\UI\RichText\{Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text as RichTextText};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 const PAGES = ['Overview', 'Controls', 'Text', 'Rich Text', 'List', 'Charts', 'Markdown', 'Styling', 'Drawing', 'Glass', 'Overlays', 'Motion', 'Languages'];
 const SIZES = ['Small', 'Medium', 'Large', 'Extra large'];
