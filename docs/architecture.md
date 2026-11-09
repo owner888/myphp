@@ -8762,6 +8762,18 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   draws them (four positions a pixel), aliased where the system does not
   smooth fonts; baselines on whole pixels. Not yet: color glyphs' layers
   (they draw as their outlines), glyph outlines, fonts the app registers.
+- The renderer (stage 2, `Native\D3d`, `D3dShader`: mygo's gpu/d3d11):
+  Direct3D 11, shader model 5, its HLSL GlShader's line for line. One
+  device serves every window (WARP where there is no GPU of feature level
+  11): the shaders, states and the atlases' textures (glyphs R8, images a
+  texture array of RGBA8) are shared; a renderer has its quads' and
+  transforms' buffers (dynamic, read as `Buffer<float4>`) and a window's
+  flip-model swap chain. Pixel rows count from the top in a back buffer and
+  a texture alike, so nothing draws upside down (uFlip 1). SV_InstanceID
+  counts from 0 whatever a draw's first instance, so each draw's first quad
+  is the constant buffer's (uFrom). `readBack` gives BGRA, premultiplied,
+  rows top down, as Gl's. Not yet: the glass's blurred backdrop, canvases,
+  custom shaders. `windows_render_test` compiles the HLSL and reads back.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
