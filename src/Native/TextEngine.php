@@ -324,29 +324,6 @@ final class TextEngine implements Engine
         return $best['desc'];
     }
 
-    /** The family names of a comma-separated list, without quotes. @return list<string> */
-    private static function families(string $family): array
-    {
-        $out = [];
-        foreach (explode(',', $family) as $f) {
-            $f = trim(trim($f), '"\'');
-            if ($f !== '') { $out[] = $f; }
-        }
-        return $out;
-    }
-
-    /** The generic family a name stands for (mygo's generic): "" for none. */
-    private static function generic(string $family): string
-    {
-        return match (strtolower($family)) {
-            '', 'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfont' => 'system-ui',
-            'sans-serif' => 'sans-serif',
-            'serif', 'ui-serif' => 'serif',
-            'monospace', 'ui-monospace' => 'monospace',
-            default => '',
-        };
-    }
-
     /** The CTFont of a style (mygo's ctFont). */
     private function ctFont(Style $style): ?CData
     {
@@ -366,11 +343,11 @@ final class TextEngine implements Engine
         }
         $size = $style->fontSize(); $weight = $style->weight(); $italic = $style->italic;
         $font = null;
-        $families = self::families($style->family);
+        $families = Style::familyList($style->family);
         $chosen = -1;
         foreach ($families as $i => $family) {
             $chosen = $i;
-            $font = match (self::generic($family)) {
+            $font = match (Style::generic($family)) {
                 'system-ui', 'sans-serif' => $this->systemFont($size, $weight, $italic, false),
                 'monospace' => $this->systemFont($size, $weight, $italic, true),
                 'serif' => $this->named('Times New Roman', $size, $weight, $italic) ?? $this->named('Times', $size, $weight, $italic) ?? $this->named('Georgia', $size, $weight, $italic),
@@ -388,9 +365,9 @@ final class TextEngine implements Engine
             // The families after it come before the system's for what it lacks.
             $descs = [];
             foreach (array_slice($families, $chosen + 1) as $family) {
-                if (self::generic($family) === '' && isset($this->registered[strtolower($family)])) {
+                if (Style::generic($family) === '' && isset($this->registered[strtolower($family)])) {
                     $descs[] = $this->c->CFRetain(self::registeredDesc($this->registered[strtolower($family)], $weight, $italic));
-                } elseif (self::generic($family) === '' && ($d = $this->namedDesc($family, $weight, $italic)) !== null) {
+                } elseif (Style::generic($family) === '' && ($d = $this->namedDesc($family, $weight, $italic)) !== null) {
                     $descs[] = $d;
                 }
             }

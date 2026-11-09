@@ -58,29 +58,6 @@ final class PangoEngine implements Engine
         $this->descs = [];
     }
 
-    /** The family names of a comma-separated list, without quotes (mygo's familyList). @return list<string> */
-    private static function familyList(string $family): array
-    {
-        $out = [];
-        foreach (explode(',', $family) as $f) {
-            $f = trim(trim($f), '"\'');
-            if ($f !== '') { $out[] = $f; }
-        }
-        return $out;
-    }
-
-    /** The generic family a name stands for (mygo's generic): '' for none. */
-    private static function generic(string $family): string
-    {
-        return match (strtolower($family)) {
-            '', 'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfont' => 'system-ui',
-            'sans-serif' => 'sans-serif',
-            'serif', 'ui-serif' => 'serif',
-            'monospace', 'ui-monospace' => 'monospace',
-            default => '',
-        };
-    }
-
     /**
      * The family list of a style for Pango, where fontconfig knows the
      * generic families, and system-ui is the desktop's interface font when
@@ -99,8 +76,8 @@ final class PangoEngine implements Engine
                 $before = null;
             }
         };
-        foreach (self::familyList($list) as $f) {
-            $g = self::generic($f);
+        foreach (Style::familyList($list) as $f) {
+            $g = Style::generic($f);
             if ($g === 'system-ui') {
                 $insert($g);
                 array_push($out, ...$systemUI);

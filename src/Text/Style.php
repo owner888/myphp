@@ -29,6 +29,29 @@ final class Style
         return $this->weight <= 0 ? 400 : min($this->weight, 999);
     }
 
+    /** The family names of a comma-separated list, without quotes (mygo's familyList). @return list<string> */
+    public static function familyList(string $family): array
+    {
+        $out = [];
+        foreach (explode(',', $family) as $f) {
+            $f = trim(trim($f), '"\'');
+            if ($f !== '') { $out[] = $f; }
+        }
+        return $out;
+    }
+
+    /** The generic family a name stands for (mygo's generic): '' for none. */
+    public static function generic(string $family): string
+    {
+        return match (strtolower($family)) {
+            '', 'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfont' => 'system-ui',
+            'sans-serif' => 'sans-serif',
+            'serif', 'ui-serif' => 'serif',
+            'monospace', 'ui-monospace' => 'monospace',
+            default => '',
+        };
+    }
+
     /** The size in points. */
     public function fontSize(): float
     {

@@ -147,7 +147,8 @@ final class DWrite implements \MyPHP\Platform\Fonts
         $this->slot = $this->f->new('void *[1]');
         $this->slotInt = $this->f->cast('int64_t[1]', $this->slot);
         $out = $this->f->new('void *');
-        $hr = $this->f->DWriteCreateFactory(0 /* shared */, FFI::addr($this->guid('b859ee5a-d838-4b5b-a2e8-1adc7d93db48')), FFI::addr($out));
+        $iid = $this->guid('b859ee5a-d838-4b5b-a2e8-1adc7d93db48'); // held through the call: FFI::addr() of a temporary points at what is freed
+        $hr = $this->f->DWriteCreateFactory(0 /* shared */, FFI::addr($iid), FFI::addr($out));
         if ($hr < 0 || FFI::isNull($out)) {
             throw new RuntimeException(sprintf('DWriteCreateFactory failed (HRESULT 0x%08X)', $hr & 0xFFFFFFFF));
         }
@@ -198,7 +199,8 @@ final class DWrite implements \MyPHP\Platform\Fonts
     {
         $q = $this->f->cast('IQuery *', $obj);
         $out = $this->f->new('void *');
-        if (($q->v->QueryInterface)($q, FFI::addr($this->guid($iid)), FFI::addr($out)) < 0 || FFI::isNull($out)) {
+        $g = $this->guid($iid); // held through the call: FFI::addr() of a temporary points at what is freed
+        if (($q->v->QueryInterface)($q, FFI::addr($g), FFI::addr($out)) < 0 || FFI::isNull($out)) {
             return null;
         }
         return $out;
