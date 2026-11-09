@@ -41,10 +41,12 @@ final class MenuDraw
      * fields of a struct read through a pointer to it, as a COM vtable's
      * are (Native\Com): FFI calls a function pointer read so, not one cast
      * from an address nor one read from a struct itself; false where
-     * there are none. The struct is kept with it.
+     * there are none. The struct is kept with it, and the FFI of its type:
+     * a CData whose FFI is gone has no type to read it by.
      */
     private static CData|false|null $appMode = null;
     private static ?CData $appModeFns = null;
+    private static ?FFI $appModeFfi = null;
     /** @var array<int, array{text: CData, glyphs: CData}> the fonts of popup items, by DPI */
     private static array $fonts = [];
     /** @var array<int, CData> brushes, by COLORREF */
@@ -149,7 +151,7 @@ final class MenuDraw
     private static function highContrast(): bool
     {
         $u = self::user();
-        $hc = FFI::new('uint32_t[4]'); // HIGHCONTRASTW: cbSize, dwFlags, the scheme's name
+        $hc = self::user()->new('uint32_t[4]'); // HIGHCONTRASTW: cbSize, dwFlags, the scheme's name
         $hc[0] = 16;
         return $u->SystemParametersInfoW(0x0042, 16, FFI::addr($hc[0]), 0) !== 0 && ($hc[1] & 1) !== 0;
     }
@@ -170,10 +172,10 @@ final class MenuDraw
                 $set = $h === null ? null : $k->GetProcAddress($h, 135);
                 $flush = $h === null ? null : $k->GetProcAddress($h, 136);
                 if ($set !== null && $flush !== null) {
-                    $f = FFI::cdef('typedef struct { int32_t (*set)(int32_t mode); void (*flush)(void); } AppMode;');
+                    $f = self::$appModeFfi = FFI::cdef('typedef struct { int32_t (*set)(int32_t mode); void (*flush)(void); } AppMode;');
                     self::$appModeFns = $f->new('AppMode', false);
                     FFI::memcpy(self::$appModeFns, pack('PP', Mem::addr($set), Mem::addr($flush)), 16);
-                    self::$appMode = FFI::addr(self::$appModeFns);
+                    self::$appMode = \MyPHP\Native\Com::typed($f, FFI::addr(self::$appModeFns), 'AppMode *');
                 }
             }
         }
@@ -343,7 +345,7 @@ final class MenuDraw
         $g = self::gdi();
         $dc = $g->CreateCompatibleDC(null);
         $old = $g->SelectObject($dc, $font);
-        $buf = FFI::new('uint16_t[64]');
+        $buf = self::user()->new('uint16_t[64]');
         $n = $g->GetTextFaceW($dc, 64, $buf);
         $g->SelectObject($dc, $old);
         $g->DeleteDC($dc);
@@ -610,7 +612,7 @@ final class MenuDraw
     private static function round(CData $hwnd): void
     {
         $u = self::user();
-        $v = FFI::new('uint32_t');
+        $v = self::user()->new('uint32_t');
         $v->cdata = 3; // DWMWCP_ROUNDSMALL
         Win32::dwmapi()->DwmSetWindowAttribute($hwnd, 33, FFI::addr($v), 4); // DWMWA_WINDOW_CORNER_PREFERENCE
         $v->cdata = self::palette()['border'];
@@ -706,7 +708,7 @@ final class MenuDraw
         } elseif (($state & self::ODS_HOTLIGHT) !== 0) {
             $plate = $hot;
         }
-        $buf = FFI::new('uint16_t[256]');
+        $buf = self::user()->new('uint16_t[256]');
         $n = $u->GetMenuStringW($d->um->hmenu, $d->iPosition, $buf, 256, 0x400);
         $flags = self::DT_CENTER | self::DT_VCENTER | self::DT_SINGLELINE | (($state & self::ODS_NOACCEL) !== 0 ? self::DT_HIDEPREFIX : 0);
         $label = function (CData $dc, int $l, int $t, int $r, int $b) use ($u, $g, $fore, $buf, $n, $flags): void {
