@@ -36,10 +36,15 @@ $labels = function ($menu) use ($m): array {
     }
     return $out;
 };
+// A template icon, its left half black.
+$raw = '';
+for ($y = 0; $y < 32; $y++) { $raw .= "\0"; for ($x = 0; $x < 32; $x++) { $raw .= "\0\0\0" . ($x < 16 ? "\xff" : "\0"); } }
+$chunk = fn(string $type, string $data): string => pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+$icon = MyPHP\MenuIcon::of("\x89PNG\r\n\x1a\n" . $chunk('IHDR', pack('NNCCCCC', 32, 32, 8, 6, 0, 0, 0)) . $chunk('IDAT', \MyPHP\Native\Zlib::deflate($raw, 15, 6)) . $chunk('IEND', ''), true);
 App::setName('MenuTest');
 App::setMenu(new Menu([
     new MenuItem('File', submenu: [
-        new MenuItem('Say Hi', click: function () use (&$r) { $r['hi']++; }, accelerator: 'CmdOrCtrl+H'),
+        new MenuItem('Say Hi', click: function () use (&$r) { $r['hi']++; }, accelerator: 'CmdOrCtrl+H', icon: $icon),
         new MenuItem(type: 'separator'),
         new MenuItem('Pinned', type: 'checkbox'),
     ]),
@@ -67,6 +72,13 @@ App::whenReady(function () use (&$r, $log, $m, $labels) {
         $mi->fMask = 0x100; // MIIM_FTYPE
         $m->GetMenuItemInfoW($file, 0, 1, FFI::addr($mi));
         $r['drawn'] = [\MyPHP\Platform\Windows\MenuDraw::fluent(), ($mi->fType & 0x100) !== 0];
+        // Say Hi's icon: in the column Windows 11's items drawn here have, else the item's bitmap.
+        $mi->fMask = 0x80; // MIIM_BITMAP
+        $m->GetMenuItemInfoW($file, 0, 1, FFI::addr($mi));
+        $looks = array_filter(\MyPHP\Platform\Windows\MenuDraw::$looks, fn(array $l): bool => $l['icon'] !== null && $l['icons']);
+        $r['icon'] = \MyPHP\Platform\Windows\MenuDraw::fluent() ? count($looks) === 1 : $mi->hbmpItem !== null;
+        $px = \MyPHP\Platform\Windows\MenuDraw::iconAt($icon, 16, 0xFF8000);
+        $r['iconPixels'] = [$px['w'], $px['h'], sprintf('%08X', $px['px'][0]), sprintf('%08X', $px['px'][15])];
         $w->native()->chooseMenuItem(['File', 'Say Hi']);
         $r['chosen'] = $r['hi'];
         // Ctrl held, as the thread's keyboard state has it, and H.
