@@ -8749,8 +8749,19 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   frameless window over its display, its style and placement kept for
   after; opacity a layered window's; Close off as the window menu's
   SC_CLOSE grayed. Native UI's content is painted its background till the
-  renderer's stage draws it. `windows_window_test` drives one, its text a
-  stand-in of fixed advances till DirectWrite's stage.
+  renderer's stage draws it. `windows_window_test` drives one.
+- Text (stage 2, `Native\DWrite`, `DWriteEngine`: mygo's dwrite engine): a
+  paragraph is an IDWriteTextLayout of a text format of its style (the
+  first family of its list the system has, a generic one's best: Segoe UI,
+  Cascadia Mono…), its spans' families, weights, styles, sizes, letter
+  spacing and languages over their ranges; DirectWrite falls back to other
+  fonts, shapes and breaks lines, and hands its glyph runs to a renderer of
+  PHP's (an IDWriteTextRenderer of closures), each run at its origin on its
+  line, right to left from the right for that direction. Glyphs rasterize
+  with IDWriteGlyphRunAnalysis, grayscale, natural symmetric as Direct2D
+  draws them (four positions a pixel), aliased where the system does not
+  smooth fonts; baselines on whole pixels. Not yet: color glyphs' layers
+  (they draw as their outlines), glyph outlines, fonts the app registers.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

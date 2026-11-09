@@ -14,8 +14,9 @@ use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
  * (mygo's appHwnd) gets what it posts itself (ready, dispatch, a function
  * to run), the timers, and what Windows tells every top-level window: the
  * settings, the displays, power and the session. Its windows are
- * Windows\Window; native UI's renderer and text, pages, menus and the rest
- * come stage by stage; what is not here yet throws Unsupported.
+ * Windows\Window, its text DirectWrite's (Native\DWrite); native UI's
+ * renderer, pages, menus and the rest come stage by stage; what is not here
+ * yet throws Unsupported.
  */
 final class Backend implements Platform\Backend
 {
@@ -226,9 +227,11 @@ final class Backend implements Platform\Backend
         throw new Unsupported('myphp: the tray is not on Windows yet');
     }
 
+    /** DirectWrite's fonts at the primary display's scale. */
     public function fonts(): Platform\Fonts
     {
-        throw new Unsupported('myphp: the text of native UI is not on Windows yet');
+        $primary = array_values(array_filter($this->screen()->displays(), fn(\MyPHP\Display $d) => $d->primary))[0] ?? null;
+        return new \MyPHP\Native\DWrite($primary?->scaleFactor ?: 1.0);
     }
 
     public function rescaled(float $scale): void {}
