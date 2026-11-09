@@ -33,6 +33,6 @@ namespace MyPHP\Tests;
     same(['Open test' => true, 'Save test' => true, 'Message test' => true, 'Cancel test' => true], $r['found'] ?? [], 'each dialog showed, titled as asked');
     same([], $r['open'], 'an open dialog canceled chooses nothing');
     same('', $r['save'], 'a save dialog canceled, no path');
-    same([1, true], $r['message'], 'a task dialog\'s second button pressed, its check box checked');
+    same([1, $r['taskDialog']], $r['message'], 'a ' . ($r['taskDialog'] ? 'task dialog' : 'plain message box (no task dialog)') . '\'s second button pressed, its check box checked');
     same([1, false], $r['canceled'], 'one closed as its cancel button');
 })();
