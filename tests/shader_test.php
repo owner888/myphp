@@ -42,9 +42,11 @@ func Fragment(dst vec4, pos vec2) vec4 {
 }
 KAGE);
 
-// The library Metal compiles: the shader's code, then the renderer's tail; off macOS the GLSL the OpenGL renderer puts its own tail around.
+// The library Metal compiles: the shader's code, then the renderer's tail; on Windows the HLSL, off both the GLSL, the renderer puts its own tail around.
 $src = $waves->code->source;
-if ($waves->code->glsl) {
+if ($waves->code->hlsl) {
+    check(str_contains($src, 'float4 shaderFragment(float4 position') && str_contains($src, 'cbuffer Uniforms : register(b2) {'), 'shader: the HLSL library, its uniforms a cbuffer');
+} elseif ($waves->code->glsl) {
     check(str_contains($src, 'vec4 shaderFragment(vec4 position') && str_contains($src, 'layout(std140) uniform Uniforms {') && str_contains($src, 'uniform ivec4 myphpFlipRows;'), 'shader: the GLSL library, its uniforms a std140 block');
 } else {
     check(str_contains($src, 'float4 shaderFragment(constant Uniforms& uniforms') && str_contains($src, 'fragment float4 shader_fragment(') && str_contains($src, 'vertex MyphpV shader_vertex('), 'shader: the library, the shader then the tail');

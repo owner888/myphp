@@ -3054,3 +3054,19 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
   `/proc/self/fd/N` written through; on iOS, and `prompt`, `login` and a
   directory anywhere, `Platform\Unsupported` — never an empty answer.
   `Platform\FileTypes` maps the filters.
+
+## The Windows backend (Windows, stage 2)
+
+- **The renderer** (v1.178)
+  - mygo: `gpu/d3d11` draws its scene ops (14 float4s an instance, clips
+    as scissor rectangles, its own shader.hlsl compiled ahead of time),
+    with three swap chain buffers a quarter larger while a window resizes
+    and DirectComposition for a composed window.
+  - myphp: `Native\D3d` draws myphp's DisplayList as `Native\Gl` does,
+    `D3dShader` being `GlShader`'s HLSL line for line, compiled at the
+    first renderer's start; one swap chain of two buffers resized with
+    the window. App shaders' HLSL is mygo's hlsl backend's
+    (`UI\Shader\Hlsl`, its fragment library byte for byte), in the cbuffer
+    of b2 and textures t6 to t9 as mygo's, around `D3dShader`'s tail.
+  - Why: myphp's renderers share the DisplayList and its shader with the
+    OpenGL and Metal ones; mygo's scene ops are not myphp's.

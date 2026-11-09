@@ -6,14 +6,18 @@ namespace MyPHP\Native;
 use FFI;
 use FFI\CData;
 use MyPHP\Logger;
-use MyPHP\UI\{Atlas, Canvas, CanvasAtlas, DisplayList, ImageAtlas};
+use MyPHP\UI\{Atlas, Canvas, CanvasAtlas, DisplayList, Image, ImageAtlas};
+use MyPHP\UI\Shader\{Code, Shader};
 use RuntimeException;
 
 /**
- * The Direct3D 11 renderer (mygo's gpu/d3d11), as Gl.php is the OpenGL
- * one: a frame's DisplayList drawn with instanced draws of the quads
- * (D3dShader's HLSL, GlShader's line for line), into a window's flip-model
- * swap chain (attach, draw, present) or off screen (readBack).
+ * The Direct3D 11 renderer: Gl.php's, myphp's OpenGL renderer (mygo's
+ * gpu/gl), on Direct3D 11, not a port of mygo's gpu/d3d11, which draws
+ * mygo's scene ops (upstream-deviations.md): a frame's DisplayList drawn
+ * with instanced draws of the quads (D3dShader's HLSL, GlShader's line
+ * for line), into a window's flip-model swap chain (attach, draw, present)
+ * or off screen (readBack). Its shaders' HLSL is mygo's hlsl backend's
+ * (UI\Shader\Hlsl).
  *
  * One device serves every window, as Metal's does: the shaders, states and
  * the atlases' textures are made once and shared; a renderer has its
@@ -24,7 +28,9 @@ use RuntimeException;
  * (glass, blurs): what was drawn so far is copied and blurred at half
  * size, which the quads after read, as Gl's. Canvases are rendered first,
  * each into a texture of its size, and copied to its place among the
- * canvases' layers of the image texture. Not yet here: custom shaders.
+ * canvases' layers of the image texture. A shader's runs draw with its
+ * pixel stage (D3dShader's SHADER tail around Hlsl's library of it), its
+ * uniforms a cbuffer, its images textures of their own.
  */
 final class D3d
 {
@@ -44,7 +50,12 @@ final class D3d
     private static ?FFI $f = null;
     /** The device and its immediate context, shared by the renderers; the shaders and states they draw with. */
     private static ?CData $device = null, $context = null;
-    private static CData $quadVS, $quadPS, $blurVS, $blurPS, $sampler, $rasterizer, $frameBuffer, $blurBuffer, $noBackdrop;
+    private static CData $quadVS, $quadPS, $blurVS, $blurPS, $shaderVS, $sampler, $rasterizer, $frameBuffer, $blurBuffer, $noBackdrop;
+    /** @var ?\WeakMap<Code, CData> each shader's pixel stage, compiled the first time it draws */
+    private static ?\WeakMap $pixelShaders = null;
+    /** The shaders' uniforms' cbuffer (b2), of $uniformSize bytes, made larger as a shader asks. */
+    private static ?CData $uniformBuffer = null;
+    private static int $uniformSize = 0;
     /** @var array<string, CData> the blend states, by name: blend, canvas (its alpha kept premultiplied), hole */
     private static array $blends = [];
     /** Whether WARP draws: no GPU, or none of feature level 11. */
@@ -72,6 +83,12 @@ final class D3d
     private array $backdropSize = [0, 0];
     /** @var array<string, array{0: CData, 1: CData, 2: CData}> the textures canvases render into, by size, and those their blurs go through (targetTexture's) */
     private array $canvasTargets = [], $canvasBlurTemps = [];
+    /** @var ?\WeakMap<Image, array{0: CData, 1: CData, 2: int}> the textures shaders read images from, their views, the version of the image each holds */
+    private ?\WeakMap $imageTextures = null;
+    /** @var ?\WeakMap<Canvas, array{0: CData, 1: CData}> the textures shaders read canvases' bitmaps from, copied from their place each frame they are read */
+    private ?\WeakMap $canvasTextures = null;
+    /** @var array<int, list<CData>> the views each shader draw of the list drawing reads, by its draw: four each */
+    private array $shaderTextures = [];
     private array $size = [0, 0];
     /** The values of the target being drawn: viewport in points, pixels per point, height in pixels. */
     private array $target = [1.0, 1.0, 1.0, 1.0];
@@ -212,9 +229,12 @@ final class D3d
         self::$device = Com::typed(self::$f, $dev, 'ID3D11Device *');
         self::$context = Com::typed(self::$f, $ctx, 'ID3D11DeviceContext *');
         $d = self::$device;
-        [$vs, $ps] = [self::compile(D3dShader::QUAD, 'quad', 'vs', 'vs_5_0'), self::compile(D3dShader::QUAD, 'quad', 'ps', 'ps_5_0')];
+        [$vs, $ps] = [self::compile(D3dShader::COMMON . "\n" . D3dShader::QUAD, 'quad', 'vs', 'vs_5_0'), self::compile(D3dShader::COMMON . "\n" . D3dShader::QUAD, 'quad', 'ps', 'ps_5_0')];
         self::$quadVS = self::make(fn($out) => ($d->v->CreateVertexShader)($d, $vs, strlen($vs), null, $out), 'CreateVertexShader');
         self::$quadPS = self::make(fn($out) => ($d->v->CreatePixelShader)($d, $ps, strlen($ps), null, $out), 'CreatePixelShader');
+        $vs = self::compile(D3dShader::COMMON . "\n" . D3dShader::SHADER_VERTEX, 'shader', 'svs', 'vs_5_0');
+        self::$shaderVS = self::make(fn($out) => ($d->v->CreateVertexShader)($d, $vs, strlen($vs), null, $out), 'CreateVertexShader');
+        self::$pixelShaders = new \WeakMap();
         [$vs, $ps] = [self::compile(D3dShader::BLUR, 'blur', 'vs', 'vs_5_0'), self::compile(D3dShader::BLUR, 'blur', 'ps', 'ps_5_0')];
         self::$blurVS = self::make(fn($out) => ($d->v->CreateVertexShader)($d, $vs, strlen($vs), null, $out), 'CreateVertexShader');
         self::$blurPS = self::make(fn($out) => ($d->v->CreatePixelShader)($d, $ps, strlen($ps), null, $out), 'CreatePixelShader');
@@ -473,6 +493,7 @@ final class D3d
         foreach (CanvasAtlas::take() as $canvas) {
             $this->renderCanvas($canvas);
         }
+        $this->prepareShaders($list);
         $this->target = [$pw / $scale, $ph / $scale, $scale, (float)$ph];
         self::renderTo($view, $pw, $ph);
         $rgba = $f->new('float[4]');
@@ -628,6 +649,138 @@ final class D3d
         $this->canvasTargets = $this->canvasBlurTemps = [];
     }
 
+    /**
+     * The textures each shader draw of $list reads, made before its passes
+     * (Gl::prepareShaders): an image's, uploaded when it is new or
+     * updated; a canvas's bitmap's, copied from its place among the
+     * canvases' layers into a texture of its own, which a shader reads as
+     * an image of its own size; a transparent pixel for none.
+     */
+    private function prepareShaders(DisplayList $list): void
+    {
+        $this->shaderTextures = [];
+        $copied = [];
+        foreach ($list->shaders as $d => [, , , $images]) {
+            $ts = [];
+            foreach ($images as $img) {
+                $ts[] = $img === null ? self::$noBackdrop : ($img->canvas !== null ? $copied[spl_object_id($img)] ??= $this->canvasTexture($img->canvas) : $this->imageTexture($img));
+            }
+            $this->shaderTextures[$d] = $ts;
+        }
+    }
+
+    /** The view of a texture of $img's pixels, premultiplied as it holds them, sent again when it changed. */
+    private function imageTexture(Image $img): CData
+    {
+        $this->imageTextures ??= new \WeakMap();
+        [$tex, $view, $version] = $this->imageTextures[$img] ?? [null, null, -1];
+        if ($view !== null && $version === $img->version) {
+            return $view;
+        }
+        if ($tex !== null) {
+            Com::release($view);
+            Com::release($tex);
+        }
+        [$tex, $view] = self::texture($img->w, $img->h, self::R8G8B8A8_UNORM, 1, self::BIND_SHADER_RESOURCE, false, self::$f->cast('void *', $img->address()), $img->w * 4);
+        $img->uploaded();
+        $this->imageTextures[$img] = [$tex, $view, $img->version];
+        return $view;
+    }
+
+    /** The view of a texture of $c's size with its pixels, copied from its place among the canvases' layers; transparent before it was drawn. */
+    private function canvasTexture(Canvas $c): CData
+    {
+        $this->canvasTextures ??= new \WeakMap();
+        $this->canvasTextures[$c] ??= self::texture($c->w, $c->h, self::R8G8B8A8_UNORM, 1, self::BIND_SHADER_RESOURCE, true);
+        [$tex, $view] = $this->canvasTextures[$c];
+        if ($c->slot !== null && self::$imagesTexture !== null) {
+            [$u, $v, $page] = $c->slot;
+            $f = self::$f;
+            $box = $f->new('D3D11_BOX');
+            [$box->left, $box->top, $box->front, $box->right, $box->bottom, $box->back] = [$u, $v, 0, $u + $c->w, $v + $c->h, 1];
+            $ctx = self::$context;
+            ($ctx->v->CopySubresourceRegion)($ctx, $tex, 0, 0, 0, 0, self::$imagesTexture, $page, FFI::addr($box));
+        }
+        return $view;
+    }
+
+    /**
+     * Draws the run of $n quads from $at shader draw $d of $list draws
+     * (Gl::drawShader): its pixel stage, its uniforms' bytes in the
+     * cbuffer, its images; the backdrop of one reading it, what the frame
+     * drew before it, blurred at half size when its glass entry asks a
+     * blur, or as it is; transparent in a canvas.
+     */
+    private function drawShader(DisplayList $list, int $d, int $at, int $n, bool $premultiplied): void
+    {
+        $f = self::$f;
+        $c = self::$context;
+        [$code, $bytes] = $list->shaders[$d];
+        $textures = $this->shaderTextures[$d] ?? [];
+        if ($code->backdrop) {
+            $blur = 0.0;
+            foreach ($list->glass as [$gAt, $sigma]) {
+                if ($gAt === $at) { $blur = $sigma; }
+            }
+            if ($premultiplied || $this->glass === []) {
+                $textures[2] = self::$noBackdrop;
+            } else {
+                $textures[2] = $blur > 0 ? $this->glass['backdrop'][2] : $this->glass['snapshot'][2];
+                [$w, $h] = $this->backdropSize;
+                if ($blur > 0) { [$w, $h] = [max(1, intdiv($w, 2)), max(1, intdiv($h, 2))]; }
+                $put = function (int $word, float $v) use (&$bytes, $code): void {
+                    $bytes = substr_replace($bytes, pack('g', $v), $code->lanes[$word], 4);
+                };
+                $put(Shader::BACKDROP_SIZE_WORD, (float)$w);
+                $put(Shader::BACKDROP_SIZE_WORD + 1, (float)$h);
+                $put(Shader::AREA_WORD, 0.0);
+                $put(Shader::AREA_WORD + 1, 0.0);
+                $put(Shader::AREA_WORD + 2, $blur > 0 ? 2.0 : 1.0);
+            }
+        }
+        ($c->v->VSSetShader)($c, self::$shaderVS, null, 0);
+        ($c->v->PSSetShader)($c, self::pixelShader($code), null, 0);
+        if ($code->size > 0) {
+            if (strlen($bytes) > self::$uniformSize) {
+                Com::release(self::$uniformBuffer);
+                $desc = $f->new('D3D11_BUFFER_DESC');
+                $desc->ByteWidth = intdiv(strlen($bytes) + 255, 256) * 256;
+                $desc->Usage = self::USAGE_DYNAMIC;
+                $desc->BindFlags = self::BIND_CONSTANT_BUFFER;
+                $desc->CPUAccessFlags = self::CPU_WRITE;
+                $d3 = self::$device;
+                self::$uniformBuffer = self::make(fn($out) => ($d3->v->CreateBuffer)($d3, FFI::addr($desc), null, $out), 'CreateBuffer (uniforms)');
+                self::$uniformSize = $desc->ByteWidth;
+            }
+            $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
+            self::hr(($c->v->Map)($c, self::$uniformBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (uniforms)');
+            FFI::memcpy($m->pData, $bytes, strlen($bytes));
+            ($c->v->Unmap)($c, self::$uniformBuffer, 0);
+            $one = $f->new('void *[1]');
+            $one[0] = self::$uniformBuffer;
+            ($c->v->PSSetConstantBuffers)($c, 2, 1, $one);
+        }
+        $views = $f->new('void *[4]');
+        for ($i = 0; $i < 4; $i++) {
+            $views[$i] = $textures[$i] ?? self::$noBackdrop;
+        }
+        ($c->v->PSSetShaderResources)($c, 6, 4, $views);
+        $this->drawQuads($at, $n, $premultiplied ? 'canvas' : 'blend');
+        ($c->v->VSSetShader)($c, self::$quadVS, null, 0);
+        ($c->v->PSSetShader)($c, self::$quadPS, null, 0);
+    }
+
+    /** $code's pixel stage: D3dShader's SHADER tail around its HLSL library, compiled the first time it draws. */
+    private static function pixelShader(Code $code): CData
+    {
+        if (!isset(self::$pixelShaders[$code])) {
+            $ps = self::compile(D3dShader::COMMON . "\n" . D3dShader::SHADER_VERTEX . "\n" . $code->source . "\n" . D3dShader::SHADER_PIXEL, 'shader', 'sps', 'ps_5_0');
+            $d = self::$device;
+            self::$pixelShaders[$code] = self::make(fn($out) => ($d->v->CreatePixelShader)($d, $ps, strlen($ps), null, $out), 'CreatePixelShader (shader)');
+        }
+        return self::$pixelShaders[$code];
+    }
+
     /** A texture of $w × $h pixels of $format (BGRA's, the targets') drawn into and read: it, its render target's view, its shaders' view. @return array{0: CData, 1: CData, 2: CData} */
     private static function targetTexture(int $w, int $h, int $format = self::B8G8R8A8_UNORM): array
     {
@@ -648,7 +801,7 @@ final class D3d
         $this->backdropSize = [0, 0];
     }
 
-    /** Draws quads [$from, $from + $count): blended, but the web views' holes, which take away what is there, and the runs shaders draw, which are left out for now. */
+    /** Draws quads [$from, $from + $count): blended, but the web views' holes, which take away what is there, and the runs shaders draw, with theirs. */
     private function drawRuns(DisplayList $list, int $from, int $count, bool $premultiplied = false): void
     {
         $runs = [];
@@ -665,7 +818,7 @@ final class D3d
             if ($d < 0) {
                 $this->drawQuads($r, $n, 'hole');
             } else {
-                $this->warnOnce('shaders');
+                $this->drawShader($list, $d, $r, $n, $premultiplied);
             }
             $at = $r + $n;
         }
@@ -845,6 +998,13 @@ final class D3d
     {
         $this->releaseGlass();
         $this->releaseCanvasTargets();
+        foreach ([$this->imageTextures, $this->canvasTextures] as $map) {
+            foreach ($map ?? [] as $views) {
+                Com::release($views[1]);
+                Com::release($views[0]);
+            }
+        }
+        $this->imageTextures = $this->canvasTextures = null;
         foreach ([$this->backBuffer, $this->backTexture, $this->swapChain, $this->quadsView, $this->quads, $this->xformsView, $this->xforms] as $o) {
             Com::release($o);
         }

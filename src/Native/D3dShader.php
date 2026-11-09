@@ -13,13 +13,8 @@ namespace MyPHP\Native;
  */
 final class D3dShader
 {
-    /** The quads' vertex (vs) and pixel (ps) stages. */
-    public const QUAD = <<<'HLSL'
-    // GlShader's VERTEX and FRAGMENT, line for line, as HLSL (shader model 5); the atlases have no
-    // mipmaps, so they are sampled at level 0, as GLSL's texture() samples them there.
-    // Direct3D's pixel positions count rows from the top, as Metal's do, in a window's back
-    // buffer and in a texture alike: uFlip is 1 and pos is SV_Position's.
-    #define saturate(x) clamp(x, 0.0, 1.0)
+    /** What the quads' stages and a shader's (QUAD's, SHADER's) share: the frame's values, the quads and transforms, the atlases (GlShader's COMMON). */
+    public const COMMON = <<<'HLSL'
     cbuffer Frame : register(b0) {
         float2 uViewport;   // points
         float2 uAtlas;      // the atlases' size in pixels
@@ -39,6 +34,15 @@ final class D3dShader
     SamplerState sLinear : register(s0);
     struct Inst { float4 rect; float4 color; float4 params; float4 clip; };
     Inst inst(int i) { Inst r; r.rect = uQuads.Load(i * 4); r.color = uQuads.Load(i * 4 + 1); r.params = uQuads.Load(i * 4 + 2); r.clip = uQuads.Load(i * 4 + 3); return r; }
+    HLSL;
+
+    /** The quads' vertex (vs) and pixel (ps) stages, after COMMON. */
+    public const QUAD = <<<'HLSL'
+    // GlShader's VERTEX and FRAGMENT, line for line, as HLSL (shader model 5); the atlases have no
+    // mipmaps, so they are sampled at level 0, as GLSL's texture() samples them there.
+    // Direct3D's pixel positions count rows from the top, as Metal's do, in a window's back
+    // buffer and in a texture alike: uFlip is 1 and pos is SV_Position's.
+    #define saturate(x) clamp(x, 0.0, 1.0)
     struct Varyings {
         float4 position : SV_Position;
         float2 local : TEXCOORD0;
@@ -530,6 +534,98 @@ final class D3dShader
             c.a *= vMrect.z < 0.0 ? 1.0 - m : m;
         }
         return c;
+    }
+    HLSL;
+
+    /**
+     * The tail of a shader's draws (GlShader's SHADER_VERTEX and
+     * SHADER_FRAGMENT_MAIN, as HLSL), after COMMON: its own vertex stage
+     * (svs), which places the quads as QUAD's does, and, after the shader's
+     * library (Hlsl::fragment's shaderFragment, its uniforms the cbuffer in
+     * b2, its images T0 to T3 in t6 to t9, as mygo's), the pixel stage
+     * (sps) that colors a rectangle (kind 16) or a glyph's mask (17) with
+     * it: the pixel in the target's pixels from the top, the point in
+     * points from the corner of the box it fills; its premultiplied color
+     * is scaled by the quad's coverage, mask and opacity.
+     */
+    public const SHADER_VERTEX = <<<'HLSL'
+    struct ShaderV {
+        float4 position : SV_Position;
+        float2 local : TEXCOORD0;
+        float2 uv : TEXCOORD1;
+        float2 box : TEXCOORD2;
+        nointerpolation float2 extent : TEXCOORD3;
+        nointerpolation float alpha : TEXCOORD4;
+        nointerpolation float radius : TEXCOORD5;
+        nointerpolation float kind : TEXCOORD6;
+        nointerpolation float4 clip : TEXCOORD7;
+        nointerpolation float4 mrect : TEXCOORD8;
+        nointerpolation float4 mslot : TEXCOORD9;
+    };
+    ShaderV svs(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
+        ShaderV o = (ShaderV)0;
+        Inst i = inst(uFrom + (int)instanceID);
+        if (i.params.y < 0.0) {
+            // hidden (DisplayList::cull)
+            o.position = float4(0.0, 0.0, 0.0, 1.0);
+            return o;
+        }
+        float entry = floor(i.params.y / 32.0);
+        float kind = i.params.y - entry * 32.0;
+        int e = int(entry);
+        float4 abcd = uXforms.Load(e * 4), xygh = uXforms.Load(e * 4 + 1);
+        float2 corner = float2(float(vertexID & 1), float(vertexID >> 1));
+        bool glyph = kind > 16.5;
+        float pad = entry > 0.5 && !glyph ? 1.0 : 0.0;
+        float2 p = i.rect.xy - pad + corner * (i.rect.zw + 2.0 * pad);
+        float w = xygh.z * p.x + xygh.w * p.y + 1.0;
+        float2 q = float2(abcd.x * p.x + abcd.z * p.y + xygh.x, abcd.y * p.x + abcd.w * p.y + xygh.y);
+        o.position = float4(q.x / uViewport.x * 2.0 - w, (w - q.y / uViewport.y * 2.0) * uFlip, 0.0, w);
+        o.local = (corner - 0.5) * (i.rect.zw + 2.0 * pad);
+        o.extent = i.rect.zw * 0.5;
+        o.uv = glyph ? (i.params.zw + corner * i.rect.zw * uAtlasScale) / uAtlas : ((float2)(0.0));
+        o.box = glyph ? p - i.color.yz : p - i.rect.xy;
+        o.alpha = i.color.a;
+        o.radius = i.params.x;
+        o.kind = kind;
+        o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * uScale;
+        o.mrect = uXforms.Load(e * 4 + 2);
+        o.mslot = uXforms.Load(e * 4 + 3);
+        return o;
+    }
+    HLSL;
+
+    /** The pixel stage of a shader's draws, after SHADER_VERTEX and the shader's library. */
+    public const SHADER_PIXEL = <<<'HLSL'
+    float4 sps(ShaderV v) : SV_Target {
+        float2 pos = v.position.xy;
+        if (pos.x < v.clip.x || pos.y < v.clip.y || pos.x >= v.clip.z || pos.y >= v.clip.w) {
+            discard;
+        }
+        float cov;
+        if (v.kind > 16.5) {
+            cov = uAtlasTex.SampleLevel(sLinear, v.uv, 0).r;
+        } else {
+            float2 q = abs(v.local) - (v.extent - v.radius);
+            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
+            cov = 1.0 - smoothstep(-0.5, 0.5, d);
+        }
+        if (v.mrect.z != 0.0) {
+            float2 t = (pos / uScale - v.mrect.xy) / float2(abs(v.mrect.z), v.mrect.w);
+            float m = 0.0;
+            if (v.mslot.z < 0.5) {
+                float2 inside = min(t, 1.0 - t) * float2(abs(v.mrect.z), v.mrect.w) * uScale;
+                m = clamp(min(inside.x, inside.y) + 0.5, 0.0, 1.0);
+            } else if (t.x >= 0.0 && t.y >= 0.0 && t.x <= 1.0 && t.y <= 1.0) {
+                float page = floor(v.mslot.x / 4096.0);
+                m = uImages.SampleLevel(sLinear, float3((float2(v.mslot.x - page * 4096.0, v.mslot.y) + t * v.mslot.zw) / uAtlas, page), 0).a;
+            }
+            cov *= v.mrect.z < 0.0 ? 1.0 - m : m;
+        }
+        // premultiplied
+        float4 c = shaderFragment(float4(pos, 0.0, 1.0), v.box);
+        float a = clamp(c.a, 0.0, 1.0);
+        return float4(a > 0.0 ? c.rgb / a : ((float3)(0.0)), a * cov * v.alpha);
     }
     HLSL;
 

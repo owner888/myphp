@@ -8802,7 +8802,12 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   reads nothing it writes. Canvases render first, each from its list
   into an RGBA texture of its size (premultiplied, blurred if it asks)
   copied to its place among the canvases' layers of the image texture
-  (`CopySubresourceRegion`). Not yet: custom shaders.
+  (`CopySubresourceRegion`). An app's shader draws its runs with its pixel
+  stage: `UI\Shader\Hlsl` (mygo's hlsl backend) writes its library, its
+  uniforms the cbuffer of b2, its images textures t6 to t9, which
+  `D3dShader`'s SHADER tail calls as GlShader's does, compiled the first
+  time it draws; its images are textures of their own, a canvas's copied
+  from its place, its backdrop the glass's snapshot or blur.
   `windows_render_test` compiles the HLSL and reads back.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
