@@ -35,6 +35,8 @@ final class Field implements TextInputClient
 {
     public TextInputSelection $selection;
     public ?TextInputRange $marked = null;
+    /** Which side of a direction change the caret shows on (TextLayout::UPSTREAM: by the character before it, as after typing it). */
+    public int $affinity = TextLayout::DOWNSTREAM;
     public ?TextLayout $layout = null;
     /** Shapes the text, given a context (the window's text system). */
     public ?Closure $shaper = null;
@@ -65,6 +67,7 @@ final class Field implements TextInputClient
         $this->text = substr($this->text, 0, $a) . $s . substr($this->text, $z);
         $end = $want->start + utf16Len($s);
         $this->selection = new TextInputSelection(new TextInputRange($end, $end));
+        $this->affinity = TextLayout::UPSTREAM;
         $this->marked = null;
         $this->shape();
     }
@@ -82,7 +85,7 @@ final class Field implements TextInputClient
     public function boundsForRange(TextInputRange $r): ?array
     {
         if ($this->layout === null) { return null; }
-        $b = $this->layout->caret($r->start);
+        $b = $this->layout->caretAt($r->start, $this->affinity);
         if ($r->start !== $r->end && ($rects = $this->layout->selectionRects($r)) !== []) { $b = $rects[0]; }
         return [[$b[0] + 12, $b[1] + 12, $b[2], $b[3]], $r]; // the rectangle and the range it is of (TextInputClient)
     }
@@ -92,8 +95,16 @@ final class Field implements TextInputClient
         return $this->layout?->indexAt($x - 12, $y - 12);
     }
 
-    private function move(int $to, bool $extend): void
+    /** The caret nearest ($x, $y) and the side of it the point is on: [index, affinity]. @return array{0: int, 1: int} */
+    private function positionAt(float $x, float $y): array
     {
+        return $this->layout?->positionAt($x - 12, $y - 12) ?? [0, TextLayout::DOWNSTREAM];
+    }
+
+    /** Moves the caret to $to, on side $affinity of it; with $extend, the selection's moving end. */
+    private function move(int $to, bool $extend, int $affinity = TextLayout::DOWNSTREAM): void
+    {
+        $this->affinity = $affinity;
         if (!$extend) { $this->selection = new TextInputSelection(new TextInputRange($to, $to)); return; }
         $anchor = $this->selection->reversed ? $this->selection->range->end : $this->selection->range->start;
         $this->selection = new TextInputSelection(new TextInputRange(min($anchor, $to), max($anchor, $to)), $to < $anchor);
@@ -104,10 +115,11 @@ final class Field implements TextInputClient
         $shift = ($ev->mods & Key::SHIFT) !== 0;
         switch ($ev->kind) {
             case InputEvent::POINTER_DOWN:
-                $this->move($this->indexForPoint($ev->x, $ev->y) ?? 0, $shift);
+                [$i, $a] = $this->positionAt($ev->x, $ev->y);
+                $this->move($i, $shift, $a);
                 return true;
             case InputEvent::POINTER_MOVE:
-                if ($ev->button === 0) { $this->move($this->indexForPoint($ev->x, $ev->y) ?? 0, true); return true; }
+                if ($ev->button === 0) { [$i, $a] = $this->positionAt($ev->x, $ev->y); $this->move($i, true, $a); return true; }
                 return false;
             case InputEvent::POINTER_UP:
                 return true;
@@ -115,7 +127,7 @@ final class Field implements TextInputClient
                 if (($ev->mods & Key::MODIFIERS) === Key::COMMAND && $ev->key === Key::A) { $this->selection = new TextInputSelection(new TextInputRange(0, utf16Len($this->text))); return true; }
                 switch ($ev->key) {
                     case Key::HOME: $this->move(0, $shift); return true;
-                    case Key::END: $this->move(utf16Len($this->text), $shift); return true;
+                    case Key::END: $this->move(utf16Len($this->text), $shift, TextLayout::UPSTREAM); return true;
                     case Key::DELETE:
                     case Key::FORWARD_DELETE:
                         $r = $this->selection->range;
@@ -149,7 +161,7 @@ final class Field implements TextInputClient
         [$x, $y] = [$r[0] + 12, $r[1] + 12];
         foreach ($this->layout->selectionRects($this->selection->range) as $b) { $p->fill([$b[0] + $x, $b[1] + $y, $b[2], $b[3]], $t->selection); }
         $p->textLayout($this->layout, $x, $y, $t->text);
-        $b = $this->layout->caret($this->selection->caret());
+        $b = $this->layout->caretAt($this->selection->caret(), $this->affinity);
         $p->fill([$b[0] + $x, $b[1] + $y, $b[2], $b[3]], $t->accent);
     }
 }

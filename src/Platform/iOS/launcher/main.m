@@ -935,6 +935,9 @@ static void* php_worker_thread(void *arg) {
 @end
 @implementation MyphpTextPosition
 + (instancetype)at:(NSInteger)i { MyphpTextPosition *p = [MyphpTextPosition new]; p.index = i; return p; }
+// equal by their index, as UIKit's own positions are: the input method compares the ones it was given with those it asks for again
+- (BOOL)isEqual:(id)other { return [other isKindOfClass:[MyphpTextPosition class]] && ((MyphpTextPosition *)other).index == self.index; }
+- (NSUInteger)hash { return (NSUInteger)self.index; }
 @end
 
 @interface MyphpTextRange : UITextRange
@@ -946,6 +949,8 @@ static void* php_worker_thread(void *arg) {
 - (BOOL)isEmpty { return self.from == self.to; }
 - (UITextPosition *)start { return [MyphpTextPosition at:self.from]; }
 - (UITextPosition *)end { return [MyphpTextPosition at:self.to]; }
+- (BOOL)isEqual:(id)other { return [other isKindOfClass:[MyphpTextRange class]] && ((MyphpTextRange *)other).from == self.from && ((MyphpTextRange *)other).to == self.to; }
+- (NSUInteger)hash { return (NSUInteger)(self.from * 31 + self.to); }
 @end
 
 @interface MyphpMetalView : MTKView <UITextInput>
