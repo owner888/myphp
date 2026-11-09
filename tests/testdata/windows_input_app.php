@@ -102,13 +102,14 @@ App::whenReady(function () use (&$r, $log) {
             $r['lines'] = $u->SystemParametersInfoW(0x68, 0, FFI::addr($n), 0) !== 0 && $n->cdata > 0 && $n->cdata < 100 ? $n->cdata : 3;
             // No node takes text: the window has no input context, so keys type the layout's characters.
             $r['imeOff'] = Win32::imm32()->ImmGetContext($w->native()->hwnd) === null;
-            $w->close();
             $log('the field\'s window');
             // A field focused: the window has its input context, and WM_CHAR types into the field.
             $name = '';
             $field = Content::view(function () use (&$name) { return TextField('Name', text: $name)->defaultFocus()->frame(width: 200); });
             $w2 = new Window(new WindowOptions(title: 'Field', width: 300, height: 100, content: $field));
             $w2->show();
+            // Closed once the other is open: the app quits as its last window closes.
+            $w->close();
             App::after(0.4, function () use ($w2, $u, &$name, &$r, $log) {
                 $log('typing');
                 $hwnd = $w2->native()->hwnd;
