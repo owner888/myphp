@@ -8905,6 +8905,17 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   its body, NIIF_NOSOUND when silent. Its click (NIN_BALLOONUSERCLICK) is
   the app's, it or its timeout finishing it; an empty balloon hides one
   removed. `windows_services_test` sends the app's window the messages.
+- Dialogs (stage 5, `Windows\Dialogs`: mygo's dialog.go): files opened
+  and saved through the Common Item Dialog (IFileOpenDialog,
+  IFileSaveDialog through their vtables), modal to their window or the
+  app, a folder and name to start at parsed into an IShellItem, the
+  filters COMDLG_FILTERSPECs; a message is a task dialog
+  (TaskDialogIndirect, its packed TASKDIALOGCONFIG laid out by hand),
+  which is version 6 of the common controls': an activation context of
+  shell32.dll's manifest (its resource 124) brings it to an executable
+  without one, as PHP's; a plain MessageBox where there is none. Not yet:
+  the prompt and login dialogs (IINA's). `windows_dialogs_test` answers
+  each from a timer its modal loop runs.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

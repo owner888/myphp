@@ -41,6 +41,7 @@ final class Backend implements Platform\Backend
     private ?Power $power = null;
     private ?Media $media = null;
     private ?Menus $menus = null;
+    private ?Dialogs $dialogs = null;
     /** @var array<int, Tray> the trays, by their numbers; the number of the last one counted */
     private array $trays = [];
     private int $nextTray = 0;
@@ -321,7 +322,7 @@ final class Backend implements Platform\Backend
 
     public function dialogs(): Platform\Dialogs
     {
-        throw new Unsupported('myphp: dialogs are not on Windows yet');
+        return $this->dialogs ??= new Dialogs($this);
     }
 
     public function clipboard(): Platform\Clipboard
