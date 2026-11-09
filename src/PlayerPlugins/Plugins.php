@@ -514,9 +514,10 @@ final class Plugins
         $dest = self::dir() . "/{$p->identifier}.iinaplugin";
         for ($i = 2; file_exists($dest); $i++) { $dest = self::dir() . "/{$p->identifier}-$i.iinaplugin"; }
         if (!rename($p->root, $dest)) { throw new PluginInstallError("cannot move {$p->root} to $dest"); }
-        $old = $p->root;
+        $old = Plugin::normalize($p->root); // as its files' paths are written (a drive's slashes forward on Windows)
         $p->root = $dest;
-        $re = fn(?string $f): ?string => $f === null || !str_starts_with($f, "$old/") ? $f : $dest . substr($f, strlen($old));
+        $new = Plugin::normalize($dest);
+        $re = fn(?string $f): ?string => $f === null || !str_starts_with($f, "$old/") ? $f : $new . substr($f, strlen($old));
         $p->entryURL = (string)$re($p->entryURL);
         $p->globalEntryURL = $re($p->globalEntryURL);
         $p->preferencesPageURL = $re($p->preferencesPageURL);

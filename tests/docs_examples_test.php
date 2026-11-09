@@ -89,16 +89,20 @@ $docs = dirname(__DIR__) . '/docs';
 $docBlocks = docBlocks("$docs/ui/*.md", "$docs/plugins/*.md", "$docs/getting-started.md", "$docs/swiftui.md", "$docs/mobile.md");
 foreach ($docBlocks as $i => $b) {
     $where = "{$b['file']}:{$b['line']}";
-    if (getenv('MYPHP_TEST_CHILD') !== false) { echo "  at $where\n"; } // run.php --each: where a block that hangs is
+    $mark = getenv('MYPHP_TEST_CHILD') !== false ? function (string $what) use ($where): void { echo "  at $where: $what\n"; } : function (string $what): void {}; // run.php --each: where a block that hangs is
+    $mark('run');
     $errors = count($failures);
     try {
         $view = (eval(docProgram($b['code'], $i, $docClasses)))();
         if ($view instanceof \Closure) {
             if ((new \ReflectionFunction($view))->getNumberOfParameters() === 0) { $declared = $view; $view = static fn(Context $c) => \MyPHP\UI\Content::render($declared, $c); } // a view file's: rendered as Content::file renders it
             $h = new Headless($view, 600, 400);
+            $mark('frame');
             $h->frame();
+            $mark('paint');
             $h->paint();
         }
+        $mark('done');
         check(count($failures) === $errors, "$where: warnings above"); // what PHP warned of, run.php counted
     } catch (\Throwable $e) {
         check(false, "$where: " . get_class($e) . ': ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
