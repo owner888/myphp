@@ -12,6 +12,35 @@ namespace MyPHP\Tests;
         echo "  skipped: Windows's\n";
         return;
     }
+    // Each step the backend's init takes, in a process of its own, the steps before it first: which one does not end.
+    $autoload = var_export(dirname(__DIR__) . '/src/autoload.php', true);
+    $steps = [
+        'autoload' => "require $autoload;",
+        'App' => '\\MyPHP\\App::setName("x");',
+        'ole32' => '$o = \\MyPHP\\Platform\\Windows\\Win32::ole32();',
+        'CoInitializeEx' => '$o->CoInitializeEx(null, 2);',
+        'user32' => '$u = \\MyPHP\\Platform\\Windows\\Win32::user32();',
+        'DPI awareness' => '$u->SetProcessDpiAwarenessContext(-4);',
+        'a class' => '\\MyPHP\\Platform\\Windows\\Win32::registerClass("MyPHPStep");',
+        'a window' => '\\MyPHP\\Platform\\Windows\\Win32::createWindow("MyPHPStep", "", 0, 0, fn(int $m, int $wp, int $lp): ?int => null);',
+    ];
+    $code = "<?php\n";
+    $report = [];
+    foreach ($steps as $what => $line) {
+        $code .= "$line\n";
+        $file = (string)tempnam(sys_get_temp_dir(), 'myphp-step');
+        file_put_contents($file, $code . 'echo "done";');
+        $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', $file], [0 => ['file', 'NUL', 'r'], 1 => ['file', "$file.out", 'w'], 2 => ['file', "$file.err", 'w']], $pipes);
+        $start = microtime(true);
+        while (($st = proc_get_status($p))['running'] && microtime(true) - $start < 15) { usleep(50000); }
+        if ($st['running']) { proc_terminate($p); }
+        proc_close($p);
+        $out = trim(@file_get_contents("$file.out") . @file_get_contents("$file.err"));
+        @unlink($file); @unlink("$file.out"); @unlink("$file.err");
+        $report[] = "$what: " . ($st['running'] ? 'hung' : ($out === 'done' ? 'ok' : 'exit ' . $st['exitcode'] . ' ' . substr($out, 0, 200)));
+        if ($out !== 'done') { break; }
+    }
+    check(!str_contains(end($report), 'hung') && str_ends_with(end($report), ': ok'), 'the steps of init, each ending: ' . implode('; ', $report));
     // Its output and log to files, read as it goes: a report that never comes, or an app that does not end after it, is told.
     $logs = [(string)tempnam(sys_get_temp_dir(), 'myphp-out'), (string)tempnam(sys_get_temp_dir(), 'myphp-err')];
     $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/windows_backend_app.php'], [0 => ['file', 'NUL', 'r'], 1 => ['file', $logs[0], 'w'], 2 => ['file', $logs[1], 'w']], $pipes);
