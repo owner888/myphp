@@ -273,7 +273,7 @@ final class D3d
         self::$atlas = $atlas;
         Com::release(self::$atlasView);
         Com::release(self::$atlasTexture);
-        [self::$atlasTexture, self::$atlasView] = self::texture($atlas->w, $atlas->h, self::R8_UNORM, 1, self::BIND_SHADER_RESOURCE, false, self::$f->cast('void *', $atlas->base), $atlas->w);
+        [self::$atlasTexture, self::$atlasView] = self::texture($atlas->w, $atlas->h, self::R8_UNORM, 1, self::BIND_SHADER_RESOURCE, false, $atlas->pix, $atlas->w);
         $atlas->dirty = false;
     }
 
@@ -598,7 +598,7 @@ final class D3d
         $box->back = 1;
         $pitch = $a->w * $a->bpp;
         $c = self::$context;
-        ($c->v->UpdateSubresource)($c, $texture, $layer, FFI::addr($box), $f->cast('void *', $a->base + $from * $pitch), $pitch, 0);
+        ($c->v->UpdateSubresource)($c, $texture, $layer, FFI::addr($box), $f->cast('void *', Mem::addr($a->pix) + $from * $pitch), $pitch, 0);
     }
 
     /** A dynamic buffer of $floats floats the shaders read as float4s, and its view. @return array{0: CData, 1: CData} */
