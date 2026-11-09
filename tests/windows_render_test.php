@@ -104,10 +104,11 @@ use MyPHP\UI\Shader\{Options, Shader};
     $h->frame();
     try {
         $pix = $r->readBack($h->paint(), 32, 32, 1.0, [1.0, 1.0, 1.0, 1.0]);
-        [$left, $right] = [$px($pix, 32, 12, 16), $px($pix, 32, 20, 16)];
+        [$left, $right, $under] = [$px($pix, 32, 12, 16), $px($pix, 32, 20, 16), $px($pix, 32, 4, 16)];
         check($near($right, [0, 255, 0, 255]), 'a shader\'s quad, its color its uniform\'s: ' . json_encode($right));
-        // half its color at half its alpha, over white
-        check($near($left, [128, 255, 128, 255], 3), 'and half of it on its left, by the point in the box it fills: ' . json_encode($left));
+        // half its color at half its alpha, over the theme's background the view paints beside it (BGRA; alpha as a rect's at half alpha)
+        $half = [(int)round($under[0] / 2), (int)round(127.5 + $under[1] / 2), (int)round($under[2] / 2), 191];
+        check($near($left, $half, 3), 'and half of it on its left, by the point in the box it fills: ' . json_encode([$left, $under]));
     } catch (\RuntimeException $e) {
         check(false, $e->getMessage());
     }
