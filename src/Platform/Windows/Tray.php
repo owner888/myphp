@@ -82,14 +82,16 @@ final class Tray implements Platform\Tray
         if ($this->added) {
             return;
         }
-        self::f()->Shell_NotifyIconW(self::NIM_ADD, FFI::addr($this->data()));
+        $d = $this->data();
+        self::f()->Shell_NotifyIconW(self::NIM_ADD, FFI::addr($d));
         $this->added = true;
     }
 
     private function update(): void
     {
         if ($this->added) { // the backend adds it as it is
-            self::f()->Shell_NotifyIconW(self::NIM_MODIFY, FFI::addr($this->data()));
+            $d = $this->data();
+            self::f()->Shell_NotifyIconW(self::NIM_MODIFY, FFI::addr($d));
         }
     }
 
@@ -107,7 +109,8 @@ final class Tray implements Platform\Tray
             return;
         }
         if ($this->added) {
-            self::f()->Shell_NotifyIconW(self::NIM_DELETE, FFI::addr($this->data()));
+            $d = $this->data();
+            self::f()->Shell_NotifyIconW(self::NIM_DELETE, FFI::addr($d));
             $this->id = $n;
             $this->added = false;
             $this->add();
@@ -182,7 +185,7 @@ final class Tray implements Platform\Tray
         $u = Win32::user32();
         $pt = $u->new('POINT');
         $u->GetCursorPos(FFI::addr($pt));
-        $this->b->menus()->track($this->menu, $this->b->hwnd(), $pt->x, $pt->y, 0, null);
+        $this->b->menus()->popupOver($this->menu, $this->b->hwnd(), $pt->x, $pt->y, 0, null);
     }
 
     /** The notification area reports its clicks itself (mygo's). */
@@ -213,7 +216,8 @@ final class Tray implements Platform\Tray
     public function destroy(): void
     {
         if ($this->added) {
-            self::f()->Shell_NotifyIconW(self::NIM_DELETE, FFI::addr($this->data()));
+            $d = $this->data();
+            self::f()->Shell_NotifyIconW(self::NIM_DELETE, FFI::addr($d));
             $this->added = false;
         }
         if ($this->icon !== null) {
