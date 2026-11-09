@@ -152,7 +152,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
         if ($hr < 0 || FFI::isNull($out)) {
             throw new RuntimeException(sprintf('DWriteCreateFactory failed (HRESULT 0x%08X)', $hr & 0xFFFFFFFF));
         }
-        $this->factory = $this->f->cast('IDWriteFactory *', $out);
+        $this->factory = $this->typed($out, 'IDWriteFactory *');
         $this->factory2 = $this->query($this->factory, '0439fc60-ca44-4994-8dee-3a9af7b732ec');
         $this->factory3 = $this->query($this->factory, '9a1b41c3-d3bb-466a-87fc-fe67556a3b65');
         $coll = $this->f->new('void *');
@@ -160,7 +160,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
         if ($hr < 0) {
             throw new RuntimeException(sprintf('IDWriteFactory::GetSystemFontCollection failed (HRESULT 0x%08X)', $hr & 0xFFFFFFFF));
         }
-        $this->system = $this->f->cast('IDWriteFontCollection *', $coll);
+        $this->system = $this->typed($coll, 'IDWriteFontCollection *');
         $k = FFI::cdef('int32_t GetUserDefaultLocaleName(uint16_t *name, int32_t max);', 'kernel32.dll');
         $buf = $k->new('uint16_t[85]');
         $n = $k->GetUserDefaultLocaleName($buf, 85);
@@ -234,12 +234,23 @@ final class DWrite implements \MyPHP\Platform\Fonts
         return $this->slotInt[0];
     }
 
+    /**
+     * Pointer $p as one of $type of its own. FFI's cast of a pointer is a
+     * view of the memory holding it, which goes with the variable it came
+     * from (a local's, a struct's field read in a callback): a pointer kept
+     * is made of its address.
+     */
+    public function typed(CData $p, string $type): CData
+    {
+        return $this->f->cast($type, $this->addr($p));
+    }
+
     /** The id of font face $face, held from now on: its address. */
     public function adopt(CData $face): int
     {
         $id = $this->addr($face);
         if (!isset($this->faces[$id])) {
-            $f = $this->f->cast('IDWriteFontFace *', $face);
+            $f = $this->typed($face, 'IDWriteFontFace *');
             ($f->v->AddRef)($f);
             $this->faces[$id] = $f;
         }
