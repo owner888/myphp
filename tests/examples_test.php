@@ -114,7 +114,8 @@ $q = $t->byLabel('Search apps');
 same(22.0, $q->fontSize, 'the query in 22 points');
 $t->clickOn($q); $t->type('saf'); $t->frame();
 same(['Safari'], array_map(fn($a) => $a->name, $s->results), 'typing the query filters, as its field reports the change');
-same(['System/Utilities', '~/Applications'], [\MyPHP\Examples\Launcher\where($s->apps[2]), \MyPHP\Examples\Launcher\where(new \MyPHP\InstalledApp('X', 'x', getenv('HOME') . '/Applications/X.app'))], 'where apps are');
+// The Mac's folders of apps, which Windows has not.
+PHP_OS_FAMILY === 'Windows' || same(['System/Utilities', '~/Applications'], [\MyPHP\Examples\Launcher\where($s->apps[2]), \MyPHP\Examples\Launcher\where(new \MyPHP\InstalledApp('X', 'x', getenv('HOME') . '/Applications/X.app'))], 'where apps are');
 
 // menubar-native: the note, its Clear and its status.
 [$view, $s] = Headless::load('menubar-native');
@@ -606,7 +607,7 @@ $t->clickText('List'); $t->frame(2);
 $t->clickText('Size'); $t->frame(2);
 same(['sub', 'a.txt', 'b.txt'], array_column($s->entries, 'name'), 'the Size header sorts, folders first');
 $t->clickOn($t->byText('sub')); $t->frame(2); $t->clickOn($t->byText('sub'), 0, 2); $t->frame(2);
-same(realpath($dir) . '/sub', $s->path, 'a double click opens a folder');
+same(realpath($dir) . DIRECTORY_SEPARATOR . 'sub', $s->path, 'a double click opens a folder');
 $t->key(Key::DELETE, 'deleteBackward:'); $t->frame(2);
 same(realpath($dir), $s->path, 'Backspace goes up');
 $t->key(ord('f'), 'f', Key::COMMAND, 'f'); $t->type('a.'); $t->frame(3);

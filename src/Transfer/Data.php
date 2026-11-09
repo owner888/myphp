@@ -112,9 +112,9 @@ final class Data
                 throw new \InvalidArgumentException("transfer: file path must be absolute: \"$path\"");
             }
             $slashed = $path;
-            if (PHP_OS_FAMILY === 'Windows') { // file:///C:/x for C:\x, file://server/share for \\server\share
+            if (PHP_OS_FAMILY === 'Windows') { // mygo's: file:///C:/x for C:\x, file:////server/share for \\server\share
                 $slashed = strtr($path, '\\', '/');
-                $slashed = str_starts_with($slashed, '//') ? substr($slashed, 2) : (preg_match('~^[A-Za-z]:~', $slashed) === 1 ? "/$slashed" : $slashed);
+                $slashed = str_starts_with($slashed, '/') ? $slashed : "/$slashed";
             }
             $u = 'file://' . implode('/', array_map(fn(string $s) => strtr(rawurlencode($s), ['%24' => '$', '%26' => '&', '%2B' => '+', '%2C' => ',', '%3A' => ':', '%3B' => ';', '%3D' => '=', '%40' => '@']), explode('/', $slashed)));
             $items[] = new Item(Representation::bytes(Format::FILE_LIST, $u), Representation::bytes(Format::URI_LIST, $u));
@@ -144,14 +144,12 @@ final class Data
         $paths = [];
         foreach ($urls as $raw) {
             $u = parse_url(trim($raw));
-            $host = $u === false ? '' : ($u['host'] ?? '');
-            $share = PHP_OS_FAMILY === 'Windows' && !in_array($host, ['', 'localhost'], true); // file://server/share: \\server\share, a path on Windows
-            if ($u === false || ($u['scheme'] ?? '') !== 'file' || !$share && !in_array($host, ['', 'localhost'], true)) {
+            if ($u === false || ($u['scheme'] ?? '') !== 'file' || !in_array($u['host'] ?? '', ['', 'localhost'], true)) {
                 continue;
             }
             $p = rawurldecode($u['path'] ?? '');
-            if (PHP_OS_FAMILY === 'Windows') { // C:\x for file:///C:/x (parse_url drops the slash before the drive), \\server\share\x for file://server/share/x
-                $p = ($share ? "\\\\$host" : '') . strtr(preg_match('~^/[A-Za-z]:~', $p) === 1 ? substr($p, 1) : $p, '/', '\\');
+            if (PHP_OS_FAMILY === 'Windows') { // C:\x for file:///C:/x (parse_url may drop the slash before the drive), \\server\share for file:////server/share
+                $p = strtr(preg_match('~^/[A-Za-z]:~', $p) === 1 ? substr($p, 1) : $p, '/', '\\');
             }
             if (\MyPHP\Native\Paths::isAbsolute($p) && !str_contains($p, "\0")) { $paths[] = $p; }
         }

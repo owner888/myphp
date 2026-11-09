@@ -9,6 +9,7 @@ use MyPHP\UI\{Key, Node};
 
 $dir = realpath('/tmp') . '/myphp-files-' . getmypid(); // a short path: the breadcrumbs of macOS's temporary folder, nine deep, leave the toolbar no room to show them
 mkdir("$dir/Docs", 0777, true); mkdir("$dir/Docs/Inner");
+$dir = (string)realpath($dir); // as the example has it: on Windows a drive's, its separators backslashes
 file_put_contents("$dir/a.txt", str_repeat('a', 10)); file_put_contents("$dir/b.txt", str_repeat('b', 3000)); file_put_contents("$dir/zed.txt", 'z'); file_put_contents("$dir/.hidden", '');
 [$view, $f] = Headless::files($dir);
 $h = new Headless($view, 960, 640);
@@ -33,7 +34,7 @@ check($showing('2 of 4 chosen') !== null, 'the status counts the chosen');
 
 // A double click on a folder opens it; Backspace goes up; the breadcrumbs show the path.
 $h->clickOn($showing('Docs')); $h->clickOn($showing('Docs'), 0, 2); // the second press of two on it (Runtime::countPress)
-same("$dir/Docs", $f->path, 'a double click opens the folder');
+same($dir . DIRECTORY_SEPARATOR . 'Docs', $f->path, 'a double click opens the folder');
 same(['Inner'], $names(), 'its entries');
 same([], $f->chosenEntries(), 'nothing chosen in the folder opened');
 check($showing('Docs') !== null, 'the breadcrumbs end with the folder');
@@ -41,7 +42,7 @@ $h->key(Key::DELETE, 'deleteBackward:');
 same($dir, $f->path, 'Backspace goes up');
 // Enter opens the entry chosen.
 $h->clickOn($showing('Docs')); $h->enter();
-same("$dir/Docs", $f->path, 'Enter opens the folder chosen');
+same($dir . DIRECTORY_SEPARATOR . 'Docs', $f->path, 'Enter opens the folder chosen');
 $h->key(Key::DELETE, 'deleteBackward:');
 
 // Cmd+F: the find bar filters the entries as the query is typed; Escape closes it and they come back.

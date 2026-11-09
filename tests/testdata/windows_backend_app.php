@@ -6,6 +6,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, PathName, Screen, Shell};
+use MyPHP\Platform\Windows\Win32;
 
 require __DIR__ . '/../../src/autoload.php';
 
@@ -60,7 +61,16 @@ App::whenReady(function () use (&$r, $at) {
     });
 });
 // The backend first, its queue and a timer before the app's ready (init again in run() does nothing): where a run that hangs stops.
+Win32::ole32()->CoInitializeEx(null, 2);
+$at('COM');
+Win32::user32()->SetProcessDpiAwarenessContext(-4);
+$at('DPI awareness');
+Win32::registerClass('MyPHPProbe');
+$at('a class registered');
+Win32::createWindow('MyPHPProbe', '', 0, 0, fn(int $m, int $wp, int $lp): ?int => null);
+$at('a window made');
 $b = App::backend();
+$at('the backend');
 $b->init(\MyPHP\ActivationPolicy::Regular);
 $at('init');
 $b->timer(0, fn() => $at('the queue turns'));
