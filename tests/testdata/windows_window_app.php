@@ -1,37 +1,16 @@
 <?php
 // A window of native UI on Windows (windows_window_test.php): its size in points, the frame
 // around it, moving and resizing it, its title, minimizing and restoring, maximizing, full
-// screen and back, the events the core hears, closing it. The text is a stand-in of fixed
-// advances (DirectWrite's comes with its stage); the content shows the background alone.
+// screen and back, the events the core hears, closing it. Its text is DirectWrite's; the
+// content shows the background alone till the renderer's stage.
 declare(strict_types=1);
 
 use MyPHP\{App, Rectangle, Window, WindowOptions};
-use MyPHP\Text\{Engine, StubEngine};
-use MyPHP\UI\{Atlas, Content, ImageAtlas, Text};
+use MyPHP\UI\Content;
 
 require __DIR__ . '/../../src/autoload.php';
 
 $at = function (string $where): void { fwrite(STDERR, "at: $where\n"); fflush(STDERR); };
-// The text of a stand-in: half an em a character, nothing drawn.
-$fonts = new class implements \MyPHP\Platform\Fonts {
-    private float $scale = 1.0;
-    private ?Engine $engine = null;
-    public function engine(): Engine { return $this->engine ??= new StubEngine(); }
-    public function scale(): float { return $this->scale; }
-    public function setScale(float $scale): void { $this->scale = $scale; }
-    public function positions(float $px): int { return 1; }
-    public function baseline(float $y): float { return round($y); }
-    public function isColor(int $fontId): bool { return false; }
-    public function shape(string $text, float $size, int $style = 0): array
-    {
-        $glyphs = []; $x = 0.0; $carets = [0 => 0.0];
-        foreach (mb_str_split($text) as $i => $c) { $glyphs[] = ['font' => 0, 'glyph' => mb_ord($c), 'x' => $x, 'y' => 0.0, 'index' => $i]; $x += $size / 2; $carets[$i + 1] = $x; }
-        return ['width' => $x, 'ascent' => $size * 0.8, 'descent' => $size * 0.2, 'glyphs' => $glyphs, 'carets' => $carets];
-    }
-    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false, float $dx = 0.0): ?array { return null; }
-};
-(new ReflectionProperty(App::class, 'text'))->setValue(null, new Text($fonts, new Atlas(), new ImageAtlas()));
-
 $r = ['events' => []];
 App::setName('WindowTest');
 App::whenReady(function () use (&$r, $at) {
