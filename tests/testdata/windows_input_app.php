@@ -52,7 +52,7 @@ App::whenReady(function () use (&$r) {
         $r['afterDown'] = array_map(fn(array $e) => $e[0], $w->input->events);
         $send(Win32::WM_LBUTTONUP, 0, $at(50, 50));
         $r['afterUp'] = array_map(fn(array $e) => $e[0], $w->input->events);
-        App::after(0.3, function () use ($w, $u, $step, $at, $screen, &$r) {
+        App::after(0.3, function () use ($w, $u, $send, $step, $at, $screen, &$r) {
             $r['tapped'] = $r['taps'];
             $in = $w->input;
             $step('move', Win32::WM_MOUSEMOVE, 0, $at(60, 70));
