@@ -1096,8 +1096,8 @@ check($t->rt->partPaints === 200 && $t->painted()->transforms <= 2 * $first, "lo
 $t = new Headless($view, 390, 844);
 $t->rt->touch = true;
 $t->frame(2);
-check($t->byText('200,000 行') !== null && $t->byText('第 3 行 · ' . md5('3')) !== null, 'mobile: the list and its title: ' . json_encode(array_slice($t->texts(), 0, 6)));
-$t->clickText('第 3 行 · ' . md5('3')); $t->frame(3);
+check($t->byText('200,000 行') !== null && $t->byText('第 3 行') !== null && $t->byText(md5('3')) !== null, 'mobile: the list and its title: ' . json_encode(array_slice($t->texts(), 0, 6)));
+$t->clickText('第 3 行'); $t->frame(3);
 check($t->byText('这是第 3 行的详情页。') !== null && $t->byText('第 3 行') !== null, "mobile: a row's page, {i} given as an int, its navigationTitle");
 $t->clickText('再推一页'); $t->frame(3);
 same(2, $s->homePath->count(), 'mobile: append() goes deeper');

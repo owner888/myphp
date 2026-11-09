@@ -5,11 +5,11 @@ declare(strict_types=1);
 
 use MyPHP\Haptics;
 
-/** The list: 200 000 rows, only those in view built, each swiped for Flag and Delete, tapped for its page. */
+/** The list: 200 000 rows, only those in view built, each a title over a subtitle as iOS's cells, swiped for Flag and Delete, tapped for its page. */
 $home = fn() => ListView(Mobile::ROWS)(fn(int $i) =>
-    NavigationLink(value: "/row/$i", label: HStack(spacing: 12)(
-        Text((string)($i + 1))->foregroundStyle(Color::secondary)->frame(width: 64, alignment: Alignment::leading),
-        Text("第 $i 行 · " . md5((string)$i))->lineLimit(1),
+    NavigationLink(value: "/row/$i", label: VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+        Text("第 $i 行"),
+        Text(md5((string)$i))->font(Font::subheadline)->foregroundStyle(Color::secondary)->lineLimit(1),
     ))->swipeActions(
         Button('标记', action: fn() => $this->swiped($i, '标记')),
         Button('删除', role: ButtonRole::destructive, action: fn() => $this->swiped($i, '删除')),
