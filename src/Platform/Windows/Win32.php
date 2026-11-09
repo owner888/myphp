@@ -18,6 +18,8 @@ final class Win32
 {
     public const WM_DESTROY = 0x0002, WM_SETTINGCHANGE = 0x001A, WM_DISPLAYCHANGE = 0x007E, WM_TIMER = 0x0113;
     public const WM_POWERBROADCAST = 0x0218, WM_WTSSESSION_CHANGE = 0x02B1, WM_QUIT = 0x0012, WM_APP = 0x8000;
+    public const WM_MOVE = 0x0003, WM_SIZE = 0x0005, WM_ACTIVATE = 0x0006, WM_PAINT = 0x000F, WM_CLOSE = 0x0010, WM_ERASEBKGND = 0x0014;
+    public const WM_GETMINMAXINFO = 0x0024, WM_SETCURSOR = 0x0020, WM_DPICHANGED = 0x02E0;
     /** HKEY_CURRENT_USER: (HKEY)(ULONG_PTR)(LONG)0x80000001, sign-extended. */
     public const HKCU = -0x7FFFFFFF;
 
@@ -45,6 +47,10 @@ final class Win32
             typedef struct { uint32_t cbSize; RECT rcMonitor, rcWork; uint32_t dwFlags; uint16_t szDevice[32]; } MONITORINFOEXW;
             typedef struct { uint32_t cbSize, dwFlags; void *lpszDefaultScheme; } HIGHCONTRASTW;
             typedef struct { uint32_t cbSize, dwTime; } LASTINPUTINFO;
+            typedef struct { POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize; } MINMAXINFO;
+            typedef struct { uint32_t length, flags, showCmd; POINT ptMinPosition, ptMaxPosition; RECT rcNormalPosition; RECT rcDevice; } WINDOWPLACEMENT;
+            typedef struct { uint32_t cbSize; void *hwnd; uint32_t dwFlags, uCount, dwTimeout; } FLASHWINFO;
+            typedef struct { void *hdc; int32_t fErase; RECT rcPaint; int32_t fRestore, fIncUpdate; uint8_t rgbReserved[32]; } PAINTSTRUCT;
             uint16_t RegisterClassExW(const WNDCLASSEXW *wc);
             void *CreateWindowExW(uint32_t exStyle, const void *cls, const void *title, uint32_t style, int32_t x, int32_t y, int32_t w, int32_t h, void *parent, void *menu, void *inst, void *param);
             int32_t DestroyWindow(void *hwnd);
@@ -76,6 +82,40 @@ final class Win32
             int32_t IsClipboardFormatAvailable(uint32_t format);
             int32_t GetClipboardFormatNameW(uint32_t format, uint16_t *name, int32_t max);
             uint32_t RegisterClipboardFormatW(const void *name);
+            int32_t ShowWindow(void *hwnd, int32_t cmd);
+            int32_t SetWindowPos(void *hwnd, intptr_t after, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t flags);
+            int32_t GetWindowRect(void *hwnd, RECT *r);
+            int32_t GetClientRect(void *hwnd, RECT *r);
+            int32_t ClientToScreen(void *hwnd, POINT *p);
+            int32_t SetWindowTextW(void *hwnd, const void *text);
+            uint32_t GetDpiForWindow(void *hwnd);
+            int32_t AdjustWindowRectExForDpi(RECT *r, uint32_t style, int32_t menu, uint32_t exStyle, uint32_t dpi);
+            int32_t IsWindowVisible(void *hwnd);
+            int32_t IsIconic(void *hwnd);
+            int32_t IsZoomed(void *hwnd);
+            void *GetForegroundWindow(void);
+            int32_t SetForegroundWindow(void *hwnd);
+            void *SetFocus(void *hwnd);
+            intptr_t GetWindowLongPtrW(void *hwnd, int32_t index);
+            intptr_t SetWindowLongPtrW(void *hwnd, int32_t index, intptr_t value);
+            int32_t SetLayeredWindowAttributes(void *hwnd, uint32_t key, uint8_t alpha, uint32_t flags);
+            int32_t GetLayeredWindowAttributes(void *hwnd, uint32_t *key, uint8_t *alpha, uint32_t *flags);
+            int32_t FlashWindowEx(FLASHWINFO *info);
+            void *MonitorFromWindow(void *hwnd, uint32_t flags);
+            int32_t GetWindowPlacement(void *hwnd, WINDOWPLACEMENT *wp);
+            int32_t SetWindowDisplayAffinity(void *hwnd, uint32_t affinity);
+            int32_t SetWindowPlacement(void *hwnd, const WINDOWPLACEMENT *wp);
+            int32_t EnableMenuItem(void *menu, uint32_t item, uint32_t enable);
+            void *GetSystemMenu(void *hwnd, int32_t revert);
+            void *LoadCursorW(void *inst, intptr_t name);
+            void *SetCursor(void *cursor);
+            void *BeginPaint(void *hwnd, PAINTSTRUCT *ps);
+            int32_t EndPaint(void *hwnd, const PAINTSTRUCT *ps);
+            int32_t FillRect(void *dc, const RECT *r, void *brush);
+            int32_t InvalidateRect(void *hwnd, const RECT *r, int32_t erase);
+            int32_t ReleaseCapture(void);
+            intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
+            int32_t EnumDisplaySettingsW(const void *device, uint32_t mode, void *devmode);
             C, 'user32.dll');
     }
 
@@ -119,6 +159,16 @@ final class Win32
     public static function advapi32(): FFI
     {
         return self::$libs['advapi32'] ??= FFI::cdef('int32_t RegGetValueW(intptr_t key, const void *subKey, const void *value, uint32_t flags, uint32_t *type, void *data, uint32_t *size);', 'advapi32.dll');
+    }
+
+    public static function gdi32(): FFI
+    {
+        return self::$libs['gdi32'] ??= FFI::cdef('void *CreateSolidBrush(uint32_t color); int32_t DeleteObject(void *object);', 'gdi32.dll');
+    }
+
+    public static function dwmapi(): FFI
+    {
+        return self::$libs['dwmapi'] ??= FFI::cdef('int32_t DwmSetWindowAttribute(void *hwnd, uint32_t attribute, const void *value, uint32_t size);', 'dwmapi.dll');
     }
 
     public static function shcore(): FFI
@@ -195,7 +245,7 @@ final class Win32
         return self::$callbacks;
     }
 
-    /** Registers window class $name, once, with the shared window procedure; $style its CS_ flags. */
+    /** Registers window class $name, once, with the shared window procedure; $style its CS_ flags; the arrow its cursor. */
     public static function registerClass(string $name, int $style = 0x0003): void
     {
         if (isset(self::$classes[$name])) {
@@ -207,6 +257,7 @@ final class Win32
         $wc->style = $style;
         $wc->lpfnWndProc = self::callbacks()->wndProc;
         $wc->hInstance = self::instance();
+        $wc->hCursor = $u->LoadCursorW(null, 32512); // IDC_ARROW
         $class = self::wide($name);
         $wc->lpszClassName = $u->cast('const uint16_t *', FFI::addr($class[0]));
         if ($u->RegisterClassExW(FFI::addr($wc)) === 0) {

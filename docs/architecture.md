@@ -8738,6 +8738,19 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   the Recycle Bin; power is WM_POWERBROADCAST, WTS's lock and unlock, and
   the thread's execution state.
 - `windows_backend_test` runs an app of no windows on it and checks each.
+- Windows (stage 2, `Windows\Window`): a top-level window of the class
+  every window shares, its frame in points (a pixel of its display's DPI
+  over 96 a point; WM_DPICHANGED moves it to the size Windows suggests, in
+  the new DPI), the frame around the content of its style
+  (AdjustWindowRectExForDpi), the limits of its size (WM_GETMINMAXINFO),
+  its title bar dark with the app's appearance (DWMWA_USE_IMMERSIVE_DARK_MODE);
+  closing asked (WM_CLOSE), closed, focus and blur (WM_ACTIVATE), moved,
+  resized, minimized and restored (WM_SIZE) to the core; full screen a
+  frameless window over its display, its style and placement kept for
+  after; opacity a layered window's; Close off as the window menu's
+  SC_CLOSE grayed. Native UI's content is painted its background till the
+  renderer's stage draws it. `windows_window_test` drives one, its text a
+  stand-in of fixed advances till DirectWrite's stage.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

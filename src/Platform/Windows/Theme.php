@@ -27,9 +27,13 @@ final class Theme implements Platform\Theme
         return Win32::regDword(self::PERSONALIZE, 'AppsUseLightTheme') === 0;
     }
 
+    public function __construct(private readonly Backend $b) {}
+
+    /** The app's appearance, the app told as Windows tells it of the system's (the windows' title bars and content follow). */
     public function setSource(ThemeSource $source): void
     {
         $this->source = $source;
+        $this->b->h->themeChanged();
     }
 
     public function preferences(): ThemePreferences
