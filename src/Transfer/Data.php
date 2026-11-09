@@ -144,12 +144,14 @@ final class Data
         $paths = [];
         foreach ($urls as $raw) {
             $u = parse_url(trim($raw));
-            if ($u === false || ($u['scheme'] ?? '') !== 'file' || !in_array($u['host'] ?? '', ['', 'localhost'], true)) {
+            $host = $u === false ? '' : ($u['host'] ?? '');
+            $share = PHP_OS_FAMILY === 'Windows' && !in_array($host, ['', 'localhost'], true); // file://server/share: \\server\share, a path on Windows
+            if ($u === false || ($u['scheme'] ?? '') !== 'file' || !$share && !in_array($host, ['', 'localhost'], true)) {
                 continue;
             }
             $p = rawurldecode($u['path'] ?? '');
-            if (PHP_OS_FAMILY === 'Windows' && str_starts_with($p, '/')) { // C:\x for file:///C:/x, \\server\share for file://server/share
-                $p = preg_match('~^/[A-Za-z]:~', $p) === 1 ? strtr(substr($p, 1), '/', '\\') : (($u['host'] ?? '') !== '' && $u['host'] !== 'localhost' ? '\\\\' . $u['host'] : '') . strtr($p, '/', '\\');
+            if (PHP_OS_FAMILY === 'Windows') { // C:\x for file:///C:/x (parse_url drops the slash before the drive), \\server\share\x for file://server/share/x
+                $p = ($share ? "\\\\$host" : '') . strtr(preg_match('~^/[A-Za-z]:~', $p) === 1 ? substr($p, 1) : $p, '/', '\\');
             }
             if (\MyPHP\Native\Paths::isAbsolute($p) && !str_contains($p, "\0")) { $paths[] = $p; }
         }

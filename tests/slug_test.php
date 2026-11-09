@@ -27,7 +27,7 @@ $dir = sys_get_temp_dir() . '/myphp-slug-' . getmypid();
 @mkdir($dir);
 $run = function (array $config) use ($dir): array {
     file_put_contents("$dir/myphp.json", json_encode($config));
-    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'generate', $dir], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'generate', $dir], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
     $out = stream_get_contents($pipes[1]);
     return [proc_close($p), $out];
 };

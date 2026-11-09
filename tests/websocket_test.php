@@ -70,7 +70,7 @@ function wsNext(WsTask $conn, array $others = []): ?array
 
 (function () {
     $port = freePort();
-    $server = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/ws_server.php', (string)$port], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes);
+    $server = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/ws_server.php', (string)$port], [['file', DEVNULL, 'r'], ['file', DEVNULL, 'w'], ['file', DEVNULL, 'w']], $pipes);
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
     $url = "ws://127.0.0.1:$port";
     try {

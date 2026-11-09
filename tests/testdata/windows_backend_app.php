@@ -59,5 +59,11 @@ App::whenReady(function () use (&$r, $at) {
         $at('quit asked');
     });
 });
+// The backend first, its queue and a timer before the app's ready (init again in run() does nothing): where a run that hangs stops.
+$b = App::backend();
+$b->init(\MyPHP\ActivationPolicy::Regular);
+$at('init');
+$b->timer(0, fn() => $at('the queue turns'));
+$b->timer(0.05, fn() => $at('a timer fires'));
 App::run();
 $at('the loop ended');

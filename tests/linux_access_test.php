@@ -19,7 +19,7 @@ namespace MyPHP\Tests;
         if (\MyPHP\Native\Build\Cmd::look('xvfb-run') === '') { echo "  skipped: no display, and no xvfb-run\n"; return; }
         $cmd = ['xvfb-run', '-a', ...$cmd];
     }
-    $p = proc_open($cmd, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $p = proc_open($cmd, [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
     $out = stream_get_contents($pipes[1]); $err = stream_get_contents($pipes[2]);
     proc_close($p);
     $line = array_values(array_filter(explode("\n", (string)$out), fn(string $l) => str_starts_with($l, '{')))[0] ?? '';

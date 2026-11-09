@@ -24,7 +24,7 @@ namespace MyPHP\Tests;
     unset($env['DISPLAY'], $env['WAYLAND_DISPLAY']); // no display: the command starts Xvfb
     /** @return array{0: int, 1: string, 2: string} the exit status, the output and the errors */
     $run = function (array $args) use ($root, $env, $tmp): array {
-        $p = proc_open([PHP_BINARY, "$root/bin/myphp", 'screenshot', ...$args], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$tmp/out", 'w'], 2 => ['file', "$tmp/err", 'w']], $pipes, $root, $env);
+        $p = proc_open([PHP_BINARY, "$root/bin/myphp", 'screenshot', ...$args], [0 => ['file', DEVNULL, 'r'], 1 => ['file', "$tmp/out", 'w'], 2 => ['file', "$tmp/err", 'w']], $pipes, $root, $env);
         $code = proc_close($p);
         return [$code, (string)file_get_contents("$tmp/out"), (string)file_get_contents("$tmp/err")];
     };
@@ -182,7 +182,7 @@ App::run();
         };
         mkdir("$tmp/sleepy");
         file_put_contents("$tmp/sleepy/app.php", "<?php\nsleep(60);\n");
-        $p = proc_open([PHP_BINARY, "$root/bin/myphp", 'screenshot', "$tmp/sleepy", '-timeout', '60'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$tmp/out", 'w'], 2 => ['file', "$tmp/err", 'w']], $pipes, $root, $env);
+        $p = proc_open([PHP_BINARY, "$root/bin/myphp", 'screenshot', "$tmp/sleepy", '-timeout', '60'], [0 => ['file', DEVNULL, 'r'], 1 => ['file', "$tmp/out", 'w'], 2 => ['file', "$tmp/err", 'w']], $pipes, $root, $env);
         $pid = proc_get_status($p)['pid'];
         for ($end = microtime(true) + 20; count($children($pid)) < 2 && microtime(true) < $end;) { usleep(50_000); }
         $kids = $children($pid);

@@ -317,5 +317,5 @@ $items = $h->menu['items'];
 check($items[0]->type === \MyPHP\MenuItem::RADIO && !$items[0]->checked && $items[1]->checked, 'radio items, Date checked');
 check($h->chooseMenuItem('Name') && $sort === 'Name', 'Name chosen');
 
-same(PHP_OS_FAMILY === 'Darwin' ? ['⇧⌘Z', '⌃⌥↩', 'F5', '⌘,'] : ['Super+Shift+Z', 'Ctrl+Alt+Enter', 'F5', 'Super+,'],
+same(PHP_OS_FAMILY === 'Darwin' ? ['⇧⌘Z', '⌃⌥↩', 'F5', '⌘,'] : (PHP_OS_FAMILY === 'Windows' ? ['Win+Shift+Z', 'Ctrl+Alt+Enter', 'F5', 'Win+,'] : ['Super+Shift+Z', 'Ctrl+Alt+Enter', 'F5', 'Super+,']),
     [DrawnMenu::shortcutText('Super+Shift+z'), DrawnMenu::shortcutText('Ctrl+Alt+Enter'), DrawnMenu::shortcutText('F5'), DrawnMenu::shortcutText('Super+,')], 'shortcuts as the system writes them');
