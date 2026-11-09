@@ -11,7 +11,8 @@ use RuntimeException;
  * The system's zlib through FFI (/usr/lib/libz.1.dylib), as PHP's zlib
  * extension is not in every PHP that runs an app: a stream that deflates
  * or inflates gzip (Go's compress/gzip) or raw DEFLATE (compress/flate)
- * chunk by chunk.
+ * chunk by chunk. On Windows, which has no zlib of its own, it is PHP's
+ * extension, which PHP's builds there always have.
  *
  *     $z = Zlib::inflater(Zlib::GZIP);
  *     foreach ($chunks as $c) { $out .= $z->update($c); }
@@ -31,9 +32,18 @@ final class Zlib
     private CData $out;
     private ?CData $in = null;
     private bool $ended = false;
+    /** PHP's zlib's context on Windows, and the input it was given. */
+    private \DeflateContext|\InflateContext|null $ext = null;
+    private int $given = 0;
 
     private function __construct(private readonly bool $deflate, int $window, int $level)
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            $encoding = match ($window) { self::RAW => ZLIB_ENCODING_RAW, self::GZIP => ZLIB_ENCODING_GZIP, default => ZLIB_ENCODING_DEFLATE };
+            $opts = ['window' => min(15, abs($window) & 15 ?: 15)];
+            $this->ext = ($deflate ? deflate_init($encoding, $opts + ['level' => $level]) : inflate_init($encoding, $opts)) ?: throw new RuntimeException('zlib: init failed');
+            return;
+        }
         $c = self::c();
         $this->s = $c->new('z_stream');
         $this->out = $c->new('unsigned char[' . self::CHUNK . ']');
@@ -48,6 +58,9 @@ final class Zlib
 
     public function __destruct()
     {
+        if ($this->ext !== null) {
+            return;
+        }
         $this->deflate ? self::c()->deflateEnd(FFI::addr($this->s)) : self::c()->inflateEnd(FFI::addr($this->s));
     }
 
@@ -101,6 +114,9 @@ final class Zlib
 
     private function run(string $data, int $flush): string
     {
+        if ($this->ext !== null) {
+            return $this->runExt($data, $flush);
+        }
         $c = self::c();
         $n = strlen($data);
         if ($n > 0) {
@@ -146,6 +162,30 @@ final class Zlib
                 $this->in = null;
             }
         }
+    }
+
+    /** run() through PHP's zlib, with what the system's tells: the end of the stream, data after it, an error. */
+    private function runExt(string $data, int $flush): string
+    {
+        if ($this->ended) {
+            if ($data !== '') { throw new RuntimeException('zlib: data after the end of the stream'); }
+            return '';
+        }
+        if ($this->ext instanceof \DeflateContext) {
+            $out = deflate_add($this->ext, $data, $flush === self::Z_FINISH ? ZLIB_FINISH : ZLIB_NO_FLUSH);
+            $this->ended = $flush === self::Z_FINISH;
+            return $out === false ? throw new RuntimeException('zlib: deflate failed') : $out;
+        }
+        $this->given += strlen($data);
+        $out = @inflate_add($this->ext, $data, ZLIB_SYNC_FLUSH);
+        if ($out === false) {
+            throw new RuntimeException('zlib: ' . preg_replace('/^inflate_add\(\): /', '', error_get_last()['message'] ?? 'inflate failed'));
+        }
+        if (inflate_get_status($this->ext) === ZLIB_STREAM_END) {
+            $this->ended = true;
+            if (inflate_get_read_len($this->ext) < $this->given) { throw new RuntimeException('zlib: data after the end of the stream'); }
+        }
+        return $out;
     }
 
     private static function c(): FFI

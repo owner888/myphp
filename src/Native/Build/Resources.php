@@ -149,7 +149,7 @@ final class Resources
             }
         }
         foreach ($listed as $p) {
-            $src = str_starts_with($p, '/') ? $p : "$root/$p";
+            $src = \MyPHP\Native\Paths::absolute($p, $root);
             if (rtrim(self::clean($src), '/') === self::clean($dir)) {
                 throw new RuntimeException("$configName: resources lists $p, whose contents are always included; list only extra files");
             }

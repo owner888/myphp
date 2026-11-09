@@ -97,9 +97,7 @@ final class DeepLink
             if (!in_array(strtolower(pathinfo($p, PATHINFO_EXTENSION)), $exts, true)) {
                 continue;
             }
-            if (!str_starts_with($p, '/')) {
-                $p = "$wd/$p";
-            }
+            $p = Paths::absolute($p, $wd);
             if (is_file($p)) {
                 $files[] = $p;
             }

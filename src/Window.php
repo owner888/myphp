@@ -740,8 +740,8 @@ final class Window
     {
         if ($path !== '' && ($real = realpath($path)) !== false) {
             $path = $real;
-        } elseif ($path !== '' && $path[0] !== '/') {
-            $path = getcwd() . '/' . $path;
+        } elseif ($path !== '') {
+            $path = \MyPHP\Native\Paths::absolute($path);
         }
         $this->representedFile = $path;
         $this->native->setRepresentedFile($path);

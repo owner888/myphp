@@ -38,6 +38,7 @@ final class Backend implements Platform\Backend
     private ?Clipboard $clipboard = null;
     private ?Shell $shell = null;
     private ?Power $power = null;
+    private ?Media $media = null;
     /** The system's icons, none yet (Headless stands them in through this property). */
     private ?Platform\Symbols $symbols = null;
 
@@ -276,7 +277,7 @@ final class Backend implements Platform\Backend
 
     public function media(): Platform\Media
     {
-        throw new Unsupported('myphp: the player is not on Windows yet');
+        return $this->media ??= new Media($this);
     }
 
     public function symbols(): Platform\Symbols

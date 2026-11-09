@@ -8737,6 +8737,12 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   the Recycle Bin; power is WM_POWERBROADCAST, WTS's lock and unlock, and
   the thread's execution state.
 - `windows_backend_test` runs an app of no windows on it and checks each.
+- Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
+  Abs): a drive's, a share's and the current drive's root are absolute on
+  Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
+  keep their slashes. zlib is PHP's extension there (`Native\Zlib`), the C
+  library the UCRT (`Native\Mem`). The player's system (`Windows\Media`)
+  plays nothing before its stage: a player's state works, a film throws.
 
 ## Open items
 

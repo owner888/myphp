@@ -64,7 +64,7 @@ final class UtilsApi extends Api
         if (!str_contains($file, '/')) {
             $path = self::which($file) ?? throw new PluginError("Cannot find the binary $file", self::ERROR_BINARY_NOT_FOUND);
         } else {
-            $path = str_starts_with($file, '/') ? $file : $this->parsePath($file)[0];
+            $path = \MyPHP\Native\Paths::isAbsolute($file) ? $file : $this->parsePath($file)[0];
             if (!file_exists($path)) { throw new PluginError("Cannot find the binary $file", self::ERROR_BINARY_NOT_FOUND); }
         }
         $p = $this->instance->plugin;

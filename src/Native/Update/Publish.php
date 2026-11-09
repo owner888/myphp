@@ -116,8 +116,8 @@ final class Publish
         if ($text === '' && $path !== '') {
             if (str_starts_with($path, '~/')) {
                 $path = getenv('HOME') . substr($path, 1);
-            } elseif (!str_starts_with($path, '/')) {
-                $path = "{$this->dir}/$path";
+            } else {
+                $path = \MyPHP\Native\Paths::absolute($path, $this->dir);
             }
             $read = @file_get_contents($path);
             if ($read === false) {

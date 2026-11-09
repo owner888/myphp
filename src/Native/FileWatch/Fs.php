@@ -95,9 +95,7 @@ final class Fs
     /** $path absolute, with its symlinks resolved (Go's filepath.Abs, then EvalSymlinks). */
     public static function realpath(string $path): string
     {
-        if (!str_starts_with($path, '/')) {
-            $path = getcwd() . '/' . $path;
-        }
+        $path = \MyPHP\Native\Paths::absolute($path);
         clearstatcache(true);
         $real = realpath($path);
         if ($real !== false) {

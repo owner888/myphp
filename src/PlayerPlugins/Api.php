@@ -97,7 +97,7 @@ abstract class Api
             $abs = $this->expand($path, 'current', dirname($film->path()), false);
         }
         if (str_starts_with($path, '~/')) { $abs = rtrim((string)getenv('HOME'), '/') . substr($path, 1); }
-        if ($absolute && !str_starts_with($abs, '/')) { $this->fail("The path should be an absolute path: $path"); }
+        if ($absolute && !\MyPHP\Native\Paths::isAbsolute($abs)) { $this->fail("The path should be an absolute path: $path"); }
         return [$abs, str_starts_with($abs, $p->dataDir()) || str_starts_with($abs, $p->tmpDir())];
     }
 
