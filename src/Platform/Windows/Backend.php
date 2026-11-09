@@ -38,6 +38,7 @@ final class Backend implements Platform\Backend
     private ?Shell $shell = null;
     private ?Power $power = null;
     private ?Media $media = null;
+    private ?Menus $menus = null;
     /** The system's icons, none yet (Headless stands them in through this property). */
     private ?Platform\Symbols $symbols = null;
 
@@ -187,19 +188,43 @@ final class Backend implements Platform\Backend
         return $this->app ??= new App;
     }
 
+    public function menus(): Menus
+    {
+        return $this->menus ??= new Menus($this->h);
+    }
+
+    /** Shows $m in the menu bar of every window that shows the application menu, and of those to come (mygo's SetApplicationMenu). */
     public function setApplicationMenu(?Menu $m): void
     {
-        \MyPHP\Logger::debug('the application menu comes with the windows of Windows, at a later stage', 'windows');
+        $this->menus()->appMenu = $m;
+        foreach (Window::all() as $w) {
+            if ($w->hasAppMenu()) { $w->installMenu($m); }
+        }
     }
 
+    /** Shows a context menu over $w, else the active window, and returns as it closes (mygo's PopupMenu); without a window there is nowhere to show it, as Linux's. */
     public function popupMenu(Menu $m, ?\MyPHP\Window $w, ?array $at): void
     {
-        throw new Unsupported('myphp: context menus are not on Windows yet');
+        $native = $w?->native();
+        if (!$native instanceof Window || !$native->isVisible()) {
+            $native = Window::active();
+        }
+        if ($native === null) {
+            \MyPHP\Logger::warn('a context menu has no window to show over', 'windows');
+            return;
+        }
+        $this->menus()->popup($m, $native, $native === $w?->native() ? $at : null);
     }
 
-    public function updateMenuItem(MenuItem $it): void {}
+    public function updateMenuItem(MenuItem $it): void
+    {
+        $this->menus()->update($it);
+    }
 
-    public function replaceSubmenu(int $id, Menu $m): void {}
+    public function replaceSubmenu(int $id, Menu $m): void
+    {
+        $this->menus()->replaceSubmenu($id, $m);
+    }
 
     public function newWindow(\MyPHP\Window $w, \MyPHP\WindowOptions $o, bool $panel): Platform\Window
     {

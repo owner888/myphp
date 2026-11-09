@@ -26,6 +26,7 @@ final class Win32
     public const WM_MOUSEWHEEL = 0x020A, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C, WM_XBUTTONDBLCLK = 0x020D, WM_MOUSEHWHEEL = 0x020E;
     public const WM_CAPTURECHANGED = 0x0215, WM_MOUSELEAVE = 0x02A3, WM_APPCOMMAND = 0x0319;
     public const WM_IME_STARTCOMPOSITION = 0x010D, WM_IME_ENDCOMPOSITION = 0x010E, WM_IME_COMPOSITION = 0x010F, WM_IME_SETCONTEXT = 0x0281, WM_IME_CHAR = 0x0286;
+    public const WM_COMMAND = 0x0111, WM_INITMENUPOPUP = 0x0117;
     public const WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_CHAR = 0x0102, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105, WM_SYSCHAR = 0x0106;
     /** HKEY_CURRENT_USER: (HKEY)(ULONG_PTR)(LONG)0x80000001, sign-extended. */
     public const HKCU = -0x7FFFFFFF;
@@ -59,6 +60,7 @@ final class Win32
             typedef struct { uint32_t cbSize; void *hwnd; uint32_t dwFlags, uCount, dwTimeout; } FLASHWINFO;
             typedef struct { void *hdc; int32_t fErase; RECT rcPaint; int32_t fRestore, fIncUpdate; uint8_t rgbReserved[32]; } PAINTSTRUCT;
             typedef struct { uint32_t cbSize, dwFlags; void *hwndTrack; uint32_t dwHoverTime; } TRACKMOUSEEVENT;
+            typedef struct { uint32_t cbSize, fMask, fType, fState, wID; void *hSubMenu, *hbmpChecked, *hbmpUnchecked; uintptr_t dwItemData; uint16_t *dwTypeData; uint32_t cch; void *hbmpItem; } MENUITEMINFOW;
             uint16_t RegisterClassExW(const WNDCLASSEXW *wc);
             void *CreateWindowExW(uint32_t exStyle, const void *cls, const void *title, uint32_t style, int32_t x, int32_t y, int32_t w, int32_t h, void *parent, void *menu, void *inst, void *param);
             int32_t DestroyWindow(void *hwnd);
@@ -129,6 +131,20 @@ final class Win32
             int32_t GetMessageTime(void);
             int32_t GetSystemMetricsForDpi(int32_t index, uint32_t dpi);
             int32_t GetKeyboardState(uint8_t *state);
+            void *CreateMenu(void);
+            void *CreatePopupMenu(void);
+            int32_t AppendMenuW(void *menu, uint32_t flags, uintptr_t id, const void *text);
+            int32_t DestroyMenu(void *menu);
+            int32_t DeleteMenu(void *menu, uint32_t position, uint32_t flags);
+            int32_t SetMenu(void *hwnd, void *menu);
+            int32_t DrawMenuBar(void *hwnd);
+            int32_t SetMenuItemInfoW(void *menu, uint32_t item, int32_t byPosition, const MENUITEMINFOW *info);
+            int32_t GetMenuState(void *menu, uint32_t id, uint32_t flags);
+            int32_t GetMenuItemCount(void *menu);
+            uint32_t GetMenuItemID(void *menu, int32_t position);
+            void *GetSubMenu(void *menu, int32_t position);
+            int32_t GetMenuStringW(void *menu, uint32_t item, uint16_t *text, int32_t max, uint32_t flags);
+            int32_t TrackPopupMenuEx(void *menu, uint32_t flags, int32_t x, int32_t y, void *hwnd, void *params);
             void *GetKeyboardLayout(uint32_t thread);
             int32_t ToUnicodeEx(uint32_t vk, uint32_t scan, const uint8_t *state, uint16_t *buf, int32_t n, uint32_t flags, void *layout);
             intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
