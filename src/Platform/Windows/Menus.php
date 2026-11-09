@@ -416,7 +416,8 @@ final class Menus
     }
 
     /** The virtual key of an accelerator's key, null for one that has none (mygo's virtualKey). */
-    private static function virtualKey(string $key): ?int
+    /** @internal also the global shortcuts' (Backend::registerHotkey) */
+    public static function virtualKey(string $key): ?int
     {
         if (isset(self::NAMED_KEYS[$key])) {
             return self::NAMED_KEYS[$key];

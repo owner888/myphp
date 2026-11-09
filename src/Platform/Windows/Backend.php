@@ -44,6 +44,8 @@ final class Backend implements Platform\Backend
     /** @var array<int, Tray> the trays, by their numbers; the number of the last one counted */
     private array $trays = [];
     private int $nextTray = 0;
+    /** @var array<string, Tray> the icons showing the notifications, by their ids */
+    private array $notifications = [];
     /** The system's icons, none yet (Headless stands them in through this property). */
     private ?Platform\Symbols $symbols = null;
 
@@ -86,6 +88,9 @@ final class Backend implements Platform\Backend
             return $r; // a tray's menu's items, drawn here
         }
         switch ($msg) {
+            case Win32::WM_HOTKEY:
+                $this->h->hotkeyPressed($wp);
+                return 0;
             case self::WM_APP_TRAY:
                 ($this->trays[$wp] ?? null)?->event($lp & 0xFFFF);
                 return 0;
@@ -374,26 +379,90 @@ final class Backend implements Platform\Backend
         throw new Unsupported('myphp: the installed applications are not on Windows yet');
     }
 
+    /** A global shortcut (mygo's RegisterHotkey): RegisterHotKey on the app's window, its WM_HOTKEY told; its key held does not repeat it. */
     public function registerHotkey(int $id, string $accelerator): void
     {
-        throw new Unsupported('myphp: global shortcuts are not on Windows yet');
+        $a = Platform\Accelerator::parse($accelerator, 'Windows');
+        $vk = Menus::virtualKey($a->key) ?? throw new \RuntimeException("myphp: unsupported key in \"$accelerator\"");
+        $mods = 0x4000; // MOD_NOREPEAT
+        foreach ([Platform\Accelerator::ALT => 0x1, Platform\Accelerator::CTRL => 0x2, Platform\Accelerator::SHIFT => 0x4, Platform\Accelerator::SUPER => 0x8] as $m => $w) {
+            if ($a->has($m)) { $mods |= $w; }
+        }
+        if (Win32::user32()->RegisterHotKey($this->start(), $id, $mods, $vk) === 0) {
+            throw new \RuntimeException("myphp: cannot register \"$accelerator\" (error " . Win32::kernel32()->GetLastError() . ')');
+        }
     }
 
-    public function unregisterHotkey(int $id): void {}
+    public function unregisterHotkey(int $id): void
+    {
+        if ($this->hwnd !== null) { Win32::user32()->UnregisterHotKey($this->hwnd, $id); }
+    }
 
+    /** Notifications are the notification area's balloons (mygo's), which Windows 10 and later show as toasts. */
     public function notificationsSupported(): bool
     {
-        return false;
+        return true;
     }
 
+    /**
+     * Shows $n as the balloon of the first tray icon showing none, else of
+     * a temporary icon of the app's icon, which goes with it (mygo's
+     * ShowNotification): its subtitle over its body.
+     */
     public function showNotification(\MyPHP\Notification $n): void
     {
-        throw new Unsupported('myphp: notifications are not on Windows yet');
+        $this->start();
+        $t = null;
+        foreach ($this->trays as $x) {
+            if (!$x->temporary() && $x->notification === '' && $x->added()) { $t = $x; break; }
+        }
+        if ($t === null) {
+            $t = new Tray($this, null, ++$this->nextTray);
+            $this->trays[$t->id] = $t;
+            $t->add();
+        }
+        $this->removeNotification($n->id); // one of the same id replaced
+        $t->notification = $n->id;
+        $this->notifications[$n->id] = $t;
+        $o = $n->options;
+        if (!$t->balloon($o->title, $o->subtitle === '' ? $o->body : "{$o->subtitle}\n{$o->body}", $o->silent)) {
+            $this->finishNotification($t);
+            throw new \RuntimeException('myphp: cannot show the notification');
+        }
     }
 
-    public function removeNotification(string $id): void {}
+    public function removeNotification(string $id): void
+    {
+        if (isset($this->notifications[$id])) { $this->finishNotification($this->notifications[$id]); }
+    }
 
-    public function removeAllNotifications(): void {}
+    public function removeAllNotifications(): void
+    {
+        foreach ($this->notifications as $t) { $this->finishNotification($t); }
+    }
+
+    /** @internal $t's balloon was clicked ($clicked) or timed out: the app told of a click, the notification finished */
+    public function notificationEnded(Tray $t, bool $clicked): void
+    {
+        $id = $t->notification;
+        if ($id === '') {
+            return;
+        }
+        $this->finishNotification($t);
+        if ($clicked) { $this->h->notificationClicked($id); }
+    }
+
+    /** $t's notification gone: a temporary icon with it, another's balloon hidden (an empty one hides it; mygo's finishNotification). */
+    private function finishNotification(Tray $t): void
+    {
+        unset($this->notifications[$t->notification]);
+        $t->notification = '';
+        if ($t->temporary()) {
+            $t->destroy();
+            return;
+        }
+        $t->balloon('', '', true);
+    }
 
     public function webViewAvailable(): bool
     {

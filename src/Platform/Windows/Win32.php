@@ -26,7 +26,7 @@ final class Win32
     public const WM_MOUSEWHEEL = 0x020A, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C, WM_XBUTTONDBLCLK = 0x020D, WM_MOUSEHWHEEL = 0x020E;
     public const WM_CAPTURECHANGED = 0x0215, WM_MOUSELEAVE = 0x02A3, WM_APPCOMMAND = 0x0319;
     public const WM_IME_STARTCOMPOSITION = 0x010D, WM_IME_ENDCOMPOSITION = 0x010E, WM_IME_COMPOSITION = 0x010F, WM_IME_SETCONTEXT = 0x0281, WM_IME_CHAR = 0x0286;
-    public const WM_COMMAND = 0x0111, WM_INITMENUPOPUP = 0x0117;
+    public const WM_COMMAND = 0x0111, WM_INITMENUPOPUP = 0x0117, WM_HOTKEY = 0x0312, WM_USER = 0x0400;
     public const WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_CHAR = 0x0102, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105, WM_SYSCHAR = 0x0106;
     /** HKEY_CURRENT_USER: (HKEY)(ULONG_PTR)(LONG)0x80000001, sign-extended. */
     public const HKCU = -0x7FFFFFFF;
@@ -118,6 +118,9 @@ final class Win32
             int32_t EnableMenuItem(void *menu, uint32_t item, uint32_t enable);
             void *GetSystemMenu(void *hwnd, int32_t revert);
             void *LoadCursorW(void *inst, intptr_t name);
+            void *LoadIconW(void *inst, intptr_t name);
+            int32_t RegisterHotKey(void *hwnd, int32_t id, uint32_t mods, uint32_t vk);
+            int32_t UnregisterHotKey(void *hwnd, int32_t id);
             void *SetCursor(void *cursor);
             void *BeginPaint(void *hwnd, PAINTSTRUCT *ps);
             int32_t EndPaint(void *hwnd, const PAINTSTRUCT *ps);
