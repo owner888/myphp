@@ -39,7 +39,6 @@ final class D3d
     private const IID_DXGIFACTORY2 = '50c83a1c-e072-4c48-87b0-3630fa36a6d0';
 
     private static ?FFI $f = null;
-    private static CData $slot, $slotInt;
     /** The device and its immediate context, shared by the renderers; the shaders and states they draw with. */
     private static ?CData $device = null, $context = null;
     private static CData $quadVS, $quadPS, $blurVS, $blurPS, $sampler, $rasterizer, $frameBuffer, $noBackdrop;
@@ -84,11 +83,6 @@ final class D3d
             return self::$f;
         }
         $f = FFI::cdef(<<<'C'
-            typedef struct { uint32_t a; uint16_t b, c; uint8_t d[8]; } GUID;
-            typedef struct { void *qi, *addRef; uint32_t (*Release)(void *self); } IUnknownVtbl;
-            typedef struct { IUnknownVtbl *v; } IUnknown;
-            typedef struct { int32_t (*QueryInterface)(void *self, const GUID *iid, void **out); void *addRef; uint32_t (*Release)(void *self); } IQueryVtbl;
-            typedef struct { IQueryVtbl *v; } IQuery;
             typedef struct { void *r0[3]; void *(*GetBufferPointer)(void *self); size_t (*GetBufferSize)(void *self); } ID3DBlobVtbl;
             typedef struct { ID3DBlobVtbl *v; } ID3DBlob;
 
@@ -159,7 +153,7 @@ final class D3d
             typedef struct { ID3D11DeviceContextVtbl *v; } ID3D11DeviceContext;
             typedef struct { void *r0[7]; int32_t (*GetAdapter)(void *self, void **adapter); } IDXGIDeviceVtbl;
             typedef struct { IDXGIDeviceVtbl *v; } IDXGIDevice;
-            typedef struct { void *r0[6]; int32_t (*GetParent)(void *self, const GUID *iid, void **parent); } IDXGIObjectVtbl;
+            typedef struct { void *r0[6]; int32_t (*GetParent)(void *self, const void *iid, void **parent); } IDXGIObjectVtbl;
             typedef struct { IDXGIObjectVtbl *v; } IDXGIObject;
             typedef struct { void *r0[15];
                 int32_t (*CreateSwapChainForHwnd)(void *self, void *device, void *hwnd, const DXGI_SWAP_CHAIN_DESC1 *desc, const void *fullscreen, void *output, void **out);
@@ -167,7 +161,7 @@ final class D3d
             typedef struct { IDXGIFactory2Vtbl *v; } IDXGIFactory2;
             typedef struct { void *r0[8];
                 int32_t (*Present)(void *self, uint32_t sync, uint32_t flags);
-                int32_t (*GetBuffer)(void *self, uint32_t i, const GUID *iid, void **out);
+                int32_t (*GetBuffer)(void *self, uint32_t i, const void *iid, void **out);
                 void *r10[3];
                 int32_t (*ResizeBuffers)(void *self, uint32_t n, uint32_t w, uint32_t h, uint32_t format, uint32_t flags);
             } IDXGISwapChainVtbl;
@@ -175,8 +169,6 @@ final class D3d
 
             int32_t D3D11CreateDevice(void *adapter, int32_t type, void *software, uint32_t flags, const int32_t *levels, uint32_t n, uint32_t sdk, void **device, int32_t *level, void **context);
             C, 'd3d11.dll');
-        self::$slot = $f->new('void *[1]');
-        self::$slotInt = $f->cast('int64_t[1]', self::$slot);
         return self::$f = $f;
     }
 
@@ -193,17 +185,17 @@ final class D3d
         $hr = getenv('MYPHP_D3D_WARP') === '1' ? -1 : $f->D3D11CreateDevice(null, 1 /* hardware */, null, 0x20 /* BGRA */, null, 0, 7, FFI::addr($dev), FFI::addr($level), FFI::addr($ctx));
         if ($hr >= 0 && $level->cdata < 0xb000) {
             // a GPU of feature level 10: shader model 5 is 11's, which WARP has
-            self::releaseObject($ctx);
-            self::releaseObject($dev);
+            Com::release($ctx);
+            Com::release($dev);
             $hr = -1;
         }
         if ($hr < 0) {
             self::$warp = true;
             $hr = $f->D3D11CreateDevice(null, 5 /* WARP */, null, 0x20, null, 0, 7, FFI::addr($dev), FFI::addr($level), FFI::addr($ctx));
-            self::check($hr, 'D3D11CreateDevice');
+            self::hr($hr, 'D3D11CreateDevice');
         }
-        self::$device = self::typed($dev, 'ID3D11Device *');
-        self::$context = self::typed($ctx, 'ID3D11DeviceContext *');
+        self::$device = Com::typed(self::$f, $dev, 'ID3D11Device *');
+        self::$context = Com::typed(self::$f, $ctx, 'ID3D11DeviceContext *');
         $d = self::$device;
         [$vs, $ps] = [self::compile(D3dShader::QUAD, 'quad', 'vs', 'vs_5_0'), self::compile(D3dShader::QUAD, 'quad', 'ps', 'ps_5_0')];
         self::$quadVS = self::make(fn($out) => ($d->v->CreateVertexShader)($d, $vs, strlen($vs), null, $out), 'CreateVertexShader');
@@ -254,7 +246,7 @@ final class D3d
         $errors = $c->new('void *');
         $hr = $c->D3DCompile($src, strlen($src), $name, null, null, $entry, $target, 1 << 15 /* optimization level 3 */, 0, FFI::addr($code), FFI::addr($errors));
         $text = static function (CData $p) use ($f): string {
-            $b = $f->cast('ID3DBlob *', self::addressOf($p));
+            $b = $f->cast('ID3DBlob *', Com::addr($p));
             $s = FFI::string(($b->v->GetBufferPointer)($b), ($b->v->GetBufferSize)($b));
             ($b->v->Release)($b);
             return $s;
@@ -279,8 +271,8 @@ final class D3d
             return;
         }
         self::$atlas = $atlas;
-        self::releaseObject(self::$atlasView);
-        self::releaseObject(self::$atlasTexture);
+        Com::release(self::$atlasView);
+        Com::release(self::$atlasTexture);
         [self::$atlasTexture, self::$atlasView] = self::texture($atlas->w, $atlas->h, self::R8_UNORM, 1, self::BIND_SHADER_RESOURCE, false, self::$f->cast('void *', $atlas->base), $atlas->w);
         $atlas->dirty = false;
     }
@@ -301,8 +293,8 @@ final class D3d
             return;
         }
         self::$images = $images;
-        self::releaseObject(self::$imagesView);
-        self::releaseObject(self::$imagesTexture);
+        Com::release(self::$imagesView);
+        Com::release(self::$imagesTexture);
         [self::$imagesTexture, self::$imagesView] = self::texture($images->w, $images->h, self::R8G8B8A8_UNORM, ImageAtlas::MAX + CanvasAtlas::PAGES, self::BIND_SHADER_RESOURCE, true);
         foreach ($images->pages as $i => $page) {
             self::uploadRows(self::$imagesTexture, $i, $page, 0, $page->h);
@@ -330,17 +322,18 @@ final class D3d
     {
         $f = self::$f;
         $d = self::$device;
-        $dxgi = self::query($d, self::IID_DXGIDEVICE);
+        $dxgi = Com::query($d, self::IID_DXGIDEVICE) ?? throw new RuntimeException('myphp: Direct3D 11: the device is no IDXGIDevice');
         $adapter = $f->new('void *');
-        $hr = ($dxgi->v->GetAdapter)(self::typed($dxgi, 'IDXGIDevice *'), FFI::addr($adapter));
-        self::releaseObject($dxgi);
-        self::check($hr, 'IDXGIDevice::GetAdapter');
+        $dx = Com::typed(self::$f, $dxgi, 'IDXGIDevice *');
+        $hr = ($dx->v->GetAdapter)($dx, FFI::addr($adapter));
+        Com::release($dxgi);
+        self::hr($hr, 'IDXGIDevice::GetAdapter');
         $factory = $f->new('void *');
-        $iid = self::guid(self::IID_DXGIFACTORY2);
-        $a = self::typed($adapter, 'IDXGIObject *');
+        $iid = Com::guid(self::IID_DXGIFACTORY2);
+        $a = Com::typed(self::$f, $adapter, 'IDXGIObject *');
         $hr = ($a->v->GetParent)($a, FFI::addr($iid), FFI::addr($factory));
-        self::releaseObject($adapter);
-        self::check($hr, 'IDXGIAdapter::GetParent (IDXGIFactory2)');
+        Com::release($adapter);
+        self::hr($hr, 'IDXGIAdapter::GetParent (IDXGIFactory2)');
         $desc = $f->new('DXGI_SWAP_CHAIN_DESC1');
         $desc->Width = max(1, $pw);
         $desc->Height = max(1, $ph);
@@ -350,12 +343,12 @@ final class D3d
         $desc->BufferCount = 2;
         // DXGI_SWAP_EFFECT_FLIP_DISCARD
         $desc->SwapEffect = 4;
-        $fac = self::typed($factory, 'IDXGIFactory2 *');
+        $fac = Com::typed(self::$f, $factory, 'IDXGIFactory2 *');
         $chain = $f->new('void *');
         $hr = ($fac->v->CreateSwapChainForHwnd)($fac, $d, $hwnd, FFI::addr($desc), null, null, FFI::addr($chain));
-        self::releaseObject($factory);
-        self::check($hr, 'IDXGIFactory2::CreateSwapChainForHwnd');
-        $this->swapChain = self::typed($chain, 'IDXGISwapChain *');
+        Com::release($factory);
+        self::hr($hr, 'IDXGIFactory2::CreateSwapChainForHwnd');
+        $this->swapChain = Com::typed(self::$f, $chain, 'IDXGISwapChain *');
         $this->size = [max(1, $pw), max(1, $ph)];
         $this->backBuffer = $this->backBufferView();
     }
@@ -366,11 +359,11 @@ final class D3d
         $f = self::$f;
         $s = $this->swapChain;
         $tex = $f->new('void *');
-        $iid = self::guid(self::IID_TEXTURE2D);
-        self::check(($s->v->GetBuffer)($s, 0, FFI::addr($iid), FFI::addr($tex)), 'IDXGISwapChain::GetBuffer');
+        $iid = Com::guid(self::IID_TEXTURE2D);
+        self::hr(($s->v->GetBuffer)($s, 0, FFI::addr($iid), FFI::addr($tex)), 'IDXGISwapChain::GetBuffer');
         $d = self::$device;
         $view = self::make(fn($out) => ($d->v->CreateRenderTargetView)($d, $tex, null, $out), 'CreateRenderTargetView');
-        self::releaseObject($tex);
+        Com::release($tex);
         return $view;
     }
 
@@ -388,9 +381,9 @@ final class D3d
         }
         [$pw, $ph] = [max(1, $pw), max(1, $ph)];
         if ([$pw, $ph] !== $this->size) {
-            self::releaseObject($this->backBuffer);
+            Com::release($this->backBuffer);
             $s = $this->swapChain;
-            self::check(($s->v->ResizeBuffers)($s, 0, $pw, $ph, 0, 0), 'IDXGISwapChain::ResizeBuffers');
+            self::hr(($s->v->ResizeBuffers)($s, 0, $pw, $ph, 0, 0), 'IDXGISwapChain::ResizeBuffers');
             $this->size = [$pw, $ph];
             $this->backBuffer = $this->backBufferView();
         }
@@ -434,15 +427,15 @@ final class D3d
         $staging = self::make(fn($out) => ($d->v->CreateTexture2D)($d, FFI::addr($desc), null, $out), 'CreateTexture2D (staging)');
         ($c->v->CopyResource)($c, $staging, $tex);
         $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
-        self::check(($c->v->Map)($c, $staging, 0, self::MAP_READ, 0, FFI::addr($m)), 'Map (read back)');
-        $at = self::addressOf($m->pData);
+        self::hr(($c->v->Map)($c, $staging, 0, self::MAP_READ, 0, FFI::addr($m)), 'Map (read back)');
+        $at = Com::addr($m->pData);
         $out = '';
         for ($y = 0; $y < $ph; $y++) {
             $out .= FFI::string($f->cast('char *', $at + $y * $m->RowPitch), $pw * 4);
         }
         ($c->v->Unmap)($c, $staging, 0);
         foreach ([$staging, $view, $tex] as $o) {
-            self::releaseObject($o);
+            Com::release($o);
         }
         return $out;
     }
@@ -551,7 +544,7 @@ final class D3d
         $frame->targetH = $th;
         $frame->from = $at;
         $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
-        self::check(($c->v->Map)($c, self::$frameBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (constants)');
+        self::hr(($c->v->Map)($c, self::$frameBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (constants)');
         FFI::memcpy($m->pData, $frame, FFI::sizeof($frame));
         ($c->v->Unmap)($c, self::$frameBuffer, 0);
         ($c->v->OMSetBlendState)($c, self::$blends[$blend], null, 0xFFFFFFFF);
@@ -567,7 +560,7 @@ final class D3d
         $f = self::$f;
         $c = self::$context;
         $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
-        self::check(($c->v->Map)($c, $buffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (quads)');
+        self::hr(($c->v->Map)($c, $buffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (quads)');
         FFI::memcpy($m->pData, $from, $bytes);
         ($c->v->Unmap)($c, $buffer, 0);
     }
@@ -649,12 +642,12 @@ final class D3d
             $bpp = $format === self::R8_UNORM ? 1 : 4;
             if ($pixels === null) {
                 $keep = $f->new('uint8_t[' . ($w * $h * $bpp * $layers) . ']');
-                $pixels = $f->cast('void *', self::addressOf(FFI::addr($keep[0])));
+                $pixels = $f->cast('void *', Com::addr(FFI::addr($keep[0])));
                 $pitch = $w * $bpp;
             }
             $init = $f->new("D3D11_SUBRESOURCE_DATA[$layers]");
             for ($i = 0; $i < $layers; $i++) {
-                $init[$i]->pSysMem = $f->cast('void *', self::addressOf($pixels) + ($keep !== null ? $i * $w * $h * $bpp : 0));
+                $init[$i]->pSysMem = $f->cast('void *', Com::addr($pixels) + ($keep !== null ? $i * $w * $h * $bpp : 0));
                 $init[$i]->SysMemPitch = $pitch;
                 $init[$i]->SysMemSlicePitch = $pitch * $h;
             }
@@ -678,7 +671,7 @@ final class D3d
     public function release(): void
     {
         foreach ([$this->backBuffer, $this->swapChain, $this->quadsView, $this->quads, $this->xformsView, $this->xforms] as $o) {
-            self::releaseObject($o);
+            Com::release($o);
         }
         $this->backBuffer = $this->swapChain = null;
         foreach ($this->lists as $l) {
@@ -692,58 +685,13 @@ final class D3d
     private static function make(\Closure $call, string $what): CData
     {
         $out = self::$f->new('void *');
-        self::check($call(FFI::addr($out)), $what);
-        return self::typed($out, 'void *');
+        self::hr($call(FFI::addr($out)), $what);
+        return Com::typed(self::$f, $out, 'void *');
     }
 
-    private static function check(int $hr, string $what): void
+    /** Com::check, its failure Direct3D 11's. */
+    private static function hr(int $hr, string $what): void
     {
-        if ($hr < 0) {
-            throw new RuntimeException(sprintf('myphp: Direct3D 11: %s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
-        }
-    }
-
-    /** $obj's interface $iid, held. */
-    private static function query(CData $obj, string $iid): CData
-    {
-        $q = self::$f->cast('IQuery *', self::addressOf($obj));
-        $out = self::$f->new('void *');
-        // held through the call: FFI::addr() of a temporary points at what is freed
-        $g = self::guid($iid);
-        self::check(($q->v->QueryInterface)($q, FFI::addr($g), FFI::addr($out)), "QueryInterface $iid");
-        return self::typed($out, 'void *');
-    }
-
-    private static function releaseObject(?CData $obj): void
-    {
-        if ($obj !== null && !FFI::isNull($obj)) {
-            $u = self::$f->cast('IUnknown *', self::addressOf($obj));
-            ($u->v->Release)($u);
-        }
-    }
-
-    private static function guid(string $s): CData
-    {
-        $h = str_replace('-', '', $s);
-        $g = self::$f->new('GUID');
-        $g->a = hexdec(substr($h, 0, 8)); $g->b = hexdec(substr($h, 8, 4)); $g->c = hexdec(substr($h, 12, 4));
-        for ($i = 0; $i < 8; $i++) { $g->d[$i] = hexdec(substr($h, 16 + 2 * $i, 2)); }
-        return $g;
-    }
-
-    /** The integer address of pointer $p (of any FFI's). */
-    private static function addressOf(CData $p): int
-    {
-        if (FFI::isNull($p)) {
-            return 0;
-        }
-        self::$slot[0] = self::$f->cast('void *', $p);
-        return self::$slotInt[0];
-    }
-
-    /** Pointer $p as one of $type of its own, made of its address: FFI's cast of a pointer is a view of the memory holding it (DWrite::typed). */
-    private static function typed(CData $p, string $type): CData
-    {
-        return self::$f->cast($type, self::addressOf($p));
+        Com::check($hr, "Direct3D 11: $what");
     }
 }

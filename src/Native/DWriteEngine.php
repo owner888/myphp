@@ -95,7 +95,7 @@ final class DWriteEngine implements \MyPHP\Text\Engine
             return $this->formats[$key];
         }
         if (count($this->formats) >= 256) {
-            foreach ($this->formats as $fmt) { $this->d->release($fmt); }
+            foreach ($this->formats as $fmt) { Com::release($fmt); }
             $this->formats = [];
         }
         $out = $this->f->new('void *');
@@ -138,10 +138,10 @@ final class DWriteEngine implements \MyPHP\Text\Engine
             }
             $ft = $f->cast('IDWriteFont *', $font);
             $ok = ($ft->v->CreateFontFace)($ft, FFI::addr($face)) >= 0;
-            $this->d->release($font);
+            Com::release($font);
             return $ok ? $face : null;
         } finally {
-            $this->d->release($fam);
+            Com::release($fam);
         }
     }
 
@@ -195,19 +195,19 @@ final class DWriteEngine implements \MyPHP\Text\Engine
                 $name = '';
                 if (($family->v->GetFamilyNames)($family, FFI::addr($names)) >= 0) {
                     $name = $this->localized($f->cast('IDWriteLocalizedStrings *', $names), $english);
-                    $this->d->release($names);
+                    Com::release($names);
                 }
                 $mono = false;
                 $font = $f->new('void *');
                 if ($name !== '' && ($family->v->GetFirstMatchingFont)($family, 400, 5, 0, FFI::addr($font)) >= 0) {
-                    if (($f1 = $this->d->query($font, 'acd16696-8c14-4f5d-877e-fe3fc1d32738')) !== null) {
+                    if (($f1 = Com::query($font, 'acd16696-8c14-4f5d-877e-fe3fc1d32738')) !== null) {
                         $ft = $f->cast('IDWriteFont1 *', $f1);
                         $mono = ($ft->v->IsMonospacedFont)($ft) !== 0;
-                        $this->d->release($f1);
+                        Com::release($f1);
                     }
-                    $this->d->release($font);
+                    Com::release($font);
                 }
-                $this->d->release($fam);
+                Com::release($fam);
                 if ($name !== '') { $out[] = [$name, $mono]; }
             }
             usort($out, fn(array $a, array $b): int => strcasecmp($a[0], $b[0]));
@@ -244,13 +244,12 @@ final class DWriteEngine implements \MyPHP\Text\Engine
         // IUnknown, IDWritePixelSnapping and IDWriteTextRenderer are itself; no other, as IDWriteTextRenderer1, whose
         // methods past these DirectWrite would call (mygo's rendererQueryInterface).
         $vt->QueryInterface = function ($self, $iid, $out) {
-            $id = sprintf('%08x-%04x-%04x-', $iid->a, $iid->b, $iid->c) . bin2hex(FFI::string($iid->d, 8));
-            if (in_array($id, ['00000000-0000-0000-c000000000000046', 'eaf3a2da-ecf4-4d24-b644b34f6842024b', 'ef8a8135-5cc6-45fe-8825c5a0724eb819'], true)) {
+            if (in_array(Com::iid($iid), ['00000000-0000-0000-c000-000000000046', 'eaf3a2da-ecf4-4d24-b644-b34f6842024b', 'ef8a8135-5cc6-45fe-8825-c5a0724eb819'], true)) {
                 $out[0] = $self;
                 return 0;
             }
             $out[0] = null;
-            return 0x80004002 - 0x100000000; // E_NOINTERFACE
+            return Com::E_NOINTERFACE;
         };
         $vt->AddRef = fn($self) => 1;
         $vt->Release = fn($self) => 1;
@@ -327,7 +326,7 @@ final class DWriteEngine implements \MyPHP\Text\Engine
             $runs = $this->drawing;
             $this->drawing = [];
         } finally {
-            $this->d->release($out);
+            Com::release($out);
         }
         $lines = []; $ends = []; $pos = 0;
         for ($i = 0; $i < $count->cdata; $i++) {
@@ -381,12 +380,12 @@ final class DWriteEngine implements \MyPHP\Text\Engine
     /** Letter spacing over a range (IDWriteTextLayout1's, Windows 8's). */
     private function spacing(CData $layout, float $spacing, CData $r): void
     {
-        if ($spacing == 0.0 || ($l1 = $this->d->query($layout, '9064d822-80a7-465c-a986-df65f78b8feb')) === null) {
+        if ($spacing == 0.0 || ($l1 = Com::query($layout, '9064d822-80a7-465c-a986-df65f78b8feb')) === null) {
             return;
         }
         $l = $this->f->cast('IDWriteTextLayout *', $l1);
         ($l->v->SetCharacterSpacing)($l, 0.0, $spacing, 0.0, $r);
-        $this->d->release($l1);
+        Com::release($l1);
     }
 
     /**
