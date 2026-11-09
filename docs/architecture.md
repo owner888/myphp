@@ -8896,6 +8896,15 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   one's a right click and its menu, shown at the pointer over the app's
   window, which hears its menus' messages. `windows_tray_test` sends the
   app's window the icon's messages.
+- Global shortcuts and notifications (stage 5: mygo's tray.go): a shortcut
+  is RegisterHotKey's on the app's window (MOD_NOREPEAT, its key the menus'
+  virtual key), WM_HOTKEY telling its id; keys another app or this one
+  holds are refused. A notification is a tray icon's balloon, which Windows
+  10 and later show as a toast: the first icon showing none shows it, else
+  a temporary icon of the app's icon, which goes with it; its subtitle over
+  its body, NIIF_NOSOUND when silent. Its click (NIN_BALLOONUSERCLICK) is
+  the app's, it or its timeout finishing it; an empty balloon hides one
+  removed. `windows_services_test` sends the app's window the messages.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

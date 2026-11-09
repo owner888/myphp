@@ -18,7 +18,10 @@ use MyPHP\Rectangle;
  * (the notification area keeps the user's choices for an icon by its
  * number and names it by its first tooltip); a template image shows white
  * on a dark taskbar, as macOS tints one. A left click is a click, a right
- * one a right click, which shows its menu, as Windows's icons do.
+ * one a right click, which shows its menu, as Windows's icons do. The
+ * app's notifications are its balloons (mygo's), which Windows 10 and
+ * later show as toasts: an icon shows one at a time, and an icon made
+ * only to show one (temporary, of the app's icon) goes with it.
  */
 final class Tray implements Platform\Tray
 {
@@ -36,10 +39,45 @@ final class Tray implements Platform\Tray
     private bool $dark;
     private string $image = '';
     private bool $template = false;
+    /** @internal the id of the notification the icon shows, '' for none */
+    public string $notification = '';
 
-    public function __construct(private readonly Backend $b, private readonly TrayHandler $h, public int $id)
+    /** $h null: a temporary icon, made only to show a notification, of the app's icon (mygo's temporary). */
+    public function __construct(private readonly Backend $b, private readonly ?TrayHandler $h, public int $id)
     {
         $this->dark = $this->dark();
+        if ($h === null) {
+            $u = Win32::user32();
+            $this->icon = $u->LoadIconW(Win32::instance(), 1) ?? $u->LoadIconW(null, 32512); // the executable's first icon, else IDI_APPLICATION
+        }
+    }
+
+    /** @internal whether the icon is a temporary one, for a notification */
+    public function temporary(): bool
+    {
+        return $this->h === null;
+    }
+
+    /** @internal whether the notification area has the icon */
+    public function added(): bool
+    {
+        return $this->added;
+    }
+
+    /**
+     * @internal shows a notification as the icon's balloon, $title over
+     * $body, without its sound when $silent (NIF_INFO, NIIF_USER): an empty
+     * one hides the one it shows. Reports whether Shell took it.
+     */
+    public function balloon(string $title, string $body, bool $silent): bool
+    {
+        $d = $this->data(0x10); // NIF_INFO
+        foreach ([[$d->szInfoTitle, $title, 126], [$d->szInfo, $body, 510]] as [$field, $text, $max]) {
+            $u = (string)iconv('UTF-8', 'UTF-16LE', $text);
+            FFI::memcpy($field, $u, min($max, strlen($u) & ~1));
+        }
+        $d->dwInfoFlags = $title === '' && $body === '' ? 0 : 0x4 | ($silent ? 0x10 : 0); // NIIF_USER, NIIF_NOSOUND
+        return self::f()->Shell_NotifyIconW(self::NIM_MODIFY, FFI::addr($d)) !== 0;
     }
 
     private static function f(): FFI
@@ -220,10 +258,10 @@ final class Tray implements Platform\Tray
             self::f()->Shell_NotifyIconW(self::NIM_DELETE, FFI::addr($d));
             $this->added = false;
         }
-        if ($this->icon !== null) {
+        if ($this->icon !== null && $this->h !== null) { // a temporary one's is the app's, shared
             Win32::user32()->DestroyIcon($this->icon);
-            $this->icon = null;
         }
+        $this->icon = null;
         $this->b->forgetTray($this);
     }
 
@@ -242,7 +280,11 @@ final class Tray implements Platform\Tray
     /** @internal the notification area's callback message: a left button's release a click, a right one's a right click and the menu (mygo's trayMessage) */
     public function event(int $event): void
     {
-        if ($event === Win32::WM_LBUTTONUP) {
+        if ($event === Win32::WM_USER + 5 || $event === Win32::WM_USER + 4) { // NIN_BALLOONUSERCLICK, NIN_BALLOONTIMEOUT
+            $this->b->notificationEnded($this, $event === Win32::WM_USER + 5);
+        } elseif ($this->h === null) {
+            return; // a temporary icon answers its balloon only
+        } elseif ($event === Win32::WM_LBUTTONUP) {
             $this->h->clicked();
         } elseif ($event === Win32::WM_RBUTTONUP) {
             $this->h->rightClicked();
@@ -253,6 +295,9 @@ final class Tray implements Platform\Tray
     /** @internal the taskbar turned dark or light: a template image shown again, white or black, and the handler told (mygo's traysAppearance) */
     public function appearance(): void
     {
+        if ($this->h === null) {
+            return; // a temporary icon has no handler to tell
+        }
         $dark = $this->dark();
         if ($dark === $this->dark) {
             return;
