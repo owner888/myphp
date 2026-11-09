@@ -2,7 +2,7 @@
 // A window of native UI on Windows (Platform\Windows\Window), in an app of its own
 // (testdata/windows_window_app.php): its content in points at its display's scale, the frame
 // around it, bounds set and read back, its title, minimized, restored, maximized, full screen
-// and back, the events the core hears, closed.
+// and back, the events the core hears, closed; its content drawn by Direct3D 11 and read back.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -28,6 +28,11 @@ namespace MyPHP\Tests;
     check(!$st['running'], 'the app ends as it quits');
     check($r['scale'] >= 1, 'its scale, of its display\'s DPI');
     same([400, 300], $r['content'], 'its content of the size asked, in points');
+    check(str_starts_with($r['draw'], 'Direct3D 11'), 'its content drawn by ' . $r['draw']);
+    [$pw, $ph, $square, $rest] = $r['frame'];
+    same([(int)round(400 * $r['scale']), (int)round(300 * $r['scale'])], [$pw, $ph], 'its last frame read back, of its pixels');
+    same([0, 0, 255, 255], $square, 'the red square in its corner, BGRA');
+    check($rest !== [] && $rest[3] === 255 && $rest !== $square, 'the background beside it: ' . json_encode($rest));
     check($r['frameAround'], 'its frame around the content');
     same([true, true], $r['visible'], 'shown');
     same('Renamed', $r['title'], 'its title');

@@ -5,7 +5,7 @@ namespace MyPHP\Platform\Windows;
 
 use FFI;
 use FFI\CData;
-use MyPHP\Native\Mem;
+use MyPHP\Native\{D3d, Mem};
 use MyPHP\{App, Rectangle, WindowOptions};
 use MyPHP\Platform;
 use MyPHP\Platform\Unsupported;
@@ -17,9 +17,11 @@ use MyPHP\UI\{Cursor, Image};
  * WM_DPICHANGED moving it to the size Windows suggests); its title bar
  * dark with the app's appearance (DWM); its events to the core: closing
  * asked (WM_CLOSE), closed, focus and blur (WM_ACTIVATE), moved, resized,
- * minimized and restored (WM_SIZE). Native UI's surface has no renderer
- * yet: its client area is painted the background (the next stage draws
- * it with Direct3D 11); web pages come with WebView2's stage.
+ * minimized and restored (WM_SIZE). Native UI's frames are built when
+ * asked for, from the queue (requestFrame), drawn by Direct3D 11 into the
+ * window's swap chain (Native\D3d) and presented at the display's
+ * refresh; WM_PAINT shows the last one again. Web pages come with
+ * WebView2's stage.
  */
 final class Window implements Platform\Window
 {
@@ -44,6 +46,12 @@ final class Window implements Platform\Window
     private ?\Closure $frame = null;
     private ?\Closure $afterPresent = null;
     private bool $transparent = false;
+    /** Native UI's renderer, made with its surface. */
+    private ?D3d $d3d = null;
+    /** Whether a frame was asked for and not drawn yet; whether every ask since the last frame only paints again; whether the frame drawing now was such; whether one is drawing; whether the frame drawing asked for another. */
+    private bool $asked = false, $repaintOnly = true, $repaintNow = false, $rendering = false, $again = false;
+    /** @var array{0: int, 1: int, 2: float, 3: array{0: float, 1: float, 2: float, 3: float}} the last frame's pixels, pixels a point and clear color */
+    private array $drawn = [0, 0, 1.0, [0.0, 0.0, 0.0, 0.0]];
     /** @var ?array{0: float, 1: float, 2: float, 3: float} the background set, 0 to 1 */
     private ?array $background = null;
     /** @var array{0: int, 1: int} */
@@ -103,6 +111,8 @@ final class Window implements Platform\Window
                 return 0;
             case Win32::WM_DESTROY:
                 $this->dead = true;
+                $this->d3d?->release();
+                $this->d3d = null;
                 unset(self::$open[Mem::addr($this->hwnd)]);
                 $this->w->closed();
                 return 0;
@@ -132,7 +142,7 @@ final class Window implements Platform\Window
             case Win32::WM_ERASEBKGND:
                 return 1; // WM_PAINT paints it all
             case Win32::WM_PAINT:
-                $this->paintBackground();
+                $this->paint();
                 return 0;
             case Win32::WM_SETCURSOR:
                 if (($lp & 0xFFFF) === 1 && $this->cursorShown !== null) { // HTCLIENT: the content's cursor
@@ -144,18 +154,78 @@ final class Window implements Platform\Window
         return null;
     }
 
-    /** The content's background, until native UI draws it (the next stage's renderer). */
-    private function paintBackground(): void
+    /**
+     * WM_PAINT: the last frame shown again, at the size now (as Linux's
+     * render signal); before native UI's first, or for a window of no
+     * native UI, the background painted.
+     */
+    private function paint(): void
     {
         $u = Win32::user32();
         $ps = $u->new('PAINTSTRUCT');
         $dc = $u->BeginPaint($this->hwnd, FFI::addr($ps));
+        if ($this->d3d !== null && $this->drawn[0] > 0 && !$this->rendering) {
+            $u->EndPaint($this->hwnd, FFI::addr($ps));
+            [$pw, $ph] = $this->clientPixels();
+            $this->d3d->draw($this->d3d->lastList(), $pw, $ph, $this->drawn[2], $this->clearColor());
+            $this->d3d->present();
+            return;
+        }
         [$r, $g, $b] = $this->clearColor();
         $gdi = Win32::gdi32();
         $brush = $gdi->CreateSolidBrush((int)round($r * 255) | ((int)round($g * 255) << 8) | ((int)round($b * 255) << 16)); // COLORREF: 0x00BBGGRR
         $u->FillRect($dc, FFI::addr($ps->rcPaint), $brush);
         $gdi->DeleteObject($brush);
         $u->EndPaint($this->hwnd, FFI::addr($ps));
+    }
+
+    /** The client area's size in pixels, one at least each way. @return array{0: int, 1: int} */
+    private function clientPixels(): array
+    {
+        $r = Win32::user32()->new('RECT');
+        Win32::user32()->GetClientRect($this->hwnd, FFI::addr($r));
+        return [max(1, $r->right - $r->left), max(1, $r->bottom - $r->top)];
+    }
+
+    /**
+     * A frame built and drawn, from the queue: the list built at the client
+     * area's size in points, drawn at its pixels, presented; another asked
+     * for meanwhile (an animation's) follows at the queue's next turn,
+     * Present having waited for the display's refresh.
+     */
+    private function frameNow(): void
+    {
+        $this->asked = false;
+        $this->repaintNow = $this->repaintOnly;
+        $this->repaintOnly = true;
+        if ($this->d3d === null || $this->dead || $this->minimized) {
+            return;
+        }
+        $this->rendering = true;
+        try {
+            [$pw, $ph] = $this->clientPixels();
+            $scale = $this->scale();
+            $text = App::text();
+            $this->d3d->setAtlasScale($text->scale());
+            $this->d3d->setDark(App::theme()->dark);
+            $list = $this->d3d->nextList();
+            ($this->frame)($list, $pw / $scale, $ph / $scale);
+            if ($this->dead) {
+                return;
+            }
+            $clear = $this->clearColor();
+            $this->d3d->draw($list, $pw, $ph, $scale * $list->zoom, $clear);
+            $this->d3d->present();
+            $this->drawn = [$pw, $ph, $scale * $list->zoom, $clear];
+            $this->afterPresent?->__invoke();
+            $this->w->runtime?->framePresented();
+        } finally {
+            $this->rendering = false;
+        }
+        if ($this->again) {
+            $this->again = false;
+            $this->requestFrame(1, $this->repaintOnly);
+        }
     }
 
     /** What native UI clears to: transparent, the background set, or the theme's. @return array{0: float, 1: float, 2: float, 3: float} */
@@ -245,12 +315,19 @@ final class Window implements Platform\Window
         throw new Unsupported('myphp: web pages are not on Windows yet');
     }
 
-    /** Native UI's surface: its frames are built once a renderer draws them (the next stage); the background shows till then. */
+    /** Native UI's surface: a renderer of Direct3D 11 drawing into the window, the text system's atlases its, the first frame asked for. */
     public function createSurface(WindowOptions $o, \Closure $frame, ?\Closure $afterPresent): void
     {
         $this->frame = $frame;
         $this->afterPresent = $afterPresent;
         $this->transparent = $o->transparent;
+        $text = App::text();
+        $this->d3d = new D3d();
+        $this->d3d->attachAtlas($text->atlas, $text->scale());
+        $this->d3d->attachImages($text->images);
+        [$pw, $ph] = $this->clientPixels();
+        $this->d3d->attach($this->hwnd, $pw, $ph);
+        $this->requestFrame();
     }
 
     public function restoreFrame(Rectangle $r, bool $onDisplay): void
@@ -297,7 +374,11 @@ final class Window implements Platform\Window
         return $this->hwnd;
     }
 
-    public function release(): void {}
+    public function release(): void
+    {
+        $this->d3d?->release();
+        $this->d3d = null;
+    }
 
     public function show(): void
     {
@@ -375,12 +456,26 @@ final class Window implements Platform\Window
         return 0.0;
     }
 
-    /** Asks for the content painted again: the background, till the renderer's stage builds frames. */
+    /** Asks for a frame at the queue's next turn (a window of no native UI is painted again); $repaint: one that only paints the last frame's nodes again, while every ask says so. */
     public function requestFrame(int $every = 1, bool $repaint = false): void
     {
-        if (!$this->dead) {
-            Win32::user32()->InvalidateRect($this->hwnd, null, 0);
+        if ($this->dead) {
+            return;
         }
+        if ($this->d3d === null) {
+            Win32::user32()->InvalidateRect($this->hwnd, null, 0);
+            return;
+        }
+        $this->repaintOnly = $this->repaintOnly && $repaint;
+        if ($this->rendering) {
+            $this->again = true;
+            return;
+        }
+        if ($this->asked) {
+            return;
+        }
+        $this->asked = true;
+        $this->b->timer(0, fn() => $this->frameNow());
     }
 
     public function wake(float $seconds, bool $repaint): void
@@ -390,7 +485,7 @@ final class Window implements Platform\Window
 
     public function repaintAsked(): bool
     {
-        return false;
+        return $this->repaintNow;
     }
 
     public function displayRate(): float
@@ -402,7 +497,7 @@ final class Window implements Platform\Window
 
     public function lastDraw(): string
     {
-        return 'GDI, the background alone';
+        return $this->d3d === null ? 'GDI, the background alone' : 'Direct3D 11' . (D3d::$warp ? ' (WARP)' : '');
     }
 
     public function backingScale(): float
@@ -423,9 +518,14 @@ final class Window implements Platform\Window
 
     public function passThrough(\Closure $at): void {}
 
+    /** The last frame drawn again off screen from its list: BGRA, premultiplied, rows top down, its width and height. */
     public function lastFrame(): array
     {
-        return ['', 0, 0];
+        if ($this->d3d === null || $this->drawn[0] === 0) {
+            return ['', 0, 0];
+        }
+        [$pw, $ph, $scale, $clear] = $this->drawn;
+        return [$this->d3d->readBack($this->d3d->lastList(), $pw, $ph, $scale, $clear), $pw, $ph];
     }
 
     public function capture(): string
@@ -820,7 +920,7 @@ final class Window implements Platform\Window
 
     public function framePending(): bool
     {
-        return false;
+        return $this->asked || $this->rendering;
     }
 
     public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void
