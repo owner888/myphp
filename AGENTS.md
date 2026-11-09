@@ -191,6 +191,11 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
   in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
   methods (`arrayWithObjects:`) avoided.
 - Record each solved problem in `docs/architecture.md` (one paragraph).
+- Chinese or Japanese typed in the iOS Simulator from the Mac's keyboard:
+  switch the input method inside the simulator (iOS's keyboard), not the
+  Mac's input source. With the Mac's composing, every app, the system's
+  too, takes the first letter and no more: check a system app (Notes)
+  before suspecting the launcher's text input.
 
 ## Roadmap
 
