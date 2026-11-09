@@ -178,9 +178,9 @@ final class ImageIO
         $image = $c->CGBitmapContextCreateImage($ctx);
         $c->CGContextRelease($ctx);
         $data = $c->CFDataCreateMutable(null, 0);
-        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str('public.jpeg'))), 1, null);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', Mem::addr(ObjC::str('public.jpeg'))), 1, null);
         $options = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $quality), ObjC::import($c->kCGImageDestinationLossyCompressionQuality));
-        $c->CGImageDestinationAddImage($dest, $image, $c->cast('void*', ObjC::addr($options)));
+        $c->CGImageDestinationAddImage($dest, $image, $c->cast('void*', Mem::addr($options)));
         $ok = $c->CGImageDestinationFinalize($dest);
         $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';
         $c->CFRelease($dest); $c->CFRelease($data); $c->CGImageRelease($image);
@@ -209,7 +209,7 @@ final class ImageIO
         $image = $c->CGBitmapContextCreateImage($ctx);
         $c->CGContextRelease($ctx);
         $data = $c->CFDataCreateMutable(null, 0);
-        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str('public.png'))), 1, null);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', Mem::addr(ObjC::str('public.png'))), 1, null);
         $ok = false;
         if ($dest !== null) {
             $c->CGImageDestinationAddImage($dest, $image, null);
@@ -234,7 +234,7 @@ final class ImageIO
         for ($i = 0, $n = ObjC::msg('L:', $types, 'count'); $i < $n; $i++) {
             $out[] = ObjC::phpStr(ObjC::msg('p:L', $types, 'objectAtIndex:', $i));
         }
-        $c->CFRelease($c->cast('void*', ObjC::addr($types)));
+        $c->CFRelease($c->cast('void*', Mem::addr($types)));
         return $out;
     }
 
@@ -252,11 +252,11 @@ final class ImageIO
             throw new RuntimeException('myphp: no image to convert');
         }
         $data = $c->CFDataCreateMutable(null, 0);
-        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str($uti))), 1, null);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', Mem::addr(ObjC::str($uti))), 1, null);
         $ok = false;
         if ($dest !== null) {
             $options = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $quality), ObjC::import($c->kCGImageDestinationLossyCompressionQuality));
-            $c->CGImageDestinationAddImage($dest, $image, $c->cast('void*', ObjC::addr($options)));
+            $c->CGImageDestinationAddImage($dest, $image, $c->cast('void*', Mem::addr($options)));
             $ok = $c->CGImageDestinationFinalize($dest);
         }
         $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';
@@ -314,7 +314,7 @@ final class ImageIO
         $image = $c->CGBitmapContextCreateImage($ctx);
         $c->CGContextRelease($ctx);
         $data = $c->CFDataCreateMutable(null, 0);
-        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str('public.png'))), 1, null);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', Mem::addr(ObjC::str('public.png'))), 1, null);
         $c->CGImageDestinationAddImage($dest, $image, null);
         $ok = $c->CGImageDestinationFinalize($dest);
         $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';

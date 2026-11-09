@@ -166,7 +166,7 @@ final class TextEngine implements Engine
     {
         $sel = $mono ? 'monospacedSystemFontOfSize:weight:' : 'systemFontOfSize:weight:';
         $ns = ObjC::msg('p:dd', ObjC::cls('NSFont'), $sel, $size, self::nsWeight($weight));
-        $font = $ns === null ? null : $this->c->CFRetain($this->c->cast('void*', ObjC::addr($ns)));
+        $font = $ns === null ? null : $this->c->CFRetain($this->c->cast('void*', Mem::addr($ns)));
         if ($font === null) {
             $font = $mono ? $this->named('Menlo', $size, $weight, false) : $this->c->CTFontCreateUIFontForLanguage(2, $size, null);
         }

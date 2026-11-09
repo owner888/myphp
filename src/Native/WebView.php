@@ -209,7 +209,7 @@ final class WebView implements \MyPHP\Platform\Page
                 ObjC::msg('v:ppLp', $self->ns, 'addObserver:forKeyPath:options:context:', self::$navigationDelegate, ObjC::str($key), 0, null);
             }
         }
-        self::$views[ObjC::addr($self->ns)] = $self;
+        self::$views[Mem::addr($self->ns)] = $self;
         return $self;
     }
 
@@ -423,7 +423,7 @@ final class WebView implements \MyPHP\Platform\Page
         ObjC::msg('v:p', $this->ns, 'setUIDelegate:', null);
         ObjC::msg('v:', $this->ucc, 'release');
         $this->ucc = null;
-        unset(self::$views[ObjC::addr($this->ns)]);
+        unset(self::$views[Mem::addr($this->ns)]);
     }
 
     public function reload(bool $ignoreCache): void { $this->navigate($ignoreCache ? 'reloadFromOrigin' : 'reload'); }
@@ -530,12 +530,12 @@ final class WebView implements \MyPHP\Platform\Page
             // A page's context menu (mygo's contextMenuMethods): WebKit's NSMenu, about to show, which the page's 'contextMenu' listeners change.
             'willOpenMenu:withEvent:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $menu, $event) {
                 ObjC::msgSuper('v:pp', $self, 'WKWebView', 'willOpenMenu:withEvent:', $menu, $event);
-                $view = self::$views[ObjC::addr($self)] ?? null;
+                $view = self::$views[Mem::addr($self)] ?? null;
                 if ($view?->onContextMenu !== null) { ($view->onContextMenu)($menu, $event); }
             }],
             // The wheel over a page that gives it to the native UI around it (mygo's ScrollToContainer), or the page's.
             'scrollWheel:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
-                $to = (self::$views[ObjC::addr($self)] ?? null)?->scrollTo;
+                $to = (self::$views[Mem::addr($self)] ?? null)?->scrollTo;
                 if ($to === null) {
                     ObjC::msgSuper('v:p', $self, 'WKWebView', 'scrollWheel:', $event);
                     return;
@@ -551,7 +551,7 @@ final class WebView implements \MyPHP\Platform\Page
         ], ['NSDraggingDestination']);
         ObjC::defineClass('MyPHPScriptHandler', 'NSObject', [
             'userContentController:didReceiveScriptMessage:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $ucc, $message) {
-                $view = self::$views[ObjC::addr(ObjC::msg('p:', $message, 'webView'))] ?? null;
+                $view = self::$views[Mem::addr(ObjC::msg('p:', $message, 'webView'))] ?? null;
                 if ($view === null) {
                     return;
                 }
@@ -562,7 +562,7 @@ final class WebView implements \MyPHP\Platform\Page
         // Requests of the schemes PHP serves (mygo's darwin scheme.go).
         ObjC::defineClass('MyPHPSchemeHandler', 'NSObject', [
             'webView:startURLSchemeTask:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $task) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 $t = new WebKitTask($task);
                 if ($view?->onScheme === null) {
                     $t->respond(503, []);
@@ -572,14 +572,14 @@ final class WebView implements \MyPHP\Platform\Page
                 ($view->onScheme)(WebKitTask::request($task), $t);
             }],
             'webView:stopURLSchemeTask:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $task) {
-                (WebKitTask::$live[ObjC::addr($task)] ?? null)?->stop();
+                (WebKitTask::$live[Mem::addr($task)] ?? null)?->stop();
             }],
         ], ['WKURLSchemeHandler']);
         self::$schemeHandler = ObjC::msg('p:', ObjC::alloc('MyPHPSchemeHandler'), 'init');
         // Navigations of the main frame the app did not start go to the window's 'willNavigate' listeners.
         ObjC::defineClass('MyPHPNavigationDelegate', 'NSObject', [
             'webView:decidePolicyForNavigationAction:decisionHandler:' => ['v@:@@@?', 'v(ppppp)', function ($self, $cmd, $wk, $action, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 // A link with the download attribute (macOS 11.3); one of a scheme PHP serves is served into the download.
                 if (ObjC::msg('b:p', $action, 'respondsToSelector:', ObjC::sel('shouldPerformDownload')) && ObjC::msg('b:', $action, 'shouldPerformDownload')) {
                     $url = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $action, 'request'), 'URL'), 'absoluteString'));
@@ -619,7 +619,7 @@ final class WebView implements \MyPHP\Platform\Page
                     ObjC::callBlock('v:l', $handler, 1); // WKNavigationResponsePolicyAllow
                     return;
                 }
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 if ($custom && $view?->onSchemeDownload !== null) {
                     ObjC::callBlock('v:l', $handler, 0); // Cancel: WebKit can't make a download of what a scheme handler serves, so it is served again into one
                     ($view->onSchemeDownload)($url);
@@ -628,16 +628,16 @@ final class WebView implements \MyPHP\Platform\Page
                 ObjC::callBlock('v:l', $handler, 2); // WKNavigationResponsePolicyDownload
             }],
             'webView:navigationAction:didBecomeDownload:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $action, $download) {
-                self::$downloads[ObjC::addr($download)] = [self::$views[ObjC::addr($wk)] ?? null, '', ''];
+                self::$downloads[Mem::addr($download)] = [self::$views[Mem::addr($wk)] ?? null, '', ''];
                 ObjC::msg('v:p', $download, 'setDelegate:', $self);
             }],
             'webView:navigationResponse:didBecomeDownload:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $download) {
-                self::$downloads[ObjC::addr($download)] = [self::$views[ObjC::addr($wk)] ?? null, '', ''];
+                self::$downloads[Mem::addr($download)] = [self::$views[Mem::addr($wk)] ?? null, '', ''];
                 ObjC::msg('v:p', $download, 'setDelegate:', $self);
             }],
             // WKDownloadDelegate.
             'download:decideDestinationUsingResponse:suggestedFilename:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $download, $resp, $suggested, $handler) {
-                $k = ObjC::addr($download);
+                $k = Mem::addr($download);
                 $view = self::$downloads[$k][0] ?? null;
                 if ($view === null || $view->onDownload === null) {
                     unset(self::$downloads[$k]);
@@ -656,7 +656,7 @@ final class WebView implements \MyPHP\Platform\Page
                 ObjC::callBlock('v:p', $handler, ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path)));
             }],
             'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
-                $view = self::$views[ObjC::addr($object)] ?? null;
+                $view = self::$views[Mem::addr($object)] ?? null;
                 $key = ObjC::phpStr($keyPath);
                 if ($view?->onTitle !== null && $key === 'title') {
                     $t = ObjC::msg('p:', $object, 'title');
@@ -669,29 +669,29 @@ final class WebView implements \MyPHP\Platform\Page
                 }
             }],
             'webView:didCommitNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 if ($view?->onCommit !== null) { ($view->onCommit)($view->url()); }
             }],
             'webView:didFinishNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
-                (self::$views[ObjC::addr($wk)] ?? null)?->onFinish?->__invoke();
+                (self::$views[Mem::addr($wk)] ?? null)?->onFinish?->__invoke();
             }],
             'webView:didStartProvisionalNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
-                if (($view = self::$views[ObjC::addr($wk)] ?? null) !== null) { $view->provisionalURL = $view->url(); }
+                if (($view = self::$views[Mem::addr($wk)] ?? null) !== null) { $view->provisionalURL = $view->url(); }
             }],
             'webView:didFailProvisionalNavigation:withError:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $error) {
-                ($view = self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error, $view->provisionalURL);
+                ($view = self::$views[Mem::addr($wk)] ?? null)?->loadFailed($error, $view->provisionalURL);
             }],
             'webView:didFailNavigation:withError:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $error) {
-                ($view = self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error, $view->url());
+                ($view = self::$views[Mem::addr($wk)] ?? null)?->loadFailed($error, $view->url());
             }],
             // HTTP sign-in and server certificates (mygo's auth.go).
             'webView:didReceiveAuthenticationChallenge:completionHandler:' => ['v@:@@@?', 'v(ppppp)', function ($self, $cmd, $wk, $challenge, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 if ($view === null) { ObjC::callBlock('v:lp', $handler, self::AUTH_DEFAULT, null); return; }
                 $view->authChallenge($challenge, $handler);
             }],
             'webViewWebContentProcessDidTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $wk) {
-                (self::$views[ObjC::addr($wk)] ?? null)?->onGone?->__invoke('terminated');
+                (self::$views[Mem::addr($wk)] ?? null)?->onGone?->__invoke('terminated');
             }],
             'downloadDidFinish:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $download) {
                 self::downloadEnded($download, null);
@@ -704,13 +704,13 @@ final class WebView implements \MyPHP\Platform\Page
         ObjC::defineClass('MyPHPUIDelegate', 'NSObject', [
             // Camera and microphone requests (macOS 12).
             'webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:' => ['v@:@@@q@?', 'v(ppppplp)', function ($self, $cmd, $wk, $origin, $frame, $type, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 $kinds = [0 => ['camera'], 1 => ['microphone'], 2 => ['camera', 'microphone']][$type] ?? [];
                 $grant = $view?->onPermission !== null && ($view->onPermission)($kinds, self::origin($origin));
                 ObjC::callBlock('v:l', $handler, $grant ? 1 : 2); // WKPermissionDecisionGrant, Deny
             }],
             'webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:' => ['@@:@@@@', 'p(pppppp)', function ($self, $cmd, $wk, $cfg, $action, $features) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 if ($view?->onOpen === null) {
                     return null;
                 }
@@ -722,24 +722,24 @@ final class WebView implements \MyPHP\Platform\Page
                 return ($view->onOpen)($url === null ? '' : ObjC::phpStr($url), '', $num('width'), $num('height'), $cfg, self::userInitiated($action));
             }],
             'webViewDidClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $wk) {
-                (self::$views[ObjC::addr($wk)] ?? null)?->onClosedByPage?->__invoke();
+                (self::$views[Mem::addr($wk)] ?? null)?->onClosedByPage?->__invoke();
             }],
             'webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $wk, $message, $frame, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 if ($view?->onPanel !== null) { ($view->onPanel)('alert', ObjC::phpStr($message)); }
                 ObjC::callBlock('v:', $handler);
             }],
             'webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $wk, $message, $frame, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 ObjC::callBlock('v:b', $handler, $view?->onPanel !== null && ($view->onPanel)('confirm', ObjC::phpStr($message)));
             }],
             'webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:' => ['v@:@@@@@?', 'v(ppppppp)', function ($self, $cmd, $wk, $prompt, $default, $frame, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 $text = $view?->onPanel === null ? null : ($view->onPanel)('prompt', ObjC::phpStr($prompt), $default === null ? '' : ObjC::phpStr($default));
                 ObjC::callBlock('v:p', $handler, $text === null ? null : ObjC::str($text));
             }],
             'webView:runOpenPanelWithParameters:initiatedByFrame:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $wk, $params, $frame, $handler) {
-                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $view = self::$views[Mem::addr($wk)] ?? null;
                 $dirs = ObjC::msg('b:p', $params, 'respondsToSelector:', ObjC::sel('allowsDirectories')) && ObjC::msg('b:', $params, 'allowsDirectories');
                 $paths = $view?->onPanel === null ? null : ($view->onPanel)('files', ObjC::msg('b:', $params, 'allowsMultipleSelection'), $dirs);
                 if ($paths === null) {
@@ -757,7 +757,7 @@ final class WebView implements \MyPHP\Platform\Page
         // The end of a print operation to PDF, whose window may be gone.
         ObjC::defineClass('MyPHPPrintDelegate', 'NSObject', [
             'printOperationDidRun:success:contextInfo:' => ['v@:@B^v', 'v(pppbp)', function ($self, $cmd, $op, $success, $context) {
-                $job = ObjC::addr($context);
+                $job = Mem::addr($context);
                 $done = self::$printJobs[$job] ?? null;
                 unset(self::$printJobs[$job]);
                 if ($done !== null) {
@@ -907,7 +907,7 @@ final class WebView implements \MyPHP\Platform\Page
     /** A download ended, with $error or done. */
     private static function downloadEnded($download, ?string $error): void
     {
-        $k = ObjC::addr($download);
+        $k = Mem::addr($download);
         [$view, $url, $path] = self::$downloads[$k] ?? [null, '', ''];
         unset(self::$downloads[$k]);
         if ($view !== null && $path !== '' && $view->onDownloadDone !== null) {

@@ -747,7 +747,7 @@ final class Metal
      */
     private function useWide($view, DisplayList $list): bool
     {
-        $key = ObjC::addr($view);
+        $key = Mem::addr($view);
         $now = hrtime(true) / 1e9;
         $wide = $list->wide !== [];
         foreach ($list->shaders as [, , $w]) { $wide = $wide || $w !== null; } // a shader reading a wide color
@@ -759,14 +759,14 @@ final class Metal
                 $this->pipelines[self::PIXEL_FORMAT_RGBA16F] ??= $this->buildPipelines(self::PIXEL_FORMAT_RGBA16F);
                 $extended = $this->extendedSRGB();
                 $own = ObjC::msg('p:', $layer, 'colorspace'); // none, as a rule: kept, held, for when the colors are sRGB again
-                $this->wideViews[$key] = $own === null ? null : ObjC::import($this->cg->CGColorSpaceRetain($this->cg->cast('void*', ObjC::addr($own))));
+                $this->wideViews[$key] = $own === null ? null : ObjC::import($this->cg->CGColorSpaceRetain($this->cg->cast('void*', Mem::addr($own))));
                 ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_RGBA16F);
                 ObjC::msg('v:p', $layer, 'setColorspace:', $extended);
             } else {
                 $own = $this->wideViews[$key];
                 ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_BGRA8);
                 ObjC::msg('v:p', $layer, 'setColorspace:', $own);
-                if ($own !== null) { $this->cg->CGColorSpaceRelease($this->cg->cast('void*', ObjC::addr($own))); }
+                if ($own !== null) { $this->cg->CGColorSpaceRelease($this->cg->cast('void*', Mem::addr($own))); }
                 unset($this->wideViews[$key]);
             }
         }
@@ -814,9 +814,9 @@ final class Metal
         ObjC::msg('v:k', $view, 'setClearColor:', $c);
         ObjC::msg('v:l', $view, 'setPreferredFramesPerSecond:', $fps);
         ObjC::msg('v:p', $view, 'setDelegate:', self::$delegate);
-        self::$draws[ObjC::addr($view)] = $draw;
-        self::$onDraw[ObjC::addr($view)] = function ($view) use ($draw) {
-            $key = ObjC::addr($view);
+        self::$draws[Mem::addr($view)] = $draw;
+        self::$onDraw[Mem::addr($view)] = function ($view) use ($draw) {
+            $key = Mem::addr($view);
             if (isset(self::$drawing[$key])) { self::$drawing[$key] = true; return; } // asked while a frame waits for a sheet: drawn after it
             self::$drawing[$key] = false;
             self::$repaints[$key] = self::$pace[$key]['repaint'] ?? false; // a frame no ask asked for (a resize, AppKit's) builds the view
@@ -844,7 +844,7 @@ final class Metal
      */
     public function adopt($view): void
     {
-        $this->adopted[ObjC::addr($view)] = true;
+        $this->adopted[Mem::addr($view)] = true;
         ObjC::msg('v:p', $view, 'setDevice:', $this->device);
         ObjC::msg('v:b', $view, 'setPaused:', true);
         ObjC::msg('v:b', $view, 'setEnableSetNeedsDisplay:', false);
@@ -889,7 +889,7 @@ final class Metal
 
     public static function requestFrame($view, int $every = 1, bool $repaint = false): void
     {
-        $key = ObjC::addr($view);
+        $key = Mem::addr($view);
         if (!isset(self::$onDraw[$key])) {
             return; // a view forgotten, its window closed (an event AppKit still sends it, its own frame that closed it): it draws no more, no link made for it
         }
@@ -949,12 +949,12 @@ final class Metal
     /** Stops pacing a view whose window closed: its link goes. */
     public static function forget($view): void
     {
-        $key = ObjC::addr($view);
+        $key = Mem::addr($view);
         self::letGo($key);
         unset(self::$damage[$key], self::$redrew[$key]);
         $link = self::$pace[$key]['link'] ?? null;
         if ($link !== null) {
-            unset(self::$linked[ObjC::addr($link)]);
+            unset(self::$linked[Mem::addr($link)]);
             ObjC::msg('v:', $link, 'invalidate');
             ObjC::msg('v:', $link, 'release');
         }
@@ -998,32 +998,32 @@ final class Metal
         $link = ObjC::msg('p:', ObjC::msg('p:pp', $view, 'displayLinkWithTarget:selector:', self::$ticker, ObjC::sel('tick:')), 'retain');
         ObjC::msg('v:b', $link, 'setPaused:', true);
         ObjC::msg('v:pp', $link, 'addToRunLoop:forMode:', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'mainRunLoop'), self::commonMode());
-        self::$linked[ObjC::addr($link)] = $view;
+        self::$linked[Mem::addr($link)] = $view;
         return $link;
     }
 
     /** A refresh of a view's display: its frame if one was asked for since the last, else the link pauses. */
     private static function tick($link): void
     {
-        $view = self::$linked[ObjC::addr($link)] ?? null;
-        $p = $view === null ? null : (self::$pace[ObjC::addr($view)] ?? null);
+        $view = self::$linked[Mem::addr($link)] ?? null;
+        $p = $view === null ? null : (self::$pace[Mem::addr($view)] ?? null);
         if ($p === null || !$p['due']) {
             ObjC::msg('v:b', $link, 'setPaused:', true);
-            if ($p !== null) { self::$pace[ObjC::addr($view)]['running'] = false; }
+            if ($p !== null) { self::$pace[Mem::addr($view)]['running'] = false; }
             return;
         }
         $refresh = self::refresh($view);
         if (!\MyPHP\UI\Runtime::due($p['every'], microtime(true) - $p['last'], 1 / $refresh)) {
             return; // a frame at a drawing's rate, not due yet: a later refresh draws it
         }
-        self::$pace[ObjC::addr($view)]['due'] = false;
+        self::$pace[Mem::addr($view)]['due'] = false;
         ObjC::msg('v:', $view, 'draw');
     }
 
     /** Whether a frame of $view was asked for and has not been drawn yet (mygo's frameAsked): the automation plugin's idle waits for none. @internal */
     public static function framePending($view): bool
     {
-        $key = ObjC::addr($view);
+        $key = Mem::addr($view);
         return isset(self::$onDraw[$key]) && ((self::$pace[$key]['repaint'] ?? null) !== null || (self::$drawing[$key] ?? false));
     }
 
@@ -1033,7 +1033,7 @@ final class Metal
     /** Whether the frame $view draws now was asked for only to paint the last frame's nodes again (requestFrame's $repaint, every ask since the last frame): the draw callback may then paint without building the view. @internal Window */
     public static function repaintAsked($view): bool
     {
-        return self::$repaints[ObjC::addr($view)] ?? false;
+        return self::$repaints[Mem::addr($view)] ?? false;
     }
 
     /** How many times a second the view's display refreshes (mygo's RefreshRate). @internal Window */
@@ -1056,7 +1056,7 @@ final class Metal
     {
         ObjC::defineClass('MyPHPMetalDelegate', 'NSObject', [
             'drawInMTKView:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $view) {
-                (self::$onDraw[ObjC::addr($view)])($view);
+                (self::$onDraw[Mem::addr($view)])($view);
             }],
             'mtkView:drawableSizeWillChange:' => ['v@:@{CGSize=dd}', 'v(pppz)', function ($self, $cmd, $view, $size) {}],
         ]);
@@ -1071,7 +1071,7 @@ final class Metal
         // (MTKView sets its layer from its own property) before it hands out the drawable, which presents as set then.
         $ds = ObjC::msg('z:', $view, 'drawableSize');
         $size = "{$ds->w}x{$ds->h}";
-        $key = ObjC::addr($view);
+        $key = Mem::addr($view);
         $sync = ($this->drawn[$key] ?? '') !== $size;
         $this->drawn[$key] = $size;
         if (!isset($this->adopted[$key])) {
@@ -1124,7 +1124,7 @@ final class Metal
             $this->renderCanvas($cb, $canvas);
         }
         $texture = ObjC::msg('p:', $drawable, 'texture');
-        $id = ObjC::addr($texture);
+        $id = Mem::addr($texture);
         if (!$damage->has($id)) { self::$held[$key][$id] = ObjC::msg('p:', $texture, 'retain'); } // held while tracked, so that no other drawable takes its address: Core Animation makes them anew as it likes
         $part = $damage->take($id, $changed, function (int $gone) use ($key): void {
             ObjC::msg('v:', self::$held[$key][$gone], 'release');
@@ -1169,7 +1169,7 @@ final class Metal
      */
     public function drawOffscreen($view): array
     {
-        $draw = self::$draws[ObjC::addr($view)] ?? throw new RuntimeException('myphp: drawOffscreen: not a view of this Metal');
+        $draw = self::$draws[Mem::addr($view)] ?? throw new RuntimeException('myphp: drawOffscreen: not a view of this Metal');
         if ($this->offscreen === null) {
             $floats = $this->capacity * DisplayList::FLOATS_PER_RECT;
             $xfloats = self::TRANSFORMS * DisplayList::FLOATS_PER_TRANSFORM;

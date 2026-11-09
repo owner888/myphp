@@ -35,7 +35,7 @@ final class DefaultApp
             void CFRelease(void*);
         ', '/System/Library/Frameworks/CoreServices.framework/CoreServices');
         ObjC::boot(['Foundation']);
-        $own = fn($o) => $ls->cast('void*', ObjC::addr($o)); // ObjC's pointers as this instance's (ObjC::import's trap, the other way)
+        $own = fn($o) => $ls->cast('void*', Mem::addr($o)); // ObjC's pointers as this instance's (ObjC::import's trap, the other way)
         $types = [];
         foreach ($extensions as $ext) {
             $all = $ls->UTTypeCreateAllIdentifiersForTag($ls->kUTTagClassFilenameExtension, $own(ObjC::str($ext)), null);

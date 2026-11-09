@@ -6,6 +6,7 @@ namespace MyPHP\Platform\Darwin;
 use MyPHP\{App, L10n, MessageOptions, MessageResult, OpenDialogOptions, SaveDialogOptions, Window};
 use MyPHP\Native\ObjC;
 use MyPHP\Platform;
+use MyPHP\Native\Mem;
 
 /**
  * NSOpenPanel, NSSavePanel and NSAlert (mygo's darwin dialog.go): with a
@@ -150,7 +151,7 @@ final class Dialogs implements Platform\Dialogs
     /** Runs $alert as run() does, Escape and Cmd+. activating its button $cancel (none for -1), also when it is the default, which takes Return as its key (mygo's runAlert). */
     private static function runAlert($alert, ?Window $parent, int $cancel): int
     {
-        $win = ObjC::addr(ObjC::msg('p:', $alert, 'window'));
+        $win = Mem::addr(ObjC::msg('p:', $alert, 'window'));
         $items = ObjC::msg('p:', $alert, 'buttons');
         if ($cancel >= 0 && $cancel < ObjC::msg('L:', $items, 'count')) {
             self::$alertCancels[$win] = ObjC::msg('p:L', $items, 'objectAtIndex:', $cancel);
@@ -176,7 +177,7 @@ final class Dialogs implements Platform\Dialogs
         if (self::$alertKeys !== null) { return; }
         self::$alertKeys = ObjC::msg('p:Lp', ObjC::cls('NSEvent'), 'addLocalMonitorForEventsMatchingMask:handler:', 1 << 10, ObjC::block('p', function ($ev) { // NSEventMaskKeyDown
             $win = ObjC::msg('p:', $ev, 'window');
-            $btn = $win === null ? null : self::$alertCancels[ObjC::addr($win)] ?? null;
+            $btn = $win === null ? null : self::$alertCancels[Mem::addr($win)] ?? null;
             if ($btn === null) { return $ev; }
             // A key typed while the input method composes in a prompt's field is the input method's, as Escape giving the composition up.
             $field = ObjC::msg('p:', $win, 'firstResponder');

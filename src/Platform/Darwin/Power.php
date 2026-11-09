@@ -6,6 +6,7 @@ namespace MyPHP\Platform\Darwin;
 use Closure;
 use MyPHP\Native\ObjC;
 use MyPHP\Platform;
+use MyPHP\Native\Mem;
 
 /** NSWorkspace's sleep and wake, the screen's lock, NSProcessInfo's activities and IOKit's power sources (mygo's darwin power.go). */
 final class Power implements Platform\Power
@@ -83,7 +84,7 @@ final class Power implements Platform\Power
         $level = null;
         $sources = ObjC::import($list);
         for ($i = 0, $n = $sources === null ? 0 : ObjC::msg('L:', $sources, 'count'); $i < $n && $level === null; $i++) {
-            $d = self::$ps->IOPSGetPowerSourceDescription($info, self::$ps->cast('void*', ObjC::addr(ObjC::msg('p:L', $sources, 'objectAtIndex:', $i))));
+            $d = self::$ps->IOPSGetPowerSourceDescription($info, self::$ps->cast('void*', Mem::addr(ObjC::msg('p:L', $sources, 'objectAtIndex:', $i))));
             $desc = $d === null ? null : ObjC::import($d);
             $type = $desc === null ? null : ObjC::msg('p:p', $desc, 'objectForKey:', ObjC::str('Type'));
             if ($type === null || ObjC::phpStr($type) !== 'InternalBattery') { continue; }

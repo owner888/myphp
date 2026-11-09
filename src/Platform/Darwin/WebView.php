@@ -5,6 +5,7 @@ namespace MyPHP\Platform\Darwin;
 
 use MyPHP\Native\ObjC;
 use MyPHP\Platform;
+use MyPHP\Native\Mem;
 
 /**
  * A web view in native UI on macOS: the page's WKWebView in a flipped clip
@@ -64,7 +65,7 @@ final class WebView implements Platform\WebView
     public function holds(mixed $view): bool
     {
         for ($v = $view; $v !== null; $v = ObjC::msg('p:', $v, 'superview')) {
-            if (ObjC::addr($v) === ObjC::addr($this->page->handle())) {
+            if (Mem::addr($v) === Mem::addr($this->page->handle())) {
                 return true;
             }
         }

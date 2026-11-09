@@ -203,14 +203,14 @@ final class ThumbnailDecoder implements \MyPHP\Platform\Thumbnails
         }
         if ($this->session === null) {
             $session = $vt->new('void*');
-            $st = $vt->VTDecompressionSessionCreate(null, $vt->cast('void*', ObjC::addr($format)), null, $vt->cast('void*', ObjC::addr($this->attributes())), FFI::addr($this->record), FFI::addr($session));
+            $st = $vt->VTDecompressionSessionCreate(null, $vt->cast('void*', Mem::addr($format)), null, $vt->cast('void*', Mem::addr($this->attributes())), FFI::addr($this->record), FFI::addr($session));
             if ($st !== 0) {
                 throw new RuntimeException("myphp: a decoder of {$this->track->codec}: VideoToolbox error $st");
             }
             $this->session = $session;
         }
         $info = $vt->new('unsigned int');
-        $st = $vt->VTDecompressionSessionDecodeFrame($this->session, $vt->cast('void*', ObjC::addr($sb)), 0, null, FFI::addr($info)); // synchronous: the callback has run
+        $st = $vt->VTDecompressionSessionDecodeFrame($this->session, $vt->cast('void*', Mem::addr($sb)), 0, null, FFI::addr($info)); // synchronous: the callback has run
         if ($owned !== null) { $cm->CFRelease($owned); }
         $image = $this->out->image;
         $this->out->image = null;

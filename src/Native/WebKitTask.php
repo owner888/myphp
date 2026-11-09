@@ -20,7 +20,7 @@ final class WebKitTask implements SchemeTask
     public function __construct(private $task)
     {
         ObjC::msg('p:', $task, 'retain');
-        self::$live[ObjC::addr($task)] = $this;
+        self::$live[Mem::addr($task)] = $this;
     }
 
     public function stopped(): bool
@@ -91,7 +91,7 @@ final class WebKitTask implements SchemeTask
             return;
         }
         $this->done = true;
-        unset(self::$live[ObjC::addr($this->task)]);
+        unset(self::$live[Mem::addr($this->task)]);
         ObjC::msg('v:', $this->task, 'release');
     }
 
