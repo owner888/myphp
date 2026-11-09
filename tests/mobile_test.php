@@ -28,6 +28,27 @@ $h = new Headless(function (Context $c) use (&$inner): void {
 $h->frame();
 same([0.0, 50.0, 390.0, 494.0], $h->rect($inner), 'the keyboard up, the content ends above it');
 
+// A window's root view on a phone (Content::render): inside the safe area, as SwiftUI lays it; a NavigationStack keeps out of it itself, its bar reaching into it.
+$phone = fn(\Closure $view, float $keyboard = 0.0) => new Headless(function (Context $c) use ($view, $keyboard): void {
+    $c->windowSafeArea = $c->safeArea = [50.0, 0.0, 34.0, 0.0];
+    $c->keyboard = $keyboard;
+    \MyPHP\UI\Content::render($view, $c);
+}, 390, 844);
+$h = $phone(fn() => \VStack(alignment: \HorizontalAlignment::leading)(\Text('Top'))->frame(maxWidth: INF, maxHeight: INF, alignment: \Alignment::topLeading));
+$h->frame();
+same([0.0, 50.0], array_slice($h->rect($h->byText('Top')), 0, 2), 'a root view filling the window starts below the status bar');
+$h = $phone(fn() => \Text('Middle'));
+$h->frame();
+$r = $h->rect($h->byText('Middle'));
+same(50.0 + (844.0 - 50.0 - 34.0) / 2, $r[1] + $r[3] / 2, 'a small one in the middle of the safe area');
+$h = $phone(fn() => \VStack()(\Spacer(), \Text('Bottom'))->frame(maxHeight: INF), 300.0);
+$h->frame();
+$r = $h->rect($h->byText('Bottom'));
+same(844.0 - 300.0, $r[1] + $r[3], 'the keyboard up, it ends above it');
+$h = $phone(fn() => \NavigationStack()(\Text('Page')->navigationTitle('Title')));
+$h->frame();
+check($h->rect($h->byText('Title'))[1] < 50.0 + 44.0, 'a NavigationStack at the root: its bar under the status bar, not a safe area lower: ' . json_encode($h->rect($h->byText('Title'))));
+
 // tabBar: a capsule in a band 8 + 56 + the safe area's bottom high, the items sharing its width; a tap chooses, changed() reports it.
 $index = 0; $changed = 0; $bar = null;
 $h = new Headless(function (Context $c) use (&$index, &$changed, &$bar, $icon): void {
