@@ -761,6 +761,20 @@ if (!defined('MYPHP_TEST_SUITE')) {
     register_shutdown_function(static function (): void { printf("%d checks, %d failed\n", $GLOBALS['checks'] ?? 0, count($GLOBALS['failures'] ?? [])); });
 }
 
+/** What PHP code $code prints, run with $args and the ini settings $ini, from a script of its own: no shell's quoting of php -r, which Windows's cmd does otherwise. @param list<string> $args @param array<string, string> $ini */
+function runPHP(string $code, array $args = [], array $ini = []): string
+{
+    $script = (string)tempnam(sys_get_temp_dir(), 'myphp-php');
+    file_put_contents($script, "<?php $code");
+    $cmd = [PHP_BINARY];
+    foreach ($ini as $k => $v) { array_push($cmd, '-d', "$k=$v"); }
+    $p = proc_open([...$cmd, $script, ...$args], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    proc_close($p);
+    unlink($script);
+    return $out;
+}
+
 /** Copies folder $from to $to, as cp -R, which Windows has not. */
 function copyDir(string $from, string $to): void
 {

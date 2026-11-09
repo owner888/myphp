@@ -84,12 +84,7 @@ foreach ([['de.json' => '{}'], ['german.json' => '{}']] as $fs) {
 
 // A catalog in a phar, as a micro app's are (v1.28): glob finds nothing there.
 $pharFile = $files([]) . "/catalogs.phar";
-$script = "$pharFile.php"; // a script of its own: no shell's quoting, which Windows's cmd does otherwise
-file_put_contents($script, '<?php $p = new Phar($argv[1]); $p["l10n/en.json"] = "{\"hello\": \"Hello\"}"; $p["l10n/de.json"] = "{\"hello\": \"Hallo\"}"; echo "ok";');
-$p = proc_open([PHP_BINARY, '-d', 'phar.readonly=0', $script, $pharFile], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-$made = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
-proc_close($p);
-unlink($script);
+$made = runPHP('$p = new Phar($argv[1]); $p["l10n/en.json"] = "{\"hello\": \"Hello\"}"; $p["l10n/de.json"] = "{\"hello\": \"Hallo\"}"; echo "ok";', [$pharFile], ['phar.readonly' => '0']);
 same('ok', $made, 'a phar of catalogs');
 $inPhar = new Catalog("phar://$pharFile/l10n", 'en');
 same([['en', 'de'], 'Hallo'], [$inPhar->languages(), $inPhar->format('de', 'hello')], 'its languages and messages');
