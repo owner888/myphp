@@ -23,6 +23,7 @@ $answer = function (string $title, Closure $act) use ($u, $wide, &$r, &$answer):
     $look = function () use ($u, $wide, $title, $act, &$tries, &$look, &$r): void {
         $h = $u->FindWindowW($wide('#32770'), $wide($title));
         if ($h !== null) {
+            fwrite(STDERR, "at: found $title\n");
             $r['found'][$title] = true;
             $act($h);
         } elseif (++$tries < 50) {
@@ -42,12 +43,15 @@ App::whenReady(function () use (&$r, $log, $u, $answer) {
     $answer('Save test', $close);
     $r['save'] = $d->save(new SaveDialogOptions(title: 'Save test', defaultPath: sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'notes.txt'));
     $log('a message');
+    // A task dialog's check box checked and its second button pressed (TDM_CLICK_VERIFICATION, TDM_CLICK_BUTTON); a plain message box's No (IDNO), where there is no task dialog.
     $answer('Message test', function ($h) use ($u) {
-        $u->SendMessageW($h, 0x0400 + 113, 1, 0); // TDM_CLICK_VERIFICATION: checked
-        $u->PostMessageW($h, 0x0111, 101, 0); // WM_COMMAND: the second button
+        $u->SendMessageW($h, 0x0400 + 113, 1, 0);
+        $u->PostMessageW($h, 0x0400 + 102, 101, 0);
+        $u->PostMessageW($h, 0x0111, 7, 0);
     });
     $m = $d->message(new MessageOptions(type: 'warning', title: 'Message test', message: 'Delete the file?', detail: 'It cannot be undone.', checkboxLabel: 'Do not ask again'), ['Keep', 'Delete', 'Cancel'], 2);
     $r['message'] = [$m->button, $m->checkboxChecked];
+    $r['taskDialog'] = (new ReflectionProperty(\MyPHP\Platform\Windows\Dialogs::class, 'taskDialog'))->getValue() !== false;
     $log('a message canceled');
     $answer('Cancel test', $close);
     $m = $d->message(new MessageOptions(title: 'Cancel test', message: 'Closed as canceled'), ['OK', 'Cancel'], 1);
