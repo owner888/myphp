@@ -8794,8 +8794,13 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   a texture alike, so nothing draws upside down (uFlip 1). SV_InstanceID
   counts from 0 whatever a draw's first instance, so each draw's first quad
   is the constant buffer's (uFrom). `readBack` gives BGRA, premultiplied,
-  rows top down, as Gl's. Not yet: the glass's blurred backdrop, canvases,
-  custom shaders. `windows_render_test` compiles the HLSL and reads back.
+  rows top down, as Gl's. A list is drawn split at each quad that reads
+  the backdrop (glass, blurs): the target so far copied (`CopyResource`),
+  blurred at half size across then down by `D3dShader::BLUR`'s fullscreen
+  triangle into a texture the quads after read; the shaders let go of
+  the backdrop and the target its output before the copy, as Direct3D
+  reads nothing it writes. Not yet: canvases, custom shaders.
+  `windows_render_test` compiles the HLSL and reads back.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

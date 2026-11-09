@@ -20,8 +20,10 @@ use RuntimeException;
  * quads' and transforms' buffers, its lists and its swap chain. Where the
  * machine has no GPU Direct3D's own, WARP, draws (CI's runners).
  *
- * Not yet here: the glass's blurred backdrop (all of a list is drawn in
- * one pass, the backdrop transparent), canvases and custom shaders.
+ * A list is drawn in one pass, split at each quad that reads the backdrop
+ * (glass, blurs): what was drawn so far is copied and blurred at half
+ * size, which the quads after read, as Gl's. Not yet here: canvases and
+ * custom shaders.
  */
 final class D3d
 {
@@ -33,7 +35,7 @@ final class D3d
     private const MAP_READ = 1, MAP_WRITE_DISCARD = 4;
     private const SRV_BUFFER = 1;
     private const BLEND_ZERO = 1, BLEND_ONE = 2, BLEND_SRC_ALPHA = 5, BLEND_INV_SRC_ALPHA = 6, BLEND_OP_ADD = 1;
-    private const TRIANGLESTRIP = 5;
+    private const TRIANGLESTRIP = 5, TRIANGLELIST = 4;
     private const IID_TEXTURE2D = '6f15aaf2-d208-4e89-9ab4-489535d34f9c';
     private const IID_DXGIDEVICE = '54ec77fa-1377-44e6-8c32-88fd5f44c84c';
     private const IID_DXGIFACTORY2 = '50c83a1c-e072-4c48-87b0-3630fa36a6d0';
@@ -41,7 +43,7 @@ final class D3d
     private static ?FFI $f = null;
     /** The device and its immediate context, shared by the renderers; the shaders and states they draw with. */
     private static ?CData $device = null, $context = null;
-    private static CData $quadVS, $quadPS, $blurVS, $blurPS, $sampler, $rasterizer, $frameBuffer, $noBackdrop;
+    private static CData $quadVS, $quadPS, $blurVS, $blurPS, $sampler, $rasterizer, $frameBuffer, $blurBuffer, $noBackdrop;
     /** @var array<string, CData> the blend states, by name: blend, canvas (its alpha kept premultiplied), hole */
     private static array $blends = [];
     /** Whether WARP draws: no GPU, or none of feature level 11. */
@@ -57,7 +59,16 @@ final class D3d
     private int $frame = 0;
     private float $atlasScale = 1.0, $dark = 0.0;
     /** The window's swap chain and its back buffer's view, of $size pixels. */
-    private ?CData $swapChain = null, $backBuffer = null;
+    private ?CData $swapChain = null, $backBuffer = null, $backTexture = null;
+    /**
+     * The glass's textures, of the target's size $backdropSize: a copy of
+     * what was drawn (the snapshot), the half-size blur in progress and the
+     * blurred backdrop the quads read, each texture, render target's view
+     * and shaders' view (the snapshot's no target's).
+     * @var array<string, array{0: CData, 1: ?CData, 2: CData}>
+     */
+    private array $glass = [];
+    private array $backdropSize = [0, 0];
     private array $size = [0, 0];
     /** The values of the target being drawn: viewport in points, pixels per point, height in pixels. */
     private array $target = [1.0, 1.0, 1.0, 1.0];
@@ -100,6 +111,7 @@ final class D3d
             typedef struct { uint32_t left, top, front, right, bottom, back; } D3D11_BOX;
             typedef struct { uint32_t Width, Height, Format; int32_t Stereo; DXGI_SAMPLE_DESC SampleDesc; uint32_t BufferUsage, BufferCount, Scaling, SwapEffect, AlphaMode, Flags; } DXGI_SWAP_CHAIN_DESC1;
             typedef struct { float viewport[2], atlas[2]; float scale, atlasScale, dark, flip, targetH; int32_t from; float pad[2]; } FRAME;
+            typedef struct { float dir[2]; float sigma, pad; } BLUR;
 
             typedef struct { void *r0[3];
                 int32_t (*CreateBuffer)(void *self, const D3D11_BUFFER_DESC *desc, const D3D11_SUBRESOURCE_DATA *init, void **out);
@@ -234,6 +246,8 @@ final class D3d
         $cb->BindFlags = self::BIND_CONSTANT_BUFFER;
         $cb->CPUAccessFlags = self::CPU_WRITE;
         self::$frameBuffer = self::make(fn($out) => ($d->v->CreateBuffer)($d, FFI::addr($cb), null, $out), 'CreateBuffer (constants)');
+        $cb->ByteWidth = FFI::sizeof($f->type('BLUR'));
+        self::$blurBuffer = self::make(fn($out) => ($d->v->CreateBuffer)($d, FFI::addr($cb), null, $out), 'CreateBuffer (blur constants)');
         [, self::$noBackdrop] = self::texture(1, 1, self::R8G8B8A8_UNORM, 1, self::BIND_SHADER_RESOURCE, true);
     }
 
@@ -350,11 +364,11 @@ final class D3d
         self::hr($hr, 'IDXGIFactory2::CreateSwapChainForHwnd');
         $this->swapChain = Com::typed(self::$f, $chain, 'IDXGISwapChain *');
         $this->size = [max(1, $pw), max(1, $ph)];
-        $this->backBuffer = $this->backBufferView();
+        [$this->backTexture, $this->backBuffer] = $this->backBufferView();
     }
 
-    /** The view of the swap chain's back buffer, to draw into. */
-    private function backBufferView(): CData
+    /** The swap chain's back buffer and its view, to draw into. @return array{0: CData, 1: CData} */
+    private function backBufferView(): array
     {
         $f = self::$f;
         $s = $this->swapChain;
@@ -363,8 +377,7 @@ final class D3d
         self::hr(($s->v->GetBuffer)($s, 0, FFI::addr($iid), FFI::addr($tex)), 'IDXGISwapChain::GetBuffer');
         $d = self::$device;
         $view = self::make(fn($out) => ($d->v->CreateRenderTargetView)($d, $tex, null, $out), 'CreateRenderTargetView');
-        Com::release($tex);
-        return $view;
+        return [Com::typed(self::$f, $tex, 'void *'), $view];
     }
 
     /**
@@ -385,12 +398,13 @@ final class D3d
             $c = self::$context;
             ($c->v->OMSetRenderTargets)($c, 0, null, null);
             Com::release($this->backBuffer);
+            Com::release($this->backTexture);
             $s = $this->swapChain;
             self::hr(($s->v->ResizeBuffers)($s, 0, $pw, $ph, 0, 0), 'IDXGISwapChain::ResizeBuffers');
             $this->size = [$pw, $ph];
-            $this->backBuffer = $this->backBufferView();
+            [$this->backTexture, $this->backBuffer] = $this->backBufferView();
         }
-        $this->drawList($list, $this->backBuffer, $pw, $ph, $scale, $clear);
+        $this->drawList($list, $this->backTexture, $this->backBuffer, $pw, $ph, $scale, $clear);
         // a new frame's list is the last from now; the last drawn again (WM_PAINT's) stays so
         if ($list === $this->lists[$this->frame % 2]) {
             $this->frame++;
@@ -420,7 +434,7 @@ final class D3d
         $d = self::$device;
         $c = self::$context;
         [$tex, $view] = self::texture($pw, $ph, self::B8G8R8A8_UNORM, 1, self::BIND_RENDER_TARGET, false, null, 0, true);
-        $this->drawList($list, $view, $pw, $ph, $scale, $clear);
+        $this->drawList($list, $tex, $view, $pw, $ph, $scale, $clear);
         $desc = $f->new('D3D11_TEXTURE2D_DESC');
         $desc->Width = $pw;
         $desc->Height = $ph;
@@ -446,8 +460,8 @@ final class D3d
         return $out;
     }
 
-    /** Draws $list into render target $view ($pw × $ph): one pass, all of it, for now (the glass's backdrop is the next step's). */
-    private function drawList(DisplayList $list, CData $view, int $pw, int $ph, float $scale, array $clear): void
+    /** Draws $list into $texture through its render target's $view ($pw × $ph): one pass, split at each glass quad, which reads what is below it blurred. */
+    private function drawList(DisplayList $list, CData $texture, CData $view, int $pw, int $ph, float $scale, array $clear): void
     {
         $f = self::$f;
         $c = self::$context;
@@ -457,14 +471,7 @@ final class D3d
             $this->warnOnce('canvases');
         }
         $this->target = [$pw / $scale, $ph / $scale, $scale, (float)$ph];
-        $views = $f->new('void *[1]');
-        $views[0] = $view;
-        ($c->v->OMSetRenderTargets)($c, 1, $views, null);
-        $vp = $f->new('D3D11_VIEWPORT');
-        $vp->Width = $pw;
-        $vp->Height = $ph;
-        $vp->MaxDepth = 1.0;
-        ($c->v->RSSetViewports)($c, 1, FFI::addr($vp));
+        self::renderTo($view, $pw, $ph);
         $rgba = $f->new('float[4]');
         [$rgba[0], $rgba[1], $rgba[2], $rgba[3]] = [$clear[0] * $clear[3], $clear[1] * $clear[3], $clear[2] * $clear[3], $clear[3]];
         ($c->v->ClearRenderTargetView)($c, $view, $rgba);
@@ -475,10 +482,105 @@ final class D3d
         $this->upload($this->quads, $list->buf, $list->n * DisplayList::FLOATS_PER_RECT * 4);
         $this->upload($this->xforms, $list->xforms, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4);
         $this->bind();
-        if ($list->glass !== []) {
-            $this->warnOnce('glass');
+        $start = 0;
+        foreach ($list->glass as [$at, $sigma]) {
+            $this->drawRuns($list, $start, $at - $start);
+            $this->blur($texture, $pw, $ph, $sigma);
+            self::renderTo($view, $pw, $ph);
+            $this->bind();
+            $start = $at;
         }
-        $this->drawRuns($list, 0, $list->n);
+        $this->drawRuns($list, $start, $list->n - $start);
+    }
+
+    /** Draws into render target $view from now, all of its $w × $h. */
+    private static function renderTo(CData $view, int $w, int $h): void
+    {
+        $f = self::$f;
+        $c = self::$context;
+        $views = $f->new('void *[1]');
+        $views[0] = $view;
+        ($c->v->OMSetRenderTargets)($c, 1, $views, null);
+        $vp = $f->new('D3D11_VIEWPORT');
+        $vp->Width = $w;
+        $vp->Height = $h;
+        $vp->MaxDepth = 1.0;
+        ($c->v->RSSetViewports)($c, 1, FFI::addr($vp));
+    }
+
+    /**
+     * Copies what $texture ($pw × $ph) holds so far and blurs it, at half
+     * size, into the backdrop the glass reads: a Gaussian across, then down
+     * (Gl::blur's), its sigma halved with the size.
+     */
+    private function blur(CData $texture, int $pw, int $ph, float $sigma): void
+    {
+        $c = self::$context;
+        if ($this->backdropSize !== [$pw, $ph]) {
+            $this->releaseGlass();
+            [$hw, $hh] = [max(1, intdiv($pw, 2)), max(1, intdiv($ph, 2))];
+            [$snapshot, $snapshotView] = self::texture($pw, $ph, self::B8G8R8A8_UNORM, 1, self::BIND_SHADER_RESOURCE, false);
+            $this->glass = ['snapshot' => [$snapshot, null, $snapshotView], 'temp' => self::targetTexture($hw, $hh), 'backdrop' => self::targetTexture($hw, $hh)];
+            $this->backdropSize = [$pw, $ph];
+        }
+        // none of these read as the blur writes them: the shaders let go of the backdrop, the output of the target, first
+        $nulls = self::$f->new('void *[5]');
+        ($c->v->PSSetShaderResources)($c, 0, 5, $nulls);
+        ($c->v->OMSetRenderTargets)($c, 0, null, null);
+        ($c->v->CopyResource)($c, $this->glass['snapshot'][0], $texture);
+        $s = max(0.5, $sigma / 2);
+        [$hw, $hh] = [max(1, intdiv($pw, 2)), max(1, intdiv($ph, 2))];
+        $this->blurPass($this->glass['snapshot'][2], $this->glass['temp'][1], $hw, $hh, 1.0, 0.0, $s);
+        $this->blurPass($this->glass['temp'][2], $this->glass['backdrop'][1], $hw, $hh, 0.0, 1.0, $s);
+    }
+
+    /** Draws $src blurred along ($dx, $dy) into $dst ($w × $h): BLUR's fullscreen triangle, unblended. */
+    private function blurPass(CData $src, CData $dst, int $w, int $h, float $dx, float $dy, float $sigma): void
+    {
+        $f = self::$f;
+        $c = self::$context;
+        $nulls = $f->new('void *[1]');
+        ($c->v->PSSetShaderResources)($c, 0, 1, $nulls);
+        self::renderTo($dst, $w, $h);
+        $b = $f->new('BLUR');
+        [$b->dir[0], $b->dir[1], $b->sigma] = [$dx, $dy, $sigma];
+        $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
+        self::hr(($c->v->Map)($c, self::$blurBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (blur constants)');
+        FFI::memcpy($m->pData, $b, FFI::sizeof($b));
+        ($c->v->Unmap)($c, self::$blurBuffer, 0);
+        ($c->v->IASetPrimitiveTopology)($c, self::TRIANGLELIST);
+        ($c->v->VSSetShader)($c, self::$blurVS, null, 0);
+        ($c->v->PSSetShader)($c, self::$blurPS, null, 0);
+        ($c->v->RSSetState)($c, self::$rasterizer);
+        ($c->v->OMSetBlendState)($c, null, null, 0xFFFFFFFF);
+        $one = $f->new('void *[1]');
+        $one[0] = $src;
+        ($c->v->PSSetShaderResources)($c, 0, 1, $one);
+        $one[0] = self::$sampler;
+        ($c->v->PSSetSamplers)($c, 0, 1, $one);
+        $one[0] = self::$blurBuffer;
+        ($c->v->PSSetConstantBuffers)($c, 0, 1, $one);
+        ($c->v->Draw)($c, 3, 0);
+    }
+
+    /** A texture of $w × $h BGRA pixels drawn into and read: it, its render target's view, its shaders' view. @return array{0: CData, 1: CData, 2: CData} */
+    private static function targetTexture(int $w, int $h): array
+    {
+        $d = self::$device;
+        [$tex, $target] = self::texture($w, $h, self::B8G8R8A8_UNORM, 1, self::BIND_RENDER_TARGET | self::BIND_SHADER_RESOURCE, false, null, 0, true);
+        $view = self::make(fn($out) => ($d->v->CreateShaderResourceView)($d, $tex, null, $out), 'CreateShaderResourceView');
+        return [$tex, $target, $view];
+    }
+
+    private function releaseGlass(): void
+    {
+        foreach ($this->glass as $views) {
+            foreach (array_reverse($views) as $o) {
+                Com::release($o);
+            }
+        }
+        $this->glass = [];
+        $this->backdropSize = [0, 0];
     }
 
     /** Draws quads [$from, $from + $count): blended, but the web views' holes, which take away what is there, and the runs shaders draw, which are left out for now. */
@@ -515,7 +617,7 @@ final class D3d
         ($c->v->PSSetShader)($c, self::$quadPS, null, 0);
         ($c->v->RSSetState)($c, self::$rasterizer);
         $views = $f->new('void *[5]');
-        foreach ([$this->quadsView, $this->xformsView, self::$atlasView, self::$imagesView, self::$noBackdrop] as $i => $v) {
+        foreach ([$this->quadsView, $this->xformsView, self::$atlasView, self::$imagesView, $this->glass['backdrop'][2] ?? self::$noBackdrop] as $i => $v) {
             $views[$i] = $v;
         }
         ($c->v->VSSetShaderResources)($c, 0, 5, $views);
@@ -676,10 +778,11 @@ final class D3d
     /** Lets go of the renderer: its buffers, lists and swap chain; the device and the atlases' textures stay, for the others. */
     public function release(): void
     {
-        foreach ([$this->backBuffer, $this->swapChain, $this->quadsView, $this->quads, $this->xformsView, $this->xforms] as $o) {
+        $this->releaseGlass();
+        foreach ([$this->backBuffer, $this->backTexture, $this->swapChain, $this->quadsView, $this->quads, $this->xformsView, $this->xforms] as $o) {
             Com::release($o);
         }
-        $this->backBuffer = $this->swapChain = null;
+        $this->backBuffer = $this->backTexture = $this->swapChain = null;
         foreach ($this->lists as $l) {
             FFI::free($l->buf);
             FFI::free($l->xforms);
