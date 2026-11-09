@@ -36,8 +36,15 @@ final class MenuDraw
 
     private static ?FFI $user = null, $gdi = null;
     private static ?int $build = null;
-    /** uxtheme's SetPreferredAppMode and FlushMenuThemes, once, as the fields of a struct: FFI calls a function pointer read from a field, as a COM vtable's, not one cast from an address; false where there are none. */
+    /**
+     * uxtheme's SetPreferredAppMode and FlushMenuThemes, once, as the
+     * fields of a struct read through a pointer to it, as a COM vtable's
+     * are (Native\Com): FFI calls a function pointer read so, not one cast
+     * from an address nor one read from a struct itself; false where
+     * there are none. The struct is kept with it.
+     */
     private static CData|false|null $appMode = null;
+    private static ?CData $appModeFns = null;
     /** @var array<int, array{text: CData, glyphs: CData}> the fonts of popup items, by DPI */
     private static array $fonts = [];
     /** @var array<int, CData> brushes, by COLORREF */
@@ -164,8 +171,9 @@ final class MenuDraw
                 $flush = $h === null ? null : $k->GetProcAddress($h, 136);
                 if ($set !== null && $flush !== null) {
                     $f = FFI::cdef('typedef struct { int32_t (*set)(int32_t mode); void (*flush)(void); } AppMode;');
-                    self::$appMode = $f->new('AppMode', false);
-                    FFI::memcpy(self::$appMode, pack('PP', Mem::addr($set), Mem::addr($flush)), 16);
+                    self::$appModeFns = $f->new('AppMode', false);
+                    FFI::memcpy(self::$appModeFns, pack('PP', Mem::addr($set), Mem::addr($flush)), 16);
+                    self::$appMode = FFI::addr(self::$appModeFns);
                 }
             }
         }
