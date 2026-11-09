@@ -101,7 +101,7 @@ final class Protocol
                 $path = "$root/index.html"; // a client-side route
             }
             $real = $stream ? $path : realpath($path); // the path cleaned of .. already
-            if ($real === false || !is_file($real) || !str_starts_with($real, $root . '/')) {
+            if ($real === false || !is_file($real) || !str_starts_with($real, $root . ($stream ? '/' : DIRECTORY_SEPARATOR))) { // realpath's separators: Windows's backslashes
                 return new ProtocolResponse(404, ['Content-Type' => 'text/plain; charset=utf-8'], "404 page not found\n");
             }
             return Native\Scheme::file($real, $r);

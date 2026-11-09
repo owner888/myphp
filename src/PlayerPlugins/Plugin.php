@@ -243,7 +243,7 @@ JS;
         if ($path === null) { return null; }
         if (preg_match('~^https?://~', $path) === 1) { return $network ? $path : null; }
         $full = self::normalize("$root/$path");
-        if (!str_starts_with($full, rtrim($root, '/') . '/')) {
+        if (!str_starts_with($full, rtrim(self::normalize($root), '/') . '/')) {
             Logger::error("The file path $path is invalid", Plugins::LOG);
             return null;
         }
@@ -258,12 +258,17 @@ JS;
     public static function normalize(string $path): string
     {
         $out = [];
+        $root = '/';
+        if (PHP_OS_FAMILY === 'Windows') { // a drive's path, of either separator: C:/x/y, its slashes forward
+            $path = strtr($path, '\\', '/');
+            if (preg_match('~^[A-Za-z]:~', $path) === 1) { $root = substr($path, 0, 2) . '/'; $path = substr($path, 2); }
+        }
         foreach (explode('/', $path) as $part) {
             if ($part === '' || $part === '.') { continue; }
             if ($part === '..') { array_pop($out); continue; }
             $out[] = $part;
         }
-        return '/' . implode('/', $out);
+        return $root . implode('/', $out);
     }
 
     /** Whether it is on (IINA's PluginEnabled.<id>, off till installed or turned on). */

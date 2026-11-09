@@ -98,13 +98,13 @@ abstract class Api
         }
         if (str_starts_with($path, '~/')) { $abs = rtrim((string)getenv('HOME'), '/') . substr($path, 1); }
         if ($absolute && !\MyPHP\Native\Paths::isAbsolute($abs)) { $this->fail("The path should be an absolute path: $path"); }
-        return [$abs, str_starts_with($abs, $p->dataDir()) || str_starts_with($abs, $p->tmpDir())];
+        return [$abs, str_starts_with(Plugin::normalize($abs), Plugin::normalize($p->dataDir())) || str_starts_with(Plugin::normalize($abs), Plugin::normalize($p->tmpDir()))];
     }
 
     private function expand(string $path, string $name, string $dir, bool $validate = true): string
     {
         $out = Plugin::normalize("$dir/" . substr($path, strlen($name) + 2));
-        if ($validate && !str_starts_with($out, rtrim($dir, '/'))) {
+        if ($validate && !str_starts_with($out, rtrim(Plugin::normalize($dir), '/'))) {
             $this->fail("The path does not locate inside the @$name directory: \"$path\"");
         }
         return $out;

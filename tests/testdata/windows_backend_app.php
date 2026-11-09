@@ -47,6 +47,8 @@ App::whenReady(function () use (&$r, $at) {
             Clipboard::writeText('myphp 剪贴板 ✓');
             $r['clipboard'] = Clipboard::readText();
             $r['clipboardFormats'] = Clipboard::availableFormats();
+            Clipboard::write(new \MyPHP\Transfer\Data(new \MyPHP\Transfer\Item(\MyPHP\Transfer\Representation::bytes('text/plain', 'both'), \MyPHP\Transfer\Representation::bytes('application/x-myphp-test', "\x00\x01bytes"))));
+            $r['clipboardData'] = [Clipboard::formats(), bin2hex(Clipboard::readFormat('application/x-myphp-test')), Clipboard::readText()];
         } catch (Throwable $e) { $r['clipboard'] = 'error: ' . $e->getMessage(); }
         $at('the clipboard');
         $release = $b->power()->keepAwake(true, 'test');

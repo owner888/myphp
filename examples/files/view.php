@@ -24,7 +24,9 @@ $table = fn() => Table($this->entries, id: 'path', selection: $this->chosen, sor
     ->onChange(of: $this->sortOrder, action: $this->reload(...));
 
 return function () use ($grid, $table) {
-    $crumbs = array_values(array_filter(explode('/', $this->path), fn($s) => $s !== ''));
+    $crumbs = preg_split(DIRECTORY_SEPARATOR === '/' ? '~/+~' : '~[\\\\/]+~', $this->path, -1, PREG_SPLIT_NO_EMPTY) ?: []; // on Windows either separator
+    // The folder of the first $n crumbs: from the root elsewhere, from the drive on Windows (C:\ for C:).
+    $upTo = fn(int $n): string => DIRECTORY_SEPARATOR === '/' ? '/' . implode('/', array_slice($crumbs, 0, $n)) : implode('\\', array_slice($crumbs, 0, $n)) . ($n === 1 ? '\\' : '');
     $chosen = $this->chosenEntries();
     $one = count($chosen) === 1 ? $chosen[0] : null;
     $names = array_map(fn($e) => $e['name'], $chosen);
@@ -39,7 +41,7 @@ return function () use ($grid, $table) {
                 Button('Macintosh HD', action: fn() => $this->open('/'))->buttonStyle(ButtonStyle::plain),
                 Each($crumbs, id: fn($s, int $i) => $i)(fn(string $crumb, int $i) => HStack(spacing: 6)(
                     Text(verbatim: '›')->foregroundStyle(Color::secondary),
-                    Button($crumb, action: fn() => $this->open('/' . implode('/', array_slice($crumbs, 0, $i + 1))))->buttonStyle(ButtonStyle::plain),
+                    Button($crumb, action: fn() => $this->open($upTo($i + 1)))->buttonStyle(ButtonStyle::plain),
                 )),
                 Spacer(),
                 Picker('View', selection: $this->view)(Text('Icons')->tag(0), Text('List')->tag(1))->pickerStyle(PickerStyle::segmented)->labelsHidden()->frame(width: 140),

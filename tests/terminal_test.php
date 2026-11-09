@@ -14,6 +14,11 @@ use MyPHP\Plugins\Terminal\Vt\Terminal as VtTerminal;
 use MyPHP\Transfer\{Data, Format, Item, Representation};
 use MyPHP\UI\{DisplayList, InputEvent, Key};
 
+if (PHP_OS_FAMILY === 'Windows') { // a terminal's shell runs in ConPTY there, with its stage
+    echo "  skipped on Windows\n";
+    return;
+}
+
 require_once __DIR__ . '/TerminalTest.php';
 
 try {

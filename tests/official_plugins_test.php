@@ -15,7 +15,7 @@ $root = sys_get_temp_dir() . '/myphp-official-' . getmypid();
 $dir = "$root/plugins";
 @mkdir($dir, 0777, true);
 foreach (['online-media' => 'io.myphp.ytdl', 'userscript' => 'io.myphp.user-script', 'opensub' => 'io.myphp.opensub'] as $folder => $id) {
-    exec('cp -R ' . escapeshellarg(__DIR__ . "/../plugins/$folder") . ' ' . escapeshellarg("$dir/$id.iinaplugin"));
+    copyDir(__DIR__ . "/../plugins/$folder", "$dir/$id.iinaplugin");
 }
 $settings = new PlayerSettings("$root/settings.json");
 Plugins::configure($dir, $settings);

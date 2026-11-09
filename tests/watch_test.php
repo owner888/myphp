@@ -9,6 +9,11 @@ namespace MyPHP\Tests;
 use MyPHP\{CallContext, ChannelWait, ErrWatchLimit, FileEvent, FileOp, FileWatchOptions};
 use MyPHP\Plugins\Watch\{Options, Request, Root, Service, Watch};
 
+if (PHP_OS_FAMILY === 'Windows') { // the watch plugin stands on watching files, ReadDirectoryChangesW's there, with its stage
+    echo "  skipped on Windows\n";
+    return;
+}
+
 /** A watcher whose batches the test gives (mygo's fakeWatcher). */
 final class FakeWatcher
 {

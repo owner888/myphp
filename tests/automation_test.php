@@ -12,6 +12,11 @@ namespace MyPHP\Tests;
 use MyPHP\Plugins\Automation\{Driver, Failure, Protocol, Server};
 use MyPHP\UI\{AccessNode, AccessTree, Context, Key, Role, TextState};
 
+if (PHP_OS_FAMILY === 'Windows') { // automation listens on a socket of Unix's, which Windows's PHP has not; its own comes with its stage
+    echo "  skipped on Windows\n";
+    return;
+}
+
 /** A fake app: records what requests ask of it. */
 $fake = fn() => new class implements Driver {
     public AccessTree $access;

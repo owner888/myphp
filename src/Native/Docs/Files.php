@@ -129,10 +129,38 @@ final class Files
         return self::stamp($path) ?? throw new RuntimeException("myphp: $path is gone after it was written");
     }
 
-    /** NSFileManager's replaceItemAtURL:withItemAtURL:, which keeps the file's permissions, creation date, tags, extended attributes, ACLs and identity, so that aliases still find it; a new file is moved into place. */
+    /**
+     * Replaces the file at $path with $tmp keeping what the system keeps of
+     * a file: NSFileManager's replaceItemAtURL:withItemAtURL: on macOS (its
+     * permissions, creation date, tags, extended attributes, ACLs and
+     * identity, so that aliases still find it), ReplaceFile on Windows (its
+     * attributes, ACLs, creation time, short name), its permissions on
+     * Linux, as GIO's replacing keeps them; a new file is moved into place.
+     */
     private static function replaceItem(string $path, string $tmp): void
     {
         if (!file_exists($path)) {
+            if (!@rename($tmp, $path)) {
+                throw new RuntimeException("myphp: cannot write $path");
+            }
+            return;
+        }
+        if (PHP_OS_FAMILY === 'Windows') {
+            $k = \FFI::cdef('int32_t ReplaceFileW(const uint16_t *replaced, const uint16_t *replacement, const uint16_t *backup, uint32_t flags, void *exclude, void *reserved); uint32_t GetLastError(void);', 'kernel32.dll');
+            $wide = function (string $s) use ($k): \FFI\CData {
+                $u = (string)iconv('UTF-8', 'UTF-16LE', $s) . "\0\0";
+                $buf = $k->new('uint16_t[' . (strlen($u) >> 1) . ']');
+                \FFI::memcpy($buf, $u, strlen($u));
+                return $buf;
+            };
+            if (!$k->ReplaceFileW($wide($path), $wide($tmp), null, 0x2 /* REPLACEFILE_IGNORE_MERGE_ERRORS */, null, null)) {
+                throw new RuntimeException("myphp: cannot replace $path (error {$k->GetLastError()})");
+            }
+            return;
+        }
+        if (PHP_OS_FAMILY !== 'Darwin') {
+            $mode = fileperms($path);
+            if ($mode !== false) { chmod($tmp, $mode & 07777); }
             if (!@rename($tmp, $path)) {
                 throw new RuntimeException("myphp: cannot write $path");
             }

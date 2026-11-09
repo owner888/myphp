@@ -761,6 +761,16 @@ if (!defined('MYPHP_TEST_SUITE')) {
     register_shutdown_function(static function (): void { printf("%d checks, %d failed\n", $GLOBALS['checks'] ?? 0, count($GLOBALS['failures'] ?? [])); });
 }
 
+/** Copies folder $from to $to, as cp -R, which Windows has not. */
+function copyDir(string $from, string $to): void
+{
+    @mkdir($to, 0777, true);
+    foreach (scandir($from) ?: [] as $f) {
+        if ($f === '.' || $f === '..') { continue; }
+        is_dir("$from/$f") ? copyDir("$from/$f", "$to/$f") : copy("$from/$f", "$to/$f");
+    }
+}
+
 /** The null device, for a child process's streams. */
 const DEVNULL = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
 

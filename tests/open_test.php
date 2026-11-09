@@ -68,20 +68,22 @@ same(['md', 'markdown'], DeepLink::extensions(), 'the extensions of its document
 check(DeepLink::handles('NOTES') && !DeepLink::handles('http'), 'it handles its schemes, whatever their case');
 check(DeepLink::isScheme('a+b-c.d') && !DeepLink::isScheme('1x') && !DeepLink::isScheme('') && !DeepLink::isScheme('a b'), 'what a scheme is');
 same(['notes://open?id=1', 'Notes:x'], DeepLink::urlArgs(['--flag', 'notes://open?id=1', 'C:\\notes', 'http://example.com', 'Notes:x', 'plain']), 'the arguments that are its URLs');
-$dir = sys_get_temp_dir() . '/myphp-open-' . getmypid();
+$s = DIRECTORY_SEPARATOR; // the paths as the system writes them, which a relative one and a file URL come back as
+$dir = sys_get_temp_dir() . "{$s}myphp-open-" . getmypid();
 @mkdir($dir);
-touch("$dir/a.md"); touch("$dir/b.MarkDown"); touch("$dir/c.txt"); @mkdir("$dir/d.md");
-same(["$dir/a.md", "$dir/b.MarkDown", "$dir/a.md"], DeepLink::fileArgs(['a.md', "$dir/b.MarkDown", 'c.txt', 'd.md', 'gone.md', "file://$dir/a.md"], $dir), 'the arguments that are files it opens, absolute; file URLs too; not folders nor missing files');
+touch("$dir{$s}a.md"); touch("$dir{$s}b.MarkDown"); touch("$dir{$s}c.txt"); @mkdir("$dir{$s}d.md");
+$fileURL = \MyPHP\Transfer\Data::files("$dir{$s}a.md")->urls()[0];
+same(["$dir{$s}a.md", "$dir{$s}b.MarkDown", "$dir{$s}a.md"], DeepLink::fileArgs(['a.md', "$dir{$s}b.MarkDown", 'c.txt', 'd.md', 'gone.md', $fileURL], $dir), 'the arguments that are files it opens, absolute; file URLs too; not folders nor missing files');
 // Delivered to the listeners, which can be removed.
 $urls = $files = [];
 $offURL = App::onOpenURL(function (string $u) use (&$urls): void { $urls[] = $u; });
 $offFile = App::onOpenFile(function (string $f) use (&$files): void { $files[] = $f; });
 DeepLink::deliverArgs(['notes://x', 'a.md', 'other'], $dir);
-same([['notes://x'], ["$dir/a.md"]], [$urls, $files], 'the launch\'s URLs and files reach the listeners');
+same([['notes://x'], ["$dir{$s}a.md"]], [$urls, $files], 'the launch\'s URLs and files reach the listeners');
 $offURL();
 DeepLink::openURLs(['notes://y']);
-DeepLink::openFiles(["$dir/b.MarkDown"]);
-same([['notes://x'], ["$dir/a.md", "$dir/b.MarkDown"]], [$urls, $files], 'a listener removed hears no more');
+DeepLink::openFiles(["$dir{$s}b.MarkDown"]);
+same([['notes://x'], ["$dir{$s}a.md", "$dir{$s}b.MarkDown"]], [$urls, $files], 'a listener removed hears no more');
 $offFile();
 // Registering checks the bundle declares it first.
 $threw = '';
