@@ -8875,9 +8875,14 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   is learned from the first menu drawn at each DPI. A hook of the thread
   while menus show rounds their windows as Windows rounds its own, outlined
   in their colors. The bar is taller there (30 DIPs), so a window with
-  one is grown by what its content lacks after AdjustWindowRectEx. Not yet:
-  items' icons. `windows_menu_test` reads a window's bar back and runs its
-  items.
+  one is grown by what its content lacks after AdjustWindowRectEx. Items'
+  icons (mygo's menuicon.go) are decoded once with their `MenuIcon`, fit to
+  16 points and kept by size and color, a template's in the text's: on
+  Windows 11 drawn in a column of their own between the checks' and the
+  labels (one given an icon later gives its menu the column), a colored
+  one faded while disabled; on Windows 10 the item's bitmap, a DIB section
+  of their premultiplied pixels, freed with its menu. A menu bar's show
+  none. `windows_menu_test` reads a window's bar back and runs its items.
 - The tray (stage 4, `Windows\Tray`: mygo's tray.go) is a notification
   area icon of Shell_NotifyIcon, its callback message to the app's window
   by its number. It is added from the queue once the call that made it

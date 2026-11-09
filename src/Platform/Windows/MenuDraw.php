@@ -5,6 +5,8 @@ namespace MyPHP\Platform\Windows;
 
 use FFI;
 use FFI\CData;
+use MyPHP\MenuIcon;
+use MyPHP\Native\Build\Png;
 use MyPHP\Native\Mem;
 
 /**
@@ -25,6 +27,8 @@ final class MenuDraw
 {
     /** Popup items' metrics, in DIPs, after WinUI's MenuFlyoutItem (mygo's). */
     private const ITEM_HEIGHT = 32, SEPARATOR_HEIGHT = 9, INSET = 4, PADDING = 12, RADIUS = 4, MARK_COLUMN = 16 + 12, ACCEL_GAP = 32, CHEVRON = 12, GLYPH_SIZE = 12;
+    /** The icons' column, after the marks': the icon, and the gap after it (mygo's menuIconColumn). */
+    private const ICON_COLUMN = MenuIcon::SIZE + 12;
     /** The menu bar's, which grows to WinUI's room. */
     private const BAR_HEIGHT = 30, BAR_EXTRA = 8, BAR_INSET_X = 2, BAR_INSET_Y = 3;
     /** The glyphs of Segoe Fluent Icons, also in Segoe MDL2 Assets: CheckMark, RadioBullet, ChevronRight, ChevronLeft. */
@@ -56,7 +60,7 @@ final class MenuDraw
     private static ?CData $hook = null, $hooks = null;
 
     /**
-     * @var array<int, array{owner: int, label: string, accel: string, separator: bool, submenu: bool, radio: bool, column: bool, first: bool, last: bool, menu: int, width: int, dpi: int}>
+     * @var array<int, array{owner: int, label: string, accel: string, separator: bool, submenu: bool, radio: bool, column: bool, icon: ?MenuIcon, icons: bool, first: bool, last: bool, menu: int, pos: int, width: int, dpi: int}>
      *     the looks of the items drawn, by their data (mygo's menuLook)
      */
     public static array $looks = [];
@@ -92,6 +96,7 @@ final class MenuDraw
             int32_t SystemParametersInfoForDpi(uint32_t action, uint32_t param, void *value, uint32_t winIni, uint32_t dpi);
             int32_t SystemParametersInfoW(uint32_t action, uint32_t param, void *value, uint32_t winIni);
             uint32_t GetDpiForWindow(void *hwnd);
+            uint32_t GetDpiForSystem(void);
             intptr_t DefWindowProcW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
             void *SetWindowsHookExW(int32_t id, HOOKPROC fn, void *module, uint32_t thread);
             int32_t UnhookWindowsHookEx(void *hook);
@@ -202,12 +207,12 @@ final class MenuDraw
      * Makes the item at $pos of $menu one drawn here, of $type besides
      * (MFT_SEPARATOR, MFT_RADIOCHECK or 0), its look registered: its data
      * (mygo's ownerDraw, addLook).
-     * @param array{owner: int, label: string, accel: string, separator: bool, submenu: bool, radio: bool, column: bool, first: bool, last: bool} $look
+     * @param array{owner: int, label: string, accel: string, separator: bool, submenu: bool, radio: bool, column: bool, icon: ?MenuIcon, icons: bool, first: bool, last: bool} $look
      */
     public static function ownerDraw(CData $menu, int $pos, array $look): int
     {
         $key = ++self::$nextLook;
-        self::$looks[$key] = $look + ['menu' => Mem::addr($menu), 'width' => 0, 'dpi' => 0];
+        self::$looks[$key] = $look + ['menu' => Mem::addr($menu), 'pos' => $pos, 'width' => 0, 'dpi' => 0];
         $u = self::user();
         $mi = $u->new('MENUITEMINFOW');
         $mi->cbSize = FFI::sizeof($mi);
@@ -404,6 +409,7 @@ final class MenuDraw
         $dc = $u->GetDC(null);
         $w = self::px(self::INSET + self::PADDING, $dpi) * 2 + self::textWidth($dc, $f['text'], $l['label']);
         if ($l['column']) { $w += self::px(self::MARK_COLUMN, $dpi); }
+        if ($l['icons']) { $w += self::px(self::ICON_COLUMN, $dpi); }
         if ($l['accel'] !== '') { $w += self::px(self::ACCEL_GAP, $dpi) + self::textWidth($dc, $f['text'], $l['accel']); }
         if ($l['submenu']) { $w += self::px(self::ACCEL_GAP / 2 + self::CHEVRON, $dpi); }
         $u->ReleaseDC(null, $dc);
@@ -444,7 +450,7 @@ final class MenuDraw
         [$top, $bottom] = self::padding($l, $dpi);
         $plate = $selected ? [$inset, $top, $rr - $rl - $inset, $rb - $rt - $bottom] : null;
         $rtl = ($g->GetLayout($d->hDC) & 1) !== 0; // LAYOUT_RTL: a menu laid out right to left, whose submenus open to the left
-        self::paint($d->hDC, $rl, $rt, $rr - $rl, $rb - $rt, $p['back'], $plate, $p['plate'], self::px(self::RADIUS, $dpi), function (CData $dc, int $w, int $h) use ($l, $p, $state, $selected, $inset, $top, $bottom, $dpi, $rtl, $u, $g): void {
+        self::paint($d->hDC, $rl, $rt, $rr - $rl, $rb - $rt, $p['back'], $plate, $p['plate'], self::px(self::RADIUS, $dpi), function (CData $dc, int $w, int $h, CData $bits) use ($l, $p, $state, $selected, $inset, $top, $bottom, $dpi, $rtl, $u, $g): void {
             [$t, $b] = [$top, $h - $bottom];
             if ($l['separator']) {
                 $thick = max(self::px(1, $dpi), 1);
@@ -478,6 +484,15 @@ final class MenuDraw
                 }
                 $x += self::px(self::MARK_COLUMN, $dpi);
             }
+            if ($l['icons']) {
+                $box = self::px(MenuIcon::SIZE, $dpi);
+                if ($l['icon'] !== null && ($img = self::iconAt($l['icon'], $box, self::dib($fore))) !== null) {
+                    // a template icon in the text's color; one in color faded while the item is disabled; in a mirrored DC, which lays the item out from the right, x counts from the bitmap's right edge
+                    $opacity = ($state & (self::ODS_GRAYED | self::ODS_DISABLED)) !== 0 && !$l['icon']->template ? 0.4 : 1.0;
+                    self::drawIcon($g->cast('uint32_t *', $bits), $w, $h, $img, $rtl ? $w - $x - $box : $x, $t + intdiv($b - $t - $box, 2), $box, $opacity);
+                }
+                $x += self::px(self::ICON_COLUMN, $dpi);
+            }
             if ($l['submenu']) {
                 $glyph($rtl ? self::GLYPH_CHEVRON_LEFT : self::GLYPH_CHEVRON, $right - self::px(self::CHEVRON, $dpi), $right);
             }
@@ -509,7 +524,7 @@ final class MenuDraw
      * rounded corners ($plate, in the item's coordinates, null for none)
      * antialiased over it, and what $draw draws over them.
      * @param ?array{0: int, 1: int, 2: int, 3: int} $plate
-     * @param \Closure(CData $dc, int $w, int $h): void $draw
+     * @param \Closure(CData $dc, int $w, int $h, CData $bits): void $draw (the bitmap's pixels, 0xAARRGGBB, which GDI has flushed)
      */
     private static function paint(CData $dc, int $x, int $y, int $w, int $h, int $back, ?array $plate, int $plateColor, int $radius, \Closure $draw): void
     {
@@ -541,7 +556,7 @@ final class MenuDraw
         }
         FFI::memcpy($bits, $px, strlen($px));
         $g->GdiFlush();
-        $draw($mem, $w, $h);
+        $draw($mem, $w, $h, $bits);
         $g->GdiFlush();
         $g->BitBlt($dc, $x, $y, $w, $h, $mem, 0, 0, 0x00CC0020); // SRCCOPY
         $g->SelectObject($mem, $old);
@@ -621,6 +636,171 @@ final class MenuDraw
         if (($style & 0x20000) !== 0) { // CS_DROPSHADOW
             $u->SetClassLongPtrW($hwnd, -26, $style & ~0x20000);
         }
+    }
+
+    // The icons of menu items (mygo's menuicon.go): Windows 11's popups,
+    // drawn here, show them in a column of their own, between the checks'
+    // and the labels, as WinUI's MenuFlyoutItem does; Windows 10's show
+    // them as the item's bitmap (hbmpItem), a DIB section of premultiplied
+    // pixels, which themed menus draw with their alpha, where they draw
+    // checks.
+
+    /**
+     * The pixels of $ic fit to a box of $box pixels, a template one in color
+     * $tint (0xRRGGBB): premultiplied 0xAARRGGBB, decoded once and kept with
+     * the icon by size and color (mygo's iconAt); null for an image that
+     * cannot be decoded.
+     * @return ?array{w: int, h: int, px: list<int>}
+     */
+    public static function iconAt(MenuIcon $ic, int $box, int $tint): ?array
+    {
+        $p = $ic->native(static function () use ($ic): ?object {
+            try {
+                [$w, $h, $f] = Png::decode($ic->png);
+            } catch (\RuntimeException) {
+                return null;
+            }
+            $px = [];
+            for ($i = 0, $n = $w * $h * 4; $i < $n; $i += 4) {
+                $px[] = ((int)round($f[$i + 3]) << 24) | ((int)round($f[$i]) << 16) | ((int)round($f[$i + 1]) << 8) | (int)round($f[$i + 2]);
+            }
+            return (object)['w' => $w, 'h' => $h, 'px' => $px, 'sized' => []];
+        });
+        if ($p === null || $box <= 0 || $p->w === 0 || $p->h === 0) {
+            return null;
+        }
+        $key = $box . ':' . ($ic->template ? $tint : 'none');
+        if (isset($p->sized[$key])) {
+            return $p->sized[$key];
+        }
+        [$w, $h] = $p->w >= $p->h ? [$box, max(1, intdiv($p->h * $box + intdiv($p->w, 2), $p->w))] : [max(1, intdiv($p->w * $box + intdiv($p->h, 2), $p->h)), $box]; // mygo's FitIcon
+        $img = self::scale($p->w, $p->h, $p->px, $w, $h);
+        if ($ic->template) {
+            [$cr, $cg, $cb] = [($tint >> 16) & 0xFF, ($tint >> 8) & 0xFF, $tint & 0xFF];
+            foreach ($img as $i => $px) {
+                $a = ($px >> 24) & 0xFF;
+                $img[$i] = ($a << 24) | (intdiv($cr * $a + 127, 255) << 16) | (intdiv($cg * $a + 127, 255) << 8) | intdiv($cb * $a + 127, 255);
+            }
+        }
+        return $p->sized[$key] = ['w' => $w, 'h' => $h, 'px' => $img];
+    }
+
+    /** Premultiplied pixels of $sw × $sh scaled to $w × $h, each the average of the source pixels it covers, by how much (mygo's Scale). @param list<int> $src @return list<int> */
+    private static function scale(int $sw, int $sh, array $src, int $w, int $h): array
+    {
+        if ($w === $sw && $h === $sh) {
+            return $src;
+        }
+        [$xs, $ys] = [self::spans($sw, $w), self::spans($sh, $h)];
+        $out = [];
+        foreach ($ys as $ry) {
+            foreach ($xs as $rx) {
+                $a = $r = $g = $b = $total = 0.0;
+                foreach ($ry as [$sy, $wy]) {
+                    foreach ($rx as [$sx, $wx]) {
+                        $k = $wx * $wy;
+                        $p = $src[$sy * $sw + $sx];
+                        $a += $k * (($p >> 24) & 0xFF); $r += $k * (($p >> 16) & 0xFF); $g += $k * (($p >> 8) & 0xFF); $b += $k * ($p & 0xFF);
+                        $total += $k;
+                    }
+                }
+                $ch = fn(float $v): int => $v <= 0 ? 0 : ($v >= 255 ? 255 : (int)($v + 0.5));
+                $out[] = ($ch($a / $total) << 24) | ($ch($r / $total) << 16) | ($ch($g / $total) << 8) | $ch($b / $total);
+            }
+        }
+        return $out;
+    }
+
+    /** For each of $n pixels of a row (or column) scaled from $size, the source pixels it covers and by how much (mygo's spans). @return list<list<array{0: int, 1: float}>> */
+    private static function spans(int $size, int $n): array
+    {
+        $out = [];
+        $scale = $size / $n;
+        for ($d = 0; $d < $n; $d++) {
+            [$lo, $hi] = [$d * $scale, ($d + 1) * $scale];
+            $out[$d] = [];
+            for ($s = (int)$lo; $s < $size && $s < $hi; $s++) {
+                $w = min($hi, $s + 1) - max($lo, (float)$s);
+                if ($w > 1e-9) { $out[$d][] = [$s, $w]; }
+            }
+        }
+        return $out;
+    }
+
+    /** An icon's pixels drawn over a bitmap's opaque ones ($px, $w × $h), centered in the box of $box pixels at ($x, $y), at an opacity (mygo's drawIcon, Over). @param array{w: int, h: int, px: list<int>} $img */
+    private static function drawIcon(CData $px, int $w, int $h, array $img, int $x, int $y, int $box, float $opacity): void
+    {
+        $x += intdiv($box - $img['w'], 2);
+        $y += intdiv($box - $img['h'], 2);
+        $ch = fn(float $v): int => $v <= 0 ? 0 : ($v >= 255 ? 255 : (int)($v + 0.5));
+        for ($sy = 0; $sy < $img['h']; $sy++) {
+            $dy = $y + $sy;
+            if ($dy < 0 || $dy >= $h) { continue; }
+            for ($sx = 0; $sx < $img['w']; $sx++) {
+                $dx = $x + $sx;
+                $src = $img['px'][$sy * $img['w'] + $sx];
+                if ($dx < 0 || $dx >= $w || ($src >> 24) === 0) { continue; }
+                $dst = $px[$dy * $w + $dx];
+                $a = (($src >> 24) & 0xFF) / 255 * $opacity;
+                $out = 0;
+                foreach ([16, 8, 0] as $shift) {
+                    $out |= $ch((($src >> $shift) & 0xFF) * $opacity + (($dst >> $shift) & 0xFF) * (1 - $a)) << $shift;
+                }
+                $px[$dy * $w + $dx] = $out;
+            }
+        }
+    }
+
+    /** The bitmap of an item of Windows 10's menus: a 32-bit top-down DIB section of the icon's premultiplied pixels at $dpi, a template one in the menus' text color, which its menu's owner frees; null for none (mygo's iconBitmap). */
+    public static function iconBitmap(MenuIcon $ic, int $dpi): ?CData
+    {
+        $tint = self::dark() && !self::highContrast() ? 0xFFFFFF : self::dib(self::user()->GetSysColor(7)); // COLOR_MENUTEXT
+        $img = self::iconAt($ic, self::px(MenuIcon::SIZE, $dpi), $tint);
+        if ($img === null) {
+            return null;
+        }
+        $g = self::gdi();
+        $hdr = $g->new('BITMAPINFOHEADER');
+        $hdr->biSize = FFI::sizeof($hdr);
+        [$hdr->biWidth, $hdr->biHeight, $hdr->biPlanes, $hdr->biBitCount] = [$img['w'], -$img['h'], 1, 32];
+        $bits = $g->new('void *');
+        $bmp = $g->CreateDIBSection(null, FFI::addr($hdr), 0, FFI::addr($bits), null, 0);
+        if ($bmp === null || FFI::isNull($bits)) {
+            return null;
+        }
+        FFI::memcpy($bits, pack('V*', ...$img['px']), count($img['px']) * 4);
+        return $bmp;
+    }
+
+    /** Frees a bitmap iconBitmap made. */
+    public static function freeBitmap(CData $bmp): void
+    {
+        self::gdi()->DeleteObject($bmp);
+    }
+
+    /** The DPI of a menu not over a window (a tray's): the system's. */
+    public static function systemDpi(): int
+    {
+        return max(96, self::user()->GetDpiForSystem());
+    }
+
+    /** Gives the items drawn here of a menu, which had no icon, a column for icons, as one gets one: set again, Windows measures them again (mygo's iconColumn). */
+    public static function iconColumn(int $menu): void
+    {
+        $u = self::user();
+        foreach (self::$looks as $key => &$l) {
+            if ($l['menu'] !== $menu || $l['icons']) {
+                continue;
+            }
+            $l['icons'] = true;
+            $mi = $u->new('MENUITEMINFOW');
+            $mi->cbSize = FFI::sizeof($mi);
+            $mi->fMask = 0x100 | 0x20; // MIIM_FTYPE, MIIM_DATA
+            $mi->fType = ($l['separator'] ? 0x800 : ($l['radio'] ? 0x200 : 0)) | 0x100;
+            $mi->dwItemData = $key;
+            $u->SetMenuItemInfoW($u->cast('void *', $menu), $l['pos'], 1, FFI::addr($mi));
+        }
+        unset($l);
     }
 
     // The menu bar, which the window draws.

@@ -37,6 +37,8 @@ namespace MyPHP\Tests;
     same(["Say Hi\tCtrl+H", '', 'Pinned'], $r['file'], 'File\'s items, the shortcut as Windows shows it');
     same([400, 300], $r['content'], 'the content of the size asked, the bar besides (Windows 11\'s taller)');
     same($r['drawn'][0], $r['drawn'][1], 'popup items drawn by the app on Windows 11, by Windows before (' . ($r['drawn'][0] ? 'Windows 11' : 'Windows 10') . ')');
+    check($r['icon'], 'Say Hi\'s icon, ' . ($r['drawn'][0] ? 'drawn in its column' : 'its bitmap'));
+    same([16, 16, 'FFFF8000', '00000000'], $r['iconPixels'], 'the icon fit to its box, a template in the color asked');
     same(1, $r['chosen'], 'an item chosen by its path ran');
     same([2, 0], $r['shortcut'], 'Ctrl+H ran it, the key and its character the content\'s no more');
     same(3, $r['command'], 'WM_COMMAND ran it');

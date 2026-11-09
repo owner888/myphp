@@ -37,7 +37,9 @@ final class Menus
 
     /** The application menu, which new windows' menu bars show, kept current by update(). */
     public ?Menu $appMenu = null;
-    /** @var array<int, array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string, look: int}> the items, by command id; look the key of the look of one drawn here, 0 for one Windows draws */
+    /** @var array<int, array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string, look: int, icon: ?\MyPHP\MenuIcon, bmp: ?CData, dpi: int}> the items, by command id; look the key of the look of one drawn here, 0 for one Windows draws; bmp the bitmap of the icon of one of Windows 10's popups, at dpi (0 for a bar's, which shows none) */
+    /** @var array<int, array{0: int, 1: CData}> the bitmaps of the icons of Windows 10's popups, with their owners, by address */
+    private array $bitmaps = [];
     private array $entries = [];
     private int $next = 0;
     private int $owners = 0;
@@ -74,6 +76,12 @@ final class Menus
         }
         $this->entries = array_filter($this->entries, fn(array $e): bool => $e['owner'] !== $owner);
         MenuDraw::dropOwner($owner);
+        foreach ($this->bitmaps as $addr => [$o, $bmp]) {
+            if ($o === $owner) {
+                MenuDraw::freeBitmap($bmp);
+                unset($this->bitmaps[$addr]);
+            }
+        }
         foreach ($this->subs as $id => $list) {
             $kept = array_values(array_filter($list, fn(array $s): bool => $s['owner'] !== $owner));
             foreach ($list as $s) {
@@ -107,17 +115,26 @@ final class Menus
         $u = Win32::user32();
         $drawn = !$bar && MenuDraw::fluent();
         $items = array_values(array_filter($items, fn(MenuItem $it): bool => $it->visible && !$it->alternate)); // the alternates are macOS's, shown while Option is held
-        $column = false;
+        $column = $icons = false;
         foreach ($items as $it) {
             $column = $column || $it->type === MenuItem::CHECKBOX || $it->type === MenuItem::RADIO || $it->checked;
+            $icons = $icons || ($it->icon !== null && $it->type !== MenuItem::SEPARATOR);
         }
+        $icons = $icons && !$bar; // a menu bar's items show no icon
+        $dpi = $bar ? 0 : ($window !== null ? (int)round($window->backingScale() * 96) : MenuDraw::systemDpi());
         $pos = $u->GetMenuItemCount($h);
-        $look = function (array $l, int $cmd = 0) use ($h, &$pos, $drawn, $owner, $column): int {
+        // Each item drawn here (Windows 11's popups) with its look; the icon of one Windows draws (Windows 10's popups) its bitmap.
+        $look = function (array $l, int $cmd = 0, ?\MyPHP\MenuIcon $icon = null) use ($h, &$pos, $drawn, $owner, $column, $icons, $dpi): int {
             $at = $pos++;
             if (!$drawn) {
+                if ($icons && $icon !== null && ($bmp = MenuDraw::iconBitmap($icon, $dpi)) !== null) {
+                    $this->bitmaps[Mem::addr($bmp)] = [$owner, $bmp];
+                    self::setBitmap($h, $cmd !== 0 ? $cmd : $at, $cmd === 0, $bmp);
+                    if ($cmd !== 0) { $this->entries[$cmd]['bmp'] = $bmp; }
+                }
                 return 0;
             }
-            $key = MenuDraw::ownerDraw($h, $at, $l + ['owner' => $owner, 'column' => $column, 'first' => $at === 0, 'last' => false, 'label' => '', 'accel' => '', 'separator' => false, 'submenu' => false, 'radio' => false]);
+            $key = MenuDraw::ownerDraw($h, $at, $l + ['owner' => $owner, 'column' => $column, 'icon' => $icon, 'icons' => $icons, 'first' => $at === 0, 'last' => false, 'label' => '', 'accel' => '', 'separator' => false, 'submenu' => false, 'radio' => false]);
             if ($cmd !== 0) { $this->entries[$cmd]['look'] = $key; }
             return $key;
         };
@@ -133,18 +150,18 @@ final class Menus
                 $sub = $u->CreatePopupMenu();
                 $this->fill($sub, $it->submenu->items, $owner, $accels, $window);
                 $u->AppendMenuW($h, $flags | self::MF_POPUP, Mem::addr($sub), Win32::wide($it->label));
-                $last = $look(['label' => $it->label, 'submenu' => true]);
+                $last = $look(['label' => $it->label, 'submenu' => true], 0, $it->icon);
                 $this->subs[$it->id][] = ['menu' => $sub, 'owner' => $owner, 'window' => $window];
                 if ($it->opens) { $this->opens[Mem::addr($sub)] = $it->id; }
                 continue;
             }
             if ($it->type === MenuItem::HEADER) {
                 $u->AppendMenuW($h, $flags, 0, Win32::wide($it->label));
-                $last = $look(['label' => $it->label]);
+                $last = $look(['label' => $it->label], 0, $it->icon);
                 continue;
             }
             $accel = '';
-            $cmd = $this->add(['uid' => $it->id, 'role' => $it->role, 'owner' => $owner, 'menu' => $h, 'radio' => $it->type === MenuItem::RADIO, 'accel' => '', 'look' => 0]);
+            $cmd = $this->add(['uid' => $it->id, 'role' => $it->role, 'owner' => $owner, 'menu' => $h, 'radio' => $it->type === MenuItem::RADIO, 'accel' => '', 'look' => 0, 'icon' => $it->icon, 'bmp' => null, 'dpi' => $dpi]);
             if ($it->accelerator !== '') {
                 try {
                     $a = Accelerator::parse($it->accelerator, 'Windows');
@@ -159,7 +176,7 @@ final class Menus
             }
             $label = $accel === '' ? $it->label : "{$it->label}\t$accel";
             $u->AppendMenuW($h, $flags | ($it->checked ? self::MF_CHECKED : 0), $cmd, Win32::wide($label));
-            $last = $look(['label' => $it->label, 'accel' => $accel, 'radio' => $it->type === MenuItem::RADIO], $cmd);
+            $last = $look(['label' => $it->label, 'accel' => $accel, 'radio' => $it->type === MenuItem::RADIO], $cmd, $it->icon);
             if ($it->type === MenuItem::RADIO && $last === 0) {
                 self::setState($h, $cmd, $label, $it->enabled, $it->checked, true, false);
             }
@@ -169,7 +186,18 @@ final class Menus
         }
     }
 
-    /** A command id of the items not taken, from 1: 0xF000 and up are the system's. @param array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string, look: int} $e */
+    /** Gives the item of command $item, or at position $item ($byPosition), its bitmap, null for none (mygo's setItemBitmap). */
+    private static function setBitmap(CData $menu, int $item, bool $byPosition, ?CData $bmp): void
+    {
+        $u = Win32::user32();
+        $mi = $u->new('MENUITEMINFOW');
+        $mi->cbSize = FFI::sizeof($mi);
+        $mi->fMask = 0x80; // MIIM_BITMAP
+        $mi->hbmpItem = $bmp;
+        $u->SetMenuItemInfoW($menu, $item, $byPosition ? 1 : 0, FFI::addr($mi));
+    }
+
+    /** A command id of the items not taken, from 1: 0xF000 and up are the system's. @param array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string, look: int, icon: ?\MyPHP\MenuIcon, bmp: ?CData, dpi: int} $e */
     private function add(array $e): int
     {
         do {
@@ -245,7 +273,23 @@ final class Menus
             if ($e['uid'] !== $it->id) {
                 continue;
             }
-            if ($e['look'] !== 0 && isset(MenuDraw::$looks[$e['look']])) { MenuDraw::$looks[$e['look']]['label'] = $it->label; }
+            if ($e['look'] !== 0 && isset(MenuDraw::$looks[$e['look']])) {
+                MenuDraw::$looks[$e['look']]['label'] = $it->label;
+                MenuDraw::$looks[$e['look']]['icon'] = $it->icon;
+                if ($it->icon !== null && !MenuDraw::$looks[$e['look']]['icons']) { MenuDraw::iconColumn(Mem::addr($e['menu'])); } // a menu that had none gets a column for icons
+            } elseif ($it->icon !== $e['icon'] && $e['dpi'] !== 0) { // Windows 10's: the bitmap made again
+                if ($e['bmp'] !== null) {
+                    MenuDraw::freeBitmap($e['bmp']);
+                    unset($this->bitmaps[Mem::addr($e['bmp'])]);
+                    $this->entries[$cmd]['bmp'] = null;
+                }
+                if ($it->icon !== null && ($bmp = MenuDraw::iconBitmap($it->icon, $e['dpi'])) !== null) {
+                    $this->bitmaps[Mem::addr($bmp)] = [$e['owner'], $bmp];
+                    $this->entries[$cmd]['bmp'] = $bmp;
+                }
+                self::setBitmap($e['menu'], $cmd, false, $this->entries[$cmd]['bmp']);
+            }
+            $this->entries[$cmd]['icon'] = $it->icon;
             self::setState($e['menu'], $cmd, $e['accel'] === '' ? $it->label : "{$it->label}\t{$e['accel']}", $it->enabled, $it->checked, $e['radio'], $e['look'] !== 0);
         }
         foreach (Window::all() as $w) {
