@@ -1,7 +1,8 @@
 <?php
 // The system's services on Windows (windows_services_test.php): a global shortcut registered, its
 // WM_HOTKEY told, the same keys refused a second time, unregistered; a notification shown as a
-// balloon of a temporary icon of the app's, its click told, the icon gone with it.
+// balloon of a temporary icon of the app's, its click told, the icon gone with it; a secret kept in the
+// Credential Manager, read back, replaced, deleted; the network's status, its changes watched.
 declare(strict_types=1);
 
 use MyPHP\{App, GlobalShortcut, Notification, NotificationOptions};
@@ -38,6 +39,29 @@ App::whenReady(function () use (&$r, $log) {
     } catch (\RuntimeException $e) {
         $r['shown'] = $e->getMessage(); // a session without a notification area
     }
+    $log('secrets');
+    $s = App::backend()->secrets();
+    $secret = "pa\u{00DF}w\u{00F6}rd \u{1F511}\0\xff"; // UTF-8 and bytes that are none
+    $s->setSecret('myphp-test', 'alice', $secret);
+    $r['secret'] = $s->secret('myphp-test', 'alice') === $secret;
+    $s->setSecret('myphp-test', 'alice', 'second');
+    $r['replaced'] = $s->secret('myphp-test', 'alice');
+    $s->setSecret('myphp-test', 'empty', '');
+    $r['empty'] = $s->secret('myphp-test', 'empty');
+    $s->deleteSecret('myphp-test', 'alice');
+    $s->deleteSecret('myphp-test', 'empty');
+    try {
+        $s->secret('myphp-test', 'alice');
+        $r['deleted'] = false;
+    } catch (\MyPHP\SecretNotFound) {
+        $r['deleted'] = true;
+    }
+    $s->deleteSecret('myphp-test', 'alice'); // none: succeeds
+    $log('the network');
+    $n = App::backend()->network();
+    $status = $n->status();
+    $r['network'] = [$status->online, $status->type];
+    $n->watch();
     App::after(0.2, function () use (&$r) {
         echo json_encode($r), "\n";
         App::quit();

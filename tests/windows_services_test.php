@@ -1,7 +1,8 @@
 <?php
 // The system's services on Windows, in an app of its own (testdata/windows_services_app.php): a
 // global shortcut registered, its WM_HOTKEY told, the same keys refused a second time, unregistered;
-// a notification shown as a balloon of a temporary icon of the app's, its click told.
+// a notification shown as a balloon of a temporary icon of the app's, its click told; a secret kept in
+// the Credential Manager, read back byte for byte, replaced, deleted; the network's status.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -33,6 +34,11 @@ namespace MyPHP\Tests;
     same(1, $r['pressed'], 'a global shortcut\'s WM_HOTKEY ran its function');
     same('refused', $r['twice'], 'the same keys refused a second time');
     check($r['unregistered'], 'and unregistered');
+    check($r['secret'], 'a secret read back byte for byte');
+    same('second', $r['replaced'], 'and replaced');
+    same('', $r['empty'], 'an empty one');
+    check($r['deleted'], 'one deleted is not found, and deleting none succeeds');
+    same([true, 'other'], $r['network'], 'the runner online, the interface untold');
     if ($r['shown'] === 'shown') {
         same(1, $r['clicked'], 'a notification shown, its balloon\'s click told');
     } else {

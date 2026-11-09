@@ -8916,6 +8916,18 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   without one, as PHP's; a plain MessageBox where there is none. Not yet:
   the prompt and login dialogs (IINA's). `windows_dialogs_test` answers
   each from a timer its modal loop runs.
+- Secrets and the network (stage 5: mygo's secrets.go, network.go): a
+  secret is a generic credential of the Credential Manager, as keytar keeps
+  them (the target "service/account", the user name the account, persisting
+  as keytar's), which the system encrypts for the user; ERROR_NOT_FOUND is
+  SecretNotFound. The network's status is the system's connectivity hint
+  (GetNetworkConnectivityHint, Windows 10 2004 and later; before, online and
+  unmetered, as the browsers take it): online beyond the computer, metered
+  as Microsoft's guidance for metered connections says; the hint names no
+  interface. Its changes are read again every two seconds, since
+  NotifyNetworkConnectivityHintChange calls back on a thread of the
+  system's, where PHP cannot run. `windows_services_test` keeps, reads,
+  replaces and deletes a secret.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths

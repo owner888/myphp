@@ -42,6 +42,8 @@ final class Backend implements Platform\Backend
     private ?Media $media = null;
     private ?Menus $menus = null;
     private ?Dialogs $dialogs = null;
+    private ?Network $network = null;
+    private ?Secrets $secrets = null;
     /** @var array<int, Tray> the trays, by their numbers; the number of the last one counted */
     private array $trays = [];
     private int $nextTray = 0;
@@ -352,7 +354,7 @@ final class Backend implements Platform\Backend
 
     public function network(): Platform\Network
     {
-        throw new Unsupported('myphp: the network status is not on Windows yet');
+        return $this->network ??= new Network($this, $this->h);
     }
 
     public function nowPlaying(): Platform\NowPlaying
@@ -372,7 +374,7 @@ final class Backend implements Platform\Backend
 
     public function secrets(): Platform\Secrets
     {
-        throw new Unsupported('myphp: secrets are not on Windows yet');
+        return $this->secrets ??= new Secrets();
     }
 
     public function applications(): array
