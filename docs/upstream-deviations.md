@@ -3070,3 +3070,19 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
     of b2 and textures t6 to t9 as mygo's, around `D3dShader`'s tail.
   - Why: myphp's renderers share the DisplayList and its shader with the
     OpenGL and Metal ones; mygo's scene ops are not myphp's.
+- **A web view in native UI** (v1.178)
+  - mygo: a composition controller of WebView2 in DirectComposition's
+    visual tree, under native UI drawn around it and in its holes.
+  - myphp: an ordinary controller in a child window of the window's,
+    placed and clipped (a region) where the content puts it, above what
+    Direct3D draws; native UI drawn over it does not show there.
+  - Why: the window's frames are a flip-model swap chain of its own, not
+    DirectComposition's; a child window gets the page there now, and
+    leaves composition for later.
+- **Content rules' sites** (v1.178)
+  - mygo: first- and third-party loads told apart by the registrable
+    domain of the Public Suffix List (golang.org/x/net/publicsuffix).
+  - myphp: by a short list of its suffixes (github.io, co.uk and the like:
+    `Native\ContentRuleList::site`), the last two labels otherwise.
+  - Why: the list is large and changes; PHP has none, and myphp adds no
+    dependency for it.

@@ -128,6 +128,9 @@ final class Win32
             int32_t InvalidateRect(void *hwnd, const RECT *r, int32_t erase);
             int32_t ReleaseCapture(void);
             void *SetCapture(void *hwnd);
+            int32_t IsChild(void *parent, void *hwnd);
+            void *GetFocus(void);
+            int32_t SetWindowRgn(void *hwnd, void *region, int32_t redraw);
             int32_t TrackMouseEvent(TRACKMOUSEEVENT *e);
             int32_t ScreenToClient(void *hwnd, POINT *p);
             int16_t GetKeyState(int32_t key);

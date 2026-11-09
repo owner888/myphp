@@ -61,37 +61,38 @@ final class App implements Platform\AppController
 
     public function newDataStore(Platform\DataStoreOptions $opts): Platform\DataStore
     {
-        throw new Unsupported('myphp: website data is not on Windows yet');
+        throw new Unsupported('myphp: sessions are not on Windows yet');
     }
 
     public function clearBrowsingData(?Platform\DataStore $store, int $types): void
     {
-        throw new Unsupported('myphp: website data is not on Windows yet');
+        WebsiteData::clear($store, $types);
     }
 
     public function listCookies(?Platform\DataStore $store): array
     {
-        throw new Unsupported('myphp: website data is not on Windows yet');
+        return WebsiteData::cookies($store);
     }
 
     public function setCookie(?Platform\DataStore $store, \MyPHP\Cookie $cookie): void
     {
-        throw new Unsupported('myphp: website data is not on Windows yet');
+        WebsiteData::setCookie($store, $cookie);
     }
 
     public function deleteCookie(?Platform\DataStore $store, string $name, string $domain, string $path): void
     {
-        throw new Unsupported('myphp: website data is not on Windows yet');
+        WebsiteData::deleteCookie($store, $name, $domain, $path);
     }
 
     public function clearCookies(?Platform\DataStore $store): void
     {
-        throw new Unsupported('myphp: website data is not on Windows yet');
+        WebsiteData::clearCookies($store);
     }
 
+    /** A list WebView2 pages match in PHP (ContentRuleList): WebView2 keeps nothing, so the rules are parsed each launch (mygo's windows CompileContentRules). */
     public function compileContentRules(string $id, string $identifier, string $rules): mixed
     {
-        throw new Unsupported('myphp: content rules are not on Windows yet');
+        return \MyPHP\Native\ContentRuleList::parse($rules);
     }
 
     public function showAboutPanel(AboutPanelOptions $opts): void
