@@ -3,7 +3,8 @@
 // (testdata/windows_menu_app.php): the application menu as a window's menu bar, its items'
 // labels and shortcuts as Windows shows them, an item run as chosen by its path, by its shortcut
 // (taking the key from the content) and by WM_COMMAND, a check mark kept current, a submenu
-// filled as it opens, the content's size kept with the bar, a context menu shown and closed.
+// filled as it opens, the content's size kept with the bar, a context menu shown and closed; on
+// Windows 11 the popups' items drawn in its style (MenuDraw).
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -34,7 +35,8 @@ namespace MyPHP\Tests;
     check(!$hung, 'the app ends as it quits');
     same(['File', 'Recent'], $r['bar'], 'the menu bar, the application menu\'s');
     same(["Say Hi\tCtrl+H", '', 'Pinned'], $r['file'], 'File\'s items, the shortcut as Windows shows it');
-    same([400, 300], $r['content'], 'the content of the size asked, the bar besides');
+    same([400, 300], $r['content'], 'the content of the size asked, the bar besides (Windows 11\'s taller)');
+    same($r['drawn'][0], $r['drawn'][1], 'popup items drawn by the app on Windows 11, by Windows before (' . ($r['drawn'][0] ? 'Windows 11' : 'Windows 10') . ')');
     same(1, $r['chosen'], 'an item chosen by its path ran');
     same([2, 0], $r['shortcut'], 'Ctrl+H ran it, the key and its character the content\'s no more');
     same(3, $r['command'], 'WM_COMMAND ran it');

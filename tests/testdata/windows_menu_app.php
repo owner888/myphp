@@ -24,6 +24,8 @@ $m = FFI::cdef(<<<'C'
     int32_t GetKeyboardState(uint8_t *s);
     int32_t SetKeyboardState(uint8_t *s);
     int32_t EndMenu(void);
+    typedef struct { uint32_t cbSize, fMask, fType, fState, wID; void *hSubMenu, *hbmpChecked, *hbmpUnchecked; uintptr_t dwItemData; uint16_t *dwTypeData; uint32_t cch; void *hbmpItem; } MENUITEMINFOW;
+    int32_t GetMenuItemInfoW(void *menu, uint32_t item, int32_t byPosition, MENUITEMINFOW *info);
     C, 'user32.dll');
 $labels = function ($menu) use ($m): array {
     $out = [];
@@ -59,6 +61,12 @@ App::whenReady(function () use (&$r, $log, $m, $labels) {
         $file = $m->GetSubMenu($bar, 0);
         $r['file'] = $labels($file);
         $r['content'] = $w->contentSize();
+        // Windows 11's popup items drawn by the app (MFT_OWNERDRAW), their strings kept; the bar's Windows's, drawn by the window.
+        $mi = $m->new('MENUITEMINFOW');
+        $mi->cbSize = FFI::sizeof($mi);
+        $mi->fMask = 0x100; // MIIM_FTYPE
+        $m->GetMenuItemInfoW($file, 0, 1, FFI::addr($mi));
+        $r['drawn'] = [\MyPHP\Platform\Windows\MenuDraw::fluent(), ($mi->fType & 0x100) !== 0];
         $w->native()->chooseMenuItem(['File', 'Say Hi']);
         $r['chosen'] = $r['hi'];
         // Ctrl held, as the thread's keyboard state has it, and H.

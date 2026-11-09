@@ -137,6 +137,10 @@ final class Window implements Platform\Window
         if ($this->making && in_array($m, [Win32::WM_MOVE, Win32::WM_SIZE, Win32::WM_ACTIVATE], true)) {
             return null; // the core has no native of the window yet
         }
+        // The menus in the appearance and Windows 11's style: the bar the window draws, the popups' items drawn here.
+        if (($this->hmenu !== null && ($r = MenuDraw::barMessage($this->hwnd, $m, $wp, $lp)) !== null) || ($r = MenuDraw::message($this->hwnd, $m, $wp, $lp)) !== null) {
+            return $r;
+        }
         switch ($m) {
             case Win32::WM_CLOSE:
                 if ($this->w->shouldClose()) { $u->DestroyWindow($this->hwnd); }
@@ -728,7 +732,14 @@ final class Window implements Platform\Window
     {
         [$fw, $fh] = $this->frameExtra();
         $s = $this->scale();
-        Win32::user32()->SetWindowPos($this->hwnd, 0, 0, 0, (int)round($w * $s) + $fw, (int)round($h * $s) + $fh, self::SWP_NOMOVE | self::SWP_NOZORDER | self::SWP_NOACTIVATE);
+        [$pw, $ph] = [(int)round($w * $s), (int)round($h * $s)];
+        $u = Win32::user32();
+        $u->SetWindowPos($this->hwnd, 0, 0, 0, $pw + $fw, $ph + $fh, self::SWP_NOMOVE | self::SWP_NOZORDER | self::SWP_NOACTIVATE);
+        // grown by what the content still lacks (mygo's fitContent): AdjustWindowRectEx counts a menu bar of one line as the system draws it, and MenuDraw draws Windows 11's taller, as a bar too wide for its window wraps
+        [$cw, $ch] = $this->clientPixels();
+        if ($this->hmenu !== null && ($cw !== $pw || $ch !== $ph)) {
+            $u->SetWindowPos($this->hwnd, 0, 0, 0, $pw + $fw + $pw - $cw, $ph + $fh + $ph - $ch, self::SWP_NOMOVE | self::SWP_NOZORDER | self::SWP_NOACTIVATE);
+        }
     }
 
     /** $px pixels in points, of the window's scale. */
@@ -864,9 +875,11 @@ final class Window implements Platform\Window
         $this->requestFrame();
     }
 
-    /** The title bar dark or light as the app's appearance (DWMWA_USE_IMMERSIVE_DARK_MODE), the content painted again. */
+    /** The title bar and the menus dark or light as the app's appearance (DWMWA_USE_IMMERSIVE_DARK_MODE, MenuDraw), the content painted again. */
     public function themeChanged(): void
     {
+        MenuDraw::applyTheme();
+        $this->menuChanged();
         $dark = Win32::user32()->new('int32_t');
         $dark->cdata = App::backend()->theme()->isDark() ? 1 : 0;
         Win32::dwmapi()->DwmSetWindowAttribute($this->hwnd, 20, FFI::addr($dark), 4);
