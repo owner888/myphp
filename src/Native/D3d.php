@@ -391,7 +391,10 @@ final class D3d
             $this->backBuffer = $this->backBufferView();
         }
         $this->drawList($list, $this->backBuffer, $pw, $ph, $scale, $clear);
-        $this->frame++;
+        // a new frame's list is the last from now; the last drawn again (WM_PAINT's) stays so
+        if ($list === $this->lists[$this->frame % 2]) {
+            $this->frame++;
+        }
     }
 
     /** Shows the frame drawn, at the display's next refresh. */
