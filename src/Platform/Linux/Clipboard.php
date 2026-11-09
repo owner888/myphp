@@ -8,6 +8,7 @@ use FFI\CData;
 use MyPHP\Logger;
 use MyPHP\Platform;
 use MyPHP\Transfer\{Data, Format, FormatUnavailable, Item, Representation};
+use MyPHP\Native\Mem;
 
 /**
  * GTK's clipboard (CLIPBOARD, mygo's linux clipboard.go): the app's data
@@ -32,7 +33,7 @@ final class Clipboard implements Platform\Clipboard
         $f = Gtk::ffi();
         $this->onGet = $f->new('HGet', false);
         $this->onGet->fn = function ($board, $sel, $info, $data): void {
-            [$d] = $this->sources[Gtk::addr($data)] ?? [null];
+            [$d] = $this->sources[Mem::addr($data)] ?? [null];
             if ($d === null) {
                 return;
             }
@@ -51,7 +52,7 @@ final class Clipboard implements Platform\Clipboard
         };
         $this->onClear = $f->new('HWidget', false);
         $this->onClear->fn = function ($board, $data): void {
-            $key = Gtk::addr($data);
+            $key = Mem::addr($data);
             $released = $this->sources[$key][1] ?? null;
             unset($this->sources[$key]);
             if ($this->current === $key) { $this->current = 0; }

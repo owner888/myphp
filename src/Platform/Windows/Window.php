@@ -5,6 +5,7 @@ namespace MyPHP\Platform\Windows;
 
 use FFI;
 use FFI\CData;
+use MyPHP\Native\Mem;
 use MyPHP\{App, Rectangle, WindowOptions};
 use MyPHP\Platform;
 use MyPHP\Platform\Unsupported;
@@ -66,7 +67,7 @@ final class Window implements Platform\Window
         $parent = $w->parent()?->native();
         $this->hwnd = Win32::createWindow('MyPHPWindow', $o->title, $style | self::WS_CLIPCHILDREN, $ex, fn(int $m, int $wp, int $lp): ?int => $this->message($m, $wp, $lp),
             -0x80000000, -0x80000000, 100, 100, $parent instanceof self ? $parent->hwnd : null); // CW_USEDEFAULT: where Windows puts a new window
-        self::$open[Win32::addr($this->hwnd)] = $this;
+        self::$open[Mem::addr($this->hwnd)] = $this;
         $this->topmost = $o->alwaysOnTop;
         $this->sizeContent(max(1, $o->width), max(1, $o->height));
         if ($o->disableClose) { $this->setClosable(false); }
@@ -86,7 +87,7 @@ final class Window implements Platform\Window
     /** The window of the foreground one, if it is the app's. */
     public static function active(): ?self
     {
-        return self::$open[Win32::addr(Win32::user32()->GetForegroundWindow())] ?? null;
+        return self::$open[Mem::addr(Win32::user32()->GetForegroundWindow())] ?? null;
     }
 
     /** The window's messages: what the core hears of, and the sizes it may take. */
@@ -102,7 +103,7 @@ final class Window implements Platform\Window
                 return 0;
             case Win32::WM_DESTROY:
                 $this->dead = true;
-                unset(self::$open[Win32::addr($this->hwnd)]);
+                unset(self::$open[Mem::addr($this->hwnd)]);
                 $this->w->closed();
                 return 0;
             case Win32::WM_ACTIVATE:
@@ -411,7 +412,7 @@ final class Window implements Platform\Window
 
     public function isKey(): bool
     {
-        return Win32::addr(Win32::user32()->GetForegroundWindow()) === Win32::addr($this->hwnd);
+        return Mem::addr(Win32::user32()->GetForegroundWindow()) === Mem::addr($this->hwnd);
     }
 
     public function setAcceptsFirstMouse(bool $on): void {}

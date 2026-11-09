@@ -5,6 +5,7 @@ namespace MyPHP\Platform\Windows;
 
 use FFI;
 use FFI\CData;
+use MyPHP\Native\Mem;
 use MyPHP\{Display, Point, Rectangle};
 use MyPHP\Platform;
 
@@ -23,7 +24,7 @@ final class Screen implements Platform\Screen
             }
             $scale = self::dpi($m) / 96;
             $rect = fn(CData $r): Rectangle => new Rectangle((int)round($r->left / $scale), (int)round($r->top / $scale), (int)round(($r->right - $r->left) / $scale), (int)round(($r->bottom - $r->top) / $scale));
-            $out[] = new Display(Win32::addr($m), Win32::str($u->cast('uint16_t *', FFI::addr($info->szDevice[0]))), $rect($info->rcMonitor), $rect($info->rcWork),
+            $out[] = new Display(Mem::addr($m), Win32::str($u->cast('uint16_t *', FFI::addr($info->szDevice[0]))), $rect($info->rcMonitor), $rect($info->rcWork),
                 $scale, 0, false, ($info->dwFlags & 1) !== 0); // MONITORINFOF_PRIMARY
         });
         return $out;

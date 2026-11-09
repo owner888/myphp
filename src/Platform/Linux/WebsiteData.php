@@ -9,6 +9,7 @@ use FFI\CData;
 use MyPHP\{App, Cookie, PathName, SiteData};
 use MyPHP\Platform;
 use RuntimeException;
+use MyPHP\Native\Mem;
 
 /**
  * What pages store, over WebKitGTK (mygo's linux session.go, cookies.go
@@ -274,7 +275,7 @@ final class WebsiteData
         if (self::$ready === null) {
             self::$ready = $f->new('HNotify', false);
             self::$ready->fn = function ($source, $res, $data): void {
-                $k = WebKit::addr($data);
+                $k = Mem::addr($data);
                 $fn = self::$waiting[$k] ?? null;
                 unset(self::$waiting[$k]);
                 $fn?->__invoke($source, $res);

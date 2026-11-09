@@ -10,6 +10,7 @@ use MyPHP\Native\Gl;
 use MyPHP\Platform;
 use MyPHP\UI\{DataDragEvent, DisplayList, Image, Key, TextInputRange, TextState};
 use MyPHP\Transfer\{Data, Format, Item, Offer, Operation, Representation, Result};
+use MyPHP\Native\Mem;
 
 /**
  * A GtkWindow (mygo's linux window): native UI draws in a GtkGLArea filling
@@ -112,7 +113,7 @@ final class Window implements Platform\Window
             $f->gtk_window_set_transient_for($this->win, $parent->native()->win);
             if ($w->isModal()) { $f->gtk_window_set_modal($this->win, 1); }
         }
-        self::$open[Gtk::addr($this->win)] = $this;
+        self::$open[Mem::addr($this->win)] = $this;
         $this->box = $f->gtk_box_new(1, 0); // vertical: the menu bar, then the content
         $f->gtk_widget_set_size_request($this->box, 1, 1); // a window the user cannot resize is never smaller than its child's natural size
         $f->gtk_container_add($this->win, $this->box);
@@ -128,7 +129,7 @@ final class Window implements Platform\Window
         Gtk::connect($this->win, 'delete-event', 'event', fn($widget, $event, $data): int => $this->w->shouldClose() ? 0 : 1); // TRUE keeps it
         Gtk::connect($this->win, 'destroy', 'widget', function ($widget, $data): void {
             $this->dead = true;
-            unset(self::$open[Gtk::addr($this->win)]);
+            unset(self::$open[Mem::addr($this->win)]);
             if ($this->area !== null) { Access::destroy($this->area); }
             $this->w->closed();
         });
@@ -710,7 +711,7 @@ final class Window implements Platform\Window
     {
         $f = Gtk::ffi();
         $win = $f->gtk_widget_get_parent_window($this->area);
-        if ($win === null || Gtk::addr($win) === Gtk::addr($f->gtk_widget_get_window($this->win))) {
+        if ($win === null || Mem::addr($win) === Mem::addr($f->gtk_widget_get_window($this->win))) {
             return;
         }
         if ($holes === []) {
@@ -839,7 +840,7 @@ final class Window implements Platform\Window
         if ($this->pressed !== null) { Gtk::ffi()->gdk_event_free($this->pressed); }
         $this->pressed = null;
         $this->b->menus()->dropOwner($this->menuOwner);
-        unset($this->b->menus()->roleKeys[Gtk::addr($this->accel)]);
+        unset($this->b->menus()->roleKeys[Mem::addr($this->accel)]);
         [$win, $area] = [$this->win, $this->area];
         Gtk::idle(function () use ($win, $area): void { // once the core is done with them
             if ($area !== null) { Gtk::ffi()->g_object_unref($area); }
@@ -1122,7 +1123,7 @@ final class Window implements Platform\Window
         $session = '';
         $source = $f->gtk_drag_get_source_widget($context);
         foreach (self::$open as $w) {
-            if ($source !== null && $w->area !== null && Gtk::addr($w->area) === Gtk::addr($source) && $w->drag !== null) { $session = $w->drag['session']; }
+            if ($source !== null && $w->area !== null && Mem::addr($w->area) === Mem::addr($source) && $w->drag !== null) { $session = $w->drag['session']; }
         }
         $offer = new Offer($formats, self::operations($f->gdk_drag_context_get_actions($context)), self::operations($f->gdk_drag_context_get_suggested_action($context)));
         return [new DataDragEvent($offer, $session, $hasFiles), $targets];
@@ -1145,7 +1146,7 @@ final class Window implements Platform\Window
         $pending = [];
         foreach ($d->formats as $format) {
             if (isset($targets[$format])) {
-                $a = Gtk::addr($targets[$format]);
+                $a = Mem::addr($targets[$format]);
                 $pending[$a] ??= [$targets[$format], []];
                 $pending[$a][1][] = $format;
             }
@@ -1165,11 +1166,11 @@ final class Window implements Platform\Window
     private function received(CData $context, CData $sel): void
     {
         $drop = &$this->drop;
-        if ($drop === null || Gtk::addr($drop['context']) !== Gtk::addr($context)) {
+        if ($drop === null || Mem::addr($drop['context']) !== Mem::addr($context)) {
             return;
         }
         $f = Gtk::ffi();
-        $a = Gtk::addr($f->gtk_selection_data_get_target($sel));
+        $a = Mem::addr($f->gtk_selection_data_get_target($sel));
         if (!isset($drop['pending'][$a])) {
             return;
         }
@@ -1239,7 +1240,7 @@ final class Window implements Platform\Window
             $menus->dropOwner($this->menuOwner);
             // the accelerators live in the group: a fresh one
             $f->gtk_window_remove_accel_group($this->win, $this->accel);
-            unset($menus->roleKeys[Gtk::addr($this->accel)]);
+            unset($menus->roleKeys[Mem::addr($this->accel)]);
             $f->g_object_unref($this->accel);
             $this->accel = $f->gtk_accel_group_new();
             $f->gtk_window_add_accel_group($this->win, $this->accel);
@@ -1277,7 +1278,7 @@ final class Window implements Platform\Window
     {
         $f = Gtk::ffi();
         $press = $e->type === 8; // GDK_KEY_PRESS
-        if ($press && isset($this->b->menus()->roleKeys[Gtk::addr($this->accel)][$f->gdk_keyval_to_lower($e->keyval) . ':' . ($e->state & Menus::MODIFIER_MASK)])
+        if ($press && isset($this->b->menus()->roleKeys[Mem::addr($this->accel)][$f->gdk_keyval_to_lower($e->keyval) . ':' . ($e->state & Menus::MODIFIER_MASK)])
             && $f->gtk_window_propagate_key_event($this->win, $event)) {
             return 1;
         }
@@ -1342,7 +1343,7 @@ final class Window implements Platform\Window
             return [$f->gtk_widget_get_window($this->win), 0, 0];
         }
         $gw = $f->gtk_widget_get_window($this->area);
-        if (Gtk::addr($gw) !== Gtk::addr($f->gtk_widget_get_window($this->win))) {
+        if (Mem::addr($gw) !== Mem::addr($f->gtk_widget_get_window($this->win))) {
             return [$gw, 0, 0]; // a window of the area's own
         }
         $x = $f->new('int[1]'); $y = $f->new('int[1]');

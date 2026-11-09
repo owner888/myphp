@@ -6,6 +6,7 @@ namespace MyPHP\Plugins\Sqlite;
 use FFI;
 use FFI\CData;
 use InvalidArgumentException;
+use MyPHP\Native\Mem;
 
 /**
  * A connection to the plugin's SQLite library (mygo's sqlite.DB). Each
@@ -143,7 +144,7 @@ final class DB
         $n = strlen($sql) + 1;
         $buf = $f->new("char[$n]");
         FFI::memcpy($buf, $sql . "\0", $n);
-        $base = Lib::addr(FFI::addr($buf[0]));
+        $base = Mem::addr(FFI::addr($buf[0]));
         $call = function (int $offset, CData $stmt, CData $tail) use ($f, $buf, $n, $control): int {
             $at = FFI::addr($buf[$offset]);
             return $control

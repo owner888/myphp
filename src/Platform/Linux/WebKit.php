@@ -53,12 +53,6 @@ final class WebKit
         }
     }
 
-    /** The integer a void* holds, its address. */
-    public static function addr(?CData $p): int
-    {
-        return Gtk::addr($p);
-    }
-
     /** A GError's message, the error freed. */
     public static function errorMessage(CData $error): string
     {

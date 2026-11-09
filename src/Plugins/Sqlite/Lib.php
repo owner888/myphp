@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP\Plugins\Sqlite;
 
 use FFI;
-use FFI\CData;
 use RuntimeException;
 
 /**
@@ -84,17 +83,5 @@ final class Lib
     public static function ffi(): FFI
     {
         return self::$ffi ?? throw new RuntimeException('sqlite: the library is not loaded');
-    }
-
-    /** The integer address of a pointer, through a void* slot (casting a pointer to an integer type would read what it points at). */
-    public static function addr(CData $p): int
-    {
-        static $slot = null, $slotInt = null;
-        if ($slot === null) {
-            $slot = self::ffi()->new('void*[1]');
-            $slotInt = self::ffi()->cast('intptr_t[1]', $slot);
-        }
-        $slot[0] = $p;
-        return $slotInt[0];
     }
 }

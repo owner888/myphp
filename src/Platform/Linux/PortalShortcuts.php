@@ -9,6 +9,7 @@ use FFI\CData;
 use MyPHP\Logger;
 use MyPHP\Platform\{Accelerator, AppHandler, Unsupported};
 use RuntimeException;
+use MyPHP\Native\Mem;
 
 /**
  * Global shortcuts through the desktop portal (mygo's linux
@@ -246,7 +247,7 @@ final class PortalShortcuts
             return;
         }
         $w = self::$wayland;
-        $d = $w->cast('void*', Gtk::addr($display));
+        $d = $w->cast('void*', Mem::addr($display));
         $w->gdk_wayland_display_set_startup_notification_id($d, $token);
         try {
             $fn();

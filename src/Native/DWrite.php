@@ -189,7 +189,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
     /** The id of font face $face, held from now on: its address. */
     public function adopt(CData $face): int
     {
-        $id = Com::addr($face);
+        $id = Mem::addr($face);
         if (!isset($this->faces[$id])) {
             $f = $this->typed($face, 'IDWriteFontFace *');
             ($f->v->AddRef)($f);

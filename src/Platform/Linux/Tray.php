@@ -8,6 +8,7 @@ use FFI\CData;
 use MyPHP\Platform;
 use MyPHP\Platform\{Menu, TrayHandler, Unsupported};
 use MyPHP\Rectangle;
+use MyPHP\Native\Mem;
 
 /**
  * A tray icon through AppIndicator (StatusNotifierItem, mygo's linux
@@ -113,7 +114,7 @@ final class Tray implements Platform\Tray
             $this->menus->fill($gm, $menu->items, null, $this->owner, null, false);
         }
         $f->gtk_widget_show_all($gm);
-        self::lib()->app_indicator_set_menu($this->ind, self::lib()->cast('void*', Gtk::addr($gm)));
+        self::lib()->app_indicator_set_menu($this->ind, self::lib()->cast('void*', Mem::addr($gm)));
         $this->menus->exportIcons($this->owner); // exported now
     }
 
