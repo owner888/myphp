@@ -53,11 +53,11 @@ App::setMenu(new Menu([
         $it->setSubmenu([new MenuItem('One'), new MenuItem('Two')]);
     }),
 ]));
-App::whenReady(function () use (&$r, $log, $m, $labels) {
+App::whenReady(function () use (&$r, $log, $m, $labels, $icon) {
     $log('ready');
     $w = new Window(new WindowOptions(title: 'Menus', width: 400, height: 300, content: Content::view(fn() => Color(Color::rgb(0xff0000)))));
     $w->show();
-    App::after(0.4, function () use ($w, &$r, $log, $m, $labels) {
+    App::after(0.4, function () use ($w, &$r, $log, $m, $labels, $icon) {
         $log('the bar');
         $hwnd = $w->native()->hwnd;
         $u = Win32::user32();
