@@ -25,6 +25,7 @@ final class Win32
     public const WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205, WM_RBUTTONDBLCLK = 0x0206, WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208, WM_MBUTTONDBLCLK = 0x0209;
     public const WM_MOUSEWHEEL = 0x020A, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C, WM_XBUTTONDBLCLK = 0x020D, WM_MOUSEHWHEEL = 0x020E;
     public const WM_CAPTURECHANGED = 0x0215, WM_MOUSELEAVE = 0x02A3, WM_APPCOMMAND = 0x0319;
+    public const WM_IME_STARTCOMPOSITION = 0x010D, WM_IME_ENDCOMPOSITION = 0x010E, WM_IME_COMPOSITION = 0x010F, WM_IME_SETCONTEXT = 0x0281, WM_IME_CHAR = 0x0286;
     public const WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_CHAR = 0x0102, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105, WM_SYSCHAR = 0x0106;
     /** HKEY_CURRENT_USER: (HKEY)(ULONG_PTR)(LONG)0x80000001, sign-extended. */
     public const HKCU = -0x7FFFFFFF;
@@ -180,6 +181,24 @@ final class Win32
     public static function gdi32(): FFI
     {
         return self::$libs['gdi32'] ??= FFI::cdef('void *CreateSolidBrush(uint32_t color); int32_t DeleteObject(void *object);', 'gdi32.dll');
+    }
+
+    /** The input methods' (IMM32): a window's input context, its composition, where its windows show. */
+    public static function imm32(): FFI
+    {
+        return self::$libs['imm32'] ??= FFI::cdef(<<<'C'
+            typedef struct { int32_t x, y; } POINT;
+            typedef struct { int32_t left, top, right, bottom; } RECT;
+            typedef struct { uint32_t dwStyle; POINT ptCurrentPos; RECT rcArea; } COMPOSITIONFORM;
+            typedef struct { uint32_t dwIndex, dwStyle; POINT ptCurrentPos; RECT rcArea; } CANDIDATEFORM;
+            void *ImmGetContext(void *hwnd);
+            int32_t ImmReleaseContext(void *hwnd, void *himc);
+            int32_t ImmGetCompositionStringW(void *himc, uint32_t index, void *buf, uint32_t len);
+            int32_t ImmSetCompositionWindow(void *himc, COMPOSITIONFORM *form);
+            int32_t ImmSetCandidateWindow(void *himc, CANDIDATEFORM *form);
+            int32_t ImmAssociateContextEx(void *hwnd, void *himc, uint32_t flags);
+            int32_t ImmNotifyIME(void *himc, uint32_t action, uint32_t index, uint32_t value);
+            C, 'imm32.dll');
     }
 
     public static function dwmapi(): FFI
