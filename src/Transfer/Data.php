@@ -108,10 +108,15 @@ final class Data
     {
         $items = [];
         foreach ($paths as $path) {
-            if (!str_starts_with($path, '/') || str_contains($path, "\0")) {
+            if (!\MyPHP\Native\Paths::isAbsolute($path) || str_contains($path, "\0")) {
                 throw new \InvalidArgumentException("transfer: file path must be absolute: \"$path\"");
             }
-            $u = 'file://' . implode('/', array_map(fn(string $s) => strtr(rawurlencode($s), ['%24' => '$', '%26' => '&', '%2B' => '+', '%2C' => ',', '%3A' => ':', '%3B' => ';', '%3D' => '=', '%40' => '@']), explode('/', $path)));
+            $slashed = $path;
+            if (PHP_OS_FAMILY === 'Windows') { // file:///C:/x for C:\x, file://server/share for \\server\share
+                $slashed = strtr($path, '\\', '/');
+                $slashed = str_starts_with($slashed, '//') ? substr($slashed, 2) : (preg_match('~^[A-Za-z]:~', $slashed) === 1 ? "/$slashed" : $slashed);
+            }
+            $u = 'file://' . implode('/', array_map(fn(string $s) => strtr(rawurlencode($s), ['%24' => '$', '%26' => '&', '%2B' => '+', '%2C' => ',', '%3A' => ':', '%3B' => ';', '%3D' => '=', '%40' => '@']), explode('/', $slashed)));
             $items[] = new Item(Representation::bytes(Format::FILE_LIST, $u), Representation::bytes(Format::URI_LIST, $u));
         }
         return new self(...$items);
@@ -143,7 +148,10 @@ final class Data
                 continue;
             }
             $p = rawurldecode($u['path'] ?? '');
-            if (str_starts_with($p, '/') && !str_contains($p, "\0")) { $paths[] = $p; }
+            if (PHP_OS_FAMILY === 'Windows' && str_starts_with($p, '/')) { // C:\x for file:///C:/x, \\server\share for file://server/share
+                $p = preg_match('~^/[A-Za-z]:~', $p) === 1 ? strtr(substr($p, 1), '/', '\\') : (($u['host'] ?? '') !== '' && $u['host'] !== 'localhost' ? '\\\\' . $u['host'] : '') . strtr($p, '/', '\\');
+            }
+            if (\MyPHP\Native\Paths::isAbsolute($p) && !str_contains($p, "\0")) { $paths[] = $p; }
         }
         return $paths;
     }

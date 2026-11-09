@@ -196,7 +196,7 @@ final class ViewFile
         foreach (file(self::hotReloadFile(), FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
             if ($line[0] === '#') { continue; } // a comment: the request's time, which tells one request from the next of the same files
             if ($line === '*') { $all = true; continue; } // r with nothing changed: every view of a file
-            $p = str_starts_with($line, '/') ? $line : "$root/$line";
+            $p = \MyPHP\Native\Paths::absolute($line, $root);
             $changed[realpath($p) ?: $p] = $line;
         }
         $loaded = [];

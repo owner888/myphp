@@ -45,9 +45,7 @@ final class RecentDocuments
     public static function add(string $path): void
     {
         $path !== '' || throw new RuntimeException('myphp: App::addRecentDocument needs a path');
-        if (!str_starts_with($path, '/')) {
-            $path = getcwd() . "/$path";
-        }
+        $path = Paths::absolute($path);
         $paths = array_values(array_filter(self::load(), fn(string $p): bool => $p !== $path));
         array_unshift($paths, $path);
         self::$paths = array_slice($paths, 0, self::MAX);

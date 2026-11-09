@@ -85,9 +85,7 @@ final class Markdown
                 return null;
             }
             $path = str_starts_with($url, 'file:') ? substr($url, 5) : $url;
-            if (!str_starts_with($path, '/')) {
-                $path = rtrim($dir, '/') . '/' . $path;
-            }
+            $path = \MyPHP\Native\Paths::absolute($path, $dir);
             if (!is_file($path)) {
                 return null;
             }

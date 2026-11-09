@@ -23,7 +23,7 @@ trait TerminalGhostty
      */
     public static function ghosttyTheme(string $name): Theme
     {
-        if (str_starts_with($name, '/')) {
+        if (\MyPHP\Native\Paths::isAbsolute($name)) {
             return self::readGhosttyTheme($name);
         }
         if ($name === '' || strpbrk($name, '/\\') !== false || $name === '.' || $name === '..') {

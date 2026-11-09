@@ -99,7 +99,7 @@ final class SubtitleMatcher
             $p = rtrim($p, '/');
             $wild = str_ends_with($path, '/*');
             if ($wild) { $p = substr($p, 0, -2); }
-            $dir = str_starts_with($path, '/') || str_starts_with($path, '~') ? $p : "$folder/$p";
+            $dir = \MyPHP\Native\Paths::isAbsolute($path) || str_starts_with($path, '~') ? $p : "$folder/$p";
             if ($wild) {
                 foreach (is_dir($dir) ? (scandir($dir) ?: []) : [] as $name) {
                     if ($name[0] !== '.' && is_dir("$dir/$name")) { $out[] = "$dir/$name"; }

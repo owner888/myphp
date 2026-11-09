@@ -75,7 +75,7 @@ final class Service
     /** Checks that $path is a file or a directory in ordinary directories, none a symlink, and returns what it is. @return array{0: int, 1: int, 2: int, 3: int, 4: int} */
     private static function validateRoot(string $path): array
     {
-        if (!str_starts_with($path, '/')) {
+        if (!\MyPHP\Native\Paths::isAbsolute($path)) {
             throw new RuntimeException('root must be absolute');
         }
         for ($p = $path; ; $p = dirname($p)) {

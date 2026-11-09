@@ -12,7 +12,7 @@ $allowed = ['PHP_BINARY' => ['Native/Bundle.php'], 'glob(' => ['Native/I18nGen.p
 $src = realpath(__DIR__ . '/../src');
 $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS));
 foreach ($it as $f) {
-    $rel = substr($f->getPathname(), strlen($src) + 1);
+    $rel = strtr(substr($f->getPathname(), strlen($src) + 1), '\\', '/'); // Windows's separators too
     if (!str_ends_with($rel, '.php') || str_contains($rel, '/Build/')) { continue; }
     $code = (string)file_get_contents($f->getPathname());
     foreach ($uses as $what => $_) {

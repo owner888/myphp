@@ -1060,7 +1060,7 @@ final class Page
     /** $path, absolute, or found relative to the working directory, the script's directory or the bundle's Resources (mygo's resolveFile). */
     private static function resolveFile(string $path): string
     {
-        if (str_starts_with($path, '/')) {
+        if (\MyPHP\Native\Paths::isAbsolute($path)) {
             if (!file_exists($path)) {
                 throw new RuntimeException("myphp: file \"$path\" not found");
             }

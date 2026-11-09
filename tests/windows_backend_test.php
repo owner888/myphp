@@ -12,13 +12,16 @@ namespace MyPHP\Tests;
         echo "  skipped: Windows's\n";
         return;
     }
-    // What it logs to a file: read after its report, a pipe of it fills and stops the app (Windows's pipes hold 4 KB).
-    $log = (string)tempnam(sys_get_temp_dir(), 'myphp-backend');
-    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/windows_backend_app.php'], [0 => ['file', 'NUL', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $log, 'w']], $pipes);
-    $out = stream_get_contents($pipes[1]);
+    // Its output and log to files, read as it goes: a report that never comes, or an app that does not end after it, is told.
+    $logs = [(string)tempnam(sys_get_temp_dir(), 'myphp-out'), (string)tempnam(sys_get_temp_dir(), 'myphp-err')];
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/windows_backend_app.php'], [0 => ['file', 'NUL', 'r'], 1 => ['file', $logs[0], 'w'], 2 => ['file', $logs[1], 'w']], $pipes);
+    $start = microtime(true);
+    while (($st = proc_get_status($p))['running'] && microtime(true) - $start < 30) { usleep(50000); }
+    if ($st['running']) { proc_terminate($p); }
     proc_close($p);
-    $err = substr((string)file_get_contents($log), -2000);
-    unlink($log);
+    $out = (string)file_get_contents($logs[0]); $err = substr((string)file_get_contents($logs[1]), -1500);
+    array_map('unlink', $logs);
+    check(!$st['running'], 'the app ends as it quits' . ($st['running'] ? ": it ran on, its output: $out | its log: $err" : ''));
     $line = array_values(array_filter(explode("\n", (string)$out), fn(string $l) => str_starts_with($l, '{')))[0] ?? '';
     $r = json_decode($line, true);
     if (!is_array($r)) { check(false, "the app's report: $out $err"); return; }

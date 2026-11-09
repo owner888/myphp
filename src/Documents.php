@@ -76,7 +76,7 @@ final class Documents
     /** Opens the document at $path in its window, or focuses the window of the document if it is open already. Throws why it can't read it. */
     public function open(string $path): Document
     {
-        $abs = str_starts_with($path, '/') ? $path : getcwd() . "/$path";
+        $abs = \MyPHP\Native\Paths::absolute($path);
         if (($d = Registry::openAt($abs)) !== null) {
             $d->focus();
             return $d;
