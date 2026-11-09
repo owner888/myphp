@@ -89,6 +89,7 @@ $docs = dirname(__DIR__) . '/docs';
 $docBlocks = docBlocks("$docs/ui/*.md", "$docs/plugins/*.md", "$docs/getting-started.md", "$docs/swiftui.md", "$docs/mobile.md");
 foreach ($docBlocks as $i => $b) {
     $where = "{$b['file']}:{$b['line']}";
+    if (getenv('MYPHP_TEST_CHILD') !== false) { echo "  at $where\n"; } // run.php --each: where a block that hangs is
     $errors = count($failures);
     try {
         $view = (eval(docProgram($b['code'], $i, $docClasses)))();

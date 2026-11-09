@@ -33,8 +33,14 @@ $video = ['title' => 'A Video', 'formats' => [['format_id' => '137', 'format' =>
 $list = ['_type' => 'playlist', 'webpage_url' => 'https://example.com/list', 'entries' => [['url' => 'https://example.com/1', 'title' => 'One'], ['url' => 'https://example.com/2', 'title' => 'Two  Spaced']]];
 file_put_contents("$root/video.json", json_encode($video));
 file_put_contents("$root/list.json", json_encode($list));
-file_put_contents($bin, "#!/bin/sh\nfor a in \"\$@\"; do last=\"\$a\"; done\necho \"\$@\" > " . escapeshellarg("$root/args") . "\ncase \"\$last\" in *list*) cat " . escapeshellarg("$root/list.json") . ";; *) cat " . escapeshellarg("$root/video.json") . ";; esac\n");
-chmod($bin, 0755);
+if (PHP_OS_FAMILY === 'Windows') { // no sh: the fake of PHP, run by a .cmd
+    file_put_contents("$root/yt-dlp.php", '<?php $a = array_slice($argv, 1); file_put_contents(' . var_export("$root/args", true) . ', implode(" ", $a) . "\n"); echo file_get_contents(str_contains((string)end($a), "list") ? ' . var_export("$root/list.json", true) . ' : ' . var_export("$root/video.json", true) . ');');
+    $bin = "$root/yt-dlp.cmd";
+    file_put_contents($bin, "@\"" . PHP_BINARY . "\" \"$root/yt-dlp.php\" %*\r\n");
+} else {
+    file_put_contents($bin, "#!/bin/sh\nfor a in \"\$@\"; do last=\"\$a\"; done\necho \"\$@\" > " . escapeshellarg("$root/args") . "\ncase \"\$last\" in *list*) cat " . escapeshellarg("$root/list.json") . ";; *) cat " . escapeshellarg("$root/video.json") . ";; esac\n");
+    chmod($bin, 0755);
+}
 Plugins::byId('io.myphp.ytdl')->setPreference('ytdl_path', $bin);
 
 $s = new MediaPlayerState(); $s->playerSettings = $settings;

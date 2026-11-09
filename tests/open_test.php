@@ -94,7 +94,8 @@ try { App::registerURLScheme('9x'); } catch (\RuntimeException $e) { $threw = $e
 check(str_contains($threw, 'invalid URL scheme'), 'an invalid scheme');
 check(DeepLink::handles('other'), 'registering it still makes the app take its URLs, as mygo\'s');
 
-// One instance: the lock's socket, per user and app, short.
+// One instance: the lock's socket, per user and app, short; Windows's comes with its stage (no socket of Unix's in its PHP).
+if (PHP_OS_FAMILY !== 'Windows') {
 same("com.example.notes\nNotes", SingleInstance::key('Notes'), 'the lock of a bundle is its identifier\'s and name\'s');
 $sock = SingleInstance::socket("test\n" . getmypid());
 check(strlen($sock) < 100 && str_contains($sock, 'myphp-' . getmyuid() . '-') && str_ends_with($sock, '.sock'), "a short per-user socket: $sock");
@@ -129,5 +130,6 @@ same([['notes://second', 'a.md'], $dir], $got, 'the first gets its arguments and
 $off();
 SingleInstance::release();
 check(!file_exists(SingleInstance::socket(SingleInstance::key(App::name()))), 'released, its socket is gone');
+}
 DeepLink::reset();
 exec('rm -rf ' . escapeshellarg($dir));

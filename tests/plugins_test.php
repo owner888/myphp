@@ -274,7 +274,9 @@ $iina->file->delete('@data/a.txt');
 check(!$iina->file->exists('@data/a.txt'), 'deleted');
 
 // utils.exec: a program on the PATH, its output and status; one not found.
-$r = $iina->utils->exec('sh', ['-c', 'echo out; echo err >&2; exit 3']);
+$r = PHP_OS_FAMILY === 'Windows' // no sh there: PHP, by its path
+    ? $iina->utils->exec(PHP_BINARY, ['-r', 'echo "out\n"; fwrite(STDERR, "err\n"); exit(3);'])
+    : $iina->utils->exec('sh', ['-c', 'echo out; echo err >&2; exit 3']);
 same([3, "out\n", "err\n"], [$r['status'], $r['stdout'], $r['stderr']], 'exec: its status and output');
 $threw = 0;
 try { $iina->utils->exec('no-such-program-x', []); } catch (PluginError $e) { $threw = $e->getCode(); }
