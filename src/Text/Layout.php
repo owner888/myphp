@@ -44,9 +44,24 @@ final class Layout
         }
         $index = max(0, min($index, count($this->runes)));
         $line = $this->lines[$this->lineAt($index)];
+        if ($index === $line->end) {
+            return [$this->lineEnd($line), $line->y, $line->height];
+        }
         $carets = $line->carets();
         $i = max(0, min($index - $line->start, count($carets) - 1));
         return [$carets[$i], $line->y, $line->height];
+    }
+
+    /**
+     * The x of the caret at a line's end: its edge in the paragraph's
+     * direction (CoreText's offset of the line's end), where what is typed
+     * there shows, not the end of its last character when that character
+     * runs the other way (an Arabic word last in an English line ends in
+     * the line's middle).
+     */
+    private function lineEnd(Line $line): float
+    {
+        return $line->rtl ? $line->x : $line->x + $line->width;
     }
 
     /** The rune index of the caret position closest to ($x, $y). */
@@ -244,6 +259,9 @@ final class Layout
         $li = $this->caretLine($index, $affinity);
         $this->visualStops($li);
         $line = $this->lines[$li];
+        if ($index === $line->end) {
+            return [$this->lineEnd($line), $line->y, $line->height];
+        }
         $carets = $line->carets();
         $i = max(0, min($index - $line->start, count($carets) - 1));
         return [$affinity === self::UPSTREAM ? $line->upstream[$i] : $carets[$i], $line->y, $line->height];
@@ -255,7 +273,12 @@ final class Layout
         if ($this->lines === []) {
             return [0, self::DOWNSTREAM];
         }
+        $line = $this->lines[$this->lineAtY($y)];
         $stops = $this->visualStops($this->lineAtY($y));
+        // past the line's end in the paragraph's direction: its end, as CoreText's hit test gives, whatever runs the other way last
+        if ($line->rtl ? $x < $stops[0][2] : $x > $stops[count($stops) - 1][2]) {
+            return [$line->end, self::UPSTREAM];
+        }
         $best = $stops[0]; $distance = -1.0;
         foreach ($stops as $s) {
             $d = abs($s[2] - $x);

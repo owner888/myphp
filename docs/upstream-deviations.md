@@ -717,6 +717,17 @@ other platforms; a tip of the keyboard focus shows on those alone.
     the variable is `MYPHP_DIRECTION` (`ltr` or `rtl`).
   - Why: ported in steps; the rest needs TextState laid out right to
     left first.
+- **A line's end where the direction changes** (v1.178)
+  - mygo: the caret at a line's end is the end of its last character
+    (`CaretAt`), so an English line ending in Arabic or Hebrew has it in
+    its middle; a hit past the line's right edge takes the nearest stop,
+    the start of that right-to-left text.
+  - myphp: a line's end is at its edge in the paragraph's direction, as
+    CoreText's offset of it, and a hit past that edge is the line's end
+    (`Text\Layout::lineEnd`, `positionAt`).
+  - Why: what is typed at the end shows at that edge; with mygo's, a tap
+    after the text put the caret at the line's right and the typing in
+    its middle (the text input example on iOS).
 
 ## Inspector
 
