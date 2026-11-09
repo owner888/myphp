@@ -37,7 +37,6 @@ final class DWrite implements \MyPHP\Platform\Fonts
     /** @var array<int, bool> whether each face's glyphs are in color */
     private array $colorFaces = [];
     private ?DWriteEngine $engine = null;
-    private CData $slot, $slotInt;
 
     public function __construct(private float $scale)
     {
@@ -51,10 +50,6 @@ final class DWrite implements \MyPHP\Platform\Fonts
             typedef struct { uint16_t designUnitsPerEm, ascent, descent; int16_t lineGap; uint16_t capHeight, xHeight; int16_t underlinePosition; uint16_t underlineThickness; int16_t strikethroughPosition; uint16_t strikethroughThickness; } DWRITE_FONT_METRICS;
             typedef struct { int32_t left, top, right, bottom; } RECT;
 
-            typedef struct { void *qi, *addRef; uint32_t (*Release)(void *self); } IUnknownVtbl;
-            typedef struct { IUnknownVtbl *v; } IUnknown;
-            typedef struct { int32_t (*QueryInterface)(void *self, const GUID *iid, void **out); void *addRef; uint32_t (*Release)(void *self); } IQueryVtbl;
-            typedef struct { IQueryVtbl *v; } IQuery;
 
             typedef struct { void *r0[3];
                 int32_t (*GetSystemFontCollection)(void *self, void **collection, int32_t check);
@@ -142,24 +137,16 @@ final class DWrite implements \MyPHP\Platform\Fonts
             } IDWriteTextRendererVtbl;
             typedef struct { IDWriteTextRendererVtbl *v; } IDWriteTextRenderer;
 
-            int32_t DWriteCreateFactory(int32_t type, const GUID *iid, void **factory);
+            int32_t DWriteCreateFactory(int32_t type, const void *iid, void **factory);
             C, 'dwrite.dll');
-        $this->slot = $this->f->new('void *[1]');
-        $this->slotInt = $this->f->cast('int64_t[1]', $this->slot);
         $out = $this->f->new('void *');
-        $iid = $this->guid('b859ee5a-d838-4b5b-a2e8-1adc7d93db48'); // held through the call: FFI::addr() of a temporary points at what is freed
-        $hr = $this->f->DWriteCreateFactory(0 /* shared */, FFI::addr($iid), FFI::addr($out));
-        if ($hr < 0 || FFI::isNull($out)) {
-            throw new RuntimeException(sprintf('DWriteCreateFactory failed (HRESULT 0x%08X)', $hr & 0xFFFFFFFF));
-        }
+        $iid = Com::guid('b859ee5a-d838-4b5b-a2e8-1adc7d93db48');
+        Com::check($this->f->DWriteCreateFactory(0 /* shared */, FFI::addr($iid), FFI::addr($out)), 'DWriteCreateFactory');
         $this->factory = $this->typed($out, 'IDWriteFactory *');
-        $this->factory2 = $this->query($this->factory, '0439fc60-ca44-4994-8dee-3a9af7b732ec');
-        $this->factory3 = $this->query($this->factory, '9a1b41c3-d3bb-466a-87fc-fe67556a3b65');
+        $this->factory2 = Com::query($this->factory, '0439fc60-ca44-4994-8dee-3a9af7b732ec');
+        $this->factory3 = Com::query($this->factory, '9a1b41c3-d3bb-466a-87fc-fe67556a3b65');
         $coll = $this->f->new('void *');
-        $hr = ($this->factory->v->GetSystemFontCollection)($this->factory, FFI::addr($coll), 0);
-        if ($hr < 0) {
-            throw new RuntimeException(sprintf('IDWriteFactory::GetSystemFontCollection failed (HRESULT 0x%08X)', $hr & 0xFFFFFFFF));
-        }
+        Com::check(($this->factory->v->GetSystemFontCollection)($this->factory, FFI::addr($coll), 0), 'IDWriteFactory::GetSystemFontCollection');
         $this->system = $this->typed($coll, 'IDWriteFontCollection *');
         $k = FFI::cdef('int32_t GetUserDefaultLocaleName(uint16_t *name, int32_t max);', 'kernel32.dll');
         $buf = $k->new('uint16_t[85]');
@@ -179,40 +166,9 @@ final class DWrite implements \MyPHP\Platform\Fonts
         if (($this->factory->v->CreateRenderingParams)($this->factory, FFI::addr($params)) >= 0) {
             $p = $this->f->cast('IDWriteRenderingParams *', $params);
             $aliasedParams = ($p->v->GetRenderingMode)($p) === 1;
-            $this->release($params);
+            Com::release($params);
         }
         $this->aliased = $smooth->cdata === 0 || $aliasedParams;
-    }
-
-    /** A GUID of its text form. */
-    public function guid(string $s): CData
-    {
-        $h = str_replace('-', '', $s);
-        $g = $this->f->new('GUID');
-        $g->a = hexdec(substr($h, 0, 8)); $g->b = hexdec(substr($h, 8, 4)); $g->c = hexdec(substr($h, 12, 4));
-        for ($i = 0; $i < 8; $i++) { $g->d[$i] = hexdec(substr($h, 16 + 2 * $i, 2)); }
-        return $g;
-    }
-
-    /** $obj's interface $iid, held, or null where it has none (QueryInterface). */
-    public function query(CData $obj, string $iid): ?CData
-    {
-        $q = $this->f->cast('IQuery *', $obj);
-        $out = $this->f->new('void *');
-        $g = $this->guid($iid); // held through the call: FFI::addr() of a temporary points at what is freed
-        if (($q->v->QueryInterface)($q, FFI::addr($g), FFI::addr($out)) < 0 || FFI::isNull($out)) {
-            return null;
-        }
-        return $out;
-    }
-
-    /** Releases COM object $obj, unless it is none. */
-    public function release(?CData $obj): void
-    {
-        if ($obj !== null && !FFI::isNull($obj)) {
-            $u = $this->f->cast('IUnknown *', $obj);
-            ($u->v->Release)($u);
-        }
     }
 
     /** $s as a NUL-terminated string of UTF-16, an array a pointer parameter takes. */
@@ -224,31 +180,16 @@ final class DWrite implements \MyPHP\Platform\Fonts
         return $buf;
     }
 
-    /** The integer address of a pointer. */
-    public function addr(?CData $p): int
-    {
-        if ($p === null || FFI::isNull($p)) {
-            return 0;
-        }
-        $this->slot[0] = $p;
-        return $this->slotInt[0];
-    }
-
-    /**
-     * Pointer $p as one of $type of its own. FFI's cast of a pointer is a
-     * view of the memory holding it, which goes with the variable it came
-     * from (a local's, a struct's field read in a callback): a pointer kept
-     * is made of its address.
-     */
+    /** Pointer $p as one of $type of DirectWrite's FFI, made of its address (Com::typed). */
     public function typed(CData $p, string $type): CData
     {
-        return $this->f->cast($type, $this->addr($p));
+        return Com::typed($this->f, $p, $type);
     }
 
     /** The id of font face $face, held from now on: its address. */
     public function adopt(CData $face): int
     {
-        $id = $this->addr($face);
+        $id = Com::addr($face);
         if (!isset($this->faces[$id])) {
             $f = $this->typed($face, 'IDWriteFontFace *');
             ($f->v->AddRef)($f);
@@ -294,10 +235,10 @@ final class DWrite implements \MyPHP\Platform\Fonts
     {
         if (!isset($this->colorFaces[$fontId])) {
             $color = false;
-            if (($f2 = $this->query($this->face($fontId), 'd8b768ff-64bc-4e66-982b-ec8e87f693f7')) !== null) {
-                $face = $this->f->cast('IDWriteFontFace2 *', $f2);
+            if (($f2 = Com::query($this->face($fontId), 'd8b768ff-64bc-4e66-982b-ec8e87f693f7')) !== null) {
+                $face = $this->typed($f2, 'IDWriteFontFace2 *');
                 $color = ($face->v->IsColorFont)($face) !== 0;
-                $this->release($f2);
+                Com::release($f2);
             }
             $this->colorFaces[$fontId] = $color;
         }
@@ -428,7 +369,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
             }
             return [$r->left, $r->top, $w, $h, $bytes];
         } finally {
-            $this->release($out);
+            Com::release($out);
         }
     }
 

@@ -8762,6 +8762,11 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   draws them (four positions a pixel), aliased where the system does not
   smooth fonts; baselines on whole pixels. Not yet: color glyphs' layers
   (they draw as their outlines), glyph outlines, fonts the app registers.
+- COM through FFI is `Native\Com`'s, which DirectWrite and Direct3D 11
+  share: GUIDs (a library's vtables take an IID as `const void *`, so one
+  GUID type serves every FFI), QueryInterface, Release, HRESULTs, and
+  pointers made of their addresses (`Com::typed`): FFI's cast of a pointer
+  is a view of the variable holding it, which dangles once it goes.
 - The renderer (stage 2, `Native\D3d`, `D3dShader`: mygo's gpu/d3d11):
   Direct3D 11, shader model 5, its HLSL GlShader's line for line. One
   device serves every window (WARP where there is no GPU of feature level
