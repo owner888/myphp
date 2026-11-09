@@ -93,7 +93,7 @@ JS;
     {
         $root = $this->instance->plugin->root;
         $file = Plugin::normalize("$root/$path");
-        if (!str_starts_with($file, rtrim($root, '/') . '/') || !is_file($file)) {
+        if (!str_starts_with($file, rtrim(Plugin::normalize($root), '/') . '/') || !is_file($file)) {
             throw new PluginError("Failed to load $path");
         }
         $this->simple = false;

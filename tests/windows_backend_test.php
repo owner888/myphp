@@ -66,5 +66,6 @@ namespace MyPHP\Tests;
     check($r['doubleClick'] > 0 && $r['doubleClick'] < 2, 'the double-click time');
     same('myphp 剪贴板 ✓', $r['clipboard'], 'the clipboard: text written read back');
     check(in_array('CF_UNICODETEXT', $r['clipboardFormats'] ?? [], true), 'the clipboard\'s formats named');
+    same([['text/plain', 'application/x-myphp-test'], '0001' . bin2hex('bytes'), 'both'], $r['clipboardData'] ?? null, 'a format of the app\'s beside text: its bytes as they were');
     same([true, false], $r['local'], 'a file of a drive here is local, a share\'s not');
 })();

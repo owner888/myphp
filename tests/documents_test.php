@@ -106,7 +106,8 @@ Host::$message = function (MessageOptions $o): MessageResult {
 Host::$save = fn() => DocLoop::$savePath;
 Host::$quit = function (): void { DocLoop::$quits++; };
 Host::$focused = fn() => null;
-Files::$replace = function (string $path, string $tmp): void { // NSFileManager's keeps the file's permissions too; a new file is renamed into place, as Files::replaceItem does
+// On macOS a rename in place of NSFileManager's, which keeps the file's permissions too; Linux's and Windows's own are tried.
+Files::$replace = PHP_OS_FAMILY !== 'Darwin' ? null : function (string $path, string $tmp): void {
     if (file_exists($path)) { chmod($tmp, fileperms($path) & 0777); }
     rename($tmp, $path) || throw new \RuntimeException("cannot replace $path");
 };
@@ -186,7 +187,7 @@ $d->set('two');
 $d->save();
 check(file_get_contents($path) === 'two' && !$d->isEdited(), 'saved');
 clearstatcache();
-same(0640, fileperms($path) & 0777, 'its permissions kept');
+PHP_OS_FAMILY === 'Windows' || same(0640, fileperms($path) & 0777, 'its permissions kept'); // Windows's are ACLs, which ReplaceFile keeps
 same(['a.txt'], array_values(array_diff(scandir(dirname($path)), ['.', '..'])), 'no file left next to it');
 // Edits made while it is written stay unsaved.
 $d->set('three');

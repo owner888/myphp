@@ -27,7 +27,7 @@ if (PHP_OS_FAMILY === 'Linux') {
 $audio = fn(Matroska $m): Track => array_values(array_filter($m->tracks(), fn(Track $t) => $t->type === Track::AUDIO))[0];
 $m = new Matroska(__DIR__ . '/testdata/clip-vorbis.mkv');
 $a = $audio($m);
-check(SoftAudio::wanted($a) && \MyPHP\Media\Player::playable($a), 'a Vorbis track: decoded so, and playable');
+check(SoftAudio::wanted($a) && (PHP_OS_FAMILY === 'Windows' || \MyPHP\Media\Player::playable($a)), 'a Vorbis track: decoded so, and playable (where the system plays: not Windows before its player\'s stage)');
 $s = new SoftAudio($a);
 same([2, 48000], [$s->channels(), $s->rate()], 'its channels and rate, of its identification header');
 $counts = []; $frames = 0; $pcm = '';

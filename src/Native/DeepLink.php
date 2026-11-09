@@ -93,7 +93,7 @@ final class DeepLink
         }
         $files = [];
         foreach ($args as $a) {
-            $p = str_starts_with($a, 'file://') ? rawurldecode((string)parse_url($a, PHP_URL_PATH)) : $a;
+            $p = str_starts_with($a, 'file://') ? (\MyPHP\Transfer\Data::url($a)->paths()[0] ?? '') : $a; // a local file's URL, as a transfer reads it (a drive's on Windows)
             if (!in_array(strtolower(pathinfo($p, PATHINFO_EXTENSION)), $exts, true)) {
                 continue;
             }

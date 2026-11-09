@@ -68,7 +68,7 @@ $cube = sys_get_temp_dir() . '/myphp-lut-' . getmypid() . '.cube';
 file_put_contents($cube, "TITLE \"t\"\n# a comment\nLUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 2 2 2\n0 0 0\n2 0 0\n0 2 0\n2 2 0\n0 0 2\n2 0 2\n0 2 2\n2 2 2\n");
 $lut = Lut3d::read($cube);
 same([2, [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0]], [$lut->size, array_values(array_slice(unpack('g*', $lut->data), 0, 8))], 'the LUT over its domain, RGBA');
-same('lut3d', $vf("lavfi=[lut3d=file=$cube:interp=trilinear]")->effects[0][0], 'lut3d of it');
+same('lut3d', $vf("lavfi=[lut3d=file='$cube':interp=trilinear]")->effects[0][0], 'lut3d of it, its path quoted (a drive\'s colon on Windows)');
 unlink($cube);
 
 // Where the decoded picture lies: of a crop of its right half, twice as wide as what shows and its middle a quarter of it left.

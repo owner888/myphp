@@ -9,6 +9,11 @@ namespace MyPHP\Tests;
 use MyPHP\{App, ErrWatchLimit, FileEvent, FileOp, FileWatcher, FileWatchOptions};
 use MyPHP\Native\FileWatch\{Backend, Backends, FsError, FsEvents, Hints, Notice, Overflow, Scan, Target, Unsupported};
 
+if (PHP_OS_FAMILY === 'Windows') { // watching files there is ReadDirectoryChangesW's, with its stage
+    echo "  skipped on Windows\n";
+    return;
+}
+
 /** A backend whose notices the test sends (mygo's fake.FileWatch). */
 final class FakeFileWatch implements Backend
 {
