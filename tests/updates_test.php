@@ -12,6 +12,11 @@ use MyPHP\{App, ErrUpdatesDisabled, Update, Updater};
 use MyPHP\Native\Fibers;
 use MyPHP\Native\Update\{Archive, Bsdiff, Delta, Ed25519, Feed, Format, NotPublished, SuffixArray};
 
+if (PHP_OS_FAMILY === 'Windows') { // the updates of macOS and Linux bundles, their links and modes; Windows's come with its build's stage
+    echo "  skipped on Windows\n";
+    return;
+}
+
 /** A temporary directory, removed at the end. */
 /**
  * Installs an update by $install into the bundle $target as an app does that
