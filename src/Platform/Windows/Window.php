@@ -8,6 +8,7 @@ use FFI\CData;
 use MyPHP\Native\{D3d, Mem};
 use MyPHP\{App, Rectangle, WindowOptions};
 use MyPHP\Platform;
+use MyPHP\Platform\Linux\Keys as LinuxKeys;
 use MyPHP\Platform\Unsupported;
 use MyPHP\UI\{Cursor, Image, Key};
 
@@ -22,7 +23,10 @@ use MyPHP\UI\{Cursor, Image, Key};
  * as the shortcut modifier (Command), the Windows key as Control, a press's
  * clicks counted by the double-click time and rectangle, a touchpad's pinch
  * (the wheel with Ctrl, not by notches) a magnification, the side buttons
- * keys back and forward. Native UI's frames are built when
+ * keys back and forward; the keys as Linux's window gives them too (Keys:
+ * macOS's codes by their place, what the layout types), then the text
+ * WM_CHAR types (TranslateMessage's of the key), a key taken first typing
+ * nothing. Native UI's frames are built when
  * asked for, from the queue (requestFrame), drawn by Direct3D 11 into the
  * window's swap chain (Native\D3d) and presented at the display's
  * refresh; WM_PAINT shows the last one again. Web pages come with
@@ -71,6 +75,9 @@ final class Window implements Platform\Window
     private int $buttons = 0;
     /** @var array{button: int, x: int, y: int, ms: int, clicks: int} the last press, in pixels and GetMessageTime's milliseconds: the next counts on from it */
     private array $lastPress = ['button' => -1, 'x' => 0, 'y' => 0, 'ms' => 0, 'clicks' => 0];
+    /** Whether the last key pressed was taken (a command, the node taking its input, a key hook), so that its WM_CHAR types nothing; a high surrogate of WM_CHAR waiting for its pair. */
+    private bool $keyTaken = false;
+    private int $high = 0;
     /** The system's lines a wheel's notch scrolls (SPI_GETWHEELSCROLLLINES), asked once. */
     private static ?int $wheelLines = null;
     /** @var ?array{0: int, 1: int, 2: CData} the style, the extended one and the placement before full screen */
@@ -162,6 +169,8 @@ final class Window implements Platform\Window
             case Win32::WM_XBUTTONDOWN: case Win32::WM_XBUTTONDBLCLK: case Win32::WM_XBUTTONUP: case Win32::WM_APPCOMMAND:
             case Win32::WM_MOUSEWHEEL: case Win32::WM_MOUSEHWHEEL:
                 return $this->pointer($m, $wp, $lp);
+            case Win32::WM_KEYDOWN: case Win32::WM_SYSKEYDOWN: case Win32::WM_KEYUP: case Win32::WM_SYSKEYUP: case Win32::WM_CHAR: case Win32::WM_SYSCHAR:
+                return $this->key($m, $wp, $lp);
             case Win32::WM_SETCURSOR:
                 if (($lp & 0xFFFF) === 1 && $this->cursorShown !== null) { // HTCLIENT: the content's cursor
                     $u->SetCursor($this->cursorShown === Cursor::None ? null : $u->LoadCursorW(null, self::CURSORS[$this->cursorShown->value] ?? 32512));
@@ -268,6 +277,118 @@ final class Window implements Platform\Window
         }
         $this->requestFrame();
         return $result;
+    }
+
+    /**
+     * The keys' messages (mygo's surface's): a key pressed to press(),
+     * one let go to the Input; WM_CHAR's text typed unless its key was
+     * taken, control characters coming as their keys. With Alt (the
+     * WM_SYS ones) they go on to DefWindowProc after, so that Alt+F4,
+     * Alt+Space and F10 keep working, unless the content took the key.
+     * Keys an input method takes (VK_PROCESSKEY) and text sent as keys
+     * (VK_PACKET) come as their text.
+     */
+    private function key(int $m, int $wp, int $lp): ?int
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return null;
+        }
+        $sys = $m === Win32::WM_SYSKEYDOWN || $m === Win32::WM_SYSKEYUP || $m === Win32::WM_SYSCHAR;
+        switch ($m) {
+            case Win32::WM_KEYDOWN: case Win32::WM_SYSKEYDOWN:
+                $this->keyTaken = false;
+                $input->mods = self::mods();
+                if (Keys::isModifier($wp) || $wp === 0xE5 || $wp === 0xE7) { // VK_PROCESSKEY, VK_PACKET
+                    break;
+                }
+                [$code, $chars] = Keys::of($wp, $lp);
+                $this->keyTaken = $this->press($code, $chars, Keys::plain($wp, $lp, $code, $chars), self::mods(), ($lp & (1 << 30)) !== 0);
+                break;
+            case Win32::WM_KEYUP: case Win32::WM_SYSKEYUP:
+                $mods = self::mods();
+                $input->mods = $mods;
+                if (Keys::isModifier($wp) || $wp === 0xE5 || $wp === 0xE7) {
+                    break;
+                }
+                [$code, $chars] = Keys::of($wp, $lp);
+                $input->push(['keyup', $chars, $code, $mods, Keys::plain($wp, $lp, $code, $chars)]);
+                break;
+            case Win32::WM_SYSCHAR:
+                return $this->keyTaken ? 0 : null; // Alt and a letter: the window's menu, unless the content took the key
+            case Win32::WM_CHAR:
+                if ($this->keyTaken) {
+                    return 0;
+                }
+                if ($wp >= 0xD800 && $wp < 0xDC00) {
+                    $this->high = $wp;
+                    return 0;
+                }
+                if ($wp >= 0xDC00 && $wp < 0xE000) {
+                    $text = (string)iconv('UTF-16LE', 'UTF-8', pack('v2', $this->high, $wp));
+                    $this->high = 0;
+                } elseif ($wp < 0x20 || $wp === 0x7F) {
+                    return 0; // control characters come as keys
+                } else {
+                    $text = mb_chr($wp, 'UTF-8');
+                }
+                $this->typed($text);
+                return 0;
+        }
+        $this->requestFrame();
+        return $sys && !$this->keyTaken ? null : 0;
+    }
+
+    /**
+     * A key past the modifiers, as Linux's press(): to the field's key hook,
+     * then the Edit menu's commands (Ctrl and X, C, V, A, Z, Y: the menu
+     * bar leaves them to the content), then the node taking its input as
+     * it comes, then the text system's command of a key that types nothing.
+     * Reports whether one took it, so that its WM_CHAR types nothing.
+     */
+    private function press(int $code, string $chars, string $plain, int $mods, bool $repeat): bool
+    {
+        $input = $this->w->input;
+        if ($input->textKey($code, $chars, $mods)) {
+            return true;
+        }
+        $input->mods = $mods & Key::MODIFIERS;
+        if (($mods & Key::COMMAND) !== 0 && ($edit = LinuxKeys::editCommand($code, $mods)) !== null) {
+            $input->push(['edit', $edit]);
+            return true;
+        }
+        if ($input->push(['key', $chars, $code, $mods, $repeat, $plain])) {
+            return true; // a node taking its input as it comes took it
+        }
+        if ($input->client !== null && !$input->inputMethod) {
+            return false; // WM_CHAR types the layout's characters
+        }
+        $selector = LinuxKeys::selector($code, $mods);
+        if ($selector === null) {
+            return false;
+        }
+        if ($input->client === null && ($input->focus === null || !$input->focus->command($selector))) {
+            $input->push(['command', $selector]);
+        }
+        return true;
+    }
+
+    /** Text typed (WM_CHAR's), or the automation plugin's, as Linux's commit: to the client of the node taking text, the field focused, or the node taking it. */
+    private function typed(string $s): void
+    {
+        $input = $this->w->input;
+        if ($input === null || $s === '') {
+            return;
+        }
+        if ($input->client !== null) {
+            $input->client->replaceText(null, $s);
+        } elseif ($input->focus === null) {
+            $input->composing = '';
+            $input->push(['insert', $s]);
+        } else {
+            $input->focus->insert($s);
+        }
+        $this->requestFrame();
     }
 
     /** A press's clicks: one more than the last's of the same button within the double-click time and rectangle, centered on it, at the window's DPI; one otherwise. */
@@ -1082,14 +1203,25 @@ final class Window implements Platform\Window
         return $this->asked || $this->rendering;
     }
 
+    /** A key of the automation plugin's, as Linux's: pressed as a key is, typing nothing (no WM_CHAR follows it), or let go. */
     public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void
     {
-        throw new Unsupported('myphp: automated keys come with Windows\'s input');
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        if ($down) {
+            $this->press($code, $chars, $plain, $mods, false);
+        } else {
+            $input->mods = $mods & Key::MODIFIERS;
+            $input->push(['keyup', $chars, $code, $mods, $plain]);
+        }
+        $this->requestFrame();
     }
 
     public function automatedText(string $text): void
     {
-        throw new Unsupported('myphp: automated text comes with Windows\'s input');
+        $this->typed($text);
     }
 
     public function chooseMenuItem(array $path): void

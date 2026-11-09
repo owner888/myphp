@@ -8784,8 +8784,8 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   GUID type serves every FFI), QueryInterface, Release, HRESULTs, and
   pointers made of their addresses (`Com::typed`): FFI's cast of a pointer
   is a view of the variable holding it, which dangles once it goes.
-- The renderer (stage 2, `Native\D3d`, `D3dShader`: mygo's gpu/d3d11):
-  Direct3D 11, shader model 5, its HLSL GlShader's line for line. One
+- The renderer (stage 2, `Native\D3d`, `D3dShader`: `Native\Gl`'s on
+  Direct3D 11, not mygo's gpu/d3d11, upstream-deviations.md): Direct3D 11, shader model 5, its HLSL GlShader's line for line. One
   device serves every window (WARP where there is no GPU of feature level
   11): the shaders, states and the atlases' textures (glyphs R8, images a
   texture array of RGBA8) are shared; a renderer has its quads' and
@@ -8809,6 +8809,32 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   time it draws; its images are textures of their own, a canvas's copied
   from its place, its backdrop the glass's snapshot or blur.
   `windows_render_test` compiles the HLSL and reads back.
+- The mouse and the wheel (stage 3, `Windows\Window::pointer`: mygo's
+  surface's messages) go into the core window's Input as Linux's window
+  gives them, in points: Ctrl the shortcut modifier (Command), Alt Option,
+  the Windows key Control (GetKeyState as each comes). A press focuses the
+  window and captures the mouse while a button is held; its clicks count
+  by the double-click time and rectangle at the window's DPI (the class
+  has no CS_DBLCLKS: a second press is a press). A right button's release
+  goes on to DefWindowProc (WM_CONTEXTMENU). The pointer's leaving is
+  asked for as it moves in (TrackMouseEvent). A wheel's notch scrolls the
+  system's lines, 33 points a line, not precise; a delta of no whole
+  notches is a touchpad's, precise, and with Ctrl a pinch (a
+  magnification, three notches' worth zooming twice as large). The side
+  buttons and WM_APPCOMMAND's back and forward are keys.
+- The keys (stage 3, `Windows\Keys`, `Window::key`): a key's macOS code is
+  its place's (its scancode, set 1, of an ANSI keyboard), or, for the keys
+  that type nothing, its virtual key's; its characters the layout's with
+  the keys held now (ToUnicodeEx of flag 4, which leaves dead keys as they
+  are; a chord of Ctrl its key's character, as GDK's keyval), AppKit's for
+  the function keys. A press goes the way Linux's goes (the key hook, the
+  Edit menu's Ctrl commands, the node taking its input, the text system's
+  command of a key typing nothing: `Linux\Keys`' tables, shared), and
+  what TranslateMessage makes of it, WM_CHAR, types, unless the press was
+  taken; a surrogate pair types once whole, control characters none. With
+  Alt they go on to DefWindowProc, so Alt+F4, Alt+Space and F10 keep
+  working. `windows_input_test` sends a window the messages and reads what
+  its Input heard.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
