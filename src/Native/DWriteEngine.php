@@ -51,29 +51,6 @@ final class DWriteEngine implements \MyPHP\Text\Engine
         $this->f = $d->f;
     }
 
-    /** The family names of a comma-separated list, without quotes (mygo's familyList). @return list<string> */
-    private static function familyList(string $family): array
-    {
-        $out = [];
-        foreach (explode(',', $family) as $f) {
-            $f = trim(trim($f), '"\'');
-            if ($f !== '') { $out[] = $f; }
-        }
-        return $out;
-    }
-
-    /** The generic family a name stands for (mygo's generic): '' for none. */
-    private static function generic(string $family): string
-    {
-        return match (strtolower($family)) {
-            '', 'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfont' => 'system-ui',
-            'sans-serif' => 'sans-serif',
-            'serif', 'ui-serif' => 'serif',
-            'monospace', 'ui-monospace' => 'monospace',
-            default => '',
-        };
-    }
-
     private function hasSystem(string $family): bool
     {
         $key = strtolower($family);
@@ -88,8 +65,8 @@ final class DWriteEngine implements \MyPHP\Text\Engine
     /** The first family of a list the system has, a generic one's best (mygo's family); Segoe UI, Windows's, for none. */
     private function family(string $list): string
     {
-        foreach (self::familyList($list) as $f) {
-            if (($g = self::generic($f)) !== '') {
+        foreach (Style::familyList($list) as $f) {
+            if (($g = Style::generic($f)) !== '') {
                 foreach (self::GENERIC[$g] as $name) {
                     if ($this->hasSystem($name)) { return $name; }
                 }

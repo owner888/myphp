@@ -15,15 +15,20 @@ use MyPHP\Text\{Span, Style};
         echo "  skipped: Windows's\n";
         return;
     }
+    $mark = function (string $what): void { if (getenv('MYPHP_TEST_CHILD') !== false) { echo "  at: $what\n"; } }; // run.php --each: where a crash came
+    $mark('the factory');
     $d = new DWrite(1.0);
     $e = $d->engine();
+    $mark('families');
     [$app, $system] = $e->fontFamilies();
     $names = array_column($system, 0);
     check(in_array('Segoe UI', $names, true) && in_array('Consolas', $names, true), 'the system\'s families: ' . count($names));
     check(in_array(['Consolas', true], $system, true) && in_array(['Segoe UI', false], $system, true), 'each with whether it is monospaced');
+    $mark('a font');
     $font = $e->font(new Style('system-ui', 14));
     check($font !== null && $font->size === 14.0 && $font->ascent > 10 && $font->ascent < 20 && $font->descent > 0 && $font->underlineThick > 0, 'the interface font at 14 points, its metrics: ' . json_encode($font));
 
+    $mark('a line');
     $line = $d->shape('Hello, 世界', 16);
     check($line['width'] > 50 && $line['ascent'] > 0 && count($line['glyphs']) === 9, "a line shaped: {$line['width']} wide, " . count($line['glyphs']) . ' glyphs');
     check(count(array_unique(array_column($line['glyphs'], 'font'))) === 2, 'its Han from a font falling back');
@@ -35,20 +40,24 @@ use MyPHP\Text\{Span, Style};
 
     $text = 'The quick brown fox jumps over the lazy dog';
     $runes = array_map('mb_ord', mb_str_split($text));
+    $mark('a paragraph');
     $lines = $e->shape($runes, new Style('system-ui', 14), [], 100, false, false);
     check(count($lines) > 2, 'a paragraph broken into lines of 100 points: ' . count($lines));
     $at = 0;
     foreach ($lines as $l) { check($l['start'] === $at && $l['end'] > $l['start'], "a line from where the last ended ($at)"); $at = $l['end']; }
     same(count($runes), $at, 'the lines hold all its runes');
 
+    $mark('Arabic');
     $ar = array_map('mb_ord', mb_str_split('مرحبا'));
     $rtl = $e->shape($ar, new Style('system-ui', 14), [], 0, true, false);
     check($rtl !== [] && $rtl[0]['runs'][0]['glyphs'][0]->rtl, 'Arabic runs right to left');
 
+    $mark('a span');
     $bold = $e->shape($runes, new Style('system-ui', 14), [new Span(3, weight: 700)], 0, false, false);
     check(count($bold[0]['runs']) >= 2 && $bold[0]['runs'][0]['font']->id !== $bold[0]['runs'][1]['font']->id, 'a span of weight 700 in a font of its own');
 
     $g = $line['glyphs'][0];
+    $mark('a glyph');
     $b = $d->rasterize($g['font'], $g['glyph'], 2.0);
     check($b !== null && $b['w'] > 5 && $b['h'] > 10 && !$b['color'] && $b['oy'] <= 0, 'H rasterized at scale 2: ' . json_encode($b === null ? null : [$b['w'], $b['h'], $b['ox'], $b['oy']]));
     if ($b !== null) {
@@ -56,6 +65,7 @@ use MyPHP\Text\{Span, Style};
         check(max(array_map('ord', str_split($ink))) === 255, 'its strokes covered whole');
         Mem::free($b['rows']);
     }
+    $mark('emoji');
     $emoji = $d->shape('😀', 16);
     check($emoji['glyphs'] !== [] && $d->isColor($emoji['glyphs'][0]['font']) && !$d->isColor($g['font']), 'an emoji of a color font, H not');
 })();
