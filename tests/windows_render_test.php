@@ -1,7 +1,8 @@
 <?php
 // The Direct3D 11 renderer on Windows (Native\D3d, D3dShader's HLSL): the shaders compiled,
 // a list of rects drawn off screen and read back (CI's runners draw with WARP) at one and at two
-// pixels a point: fills, alpha, a rounded corner's coverage, a clip, the clear color.
+// pixels a point: fills, alpha, a rounded corner's coverage, a clip, the clear color; a backdrop
+// blur and a pane of glass over what was drawn before them.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -57,6 +58,26 @@ use MyPHP\UI\{Atlas, ImageAtlas};
     $pix = $r->readBack($list, 128, 128, 2.0, [0.0, 0.0, 0.0, 0.0]);
     check($near($px($pix, 128, 21, 21), [0, 0, 255, 255]) && $near($px($pix, 128, 58, 58), [0, 0, 255, 255]) && $near($px($pix, 128, 61, 61), [0, 0, 0, 0]),
         'two pixels a point, on a transparent clear: ' . json_encode([$px($pix, 128, 21, 21), $px($pix, 128, 61, 61)]));
+
+    // The glass: what was drawn before it copied and blurred at half size, which the quads after it read.
+    $list = $r->nextList();
+    $list->rect(0, 0, 32, 32, 0xff0000);
+    $list->rect(32, 0, 32, 32, 0x0000ff);
+    $list->blurLevel(16, 0, 32, 32, 0.0, 8.0, 1.0, 0.0, 0.0, 0.0, 0.0);
+    $pix = $r->readBack($list, 64, 32, 1.0, [1.0, 1.0, 1.0, 1.0]);
+    [$mid, $left, $outside] = [$px($pix, 64, 32, 16), $px($pix, 64, 18, 16), $px($pix, 64, 2, 16)];
+    check($mid[0] > 40 && $mid[0] < 215 && $mid[2] > 40 && $mid[2] < 215 && $mid[3] === 255, 'a backdrop blur over red and blue: their middle mixed: ' . json_encode($mid));
+    check($left[2] > $left[0], 'nearer the red, redder: ' . json_encode($left));
+    check($near($outside, [0, 0, 255, 255]), 'beside it, what was drawn as it was: ' . json_encode($outside));
+    $list = $r->nextList();
+    $list->rect(0, 0, 32, 32, 0xff0000);
+    $list->rect(32, 0, 32, 32, 0x0000ff);
+    $list->glass(8, 4, 48, 24, 12.0, 0, 0xffffff, 0.2, 10.0);
+    $list->rect(60, 28, 4, 4, 0x00ff00);
+    $pix = $r->readBack($list, 64, 32, 1.0, [1.0, 1.0, 1.0, 1.0]);
+    $glass = $px($pix, 64, 32, 16);
+    check($glass[3] === 255 && $glass !== [255, 0, 0, 255] && $glass !== [0, 0, 255, 255], 'a pane of glass over them: ' . json_encode($glass));
+    check($near($px($pix, 64, 62, 30), [0, 255, 0, 255]), 'and what is drawn after it, over: ' . json_encode($px($pix, 64, 62, 30)));
 
     $other = new D3d(256);
     $list = $other->nextList();
