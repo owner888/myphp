@@ -241,9 +241,16 @@ final class DWriteEngine implements \MyPHP\Text\Engine
         }
         $f = $this->f;
         $vt = $f->new('IDWriteTextRendererVtbl', false);
-        $vt->QueryInterface = function ($self, $iid, $out) { // IUnknown, IDWritePixelSnapping, IDWriteTextRenderer: itself
-            $out[0] = $self;
-            return 0;
+        // IUnknown, IDWritePixelSnapping and IDWriteTextRenderer are itself; no other, as IDWriteTextRenderer1, whose
+        // methods past these DirectWrite would call (mygo's rendererQueryInterface).
+        $vt->QueryInterface = function ($self, $iid, $out) {
+            $id = sprintf('%08x-%04x-%04x-', $iid->a, $iid->b, $iid->c) . bin2hex(FFI::string($iid->d, 8));
+            if (in_array($id, ['00000000-0000-0000-c000000000000046', 'eaf3a2da-ecf4-4d24-b644b34f6842024b', 'ef8a8135-5cc6-45fe-8825c5a0724eb819'], true)) {
+                $out[0] = $self;
+                return 0;
+            }
+            $out[0] = null;
+            return 0x80004002 - 0x100000000; // E_NOINTERFACE
         };
         $vt->AddRef = fn($self) => 1;
         $vt->Release = fn($self) => 1;
