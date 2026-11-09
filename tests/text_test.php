@@ -130,6 +130,15 @@ $left = [];
 foreach (range(1, 5) as $_) { $p = $l->moveCaret($p[0], $p[1], -1); $left[] = $p; }
 same([[7, 0], [5, 1], [6, 1], [7, 1], [3, 0]], $left, 'and left');
 same([[4, 6], [7, 8]], $l->selectionRanges([6, Layout::DOWNSTREAM], [8, Layout::UPSTREAM]), 'a visual selection keeps its bidi gap');
+// A line that ends in text of the other direction: its end is at its edge in the paragraph's direction, where what is typed there shows, and a hit past that edge is its end.
+$runes = System::runes('abc אבג');
+$l = new Layout(new Params('abc אבג'), $runes);
+$line = new Line(0, 0, 70, 20, 0, 0, 0, 0, count($runes));
+foreach ($runes as $i => $_) { $rtl = $i >= 4; $line->glyphs[] = new Glyph(null, 0, 10, $rtl ? (10 - $i) * 10 : $i * 10, 0, 10, $i, 1, $rtl); }
+$l->lines[] = $line;
+same([70.0, 70.0, 70.0], [$l->caretAt(7, Layout::UPSTREAM)[0], $l->caretAt(7, Layout::DOWNSTREAM)[0], $l->caret(7)[0]], 'a line\'s end at its right edge, not the end of the Hebrew in its middle');
+same([7, Layout::UPSTREAM], $l->positionAt(90, 10), 'a hit past the right edge, its end');
+same([4, Layout::DOWNSTREAM], $l->positionAt(69, 10), 'one on the Hebrew\'s right edge, its start');
 $l = $mixed(); $l->lines[0]->glyphs[4]->advance += 0.00001;
 same([4, Layout::DOWNSTREAM], $l->moveCaret(5, Layout::DOWNSTREAM, 1), 'rounding picks the right run edge');
 $l = new Layout(new Params("e\u{301}😀x"), System::runes("e\u{301}😀x"));
