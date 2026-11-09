@@ -11,8 +11,11 @@ use MyPHP\UI\Content;
 require __DIR__ . '/../../src/autoload.php';
 
 $r = ['taps' => 0, 'window' => [], 'steps' => []];
+// Where it got to, on its log: the test reports it if it never ends.
+$log = function (string $where): void { fwrite(STDERR, "at: $where\n"); fflush(STDERR); };
 App::setName('InputTest');
-App::whenReady(function () use (&$r) {
+App::whenReady(function () use (&$r, $log) {
+    $log('ready');
     // Made out here: the view's arrow function would hold a copy of $r, which the tap would count in.
     $tap = function () use (&$r) { $r['taps']++; };
     $w = new Window(new WindowOptions(title: 'Input', width: 400, height: 300, content: Content::view(fn() => Color(Color::rgb(0xff0000))->frame(width: 100, height: 100)->onTapGesture($tap)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading))));
@@ -47,12 +50,14 @@ App::whenReady(function () use (&$r) {
         $send($m, $wp, $lp);
         $r['steps'][] = [$name, array_map($plain, $w->input->events), $w->input->mouseDown];
     };
-    App::after(0.4, function () use ($w, $u, $send, $step, $at, $screen, &$r) {
+    App::after(0.4, function () use ($w, $u, $send, $step, $at, $screen, &$r, $log) {
+        $log('clicking');
         $send(Win32::WM_LBUTTONDOWN, 0x1, $at(50, 50));
         $r['afterDown'] = array_map(fn(array $e) => $e[0], $w->input->events);
         $send(Win32::WM_LBUTTONUP, 0, $at(50, 50));
         $r['afterUp'] = array_map(fn(array $e) => $e[0], $w->input->events);
-        App::after(0.3, function () use ($w, $u, $send, $step, $at, $screen, &$r) {
+        App::after(0.3, function () use ($w, $u, $send, $step, $at, $screen, &$r, $log) {
+            $log('the mouse');
             $r['tapped'] = $r['taps'];
             $in = $w->input;
             $step('move', Win32::WM_MOUSEMOVE, 0, $at(60, 70));
@@ -73,6 +78,7 @@ App::whenReady(function () use (&$r) {
             $step('leave', Win32::WM_MOUSELEAVE, 0, 0);
             $r['left'] = $in->mouseInside;
             // A key's lParam: one press, its scancode, whether it is extended, whether it was down, whether it goes up.
+            $log('the keys');
             $key = fn(int $scan, bool $extended = false, bool $up = false): int => 1 | ($scan << 16) | ($extended ? 1 << 24 : 0) | ($up ? (1 << 30) | (1 << 31) : 0);
             $step('A down', Win32::WM_KEYDOWN, 0x41, $key(0x1E));
             $step('a typed', Win32::WM_CHAR, 0x61, $key(0x1E));
@@ -97,12 +103,14 @@ App::whenReady(function () use (&$r) {
             // No node takes text: the window has no input context, so keys type the layout's characters.
             $r['imeOff'] = Win32::imm32()->ImmGetContext($w->native()->hwnd) === null;
             $w->close();
+            $log('the field\'s window');
             // A field focused: the window has its input context, and WM_CHAR types into the field.
             $name = '';
             $field = Content::view(function () use (&$name) { return TextField('Name', text: $name)->defaultFocus()->frame(width: 200); });
             $w2 = new Window(new WindowOptions(title: 'Field', width: 300, height: 100, content: $field));
             $w2->show();
-            App::after(0.4, function () use ($w2, $u, &$name, &$r) {
+            App::after(0.4, function () use ($w2, $u, &$name, &$r, $log) {
+                $log('typing');
                 $hwnd = $w2->native()->hwnd;
                 $imm = Win32::imm32();
                 $himc = $imm->ImmGetContext($hwnd);
@@ -110,7 +118,8 @@ App::whenReady(function () use (&$r) {
                 if ($himc !== null) { $imm->ImmReleaseContext($hwnd, $himc); }
                 $r['focused'] = $w2->input->focus !== null;
                 foreach ([0x68, 0x69, 0xD83D, 0xDE00] as $c) { $u->SendMessageW($hwnd, Win32::WM_CHAR, $c, 0); }
-                App::after(0.3, function () use ($w2, &$name, &$r) {
+                App::after(0.3, function () use ($w2, &$name, &$r, $log) {
+                    $log('typed');
                     $r['typed'] = $name;
                     $w2->close();
                     echo json_encode($r), "\n";

@@ -21,10 +21,15 @@ use MyPHP\UI\Key;
     $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/testdata/windows_input_app.php'], [0 => ['file', DEVNULL, 'r'], 1 => ['file', $logs[0], 'w'], 2 => ['file', $logs[1], 'w']], $pipes);
     $start = microtime(true);
     while (($st = proc_get_status($p))['running'] && microtime(true) - $start < 30) { usleep(50000); }
-    if ($st['running']) { proc_terminate($p); }
-    proc_close($p);
-    $out = (string)file_get_contents($logs[0]); $err = substr((string)file_get_contents($logs[1]), -1500);
-    $oneLine = fn(string $s): string => str_replace(["\r\n", "\n"], ' / ', trim($s)); // a failure's message is one line (run.php --each reads them so)
+    $hung = $st['running'];
+    if ($hung) { proc_terminate($p); }
+    $code = proc_close($p);
+    $out = (string)file_get_contents($logs[0]);
+    // How it ended, then where it got to (the app's "at:" lines), then the log's end: what fits in a failure's message first.
+    $log = (string)file_get_contents($logs[1]);
+    preg_match_all('/^at: .*$/m', $log, $at);
+    $err = ($hung ? 'hung' : "exit $code") . ', at ' . implode(', ', array_map(fn(string $l) => substr(trim($l), 4), $at[0])) . ' | ' . substr($log, -1200);
+    $oneLine = fn(string $s): string => str_replace(["\r\n", "\n", "\r"], ' / ', trim($s)); // a failure's message is one line (run.php --each reads them so)
     array_map('unlink', $logs);
     $line = array_values(array_filter(explode("\n", $out), fn(string $l) => str_starts_with($l, '{')))[0] ?? '';
     $r = json_decode($line, true);
