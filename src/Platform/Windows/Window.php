@@ -92,6 +92,8 @@ final class Window implements Platform\Window
 
     /** The menu bar's menu, the owner of its items, and their shortcuts by "virtual key:modifiers" (mygo's hmenu, owner, accels). @var array<string, int> */
     private ?CData $hmenu = null;
+    /** The page the window shows, WebView2's. */
+    private ?WebView $page = null;
     private int $menuOwner = 0;
     private array $accels = [];
 
@@ -155,9 +157,11 @@ final class Window implements Platform\Window
                 return 0;
             case Win32::WM_ACTIVATE:
                 $this->w->nativeEvent(($wp & 0xFFFF) === 0 ? 'blur' : 'focus');
+                if (($wp & 0xFFFF) !== 0) { $this->page?->focus(); } // the page has the keyboard of its window
                 return null;
             case Win32::WM_MOVE:
                 $this->w->nativeEvent('move');
+                $this->page?->moved();
                 return null;
             case Win32::WM_SIZE:
                 if ($wp === 1) { // SIZE_MINIMIZED
@@ -166,6 +170,7 @@ final class Window implements Platform\Window
                 }
                 if ($this->minimized) { $this->minimized = false; $this->w->nativeEvent('restore'); }
                 $this->w->nativeEvent('resize');
+                $this->page?->fit();
                 $this->requestFrame();
                 return null;
             case Win32::WM_DPICHANGED: // to its new display: the size Windows suggests, in the new DPI
@@ -758,9 +763,14 @@ final class Window implements Platform\Window
         return $this->hwnd;
     }
 
+    /** A page of WebView2 fills the client area, made as the environment is, fit as the window is resized. */
     public function setContent(Platform\Page $page, WindowOptions $o): void
     {
-        throw new Unsupported('myphp: web pages are not on Windows yet');
+        if (!$page instanceof WebView) {
+            throw new Unsupported('myphp: a page of another backend');
+        }
+        $this->page = $page;
+        $page->attach($this);
     }
 
     /** Native UI's surface: a renderer of Direct3D 11 drawing into the window, the text system's atlases its, the first frame asked for. */
@@ -808,13 +818,49 @@ final class Window implements Platform\Window
         return false;
     }
 
-    public function placeWebViews(): void {}
+    /**
+     * The web views where the content placed them this frame, hidden where
+     * it placed none (Linux's placeWebViews): a node focused on one gives
+     * it the keyboard, at its page's first or last element when tabbed into.
+     */
+    public function placeWebViews(): void
+    {
+        $views = $this->w->webViewList();
+        if ($views === []) {
+            return;
+        }
+        $rt = $this->w->runtime;
+        $places = [];
+        foreach ($rt->webPlaces as $p) {
+            $places[spl_object_id($p['view'])] = $p; // a web view built twice shows where it was built last
+        }
+        foreach ($views as $v) {
+            $p = $places[spl_object_id($v)] ?? null;
+            $v->place($p === null ? null : $rt->windowRect($p['frame']), $p === null ? null : $rt->windowRect($p['clip']), 0.0);
+        }
+        $node = null;
+        foreach ($places as $p) {
+            if ($p['id'] === $rt->focus) { $node = $p; }
+        }
+        if ($node !== null && $rt->focus !== $this->webFocus) {
+            $rt->focusFromKeyboard() ? $node['view']->tabInto(($this->w->input->mods & Key::SHIFT) !== 0) : $node['view']->focus();
+        }
+        $this->webFocus = $node === null ? null : $rt->focus;
+    }
+
+    /** The node the web view with the keyboard was placed for, as it got it. */
+    private ?int $webFocus = null;
 
     public function placeVideos(): void {}
 
+    /** A web view in the window's native UI: its page in a child window (EmbeddedWebView). */
     public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
     {
-        throw new Unsupported('myphp: web views are not on Windows yet');
+        if (!$page instanceof WebView) {
+            throw new Unsupported('myphp: a page of another backend');
+        }
+        if ($transparent) { $page->background([0, 0, 0, 0]); }
+        return new EmbeddedWebView($this, $page);
     }
 
     public function contentView(): mixed

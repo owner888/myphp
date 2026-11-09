@@ -8938,6 +8938,51 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   its alpha only past BITMAPINFOHEADER's header, its size bounded, as
   the clipboard's are untrusted). `windows_services_test` writes and reads
   them, and reads a bitmap another app put there.
+- Pages (stage 6, `Windows\WebView`: mygo's webview.go, webview2.go) are
+  WebView2's. Its environment is made once, without WebView2Loader.dll:
+  the client library (EmbeddedBrowserWebView.dll) of the Evergreen runtime
+  the registry names (EdgeUpdate's ClientState, the 32-bit view, per
+  machine then per user, Stable before Beta, Dev and Canary), or of a fixed
+  version one by WEBVIEW2_BROWSER_EXECUTABLE_FOLDER, is asked for one by
+  CreateWebViewEnvironmentWithOptionsInternal, as the loader does; its user
+  data in the local AppData of the app. A page's controller is made in its
+  window as the window shows it, the calls made meanwhile waiting; its view
+  fills the client area and follows it. The handlers WebView2 calls are COM
+  objects of PHP's sharing one vtable, Invoke(result or sender, args)
+  dispatched by the handler's number; an HRESULT comes in a 64-bit
+  register, its upper half undefined. The page's bridge posts to
+  window.webkit.messageHandlers.myphp, as WebKit's: a script added before
+  the page's hands its posts to chrome.webview, whose WebMessageReceived
+  is the core's message. callAsync is the DevTools protocol's
+  Runtime.evaluate, its promise awaited; loadHTML is NavigateToString,
+  which knows no base URL. The app's schemes (Protocol) are served from
+  http://<scheme>.localhost/, their other hosts from
+  http://<host>.<scheme>.localhost/ (mygo's schemehost), which
+  WebResourceRequested lets the app answer, its request's headers and body
+  read and a deferral held till the core's task finishes (WebView2 takes a
+  response whole, of an IStream: SHCreateMemStream); Chromium takes
+  *.localhost for a secure origin, and http blocks no mixed content; the
+  core sees <scheme>://<host>/ URLs. window.open() and target=_blank links
+  are the core's to open (NewWindowRequested handled); the camera, the
+  microphone, location and notifications are the core's to grant; a
+  download goes where the core says (ICoreWebView2_4's DownloadStarting,
+  its end told as its state changes). A web view in native UI is a child
+  window of the window's holding its controller, placed and clipped (a
+  region) where the content puts it (upstream-deviations.md). Cookies are
+  the profile's ICoreWebView2CookieManager's, which WebView2 has only
+  through a web view: a page's, or before one shows a hidden web view's in
+  the app's window (`Windows\WebsiteData`); each call waits for its
+  completion handler (App::wait), a change till GetCookies sees it.
+  Content rules are matched in PHP (`Native\ContentRuleList`, mygo's
+  contentrules): a page applying them asks about every request (a "*"
+  filter), a blocked one redirected to data:, or a page's an empty 403,
+  and a script hides what css-display-none rules select. Not yet:
+  sessions (profiles of their own), the audio, capture and session
+  states, PDFs and a page's capture. `windows_webview_test` shows HTML,
+  reads its document, answers the bridge's call, serves a scheme's page
+  and its fetch, sets and deletes cookies before a page shows and after,
+  and applies content rules; `content_rule_list_test` matches rules on
+  every system.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
