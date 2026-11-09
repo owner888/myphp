@@ -23,7 +23,9 @@ use MyPHP\UI\{Cursor, Image, Key, TextInputRange, TextState};
  * as the shortcut modifier (Command), the Windows key as Control, a press's
  * clicks counted by the double-click time and rectangle, a touchpad's pinch
  * (the wheel with Ctrl, not by notches) a magnification, the side buttons
- * keys back and forward; the keys as Linux's window gives them too (Keys:
+ * keys back and forward; its menu bar the application menu's (Menus), its
+ * items' shortcuts run before the keys go on (an editing role's after the
+ * content leaves them), WM_COMMAND running an item; the keys as Linux's window gives them too (Keys:
  * macOS's codes by their place, what the layout types), then the text
  * WM_CHAR types (TranslateMessage's of the key), a key taken first typing
  * nothing; an input method's composition shown by the content (its own
@@ -88,7 +90,12 @@ final class Window implements Platform\Window
     /** @var ?array{0: int, 1: int, 2: CData} the style, the extended one and the placement before full screen */
     private ?array $beforeFullScreen = null;
 
-    public function __construct(private readonly Backend $b, public readonly \MyPHP\Window $w, WindowOptions $o, bool $panel)
+    /** The menu bar's menu, the owner of its items, and their shortcuts by "virtual key:modifiers" (mygo's hmenu, owner, accels). @var array<string, int> */
+    private ?CData $hmenu = null;
+    private int $menuOwner = 0;
+    private array $accels = [];
+
+    public function __construct(private readonly Backend $b, public readonly \MyPHP\Window $w, WindowOptions $o, private readonly bool $panel)
     {
         $u = Win32::user32();
         Win32::registerClass('MyPHPWindow');
@@ -101,6 +108,7 @@ final class Window implements Platform\Window
             -0x80000000, -0x80000000, 100, 100, $parent instanceof self ? $parent->hwnd : null); // CW_USEDEFAULT: where Windows puts a new window
         self::$open[Mem::addr($this->hwnd)] = $this;
         $this->topmost = $o->alwaysOnTop;
+        if ($this->hasAppMenu() && $b->menus()->appMenu !== null) { $this->installMenu($b->menus()->appMenu); } // before its size, which counts the bar
         $this->sizeContent(max(1, $o->width), max(1, $o->height));
         if ($o->disableClose) { $this->setClosable(false); }
         if ($o->minWidth > 0 || $o->minHeight > 0) { $this->setMinimumSize($o->minWidth, $o->minHeight); }
@@ -135,6 +143,7 @@ final class Window implements Platform\Window
                 return 0;
             case Win32::WM_DESTROY:
                 $this->dead = true;
+                $this->b->menus()->dropOwner($this->menuOwner); // the bar itself goes with the window
                 $this->d3d?->release();
                 $this->d3d = null;
                 unset(self::$open[Mem::addr($this->hwnd)]);
@@ -176,6 +185,17 @@ final class Window implements Platform\Window
                 return $this->pointer($m, $wp, $lp);
             case Win32::WM_KEYDOWN: case Win32::WM_SYSKEYDOWN: case Win32::WM_KEYUP: case Win32::WM_SYSKEYUP: case Win32::WM_CHAR: case Win32::WM_SYSCHAR:
                 return $this->key($m, $wp, $lp);
+            case Win32::WM_COMMAND:
+                if (($wp >> 16) === 0 && $lp === 0) { // a menu item's, not an accelerator's or a control's
+                    $this->b->menus()->command($wp & 0xFFFF, $this);
+                    return 0;
+                }
+                return null;
+            case Win32::WM_INITMENUPOPUP:
+                if ((($lp >> 16) & 0xFFFF) === 0) { // not the window menu
+                    $this->b->menus()->opening($wp);
+                }
+                return null;
             case Win32::WM_IME_SETCONTEXT: // the composition the content shows, not the input method's own window (ISC_SHOWUICOMPOSITIONWINDOW)
                 return $u->DefWindowProcW($this->hwnd, $m, $wp, $lp & ~0x80000000);
             case Win32::WM_IME_STARTCOMPOSITION:
@@ -320,8 +340,13 @@ final class Window implements Platform\Window
                 if (Keys::isModifier($wp) || $wp === 0xE5 || $wp === 0xE7) { // VK_PROCESSKEY, VK_PACKET
                     break;
                 }
+                if ($this->b->menus()->shortcut($this->accels, $wp, false, $this)) {
+                    $this->keyTaken = true; // the app's item's, before the content
+                    break;
+                }
                 [$code, $chars] = Keys::of($wp, $lp);
-                $this->keyTaken = $this->press($code, $chars, Keys::plain($wp, $lp, $code, $chars), self::mods(), ($lp & (1 << 30)) !== 0);
+                $this->keyTaken = $this->press($code, $chars, Keys::plain($wp, $lp, $code, $chars), self::mods(), ($lp & (1 << 30)) !== 0)
+                    || $this->b->menus()->shortcut($this->accels, $wp, true, $this); // an editing role's, which the content left
                 break;
             case Win32::WM_KEYUP: case Win32::WM_SYSKEYUP:
                 $mods = self::mods();
@@ -676,7 +701,7 @@ final class Window implements Platform\Window
     {
         $u = Win32::user32();
         $r = $u->new('RECT');
-        $u->AdjustWindowRectExForDpi(FFI::addr($r), $this->style(), 0, $this->exStyle(), $u->GetDpiForWindow($this->hwnd));
+        $u->AdjustWindowRectExForDpi(FFI::addr($r), $this->style(), $this->hmenu !== null ? 1 : 0, $this->exStyle(), $u->GetDpiForWindow($this->hwnd));
         return [$r->right - $r->left, $r->bottom - $r->top];
     }
 
@@ -926,7 +951,40 @@ final class Window implements Platform\Window
 
     public function setDropFormats(array $formats): void {}
 
-    public function command(string $cmd): void {}
+    /** An editing role's command, to the content (Linux's). */
+    public function command(string $cmd): void
+    {
+        $this->w->input?->push(['edit', $cmd]);
+        $this->requestFrame();
+    }
+
+    /** Whether the window shows the application menu in its menu bar: flyouts and panels show none (mygo's hasAppMenu). */
+    public function hasAppMenu(): bool
+    {
+        return $this->w->flyoutState() === null && !$this->panel;
+    }
+
+    /** Shows $m as the window's menu bar, none for null (mygo's installMenu): the old one destroyed, its items forgotten. */
+    public function installMenu(?\MyPHP\Platform\Menu $m): void
+    {
+        $u = Win32::user32();
+        $menus = $this->b->menus();
+        $old = $this->hmenu;
+        $menus->dropOwner($this->menuOwner);
+        [$this->hmenu, $this->menuOwner, $this->accels] = [null, 0, []];
+        if ($m !== null && $m->items !== []) {
+            $this->menuOwner = $menus->newOwner();
+            $this->hmenu = $menus->build($m, true, $this->menuOwner, $this->accels, $this);
+        }
+        $u->SetMenu($this->hwnd, $this->hmenu);
+        if ($old !== null) { $u->DestroyMenu($old); }
+    }
+
+    /** An item of the menu bar changed: the bar drawn again. */
+    public function menuChanged(): void
+    {
+        if ($this->hmenu !== null && !$this->dead) { Win32::user32()->DrawMenuBar($this->hwnd); }
+    }
 
     public function passThrough(\Closure $at): void {}
 
@@ -1158,7 +1216,7 @@ final class Window implements Platform\Window
         $rect = $u->new('RECT');
         $rect->left = $this->px($r->x); $rect->top = $this->px($r->y);
         $rect->right = $rect->left + $this->px(max(1, $r->width)); $rect->bottom = $rect->top + $this->px(max(1, $r->height));
-        $u->AdjustWindowRectExForDpi(FFI::addr($rect), $this->style(), 0, $this->exStyle(), $u->GetDpiForWindow($this->hwnd));
+        $u->AdjustWindowRectExForDpi(FFI::addr($rect), $this->style(), $this->hmenu !== null ? 1 : 0, $this->exStyle(), $u->GetDpiForWindow($this->hwnd));
         $u->SetWindowPos($this->hwnd, 0, $rect->left, $rect->top, $rect->right - $rect->left, $rect->bottom - $rect->top, self::SWP_NOZORDER | self::SWP_NOACTIVATE);
     }
 
@@ -1356,8 +1414,12 @@ final class Window implements Platform\Window
         $this->typed($text);
     }
 
+    /** The menu bar's item at the end of $path, the labels along it, run as choosing it does (mygo's TestActivateMenuItem). */
     public function chooseMenuItem(array $path): void
     {
-        throw new Unsupported('myphp: the menu bar comes with Windows\'s menus');
+        if ($this->hmenu === null) {
+            throw new \RuntimeException('the window has no menu bar');
+        }
+        $this->b->menus()->activate($this->hmenu, $path, $this);
     }
 }

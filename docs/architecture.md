@@ -8842,6 +8842,22 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   shortcuts and a field without them get the layout's keys, and one taken
   away completes what it composed. `windows_input_test` sends a window the
   messages and reads what its Input heard, and types into a field.
+- Menus (stage 4, `Windows\Menus`: mygo's menu.go): a window's menu bar is
+  the application menu's (flyouts and panels have none), built before the
+  window is sized, so its content keeps the size asked with the bar. Items
+  are command ids of 16 bits (the system's from 0xF000), mapped back to
+  the items they were built from and tracked per owner (a bar, a popup, a
+  submenu filled anew as it opens: WM_INITMENUPOPUP tells the core, whose
+  onOpen replaces its items). A shortcut shows after a tab as Windows
+  words it ("Ctrl+Shift+Z") and runs its item as its key goes down: the
+  app's items before the content, an editing role's only once the content
+  left the key, and its WM_CHAR types nothing. The editing roles go to the
+  content of the window, as Linux's. A context menu is TrackPopupMenuEx's
+  over the window (its owner brought to the front, or it would not close),
+  at the point or the pointer, right to left as asked. Not yet: the menus
+  drawn as mygo draws them (Fluent, the appearance's dark), items' icons,
+  the tray. `windows_menu_test` reads a window's bar back and runs its
+  items.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
