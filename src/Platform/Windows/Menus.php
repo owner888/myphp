@@ -50,6 +50,9 @@ final class Menus
     /** @var array<int, int> the owner of the items a submenu was filled with anew, by its address */
     private array $subOwners = [];
 
+    /** @var ?\Closure(MenuItem): void gives the trays' menus, which build their popups later, the item's state */
+    public ?\Closure $trayMenus = null;
+
     public function __construct(private readonly AppHandler $h) {}
 
     /** A new owner of items, gone with $parent's when given. */
@@ -237,6 +240,7 @@ final class Menus
     public function update(MenuItem $it): void
     {
         $this->appMenu?->apply($it);
+        ($this->trayMenus)?->__invoke($it);
         foreach ($this->entries as $cmd => $e) {
             if ($e['uid'] !== $it->id) {
                 continue;
@@ -281,27 +285,32 @@ final class Menus
     public function popup(Menu $m, Window $w, ?array $at): void
     {
         $u = Win32::user32();
-        $owner = $this->newOwner();
+        $pt = $u->new('POINT');
+        if ($at !== null) {
+            $s = $w->backingScale();
+            $pt->x = (int)round($at[0] * $s); $pt->y = (int)round($at[1] * $s);
+            $u->ClientToScreen($w->hwnd, FFI::addr($pt));
+        } else {
+            $u->GetCursorPos(FFI::addr($pt));
+        }
+        $this->popupOver($m, $w->hwnd, $pt->x, $pt->y, $m->rightToLeft ? 0x8 | 0x8000 : 0, $w); // TPM_RIGHTALIGN, TPM_LAYOUTRTL: its right edge at the point, laid out from the right
+    }
+
+    /** Shows $m over window $owner at ($x, $y) on the screen, in pixels, with TrackPopupMenuEx's $flags, and runs the item chosen once it closes, an editing role's in $w's content. */
+    public function popupOver(Menu $m, CData $owner, int $x, int $y, int $flags, ?Window $w): void
+    {
+        $id = $this->newOwner();
         $none = null;
-        $menu = $this->build($m, false, $owner, $none, $w);
+        $menu = $this->build($m, false, $id, $none, $w);
         try {
-            $pt = $u->new('POINT');
-            if ($at !== null) {
-                $s = $w->backingScale();
-                $pt->x = (int)round($at[0] * $s); $pt->y = (int)round($at[1] * $s);
-                $u->ClientToScreen($w->hwnd, FFI::addr($pt));
-            } else {
-                $u->GetCursorPos(FFI::addr($pt));
-            }
-            $flags = $m->rightToLeft ? 0x8 | 0x8000 : 0; // TPM_RIGHTALIGN, TPM_LAYOUTRTL: its right edge at the point, laid out from the right
-            $cmd = $this->track($menu, $w->hwnd, $pt->x, $pt->y, $flags);
+            $cmd = $this->track($menu, $owner, $x, $y, $flags);
         } finally {
-            $u->DestroyMenu($menu);
+            Win32::user32()->DestroyMenu($menu);
         }
         if ($cmd !== 0) {
             $this->command($cmd, $w);
         }
-        $this->dropOwner($owner);
+        $this->dropOwner($id);
     }
 
     /** Shows a popup menu over $owner and returns the command chosen, or 0 (mygo's trackPopup); TrackPopupMenuEx's $flags besides those it always gives. */

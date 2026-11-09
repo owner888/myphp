@@ -8876,8 +8876,21 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   while menus show rounds their windows as Windows rounds its own, outlined
   in their colors. The bar is taller there (30 DIPs), so a window with
   one is grown by what its content lacks after AdjustWindowRectEx. Not yet:
-  items' icons, the tray. `windows_menu_test` reads a window's bar back and
-  runs its items.
+  items' icons. `windows_menu_test` reads a window's bar back and runs its
+  items.
+- The tray (stage 4, `Windows\Tray`: mygo's tray.go) is a notification
+  area icon of Shell_NotifyIcon, its callback message to the app's window
+  by its number. It is added from the queue once the call that made it
+  gave it its number, image and tooltip: the notification area keeps the
+  user's choice to show an icon by the executable and the icon's number,
+  names it by its first tooltip, and keeps none for one added blank. An ID
+  numbers it by its FNV-1a hash with the high bit set, which the numbers
+  counted never reach. Its image is CreateIconFromResourceEx's of the PNG;
+  a template's drawn white on a dark taskbar (the system's mode, which may
+  differ from the apps'). A left button's release is a click, a right
+  one's a right click and its menu, shown at the pointer over the app's
+  window, which hears its menus' messages. `windows_tray_test` sends the
+  app's window the icon's messages.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
