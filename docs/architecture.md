@@ -8760,8 +8760,13 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   resized, minimized and restored (WM_SIZE) to the core; full screen a
   frameless window over its display, its style and placement kept for
   after; opacity a layered window's; Close off as the window menu's
-  SC_CLOSE grayed. Native UI's content is painted its background till the
-  renderer's stage draws it. `windows_window_test` drives one.
+  SC_CLOSE grayed. Native UI's frames are asked for from the queue
+  (`requestFrame`, one at a time, another asked while one draws following
+  it), built at the client area's size in points, drawn by `Native\D3d`
+  into the window's swap chain at its pixels and presented at the
+  display's refresh; WM_PAINT shows the last frame again (a window of no
+  native UI is painted its background). `windows_window_test` drives one
+  and reads its frame back.
 - Text (stage 2, `Native\DWrite`, `DWriteEngine`: mygo's dwrite engine): a
   paragraph is an IDWriteTextLayout of a text format of its style (the
   first family of its list the system has, a generic one's best: Segoe UI,

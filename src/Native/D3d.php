@@ -381,6 +381,9 @@ final class D3d
         }
         [$pw, $ph] = [max(1, $pw), max(1, $ph)];
         if ([$pw, $ph] !== $this->size) {
+            // the context lets go of the back buffer's view too: ResizeBuffers fails while anything holds the buffers
+            $c = self::$context;
+            ($c->v->OMSetRenderTargets)($c, 0, null, null);
             Com::release($this->backBuffer);
             $s = $this->swapChain;
             self::hr(($s->v->ResizeBuffers)($s, 0, $pw, $ph, 0, 0), 'IDXGISwapChain::ResizeBuffers');

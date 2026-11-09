@@ -1,8 +1,8 @@
 <?php
 // A window of native UI on Windows (windows_window_test.php): its size in points, the frame
 // around it, moving and resizing it, its title, minimizing and restoring, maximizing, full
-// screen and back, the events the core hears, closing it. Its text is DirectWrite's; the
-// content shows the background alone till the renderer's stage.
+// screen and back, the events the core hears, closing it; its content drawn by Direct3D 11
+// (WARP on CI's runners) and read back: a red square in its top left corner on the background.
 declare(strict_types=1);
 
 use MyPHP\{App, Rectangle, Window, WindowOptions};
@@ -15,7 +15,7 @@ $r = ['events' => []];
 App::setName('WindowTest');
 App::whenReady(function () use (&$r, $at) {
     $at('ready');
-    $w = new Window(new WindowOptions(title: 'Hello', width: 400, height: 300, content: Content::view(fn() => Text('Hello'))));
+    $w = new Window(new WindowOptions(title: 'Hello', width: 400, height: 300, content: Content::view(fn() => Color(Color::rgb(0xff0000))->frame(width: 100, height: 100)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading))));
     foreach (['focus', 'blur', 'move', 'resize', 'minimize', 'restore', 'maximize', 'unmaximize', 'enterFullScreen', 'leaveFullScreen', 'closed'] as $e) {
         $w->on($e, function () use (&$r, $e) { $r['events'][] = $e; });
     }
@@ -24,6 +24,11 @@ App::whenReady(function () use (&$r, $at) {
     $step = function (float $seconds, Closure $then) { App::after($seconds, $then); };
     $step(0.3, function () use ($w, &$r, $at, $step) {
         $r['scale'] = $w->native()->backingScale();
+        $r['draw'] = $w->native()->lastDraw();
+        [$pix, $pw, $ph] = $w->native()->lastFrame();
+        $px = fn(int $x, int $y): array => $pix === '' ? [] : array_values(unpack('C4', substr($pix, ($y * $pw + $x) * 4, 4)));
+        $s = $r['scale'];
+        $r['frame'] = [$pw, $ph, $px((int)(50 * $s), (int)(50 * $s)), $px((int)(200 * $s), (int)(150 * $s))];
         $r['content'] = $w->contentSize();
         $b = $w->bounds(); $c = $w->contentBounds();
         $r['frameAround'] = $b->width > $c->width && $b->height > $c->height;
