@@ -11,7 +11,7 @@ use MyPHP\Platform\Windows\Win32;
 require __DIR__ . '/../../src/autoload.php';
 
 $r = ['events' => []];
-$at = function (string $where): void { fwrite(STDERR, "at: $where\n"); }; // where it got, for a run that hangs
+$at = function (string $where): void { fwrite(STDERR, "at: $where\n"); fflush(STDERR); }; // where it got, for a run that hangs
 $at('start');
 App::setName('BackendTest');
 App::whenReady(function () use (&$r, $at) {
@@ -26,7 +26,7 @@ App::whenReady(function () use (&$r, $at) {
         $start = microtime(true);
         $done = false;
         App::after(0.1, function () use (&$done) { $done = true; });
-        App::wait(fn() => $done);
+        App::wait(function () use (&$done): bool { return $done; }); // by reference: an arrow function would keep the false it saw
         $r['waited'] = round(microtime(true) - $start, 2);
         $at('waited');
         $r['userData'] = App::path(PathName::UserData);

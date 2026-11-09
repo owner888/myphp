@@ -13,6 +13,11 @@ namespace MyPHP\Tests;
 
 use MyPHP\Native\Build\{Codesign, Deb, Dmg, DsStore, Icns, Linux, MachO, Pkgbuild, Png, Resources, S3, Upload};
 
+if (PHP_OS_FAMILY === 'Windows') { // the bundles of macOS and Linux, their links and modes; Windows's build comes with its stage
+    echo "  skipped on Windows\n";
+    return;
+}
+
 function bldDir(): string
 {
     $d = sys_get_temp_dir() . '/myphp-build-' . bin2hex(random_bytes(4));
