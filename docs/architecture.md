@@ -8754,7 +8754,7 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   transparency effects, a contrast theme and the text size. The languages
   are the display languages, the region the user's formats (LOCALE_SNAME,
   the first weekday, the time format's hour cycle). The clipboard has text
-  for now; the shell opens with ShellExecute, shows in Explorer, trashes to
+  (and HTML and images, below); the shell opens with ShellExecute, shows in Explorer, trashes to
   the Recycle Bin; power is WM_POWERBROADCAST, WTS's lock and unlock, and
   the thread's execution state.
 - `windows_backend_test` runs an app of no windows on it and checks each.
@@ -8928,6 +8928,16 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   NotifyNetworkConnectivityHintChange calls back on a thread of the
   system's, where PHP cannot run. `windows_services_test` keeps, reads,
   replaces and deletes a secret.
+- The clipboard's HTML and images (stage 5: mygo's system.go and
+  clipboard.go): HTML is written as its type and as CF_HTML ("HTML
+  Format", the fragment in a header of byte offsets), a PNG as its type,
+  as the registered "PNG" browsers and Office copy, and as a CF_DIB (a
+  top-down 32-bit BITMAPINFOHEADER bitmap, straight colors). Read, the
+  app's own come first, then CF_HTML's fragment, the "PNG", and a
+  bitmap's pixels encoded as a PNG (24 or 32 bits, bottom up or top down,
+  its alpha only past BITMAPINFOHEADER's header, its size bounded, as
+  the clipboard's are untrusted). `windows_services_test` writes and reads
+  them, and reads a bitmap another app put there.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
