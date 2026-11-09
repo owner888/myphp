@@ -8799,7 +8799,10 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   blurred at half size across then down by `D3dShader::BLUR`'s fullscreen
   triangle into a texture the quads after read; the shaders let go of
   the backdrop and the target its output before the copy, as Direct3D
-  reads nothing it writes. Not yet: canvases, custom shaders.
+  reads nothing it writes. Canvases render first, each from its list
+  into an RGBA texture of its size (premultiplied, blurred if it asks)
+  copied to its place among the canvases' layers of the image texture
+  (`CopySubresourceRegion`). Not yet: custom shaders.
   `windows_render_test` compiles the HLSL and reads back.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on

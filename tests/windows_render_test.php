@@ -2,13 +2,13 @@
 // The Direct3D 11 renderer on Windows (Native\D3d, D3dShader's HLSL): the shaders compiled,
 // a list of rects drawn off screen and read back (CI's runners draw with WARP) at one and at two
 // pixels a point: fills, alpha, a rounded corner's coverage, a clip, the clear color; a backdrop
-// blur and a pane of glass over what was drawn before them.
+// blur and a pane of glass over what was drawn before them; a canvas rendered and shown.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
 use MyPHP\Native\{D3d, D3dShader};
-use MyPHP\UI\{Atlas, ImageAtlas};
+use MyPHP\UI\{Atlas, Canvas, ImageAtlas};
 
 (function (): void {
     if (PHP_OS_FAMILY !== 'Windows') {
@@ -78,6 +78,19 @@ use MyPHP\UI\{Atlas, ImageAtlas};
     $glass = $px($pix, 64, 32, 16);
     check($glass[3] === 255 && $glass !== [255, 0, 0, 255] && $glass !== [0, 0, 255, 255], 'a pane of glass over them: ' . json_encode($glass));
     check($near($px($pix, 64, 62, 30), [0, 255, 0, 255]), 'and what is drawn after it, over: ' . json_encode($px($pix, 64, 62, 30)));
+
+    // A canvas: rendered first into a texture of its size, copied to its place among the canvases' layers, shown from there.
+    $cv = new Canvas(8, 4);
+    $cv->list = Canvas::newList();
+    $cv->list->pushClip(0, 0, 8, 4);
+    $cv->list->rect(0, 0, 4, 4, 0xff0000);
+    $cv->list->rect(4, 0, 4, 4, 0x0000ff);
+    $cv->rendered();
+    $slot = $cv->slot();
+    $list = $r->nextList();
+    $list->image(0, 0, 32, 16, $slot['u'], $slot['v'], 8, 4, $slot['page'], pixelated: true);
+    $pix = $r->readBack($list, 32, 16, 1.0, [1.0, 1.0, 1.0, 1.0]);
+    check($near($px($pix, 32, 8, 8), [0, 0, 255, 255]) && $near($px($pix, 32, 24, 8), [255, 0, 0, 255]), 'a canvas drawn red and blue, shown scaled up: ' . json_encode([$px($pix, 32, 8, 8), $px($pix, 32, 24, 8)]));
 
     $other = new D3d(256);
     $list = $other->nextList();
