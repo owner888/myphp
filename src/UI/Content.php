@@ -39,7 +39,14 @@ final class Content
         });
     }
 
-    /** Builds a window's view $view, which returns the root View, into $c: in the middle of the window, as SwiftUI's. @internal Content's and the tests' */
+    /**
+     * Builds a window's view $view, which returns the root View, into $c: in
+     * the middle of the window, as SwiftUI's, and inside the safe area on a
+     * phone (out of the status bar, the cutout and the home indicator, above
+     * the keyboard), the window's background reaching the edges. A
+     * NavigationStack or a TabView keeps out of it itself, its bars reaching
+     * into it. @internal Content's and the tests'
+     */
     public static function render(Closure $view, Context $c): void
     {
         if (self::takesContext($view)) { // the engine's own builder, the framework's @internal
@@ -50,7 +57,16 @@ final class Content
         Declarative\Transaction::frame($c);
         $c->root->alignItems(Node::CENTER)->justify(Node::CENTER);
         if ($c->vibrancy()) { $c->root->color = null; } // a window of a material: it shows through, a SwiftUI view having no background of its own
-        Declarative\View::renderAll($c, Declarative\Env::root($c), $view());
+        $root = $view();
+        if ($root instanceof Declarative\NavigationStack || $root instanceof Declarative\TabView || ($c->safeArea === [0.0, 0.0, 0.0, 0.0] && $c->keyboard == 0.0)) {
+            Declarative\View::renderAll($c, Declarative\Env::root($c), $root);
+            return;
+        }
+        $c->safeArea(function () use ($c, $root): void {
+            // what it builds is inside: a NavigationStack in it keeps out of nothing more
+            $c->safeArea = [0.0, 0.0, 0.0, 0.0];
+            Declarative\View::renderAll($c, Declarative\Env::root($c), $root);
+        })->alignItems(Node::CENTER)->justify(Node::CENTER);
     }
 
     /** @var \WeakMap<Closure, bool>|null */

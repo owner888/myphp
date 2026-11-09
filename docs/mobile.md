@@ -55,7 +55,8 @@ directory, and on iOS `Dialog::save` (write the file, then share it).
 ## The safe area and the keyboard
 
 The views keep out of the status bar, the notch or cutout and the home
-indicator by themselves, as SwiftUI's: a `NavigationStack`'s bar reaches
+indicator by themselves, as SwiftUI's: a window's root view is laid out
+inside the safe area, its background reaching the edges; a `NavigationStack`'s bar reaches
 into the status bar, a `TabView`'s bar floats over the home indicator, and
 what scrolls under them goes on to the screen's edges. While a field has
 the focus, the keyboard takes the bottom and what it would cover of the

@@ -676,13 +676,21 @@ final class Headless
     private static array $loaded = [];
 
     /** $src without its classes, enums, interfaces, traits, functions and constants at the top level: the code that makes the state. */
+    /** Whether token $i follows a :: (whitespace between), as the class of X::class does. @param list<\PhpToken> $tk */
+    private static function afterDoubleColon(array $tk, int $i): bool
+    {
+        for ($j = $i - 1; $j >= 0 && $tk[$j]->is(T_WHITESPACE); $j--);
+        return $j >= 0 && $tk[$j]->is(T_DOUBLE_COLON);
+    }
+
     private static function withoutDeclarations(string $src): string
     {
         $tk = \PhpToken::tokenize($src);
         $out = '';
         for ($i = 0, $n = count($tk), $depth = 0; $i < $n; $i++) {
             $t = $tk[$i];
-            if ($depth === 0 && $t->is([T_CLASS, T_ENUM, T_INTERFACE, T_TRAIT, T_FUNCTION]) && !($t->is(T_FUNCTION) && self::anonymous($tk, $i))) {
+            // not X::class, a name (the examples' class_exists(\MyPHP\App::class) before their autoloader)
+            if ($depth === 0 && $t->is([T_CLASS, T_ENUM, T_INTERFACE, T_TRAIT, T_FUNCTION]) && !($t->is(T_FUNCTION) && self::anonymous($tk, $i)) && !($t->is(T_CLASS) && self::afterDoubleColon($tk, $i))) {
                 $out = (string)preg_replace('/(?:final|abstract|readonly|\s|\/\*\*.*?\*\/)*$/s', '', $out); // its modifiers and doc comment go with it
                 for ($open = 0, $i++; $i < $n; $i++) { // to the end of its body
                     if ($tk[$i]->id === 123 || $tk[$i]->is([T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES])) { $open++; } // { and }, not a brace in a string's text ("delete {{$list}}")
