@@ -12,7 +12,8 @@ use MyPHP\Platform\{Accelerator, AppHandler, Menu, MenuItem};
 /**
  * Win32's menus (mygo's windows menu.go): the menu bar of each window,
  * which shows the application menu, its keyboard shortcuts, and the
- * context menus, as Windows draws them. WM_COMMAND reports 16-bit command
+ * context menus, popup menus' items drawn in Windows 11's style there
+ * (MenuDraw). WM_COMMAND reports 16-bit command
  * ids, which map back to the items they were built from; the items are
  * tracked per owner (a window's menu bar, a popup, a submenu filled anew
  * as it opens) and forgotten with it.
@@ -36,7 +37,7 @@ final class Menus
 
     /** The application menu, which new windows' menu bars show, kept current by update(). */
     public ?Menu $appMenu = null;
-    /** @var array<int, array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string}> the items, by command id */
+    /** @var array<int, array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string, look: int}> the items, by command id; look the key of the look of one drawn here, 0 for one Windows draws */
     private array $entries = [];
     private int $next = 0;
     private int $owners = 0;
@@ -69,6 +70,7 @@ final class Menus
             }
         }
         $this->entries = array_filter($this->entries, fn(array $e): bool => $e['owner'] !== $owner);
+        MenuDraw::dropOwner($owner);
         foreach ($this->subs as $id => $list) {
             $kept = array_values(array_filter($list, fn(array $s): bool => $s['owner'] !== $owner));
             foreach ($list as $s) {
@@ -88,20 +90,39 @@ final class Menus
     {
         $u = Win32::user32();
         $h = $bar ? $u->CreateMenu() : $u->CreatePopupMenu();
-        $this->fill($h, $m->items, $owner, $accels, $window);
+        $this->fill($h, $m->items, $owner, $accels, $window, $bar);
         return $h;
     }
 
-    /** Appends $items to menu $h. @param list<MenuItem> $items @param ?array<string, int> $accels */
-    private function fill(CData $h, array $items, int $owner, ?array &$accels, ?Window $window): void
+    /**
+     * Appends $items to menu $h; a popup's ($bar false) are drawn here on
+     * Windows 11 (MenuDraw), leaving room for checks when any item has one.
+     * @param list<MenuItem> $items @param ?array<string, int> $accels
+     */
+    private function fill(CData $h, array $items, int $owner, ?array &$accels, ?Window $window, bool $bar = false): void
     {
         $u = Win32::user32();
+        $drawn = !$bar && MenuDraw::fluent();
+        $items = array_values(array_filter($items, fn(MenuItem $it): bool => $it->visible && !$it->alternate)); // the alternates are macOS's, shown while Option is held
+        $column = false;
         foreach ($items as $it) {
-            if (!$it->visible || $it->alternate) {
-                continue; // the alternates are macOS's, shown while Option is held
+            $column = $column || $it->type === MenuItem::CHECKBOX || $it->type === MenuItem::RADIO || $it->checked;
+        }
+        $pos = $u->GetMenuItemCount($h);
+        $look = function (array $l, int $cmd = 0) use ($h, &$pos, $drawn, $owner, $column): int {
+            $at = $pos++;
+            if (!$drawn) {
+                return 0;
             }
+            $key = MenuDraw::ownerDraw($h, $at, $l + ['owner' => $owner, 'column' => $column, 'first' => $at === 0, 'last' => false, 'label' => '', 'accel' => '', 'separator' => false, 'submenu' => false, 'radio' => false]);
+            if ($cmd !== 0) { $this->entries[$cmd]['look'] = $key; }
+            return $key;
+        };
+        $last = 0;
+        foreach ($items as $it) {
             if ($it->type === MenuItem::SEPARATOR) {
                 $u->AppendMenuW($h, self::MF_SEPARATOR, 0, null);
+                $last = $look(['separator' => true]);
                 continue;
             }
             $flags = self::MF_STRING | ($it->enabled && $it->type !== MenuItem::HEADER ? 0 : self::MF_GRAYED);
@@ -109,16 +130,18 @@ final class Menus
                 $sub = $u->CreatePopupMenu();
                 $this->fill($sub, $it->submenu->items, $owner, $accels, $window);
                 $u->AppendMenuW($h, $flags | self::MF_POPUP, Mem::addr($sub), Win32::wide($it->label));
+                $last = $look(['label' => $it->label, 'submenu' => true]);
                 $this->subs[$it->id][] = ['menu' => $sub, 'owner' => $owner, 'window' => $window];
                 if ($it->opens) { $this->opens[Mem::addr($sub)] = $it->id; }
                 continue;
             }
             if ($it->type === MenuItem::HEADER) {
                 $u->AppendMenuW($h, $flags, 0, Win32::wide($it->label));
+                $last = $look(['label' => $it->label]);
                 continue;
             }
             $accel = '';
-            $cmd = $this->add(['uid' => $it->id, 'role' => $it->role, 'owner' => $owner, 'menu' => $h, 'radio' => $it->type === MenuItem::RADIO, 'accel' => '']);
+            $cmd = $this->add(['uid' => $it->id, 'role' => $it->role, 'owner' => $owner, 'menu' => $h, 'radio' => $it->type === MenuItem::RADIO, 'accel' => '', 'look' => 0]);
             if ($it->accelerator !== '') {
                 try {
                     $a = Accelerator::parse($it->accelerator, 'Windows');
@@ -133,13 +156,17 @@ final class Menus
             }
             $label = $accel === '' ? $it->label : "{$it->label}\t$accel";
             $u->AppendMenuW($h, $flags | ($it->checked ? self::MF_CHECKED : 0), $cmd, Win32::wide($label));
-            if ($it->type === MenuItem::RADIO) {
-                self::setState($h, $cmd, $label, $it->enabled, $it->checked, true);
+            $last = $look(['label' => $it->label, 'accel' => $accel, 'radio' => $it->type === MenuItem::RADIO], $cmd);
+            if ($it->type === MenuItem::RADIO && $last === 0) {
+                self::setState($h, $cmd, $label, $it->enabled, $it->checked, true, false);
             }
+        }
+        if ($last !== 0) {
+            MenuDraw::$looks[$last]['last'] = true; // the menu's padding below it
         }
     }
 
-    /** A command id of the items not taken, from 1: 0xF000 and up are the system's. @param array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string} $e */
+    /** A command id of the items not taken, from 1: 0xF000 and up are the system's. @param array{uid: int, role: string, owner: int, menu: CData, radio: bool, accel: string, look: int} $e */
     private function add(array $e): int
     {
         do {
@@ -149,14 +176,14 @@ final class Menus
         return $this->next;
     }
 
-    /** Gives an item its label, state and kind (mygo's setItemInfo): a radio item shows a bullet. */
-    private static function setState(CData $menu, int $cmd, string $label, bool $enabled, bool $checked, bool $radio): void
+    /** Gives an item its label, state and kind (mygo's setItemInfo): a radio item shows a bullet; one drawn here ($drawn) stays so. */
+    private static function setState(CData $menu, int $cmd, string $label, bool $enabled, bool $checked, bool $radio, bool $drawn): void
     {
         $u = Win32::user32();
         $mi = $u->new('MENUITEMINFOW');
         $mi->cbSize = FFI::sizeof($mi);
         $mi->fMask = 0x1 | 0x100 | 0x40; // MIIM_STATE, MIIM_FTYPE, MIIM_STRING
-        $mi->fType = $radio ? 0x200 : 0; // MFT_RADIOCHECK
+        $mi->fType = ($radio ? 0x200 : 0) | ($drawn ? 0x100 : 0); // MFT_RADIOCHECK, MFT_OWNERDRAW
         $mi->fState = ($checked ? 0x8 : 0) | ($enabled ? 0 : 0x3); // MFS_CHECKED, MFS_DISABLED
         $text = Win32::wide($label);
         $mi->dwTypeData = $u->cast('uint16_t *', FFI::addr($text[0]));
@@ -214,7 +241,8 @@ final class Menus
             if ($e['uid'] !== $it->id) {
                 continue;
             }
-            self::setState($e['menu'], $cmd, $e['accel'] === '' ? $it->label : "{$it->label}\t{$e['accel']}", $it->enabled, $it->checked, $e['radio']);
+            if ($e['look'] !== 0 && isset(MenuDraw::$looks[$e['look']])) { MenuDraw::$looks[$e['look']]['label'] = $it->label; }
+            self::setState($e['menu'], $cmd, $e['accel'] === '' ? $it->label : "{$it->label}\t{$e['accel']}", $it->enabled, $it->checked, $e['radio'], $e['look'] !== 0);
         }
         foreach (Window::all() as $w) {
             $w->menuChanged();

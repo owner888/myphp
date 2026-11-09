@@ -8854,10 +8854,22 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   left the key, and its WM_CHAR types nothing. The editing roles go to the
   content of the window, as Linux's. A context menu is TrackPopupMenuEx's
   over the window (its owner brought to the front, or it would not close),
-  at the point or the pointer, right to left as asked. Not yet: the menus
-  drawn as mygo draws them (Fluent, the appearance's dark), items' icons,
-  the tray. `windows_menu_test` reads a window's bar back and runs its
-  items.
+  at the point or the pointer, right to left as asked. The menus follow the
+  appearance (`Windows\MenuDraw`: mygo's darkmenu.go, menudraw.go): popups
+  by uxtheme's preferred app mode (its ordinals 135 and 136, Windows 10
+  1903 and later), the bar drawn by the window through the UAH messages
+  (on Windows 11 always, on 10 while dark; a contrast theme keeps the
+  system's). On Windows 11 popup items are drawn in its style
+  (MFT_OWNERDRAW, their strings kept for mnemonics, screen readers and the
+  tests): WinUI's metrics, a highlight inset with rounded corners
+  antialiased in a DIB, Segoe Fluent Icons' marks, the shortcut fainter;
+  Windows widens items past what they ask by what it does not tell, which
+  is learned from the first menu drawn at each DPI. A hook of the thread
+  while menus show rounds their windows as Windows rounds its own, outlined
+  in their colors. The bar is taller there (30 DIPs), so a window with
+  one is grown by what its content lacks after AdjustWindowRectEx. Not yet:
+  items' icons, the tray. `windows_menu_test` reads a window's bar back and
+  runs its items.
 - Paths of the file system are `Native\Paths`' (Go's filepath.IsAbs and
   Abs): a drive's, a share's and the current drive's root are absolute on
   Windows, a file URL is file:///C:/x for C:\x; URLs' and routes' paths
