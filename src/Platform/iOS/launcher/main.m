@@ -189,6 +189,14 @@ float myphp_ios_get_keyboard_height(void) {
     return g_keyboard_height;
 }
 
+// Where the caret of the field taking the keyboard is, in the Metal view's points (Platform\iOS\Window::placeCaret, each
+// frame): what the text input's geometry gives, so a hardware keyboard's candidates show by it, not at the screen's corner.
+static CGRect g_caret_rect = {{0, 0}, {0, 0}};
+
+void myphp_ios_set_caret_rect(float x, float y, float w, float h) {
+    g_caret_rect = CGRectMake(x, y, w, h);
+}
+
 void* myphp_ios_get_view(void) {
     return (__bridge void*)g_view;
 }
@@ -1094,9 +1102,10 @@ static void* php_worker_thread(void *arg) {
 
 - (void)setBaseWritingDirection:(NSWritingDirection)writingDirection forRange:(UITextRange *)range {}
 
-// Geometry: the field is PHP's; the keyboard's candidates sit over the keyboard whatever these say
-- (CGRect)firstRectForRange:(UITextRange *)range { return CGRectZero; }
-- (CGRect)caretRectForPosition:(UITextPosition *)position { return CGRectZero; }
+// Geometry: the field is PHP's, which tells its caret each frame; a hardware keyboard's candidates show by it (the
+// software keyboard's sit over the keyboard whatever these say)
+- (CGRect)firstRectForRange:(UITextRange *)range { return g_caret_rect; }
+- (CGRect)caretRectForPosition:(UITextPosition *)position { return g_caret_rect; }
 - (NSArray<UITextSelectionRect *> *)selectionRectsForRange:(UITextRange *)range { return @[]; }
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point { return [self endOfDocument]; }
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range { return range.end; }
