@@ -306,10 +306,10 @@ same('Ada', $name->text, "setting the field's value types it");
     }
     $dir = sys_get_temp_dir() . '/myphp-automation-x-' . getmypid();
     @mkdir($dir, 0700);
-    $x = proc_open([$xvfb, '-displayfd', '3', '-screen', '0', '1280x1024x24', '-nolisten', 'tcp'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w'], 3 => ['pipe', 'w']], $xp);
+    $x = proc_open([$xvfb, '-displayfd', '3', '-screen', '0', '1280x1024x24', '-nolisten', 'tcp'], [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w'], 3 => ['pipe', 'w']], $xp);
     $display = trim((string)fgets($xp[3]));
     $sock = "$dir/s";
-    $app = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/examples/automation/main.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$dir/log", 'w'], 2 => ['file', "$dir/log", 'w']], $ap, $dir,
+    $app = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/examples/automation/main.php'], [0 => ['file', DEVNULL, 'r'], 1 => ['file', "$dir/log", 'w'], 2 => ['file', "$dir/log", 'w']], $ap, $dir,
         ['DISPLAY' => ":$display", 'MYPHP_AUTOMATION' => $sock] + getenv());
     try {
         for ($i = 0; $i < 200 && !file_exists($sock); $i++) { usleep(50_000); }

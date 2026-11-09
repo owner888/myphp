@@ -336,7 +336,7 @@ if (str_contains($path, 'elsewhere')) {
 file_put_contents(getenv('PUT_LOG'), json_encode([$path, $h['Content-Type'] ?? '', $h['Cache-Control'] ?? '', $ok]) . "\n", FILE_APPEND);
 PHP);
 $port = 20000 + random_int(0, 20000);
-$server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", "$www/router.php"], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, $www, ['PUT_LOG' => $log]);
+$server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", "$www/router.php"], [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w']], $pipes, $www, ['PUT_LOG' => $log]);
 for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(100_000); }
 $dist = bldDir();
 $artifacts = [];
@@ -367,7 +367,7 @@ $env(['AWS_ACCESS_KEY_ID' => null, 'AWS_SECRET_ACCESS_KEY' => null, 'AWS_SESSION
 
 // The commands of bin/myphp that run anywhere.
 $myphp = fn(string ...$args): array => (function () use ($args): array {
-    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', ...$args], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', ...$args], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
     return [proc_close($p), $out];
 })();
@@ -460,7 +460,7 @@ $root = bldDir();
 $myphp('init', "$root/b");
 unlink("$root/b/resources/icon.png"); // ImageIO decodes it, on macOS
 bldWrite("$root/b", ['resources/darwin-arm64/bin/tool' => 'arm', 'resources/darwin-amd64/bin/tool' => 'amd', 'resources/notes.txt' => 'notes']);
-$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-skip-dmg', '-platform', 'darwin/arm64,darwin/amd64', "$root/b"], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
+$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-skip-dmg', '-platform', 'darwin/arm64,darwin/amd64', "$root/b"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
 $out = stream_get_contents($pipes[1]);
 same(0, proc_close($p), 'myphp build: ' . $out);
 check(str_contains($out, 'Built b 0.1.0 in') && str_contains($out, 'build/darwin-amd64/'), 'and its summary');
@@ -543,7 +543,7 @@ $myphp('init', '-name', 'Demo', "$root/d");
 unlink("$root/d/resources/icon.png");
 file_put_contents("$root/d/resources/data.txt", 'data');
 file_put_contents("$root/d/view.php", "<?php\nreturn fn() => null;\n");
-$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'dev'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, "$root/d",
+$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'dev'], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, "$root/d",
     ['DEVAPP' => "$stub/app.sh", 'DEVLOG' => "$stub/log", 'PATH' => "$stub:" . getenv('PATH')] + getenv());
 for ($i = 0; $i < 100 && substr_count((string)@file_get_contents("$stub/log"), "\n") < 2; $i++) { usleep(100_000); }
 usleep(300_000);
@@ -740,7 +740,7 @@ if (PHP_OS_FAMILY === 'Linux') {
     $cfg = json_decode(file_get_contents("$root/l/myphp.json"), true);
     $cfg['linux'] = ['command' => 'linux-demo'];
     file_put_contents("$root/l/myphp.json", json_encode($cfg));
-    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-platform', 'linux/' . (php_uname('m') === 'aarch64' ? 'arm64' : 'amd64'), "$root/l"], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, ['PATH' => "$stub:" . getenv('PATH')] + getenv());
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-platform', 'linux/' . (php_uname('m') === 'aarch64' ? 'arm64' : 'amd64'), "$root/l"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, ['PATH' => "$stub:" . getenv('PATH')] + getenv());
     $out = stream_get_contents($pipes[1]);
     same(0, proc_close($p), 'myphp build linux: ' . $out);
     $arch = php_uname('m') === 'aarch64' ? 'arm64' : 'amd64';

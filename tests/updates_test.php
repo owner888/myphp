@@ -302,7 +302,7 @@ try {
     // Check and install from a local server, into a bundle.
     $port = freePort();
     $www = updDir();
-    $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", '-t', $www], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes);
+    $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", '-t', $www], [['file', DEVNULL, 'r'], ['file', DEVNULL, 'w'], ['file', DEVNULL, 'w']], $pipes);
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
     $base = "http://127.0.0.1:$port";
     try {

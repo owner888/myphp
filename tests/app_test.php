@@ -29,9 +29,11 @@ App::lastWindowClosed();
 same(1, $closed, 'the listener heard it');
 $off();
 
-// Directories: the Mac's, XDG's on Linux, or what setPath set.
+// Directories: the Mac's, XDG's on Linux, AppData's on Windows, or what setPath set.
 $home = (string)getenv('HOME');
-if (PHP_OS_FAMILY === 'Linux') {
+if (PHP_OS_FAMILY === 'Windows') {
+    same([(string)getenv('APPDATA'), getenv('USERPROFILE') . '\\Videos'], [App::path(PathName::AppData), App::path(PathName::Videos)], 'Windows\'s names');
+} elseif (PHP_OS_FAMILY === 'Linux') {
     same([(string)(getenv('XDG_CONFIG_HOME') ?: "$home/.config"), "$home/Videos"], [App::path(PathName::AppData), App::path(PathName::Videos)], 'XDG\'s names');
 } else {
     same(["$home/Movies", "$home/Library/Application Support"], [App::path(PathName::Videos), App::path(PathName::AppData)], 'the Mac\'s names');

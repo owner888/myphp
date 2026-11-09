@@ -738,7 +738,7 @@ final class Headless
 function rangeServer(string $dir): array
 {
     $port = freePort(); // nothing listens on it: an earlier test's server (its workers outlive it a moment) would answer of its own folder
-    $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/range_server.php'], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4', 'MYPHP_FILES' => $dir] + getenv());
+    $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/range_server.php'], [['file', DEVNULL, 'r'], ['file', DEVNULL, 'w'], ['file', DEVNULL, 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4', 'MYPHP_FILES' => $dir] + getenv());
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
     return ["http://127.0.0.1:$port", static function () use ($server): void { proc_terminate($server); }];
 }
@@ -760,6 +760,9 @@ function freePort(): int
 if (!defined('MYPHP_TEST_SUITE')) {
     register_shutdown_function(static function (): void { printf("%d checks, %d failed\n", $GLOBALS['checks'] ?? 0, count($GLOBALS['failures'] ?? [])); });
 }
+
+/** The null device, for a child process's streams. */
+const DEVNULL = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
 
 function check(bool $cond, string $what): void
 {

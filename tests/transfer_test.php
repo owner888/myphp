@@ -33,7 +33,7 @@ try { $d->materialize([Format::PNG]); check(false, 'no match'); } catch (FormatU
 same('', (new Data(new Item(Representation::bytes(Format::TEXT, ''))))->read(Format::TEXT), 'empty data is valid');
 
 // Files and URLs.
-$paths = [sys_get_temp_dir() . '/a #%.txt', sys_get_temp_dir() . '/日本語.txt'];
+$paths = [sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'a #%.txt', sys_get_temp_dir() . DIRECTORY_SEPARATOR . '日本語.txt']; // the system's separators, which a path comes back with
 $d = Data::files(...$paths);
 same($paths, $d->paths(), 'file paths round-trip');
 same(2, count($d->items), 'one item per file');
