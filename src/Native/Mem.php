@@ -39,9 +39,12 @@ final class Mem
         self::c()->free($p);
     }
 
-    /** The integer address a pointer CData holds. */
-    public static function addr(CData $p): int
+    /** The integer address a pointer CData holds (of any FFI's); 0 for none (a null pointer, or null as an FFI function returns one). */
+    public static function addr(?CData $p): int
     {
+        if ($p === null) {
+            return 0;
+        }
         self::c();
         self::$slot[0] = $p;
         return self::$slotInt[0];

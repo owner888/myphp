@@ -6,6 +6,7 @@ namespace MyPHP\Platform\Windows;
 use Closure;
 use FFI;
 use FFI\CData;
+use MyPHP\Native\Mem;
 
 /**
  * Win32 over FFI (mygo's internal/windows win32.go): the system's
@@ -201,22 +202,6 @@ final class Win32
         return $addr === 0 ? '' : self::str(self::user32()->cast('uint16_t *', $addr));
     }
 
-    /** A handle's address, by which route() keeps windows: the pointer's own bytes, through a slot (FFI's cast of a pointer to an integer reads what it points to, ffi_addr_test). */
-    public static function addr(?CData $p): int
-    {
-        if ($p === null) {
-            return 0;
-        }
-        if (self::$slot === null) {
-            self::$slot = self::user32()->new('void *[1]');
-            self::$slotInt = self::user32()->cast('int64_t[1]', self::$slot);
-        }
-        self::$slot[0] = $p;
-        return self::$slotInt[0];
-    }
-
-    private static ?CData $slot = null, $slotInt = null;
-
     public static function instance(): CData
     {
         return self::kernel32()->GetModuleHandleW(null);
@@ -228,12 +213,12 @@ final class Win32
             $u = self::user32();
             self::$callbacks = $u->new('Callbacks', false);
             self::$callbacks->wndProc = static function ($hwnd, int $msg, int $wp, int $lp) use ($u): int {
-                $fn = self::$routes[self::addr($hwnd)] ?? null;
+                $fn = self::$routes[Mem::addr($hwnd)] ?? null;
                 if ($fn !== null && ($r = $fn($msg, $wp, $lp)) !== null) {
                     return $r;
                 }
                 if ($msg === self::WM_DESTROY) {
-                    unset(self::$routes[self::addr($hwnd)]);
+                    unset(self::$routes[Mem::addr($hwnd)]);
                 }
                 return $u->DefWindowProcW($hwnd, $msg, $wp, $lp);
             };
@@ -273,7 +258,7 @@ final class Win32
         if ($hwnd === null) {
             throw new \RuntimeException("myphp: cannot create a window of class $class (error " . self::kernel32()->GetLastError() . ')');
         }
-        self::$routes[self::addr($hwnd)] = $handler;
+        self::$routes[Mem::addr($hwnd)] = $handler;
         return $hwnd;
     }
 

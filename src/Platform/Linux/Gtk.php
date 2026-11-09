@@ -7,6 +7,7 @@ use Closure;
 use FFI;
 use FFI\CData;
 use RuntimeException;
+use MyPHP\Native\Mem;
 
 /**
  * GTK 3, GDK, GLib and GObject over one FFI instance (mygo's linux ffi.go):
@@ -19,7 +20,6 @@ final class Gtk
     private static ?FFI $f = null;
     /** @var array<int, list<CData>> the holders of the closures connected to each object, by its address */
     private static array $kept = [];
-    private static ?CData $slot = null, $slotInt = null;
 
     public static function ffi(): FFI
     {
@@ -332,8 +332,6 @@ final class Gtk
         } catch (FFI\Exception $e) { // the system's GTK 3 missing: say what to install, not only that a library did not load
             throw new RuntimeException('native UI on Linux needs GTK 3, which is not installed: sudo apt install libgtk-3-0 (Debian, Ubuntu) or sudo dnf install gtk3 (Fedora); myphp doctor checks it (' . $e->getMessage() . ')', 0, $e);
         }
-        self::$slot = self::$f->new('void*[1]');
-        self::$slotInt = self::$f->cast('unsigned long[1]', self::$slot);
         return self::$f;
     }
 
@@ -347,17 +345,6 @@ final class Gtk
         $message = $e === null ? 'failed' : \FFI::string($e->message);
         if ($e !== null) { self::ffi()->g_error_free($e); }
         throw new RuntimeException("myphp: $what: $message");
-    }
-
-    /** The integer address of a pointer. */
-    public static function addr(?CData $p): int
-    {
-        if ($p === null) {
-            return 0;
-        }
-        self::ffi();
-        self::$slot[0] = $p;
-        return self::$slotInt[0];
     }
 
     /**
@@ -382,7 +369,7 @@ final class Gtk
             'focus' => $f->new('HFocus', false),
         };
         $h->fn = $fn;
-        self::$kept[self::addr($obj)][] = $h;
+        self::$kept[Mem::addr($obj)][] = $h;
         $f->g_signal_connect_data($obj, $signal, $f->cast('void*', $h->fn), null, null, 0);
     }
 
@@ -411,7 +398,7 @@ final class Gtk
             $f = self::ffi();
             $h = $f->new('HSource', false);
             $h->fn = function ($data): int {
-                $key = self::addr($data);
+                $key = Mem::addr($data);
                 $fn = self::$sources[$key] ?? null;
                 unset(self::$sources[$key], self::$ids[$key]);
                 $fn?->__invoke();
@@ -487,7 +474,7 @@ final class Gtk
         $f = self::ffi();
         $h = $f->new('HTick', false);
         $h->fn = fn($w, $clock, $data): int => $fn() ? 1 : 0;
-        self::$kept[self::addr($widget)][] = $h;
+        self::$kept[Mem::addr($widget)][] = $h;
         return $f->gtk_widget_add_tick_callback($widget, $h->fn, null, null);
     }
 }

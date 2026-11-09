@@ -246,7 +246,7 @@ final class D3d
         $errors = $c->new('void *');
         $hr = $c->D3DCompile($src, strlen($src), $name, null, null, $entry, $target, 1 << 15 /* optimization level 3 */, 0, FFI::addr($code), FFI::addr($errors));
         $text = static function (CData $p) use ($f): string {
-            $b = $f->cast('ID3DBlob *', Com::addr($p));
+            $b = $f->cast('ID3DBlob *', Mem::addr($p));
             $s = FFI::string(($b->v->GetBufferPointer)($b), ($b->v->GetBufferSize)($b));
             ($b->v->Release)($b);
             return $s;
@@ -428,7 +428,7 @@ final class D3d
         ($c->v->CopyResource)($c, $staging, $tex);
         $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
         self::hr(($c->v->Map)($c, $staging, 0, self::MAP_READ, 0, FFI::addr($m)), 'Map (read back)');
-        $at = Com::addr($m->pData);
+        $at = Mem::addr($m->pData);
         $out = '';
         for ($y = 0; $y < $ph; $y++) {
             $out .= FFI::string($f->cast('char *', $at + $y * $m->RowPitch), $pw * 4);
@@ -642,12 +642,12 @@ final class D3d
             $bpp = $format === self::R8_UNORM ? 1 : 4;
             if ($pixels === null) {
                 $keep = $f->new('uint8_t[' . ($w * $h * $bpp * $layers) . ']');
-                $pixels = $f->cast('void *', Com::addr(FFI::addr($keep[0])));
+                $pixels = $f->cast('void *', Mem::addr(FFI::addr($keep[0])));
                 $pitch = $w * $bpp;
             }
             $init = $f->new("D3D11_SUBRESOURCE_DATA[$layers]");
             for ($i = 0; $i < $layers; $i++) {
-                $init[$i]->pSysMem = $f->cast('void *', Com::addr($pixels) + ($keep !== null ? $i * $w * $h * $bpp : 0));
+                $init[$i]->pSysMem = $f->cast('void *', Mem::addr($pixels) + ($keep !== null ? $i * $w * $h * $bpp : 0));
                 $init[$i]->SysMemPitch = $pitch;
                 $init[$i]->SysMemSlicePitch = $pitch * $h;
             }

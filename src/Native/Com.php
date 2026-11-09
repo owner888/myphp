@@ -47,12 +47,6 @@ final class Com
         return sprintf('%08x-%04x-%04x-%s-%s', $g->a, $g->b, $g->c, substr($d, 0, 4), substr($d, 4));
     }
 
-    /** The integer address of pointer $p (of any FFI's); 0 for none. */
-    public static function addr(?CData $p): int
-    {
-        return $p === null || FFI::isNull($p) ? 0 : Mem::addr($p);
-    }
-
     /**
      * Pointer $p as one of $type of $f's, made of its address. FFI's cast
      * of a pointer is a view of the memory holding it, which goes with the
@@ -61,7 +55,7 @@ final class Com
      */
     public static function typed(FFI $f, CData $p, string $type): CData
     {
-        return $f->cast($type, self::addr($p));
+        return $f->cast($type, Mem::addr($p));
     }
 
     /** $obj's interface $iid, held (a `void *`), or null where it has none. */

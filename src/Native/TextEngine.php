@@ -39,7 +39,6 @@ final class TextEngine implements Engine
     /** @var array<int, Font> fonts by their slanted copies, for italics a font lacks */
     private array $oblique = [];
 
-    private CData $slot, $slotInt;
     /** @var array<string, list<array{desc: CData, weight: float, italic: bool, mono: bool}>> the faces the app registered, by lowercased family: the font's own and the name it gave (mygo's registered) */
     private array $registered = [];
     /** @var list<string> the families registered, as listed (mygo's names) */
@@ -131,22 +130,11 @@ final class TextEngine implements Engine
         }
         $this->styles = $styles;
         $this->italic = $this->str('MyPHPItalic');
-        $this->slot = $this->c->new('void*[1]');
-        $this->slotInt = $this->c->cast('unsigned long[1]', $this->slot);
     }
 
     private function str(string $s): CData
     {
         return $this->c->CFStringCreateWithCString(null, $s, self::UTF8) ?? throw new RuntimeException('CFString');
-    }
-
-    private function addr(?CData $p): int
-    {
-        if ($p === null) {
-            return 0;
-        }
-        $this->slot[0] = $p; // the pointer itself, read as an integer (as ObjC::addr)
-        return $this->slotInt[0];
     }
 
     /** @param list<CData> $keys @param list<CData> $values */
@@ -441,7 +429,7 @@ final class TextEngine implements Engine
     /** The Font of a CTFont, registered for rasterizing. */
     private function fontOf(CData $font): Font
     {
-        $a = $this->addr($font);
+        $a = Mem::addr($font);
         if (isset($this->native[$a])) {
             return $this->native[$a];
         }
@@ -662,7 +650,7 @@ final class TextEngine implements Engine
     /** The advance of a no-break space in $font, which shapes an inline object's rune. */
     private function spaceAdvance(CData $font): float
     {
-        $a = $this->addr($font);
+        $a = Mem::addr($font);
         if (!isset($this->spaceAdvance[$a])) {
             $c = $this->c;
             $ch = $c->new('unsigned short[1]'); $ch[0] = 0x00A0;

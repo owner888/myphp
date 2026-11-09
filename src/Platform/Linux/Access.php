@@ -7,6 +7,7 @@ use Closure;
 use FFI;
 use FFI\CData;
 use MyPHP\UI\{AccessNode, AccessTree, Role};
+use MyPHP\Native\Mem;
 
 /**
  * Assistive technology, such as Orca, reads applications through AT-SPI,
@@ -75,7 +76,7 @@ final class Access
         self::register();
         $g = Gtk::ffi();
         $area = $g->cast('void*', self::$areaType !== 0 ? self::$f->g_object_new(self::$areaType, null) : $g->gtk_gl_area_new());
-        self::$byArea[Gtk::addr($area)] = new self($win, $area);
+        self::$byArea[Mem::addr($area)] = new self($win, $area);
         return $area;
     }
 
@@ -89,19 +90,19 @@ final class Access
     /** Shows assistive technology the content's last frame of the window of $area, and tells it what changed. */
     public static function update(CData $area, AccessTree $tree): void
     {
-        $t = self::$byArea[Gtk::addr($area)] ?? null;
+        $t = self::$byArea[Mem::addr($area)] ?? null;
         if ($t !== null && $t->root !== null) { $t->apply($tree); }
     }
 
     /** Lets go of the tree of the window of $area, which is going. */
     public static function destroy(CData $area): void
     {
-        $t = self::$byArea[Gtk::addr($area)] ?? null;
+        $t = self::$byArea[Mem::addr($area)] ?? null;
         if ($t === null) {
             return;
         }
-        unset(self::$byArea[Gtk::addr($area)]);
-        if ($t->root !== null) { unset(self::$byRoot[Gtk::addr($t->root)]); }
+        unset(self::$byArea[Mem::addr($area)]);
+        if ($t->root !== null) { unset(self::$byRoot[Mem::addr($t->root)]); }
         $t->graft([]);
         foreach (array_keys($t->nodes) as $id) { $t->release($id); }
         $t->nodes = []; $t->top = [];
@@ -207,15 +208,15 @@ final class Access
     /** The tree below the area's accessible $root, asking the content for it while it has none, as before its first frame. */
     private static function rootTree(CData $root): ?self
     {
-        $t = self::$byRoot[Gtk::addr($root)] ?? null;
+        $t = self::$byRoot[Mem::addr($root)] ?? null;
         if ($t === null) {
             $area = self::$f->gtk_accessible_get_widget($root);
-            $t = $area === null ? null : (self::$byArea[Gtk::addr($area)] ?? null);
+            $t = $area === null ? null : (self::$byArea[Mem::addr($area)] ?? null);
             if ($t === null || $t->win->isDead()) {
                 return null;
             }
             $t->root = $root;
-            self::$byRoot[Gtk::addr($root)] = $t;
+            self::$byRoot[Mem::addr($root)] = $t;
         }
         if ($t->top === []) {
             $t->quiet = true;
@@ -282,7 +283,7 @@ final class Access
             } else {
                 $obj = $f->cast('void*', $f->g_object_new($type, null));
                 $an = ['obj' => $obj, 'type' => $type, 'parent' => -1, 'children' => [], 'n' => $n, 'chosen' => [], 'page' => null];
-                self::$objects[Gtk::addr($obj)] = [$this, $n->id];
+                self::$objects[Mem::addr($obj)] = [$this, $n->id];
                 $prev[$i] = null;
                 $fresh[$i] = true;
             }
@@ -432,7 +433,7 @@ final class Access
     private function releaseNode(array $an): void
     {
         self::$f->atk_object_notify_state_change($an['obj'], self::$st['defunct'], 1);
-        unset(self::$objects[Gtk::addr($an['obj'])]);
+        unset(self::$objects[Mem::addr($an['obj'])]);
         self::$f->g_object_unref($an['obj']);
     }
 
@@ -497,7 +498,7 @@ final class Access
             if (($acc = self::pageAccessible($sv)) !== null) {
                 $grafted[spl_object_id($sv)] = true;
                 $this->nodes[$id]['page'] = $acc;
-                if (Gtk::addr($sv->accessParent) !== Gtk::addr($this->nodes[$id]['obj'])) {
+                if (Mem::addr($sv->accessParent) !== Mem::addr($this->nodes[$id]['obj'])) {
                     $sv->accessParent = $this->nodes[$id]['obj'];
                     self::$f->atk_object_set_parent($acc, $this->nodes[$id]['obj']);
                 }
@@ -523,7 +524,7 @@ final class Access
     /** The node of ATK object $obj and its tree, or null. @return ?array{0: self, 1: int} */
     private static function node(CData $obj): ?array
     {
-        $at = self::$objects[Gtk::addr($obj)] ?? null;
+        $at = self::$objects[Mem::addr($obj)] ?? null;
         return $at !== null && isset($at[0]->nodes[$at[1]]) ? $at : null;
     }
 
@@ -627,7 +628,7 @@ final class Access
         // In the overlay holding web views, the area is its only child.
         $rootIndex = self::fn('HInt', function ($root) use ($f, $g): int {
             $area = self::$f->gtk_accessible_get_widget($root);
-            $t = $area === null ? null : (self::$byArea[Gtk::addr($area)] ?? null);
+            $t = $area === null ? null : (self::$byArea[Mem::addr($area)] ?? null);
             if ($t !== null && $t->win->layered() && self::$overlayType !== 0) { return 0; }
             return (self::$rootParentIndex)($root);
         });
@@ -901,7 +902,7 @@ final class Access
             return null;
         }
         foreach (self::$byArea as $t) {
-            if ($t->win->layers() !== null && Gtk::addr($t->win->layers()) === Gtk::addr($overlay)) { return $t; }
+            if ($t->win->layers() !== null && Mem::addr($t->win->layers()) === Mem::addr($overlay)) { return $t; }
         }
         return null;
     }

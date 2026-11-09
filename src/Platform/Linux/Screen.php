@@ -5,6 +5,7 @@ namespace MyPHP\Platform\Linux;
 
 use MyPHP\{Display, Point, Rectangle};
 use MyPHP\Platform;
+use MyPHP\Native\Mem;
 
 /** GDK's monitors (mygo's linux screen): on X11 in the screen's coordinates; on Wayland each its own. */
 final class Screen implements Platform\Screen
@@ -25,7 +26,7 @@ final class Screen implements Platform\Screen
             $f->gdk_monitor_get_workarea($m, \FFI::addr($wa));
             $model = $f->gdk_monitor_get_model($m);
             $out[] = new Display($i + 1, (string)$model, new Rectangle($g->x, $g->y, $g->width, $g->height), new Rectangle($wa->x, $wa->y, $wa->width, $wa->height),
-                (float)$f->gdk_monitor_get_scale_factor($m), 0, false, $primary !== null ? Gtk::addr($m) === Gtk::addr($primary) : $i === 0);
+                (float)$f->gdk_monitor_get_scale_factor($m), 0, false, $primary !== null ? Mem::addr($m) === Mem::addr($primary) : $i === 0);
         }
         return $out;
     }

@@ -6,6 +6,7 @@ namespace MyPHP\Platform\Linux;
 use Closure;
 use FFI\CData;
 use MyPHP\Platform\Unsupported;
+use MyPHP\Native\Mem;
 
 /**
  * A WebKitWebView with the MyPHP bridge installed (mygo's linux
@@ -134,7 +135,7 @@ final class WebView implements \MyPHP\Platform\Page
         $f = WebKit::ffi();
         self::hooks();
         $ctx = WebsiteData::context($store);
-        $k = WebKit::addr($ctx);
+        $k = Mem::addr($ctx);
         foreach (\MyPHP\Protocol::schemes() as $scheme) { // on the view's context, before the view loads anything (mygo's registerScheme)
             if (isset(self::$schemes[$k][$scheme])) { continue; }
             self::$schemes[$k][$scheme] = true;
@@ -188,7 +189,7 @@ final class WebView implements \MyPHP\Platform\Page
             self::on($self->web, "notify::$p", 'change', $data);
         }
         self::$views[$self->id] = $self;
-        self::$byWeb[WebKit::addr($self->web)] = $self->id;
+        self::$byWeb[Mem::addr($self->web)] = $self->id;
         if ($opened !== null) {
             $self->loadURL((string)$f->webkit_uri_request_get_uri($f->webkit_navigation_action_get_request($opened)));
         }
@@ -204,7 +205,7 @@ final class WebView implements \MyPHP\Platform\Page
 
     private static function view(?CData $data): ?self
     {
-        return self::$views[WebKit::addr($data)] ?? null;
+        return self::$views[Mem::addr($data)] ?? null;
     }
 
     /** The C functions of the signals, made once. */
@@ -285,7 +286,7 @@ final class WebView implements \MyPHP\Platform\Page
             self::view($data)?->onGone?->__invoke([0 => 'crashed', 1 => 'exceeded memory limit', 2 => 'terminated by API'][$reason] ?? 'crashed');
         });
         self::$hooks['async'] = $h('HNotify', function ($source, $res, $data): void {
-            $key = WebKit::addr($data);
+            $key = Mem::addr($data);
             $done = self::$pending[$key] ?? null;
             unset(self::$pending[$key]);
             if ($done === null) { return; }
@@ -311,15 +312,15 @@ final class WebView implements \MyPHP\Platform\Page
         // Downloads: the web context tells each, which asks where it goes and tells how it ended, "failed" before "finished" (mygo's download.go).
         self::$hooks['download'] = $h('HNotify', function ($ctx, $d, $data): void {
             $f = WebKit::ffi();
-            $id = self::$byWeb[WebKit::addr($f->webkit_download_get_web_view($d))] ?? 0;
+            $id = self::$byWeb[Mem::addr($f->webkit_download_get_web_view($d))] ?? 0;
             if (!isset(self::$views[$id])) { return; }
-            self::$downloads[WebKit::addr($d)] = [$id, (string)$f->webkit_uri_request_get_uri($f->webkit_download_get_request($d)), '', null];
+            self::$downloads[Mem::addr($d)] = [$id, (string)$f->webkit_uri_request_get_uri($f->webkit_download_get_request($d)), '', null];
             $f->g_signal_connect_data($d, 'decide-destination', $f->cast('void*', self::$hooks['destination']->fn), null, null, 0);
             $f->g_signal_connect_data($d, 'failed', $f->cast('void*', self::$hooks['downloadFailed']->fn), null, null, 0);
             $f->g_signal_connect_data($d, 'finished', $f->cast('void*', self::$hooks['downloadFinished']->fn), null, null, 0);
         });
         self::$hooks['destination'] = $h('HDestination', function ($d, $suggested, $data): int {
-            $k = WebKit::addr($d);
+            $k = Mem::addr($d);
             [$id, $url] = self::$downloads[$k] ?? [0, ''];
             $v = self::$views[$id] ?? null;
             $f = WebKit::ffi();
@@ -337,18 +338,18 @@ final class WebView implements \MyPHP\Platform\Page
             return 1;
         });
         self::$hooks['downloadFailed'] = $h('HNotify', function ($d, $error, $data): void {
-            $k = WebKit::addr($d);
+            $k = Mem::addr($d);
             if (isset(self::$downloads[$k])) { self::$downloads[$k][3] = \FFI::string(WebKit::ffi()->cast('GError*', $error)->message); }
         });
         self::$hooks['downloadFinished'] = $h('HPlain', function ($d, $data): void {
-            $k = WebKit::addr($d);
+            $k = Mem::addr($d);
             [$id, $url, $path, $error] = self::$downloads[$k] ?? [0, '', '', null];
             unset(self::$downloads[$k]);
             $v = self::$views[$id] ?? null;
             if ($path !== '' && $v?->onDownloadDone !== null) { ($v->onDownloadDone)($url, $path, $error); }
         });
         self::$hooks['snapshot'] = $h('HNotify', function ($source, $res, $data): void {
-            $key = WebKit::addr($data);
+            $key = Mem::addr($data);
             $done = self::$pending[$key] ?? null;
             unset(self::$pending[$key]);
             if ($done === null) { return; }
@@ -358,16 +359,16 @@ final class WebView implements \MyPHP\Platform\Page
             $done($err[0] === null ? $surface : null, $err[0] === null ? null : WebKit::errorMessage($err[0]));
         });
         self::$hooks['printed'] = $h('HPlain', function ($op, $data): void {
-            (self::$printJobs[WebKit::addr($op)] ?? null)?->__invoke(null);
+            (self::$printJobs[Mem::addr($op)] ?? null)?->__invoke(null);
         });
         self::$hooks['printFailed'] = $h('HNotify', function ($op, $error, $data): void {
-            (self::$printJobs[WebKit::addr($op)] ?? null)?->__invoke(\FFI::string(WebKit::ffi()->cast('GError*', $error)->message));
+            (self::$printJobs[Mem::addr($op)] ?? null)?->__invoke(\FFI::string(WebKit::ffi()->cast('GError*', $error)->message));
         });
         self::contextMade(WebKit::ffi()->webkit_web_context_get_default());
         // Requests of the schemes PHP serves (mygo's serveScheme); one of a view gone gets a 503, as macOS's.
         self::$hooks['scheme'] = $h('HScheme', function ($req, $data): void {
             $f = WebKit::ffi();
-            $v = self::$views[self::$byWeb[WebKit::addr($f->webkit_uri_scheme_request_get_web_view($req))] ?? 0] ?? null;
+            $v = self::$views[self::$byWeb[Mem::addr($f->webkit_uri_scheme_request_get_web_view($req))] ?? 0] ?? null;
             $task = new SchemeTask($req);
             if ($v?->onScheme === null) {
                 $task->respond(503, []);
@@ -711,7 +712,7 @@ final class WebView implements \MyPHP\Platform\Page
             return;
         }
         $f = WebKit::ffi();
-        unset(self::$views[$this->id], self::$byWeb[WebKit::addr($this->web)]);
+        unset(self::$views[$this->id], self::$byWeb[Mem::addr($this->web)]);
         $f->webkit_user_content_manager_unregister_script_message_handler($this->ucm, 'myphp');
         $f->webkit_user_content_manager_remove_all_scripts($this->ucm);
         $f->webkit_web_view_stop_loading($this->web);
@@ -896,7 +897,7 @@ final class WebView implements \MyPHP\Platform\Page
         $f->webkit_print_operation_set_page_setup($op, $setup);
         $f->g_object_unref($settings);
         $f->g_object_unref($setup);
-        $k = WebKit::addr($op);
+        $k = Mem::addr($op);
         $failed = null;
         self::$printJobs[$k] = function (?string $error) use ($k, $op, $web, $printed, $path, $done, &$failed): void {
             if ($error !== null) { // "failed" comes before "finished"

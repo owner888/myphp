@@ -7,6 +7,7 @@ use Closure;
 use FFI\CData;
 use MyPHP\{App, ContextMenuEvent, Menu, MenuItem};
 use MyPHP\Native\ContextMenus as Shared;
+use MyPHP\Native\Mem;
 
 /**
  * A page's context menu on Linux (mygo's linux context_menu.go): the web
@@ -196,13 +197,13 @@ final class ContextMenus
         if (self::$onActivate === null) {
             self::$onActivate = $f->new('HNotify', false);
             self::$onActivate->fn = function ($action, $parameter, $data): void {
-                [$v, $role] = self::$items[WebKit::addr($data)] ?? [null, ''];
+                [$v, $role] = self::$items[Mem::addr($data)] ?? [null, ''];
                 if ($v === null) { return; }
                 if (isset(self::EDIT_COMMANDS[$role])) {
                     WebKit::ffi()->webkit_web_view_execute_editing_command($v->web, self::EDIT_COMMANDS[$role]);
                     return;
                 }
-                App::backend()->h->menuItemClicked(WebKit::addr($data));
+                App::backend()->h->menuItemClicked(Mem::addr($data));
             };
         }
         $f->g_signal_connect_data($action, 'activate', $f->cast('void*', self::$onActivate->fn), $f->cast('void*', $p->id), null, 0);

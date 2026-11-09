@@ -37,7 +37,6 @@ final class Pango implements \MyPHP\Platform\Fonts
     /** @var array<int, bool> whether each font's glyphs are in color */
     private array $colorFonts = [];
     private ?PangoEngine $engine = null;
-    private CData $slot, $slotInt;
 
     public function __construct(private float $scale)
     {
@@ -128,8 +127,6 @@ final class Pango implements \MyPHP\Platform\Fonts
         $this->f->pango_cairo_context_set_font_options($this->context, $opts);
         $this->f->cairo_font_options_destroy($opts);
         $this->f->pango_context_set_round_glyph_positions($this->context, 1);
-        $this->slot = $this->f->new('void*[1]');
-        $this->slotInt = $this->f->cast('unsigned long[1]', $this->slot);
     }
 
     public function engine(): \MyPHP\Text\Engine
@@ -157,20 +154,10 @@ final class Pango implements \MyPHP\Platform\Fonts
         return floor($y + 1e-3);
     }
 
-    /** The integer address of a pointer. */
-    public function addr(?CData $p): int
-    {
-        if ($p === null) {
-            return 0;
-        }
-        $this->slot[0] = $p;
-        return $this->slotInt[0];
-    }
-
     /** The id of PangoFont $font, held from now on: its address. */
     public function adopt(CData $font): int
     {
-        $id = $this->addr($font);
+        $id = Mem::addr($font);
         if (!isset($this->fonts[$id])) {
             $this->fonts[$id] = $this->f->g_object_ref($font);
         }

@@ -6,6 +6,7 @@ namespace MyPHP\Plugins\Terminal\Vt;
 use FFI;
 use FFI\CData;
 use RuntimeException;
+use MyPHP\Native\Mem;
 
 /**
  * Binds libghostty-vt, the terminal emulator of Ghostty, which it loads at
@@ -255,19 +256,6 @@ final class Lib
     /** Whether load() succeeded. */
     public static function loaded(): bool { return self::$ffi !== null; }
 
-    /** The integer address of a pointer. */
-    public static function addr(?CData $p): int
-    {
-        static $slot = null, $slotInt = null;
-        if ($p === null) { return 0; }
-        if ($slot === null) {
-            $slot = self::plain()->new('void*[1]');
-            $slotInt = self::plain()->cast('uint64_t[1]', $slot);
-        }
-        $slot[0] = $p;
-        return $slotInt[0];
-    }
-
     /** The bytes the library gave at $p, $n long. */
     public static function bytes(?CData $p, int $n): string
     {
@@ -290,10 +278,10 @@ final class Lib
             if ($t === null) { return "no type $name"; }
             $s = $ffi->new($name);
             if (($t['size'] ?? -1) !== FFI::sizeof($s)) { return "$name is {$t['size']} bytes, not " . FFI::sizeof($s); }
-            $base = self::addr(FFI::addr($s));
+            $base = Mem::addr(FFI::addr($s));
             foreach ($fields as $k => $field) {
                 $cName = is_string($k) ? $k : $field;
-                $off = self::addr(FFI::addr($s->$field)) - $base;
+                $off = Mem::addr(FFI::addr($s->$field)) - $base;
                 $want = $t['fields'][$cName]['offset'] ?? null;
                 if ($want === null) { return "$name has no field $cName"; }
                 if ($want !== $off) { return "$name.$cName is at $want, not $off"; }

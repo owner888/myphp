@@ -5,6 +5,7 @@ namespace MyPHP\Platform\Linux;
 
 use FFI\CData;
 use MyPHP\Platform;
+use MyPHP\Native\Mem;
 
 /**
  * A web view in a window of native UI on Linux (mygo's linux webview.go):
@@ -77,7 +78,7 @@ final class SurfaceWebView implements Platform\WebView
 
     public function holds(mixed $view): bool
     {
-        return $view instanceof \FFI\CData && Gtk::addr($view) === Gtk::addr($this->page->web);
+        return $view instanceof \FFI\CData && Mem::addr($view) === Mem::addr($this->page->web);
     }
 
     public function hasKeyboard(): bool

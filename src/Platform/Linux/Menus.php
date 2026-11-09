@@ -7,6 +7,7 @@ use FFI\CData;
 use MyPHP\Logger;
 use MyPHP\MenuIcon;
 use MyPHP\Platform\{Accelerator, AppHandler, Menu, MenuItem};
+use MyPHP\Native\Mem;
 
 /**
  * GTK's menus (mygo's linux menu.go and menuicon.go): the menu bar at the
@@ -60,9 +61,9 @@ final class Menus
     {
         $f = Gtk::ffi();
         $this->onActivate = $f->new('HWidget', false);
-        $this->onActivate->fn = fn($item, $data) => $this->activated($item, Gtk::addr($data));
+        $this->onActivate->fn = fn($item, $data) => $this->activated($item, Mem::addr($data));
         $this->onOpen = $f->new('HWidget', false);
-        $this->onOpen->fn = fn($menu, $data) => $this->h->menuWillOpen(Gtk::addr($data));
+        $this->onOpen->fn = fn($menu, $data) => $this->h->menuWillOpen(Mem::addr($data));
         $this->onDeactivate = $f->new('HWidget', false);
         $this->onDeactivate->fn = function ($menu, $data): void {
             if ($this->loops !== []) { Gtk::ffi()->g_main_loop_quit($this->loops[count($this->loops) - 1]); }
@@ -130,7 +131,7 @@ final class Menus
             if ($accel !== null && $it->accelerator !== '' && ($key = self::accelerator($it->accelerator)) !== null) {
                 $f->gtk_widget_add_accelerator($item, 'activate', $accel, $key[0], $key[1], 1); // GTK_ACCEL_VISIBLE
                 if (in_array($it->role, self::EDIT_ROLES, true)) {
-                    $this->roleKeys[Gtk::addr($accel)][$f->gdk_keyval_to_lower($key[0]) . ':' . $key[1]] = true;
+                    $this->roleKeys[Mem::addr($accel)][$f->gdk_keyval_to_lower($key[0]) . ':' . $key[1]] = true;
                 }
             }
         }
@@ -174,7 +175,7 @@ final class Menus
         if (in_array($this->roles[$id] ?? '', self::EDIT_ROLES, true)) {
             $w = null;
             foreach ($this->items[$id] ?? [] as $n) {
-                if (Gtk::addr($n['item']) === Gtk::addr($item)) { $w = $n['window']; break; }
+                if (Mem::addr($n['item']) === Mem::addr($item)) { $w = $n['window']; break; }
             }
             $w = $w ?? Window::active()?->native();
             if ($w instanceof Window) { $w->command($this->roles[$id]); }
@@ -213,7 +214,7 @@ final class Menus
             $own = null;
             foreach ($this->items as $ns) {
                 foreach ($ns as $n) {
-                    if ($n['label'] !== null && Gtk::addr($n['item']) === Gtk::addr($item)) { $own = $n['label']; }
+                    if ($n['label'] !== null && Mem::addr($n['item']) === Mem::addr($item)) { $own = $n['label']; }
                 }
             }
             $text = $own !== null ? $f->gtk_label_get_label($own) : $f->gtk_menu_item_get_label($item);
@@ -255,7 +256,7 @@ final class Menus
             if ($sub === null) {
                 continue;
             }
-            $addr = Gtk::addr($sub);
+            $addr = Mem::addr($sub);
             if (isset($this->subOwners[$addr])) { $this->dropOwner($this->subOwners[$addr]); }
             $this->subOwners[$addr] = $o = $this->newOwner($n['owner']);
             $list = $f->gtk_container_get_children($sub);
@@ -453,7 +454,7 @@ final class Menus
             return;
         }
         $d = self::$dbusmenu;
-        $mi = $d->dbusmenu_gtk_parse_get_cached_item($d->cast('void*', Gtk::addr($item)));
+        $mi = $d->dbusmenu_gtk_parse_get_cached_item($d->cast('void*', Mem::addr($item)));
         if ($mi === null) {
             return;
         }
