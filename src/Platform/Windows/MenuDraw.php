@@ -36,8 +36,8 @@ final class MenuDraw
 
     private static ?FFI $user = null, $gdi = null;
     private static ?int $build = null;
-    /** @var ?array{0: ?CData, 1: ?CData} uxtheme's SetPreferredAppMode and FlushMenuThemes, once */
-    private static ?array $appMode = null;
+    /** uxtheme's SetPreferredAppMode and FlushMenuThemes, once, as the fields of a struct: FFI calls a function pointer read from a field, as a COM vtable's, not one cast from an address; false where there are none. */
+    private static CData|false|null $appMode = null;
     /** @var array<int, array{text: CData, glyphs: CData}> the fonts of popup items, by DPI */
     private static array $fonts = [];
     /** @var array<int, CData> brushes, by COLORREF */
@@ -156,24 +156,24 @@ final class MenuDraw
     public static function applyTheme(): void
     {
         if (self::$appMode === null) {
-            self::$appMode = [null, null];
+            self::$appMode = false;
             if (self::build() >= 18362) { // ordinal 135 was AllowDarkModeForApp before
                 $k = FFI::cdef('void *LoadLibraryExW(const void *name, void *file, uint32_t flags); void *GetProcAddress(void *module, intptr_t name);', 'kernel32.dll');
                 $h = $k->LoadLibraryExW(Win32::wide('uxtheme.dll'), null, 0x800); // LOAD_LIBRARY_SEARCH_SYSTEM32
-                if ($h !== null) {
-                    $f = FFI::cdef('typedef int32_t (*SetMode)(int32_t mode); typedef void (*Flush)(void);');
-                    $set = $k->GetProcAddress($h, 135);
-                    $flush = $k->GetProcAddress($h, 136);
-                    self::$appMode = [$set === null ? null : $f->cast('SetMode', $set), $flush === null ? null : $f->cast('Flush', $flush)];
+                $set = $h === null ? null : $k->GetProcAddress($h, 135);
+                $flush = $h === null ? null : $k->GetProcAddress($h, 136);
+                if ($set !== null && $flush !== null) {
+                    $f = FFI::cdef('typedef struct { int32_t (*set)(int32_t mode); void (*flush)(void); } AppMode;');
+                    self::$appMode = $f->new('AppMode', false);
+                    FFI::memcpy(self::$appMode, pack('PP', Mem::addr($set), Mem::addr($flush)), 16);
                 }
             }
         }
-        [$set, $flush] = self::$appMode;
-        if ($set === null) {
+        if (self::$appMode === false) {
             return;
         }
-        $set(self::dark() ? 2 : 3); // ForceDark, ForceLight
-        if ($flush !== null) { $flush(); }
+        (self::$appMode->set)(self::dark() ? 2 : 3); // ForceDark, ForceLight
+        (self::$appMode->flush)();
     }
 
     /** The fonts of popup items forgotten, for the next menus to follow the system's (mygo's dropMenuFonts). */
