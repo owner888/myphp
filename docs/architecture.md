@@ -8720,12 +8720,13 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   through a slot, as `ffi_addr_test` asks.
 - The loop (stage 1): the thread's queue; the app's hidden window (mygo's
   appHwnd) gets ready, dispatch and run-next posted to itself, the timers
-  (SetTimer, 10 ms at the least; none is the queue's next turn; those asked
-  for before init wait for it), WM_SETTINGCHANGE (ImmersiveColorSet: the
+  (SetTimer, 10 ms at the least; none is the queue's next turn), WM_SETTINGCHANGE (ImmersiveColorSet: the
   theme; intl: the locale), WM_DISPLAYCHANGE, and power and the session.
   `step()` waits 50 ms at most (MsgWaitForMultipleObjectsEx) and posts
   WM_QUIT again for the loop outside. The process is per-monitor DPI aware
-  (v2) and COM apartment threaded.
+  (v2) and COM apartment threaded. The window is made at init, or before it
+  as a timer, a signal or a wait asks (a test's App::wait without the app
+  running), as GLib's loop runs before GTK's init.
 - The paths are Go's there: the roaming AppData holds the user data and
   logs, the local AppData the cache. The displays are in points, a
   monitor's pixels over its effective DPI's scale (96 a point). The theme
@@ -8743,6 +8744,7 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   keep their slashes. zlib is PHP's extension there (`Native\Zlib`), the C
   library the UCRT (`Native\Mem`). The player's system (`Windows\Media`)
   plays nothing before its stage: a player's state works, a film throws.
+  A plugin's package is unzipped by Windows's tar (bsdtar), unzip elsewhere.
 
 ## Open items
 
