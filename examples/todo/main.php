@@ -10,7 +10,7 @@ declare(strict_types=1);
 use MyPHP\{App, CallContext, Dialog, Event, FileFilter, Ipc, Menu, MenuItem, PathName, SaveDialogOptions, Window, WindowOptions};
 
 // MyPHP from inside the built app, else from this checkout.
-require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
+class_exists(\MyPHP\App::class) || require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
 
 /** An item of the list. */
 final class Todo

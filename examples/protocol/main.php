@@ -9,7 +9,8 @@ declare(strict_types=1);
 
 use MyPHP\{App, Ipc, Protocol, ProtocolRequest, ProtocolResponse, Window, WindowOptions};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** What the page asks PHP. */
 final class Shapes

@@ -28,7 +28,8 @@ use MyPHP\UI\{Content, Image, ImageOptions, Key, Painter, Span, Transform};
 use Random\Engine\Xoshiro256StarStar;
 use Random\Randomizer;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 // The world's fixed step, as Game::view runs it.
 const STEP_TIME = 1.0 / Game::RATE;

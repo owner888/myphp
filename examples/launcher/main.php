@@ -10,7 +10,8 @@ declare(strict_types=1);
 use MyPHP\{ActivationPolicy, App, CloseEvent, GlobalShortcut, InstalledApp, Menu, MenuItem, QuitEvent, Screen, Shell, Tray, TrayOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Image, SVG};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** Tried in turn: the first one free is the app's. Not Alt+Space, which Raycast and others take: macOS gives a shortcut to every app that registers it. */
 const SHORTCUTS = ['Alt+Shift+Space', 'CmdOrCtrl+Alt+Shift+Space'];

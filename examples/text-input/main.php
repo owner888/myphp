@@ -9,7 +9,8 @@ declare(strict_types=1);
 use MyPHP\{App, Clipboard, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\UI\{Content, InputEvent, Key, Painter, TextInputClient, TextInputRange, TextInputSelection, TextLayout};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** The UTF-16 length of $s, in which the system's text services count. */
 function utf16Len(string $s): int

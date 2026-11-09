@@ -9,7 +9,8 @@ declare(strict_types=1);
 use MyPHP\{App, Document, Documents, DocumentsOptions, DocumentType, Window, WindowOptions};
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** A note's window: its document, and the text being edited, which view.php shows. */
 final class Note

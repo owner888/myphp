@@ -12,7 +12,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Glass\Glass;
 use MyPHP\UI\{Content, Image};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 $pictures = array_values(array_filter(glob('/System/Library/Desktop Pictures/*.heic') ?: [], fn($p) => filesize($p) < 30_000_000));
 $pictures !== [] || throw new RuntimeException('no pictures under /System/Library/Desktop Pictures');

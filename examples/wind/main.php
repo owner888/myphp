@@ -23,7 +23,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Canvas, Content, Context, Easing, Image, Painter, TextState, TextStyle};
 use MyPHP\UI\Shader\{Options, Shader};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 const WINDOW_W = 1100;
 const WINDOW_H = 720;

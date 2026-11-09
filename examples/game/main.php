@@ -13,7 +13,8 @@ use MyPHP\Plugins\Game\{Camera, Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
 use MyPHP\UI\{Canvas, Content, Context, Image, Key, Node, Painter};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** A sheet of 16×16 tiles: grass, flowers, water, and the walker. */
 function sheet(): Image

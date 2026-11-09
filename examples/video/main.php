@@ -26,7 +26,7 @@ use MyPHP\Plugins\Updater\{Options, Updater};
 use MyPHP\UI\{Content, Context, MediaPlayerFilters, MediaPlayerInspector, MediaPlayerMenus, MediaPlayerState};
 
 // MyPHP from inside the built app, else from this checkout.
-require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
+class_exists(\MyPHP\App::class) || require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
 
 /**
  * With MYPHP_VIDEO_LOG set, what the players do, on stderr: the film

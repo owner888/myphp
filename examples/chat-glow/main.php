@@ -20,7 +20,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Content, GradientStop, Painter, Span, Theme};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 // THINK_TIME is how long the assistant thinks before it writes, in
 // seconds, and WORDS_PER_SECOND how fast it writes.

@@ -9,7 +9,8 @@ use MyPHP\{App, Clipboard, Window, WindowOptions};
 use MyPHP\Transfer\{Data, Format, FormatUnavailable, Item, Representation};
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 const NOTE_FORMAT = 'application/vnd.myphp.clipboard-note+json';
 

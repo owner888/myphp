@@ -16,7 +16,8 @@ declare(strict_types=1);
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Content, Easing, Path, Pose};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 const WINDOW_W = 980;
 const WINDOW_H = 700;

@@ -11,7 +11,8 @@ declare(strict_types=1);
 use MyPHP\{App, Ipc, PathName, Window, WindowOptions};
 use MyPHP\Plugins\Watch\{Options, Root, Watch};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 App::setName('Watch');
 $dir = $argv[1] ?? App::path(PathName::UserData) . '/watched';

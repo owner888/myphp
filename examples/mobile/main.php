@@ -11,7 +11,8 @@ declare(strict_types=1);
 use MyPHP\{App, Dialog, FileFilter, Haptics, Http, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Image, SVG};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 final class Mobile
 {

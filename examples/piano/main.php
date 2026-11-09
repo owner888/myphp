@@ -11,7 +11,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Player, Sound};
 use MyPHP\UI\{Content, InputEvent, Key, Painter, Theme};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** The keyboard spans three octaves, C3 to C6, in MIDI note numbers. */
 const LOWEST = 48;

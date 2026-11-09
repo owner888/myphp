@@ -18,7 +18,8 @@ use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Canvas, Content, InputEvent, Painter};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** A point or a direction of the scene, y up, in radii of the hole. */
 final class Vec3

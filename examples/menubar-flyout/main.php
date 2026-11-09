@@ -9,7 +9,8 @@ declare(strict_types=1);
 use MyPHP\{ActivationPolicy, App, FlyoutOptions, Menu, MenuItem, QuitEvent, Tray, TrayOptions, Window};
 use MyPHP\UI\Content;
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** A PNG of 32 × 32 pixels, black where $ink says, transparent elsewhere, for macOS to tint as a template. */
 function trayIcon(Closure $ink): string

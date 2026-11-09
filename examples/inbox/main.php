@@ -9,7 +9,8 @@ declare(strict_types=1);
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Content, Image};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 // chosen: the rows chosen, an array, so several: Cmd-click adds or takes out, Shift-click and Shift+arrows extend, Cmd+A chooses all
 $state = (object)['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'chosen' => [], 'last' => '', 'mailbox' => 'inbox'];

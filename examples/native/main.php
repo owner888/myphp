@@ -9,7 +9,8 @@ declare(strict_types=1);
 
 use MyPHP\{App, CallContext, Clipboard, Dialog, Event, GlobalShortcut, Ipc, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, Screen, Theme, ThemeSource, Tray, TrayOptions, Window, WindowOptions};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** Called from the page. */
 final class Native

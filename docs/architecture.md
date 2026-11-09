@@ -57,13 +57,13 @@ the cycle collector never ran. Headroom to the 16.6 ms budget is about
 - `FFI::cast` from a pointer CData to a scalar, struct or array type
   dereferences the pointer (that is how `cast('float[n]', $buffer)` writes
   into GPU memory). So `cast('unsigned long', $obj)` reads the object's first
-  word, the isa, not its address; `ObjC::addr()` goes through a `void*[1]`
+  word, the isa, not its address; `Mem::addr()` goes through a `void*[1]`
   slot instead.
 - A pointer-typed CData takes no `->cdata`: `$c->new('void*')->cdata =
   $p` throws "Attempt to assign field 'cdata' of non C struct/union"
   (`cdata` is a scalar's). A slot that must hold a pointer by value, as
   an NSInvocation's argument (`CoreImage::run`, v1.31), is an `unsigned
-  long` of `ObjC::addr($p)`: the same bytes on arm64.
+  long` of `Mem::addr($p)`: the same bytes on arm64.
 - There is no pointer arithmetic on CData (`$p + 1` is a TypeError). `Native\Mem`
   works on integer addresses: `addr()` reads a pointer's value through the
   slot trick, `copy()` casts `int` back to `unsigned char*` for `FFI::memcpy`.
@@ -8361,6 +8361,10 @@ callbacks is not allowed") and which ended the app.
 
 **An app's autoloader on a phone**: the launcher requires the framework's
 `src/autoload.php` before `app.php`, so an app needs none. The examples'
+`require __DIR__ . '/../../src/autoload.php'` (since v1.178) named a file
+the package has not, and ended the app at its first line on iOS; they
+require it only where `MyPHP\App` is not loaded yet, as the template's
+`boot.php` returns then. The examples'
 one-liner `fn($c) => require __DIR__ . '/../../src/' . …` required a file
 for every class asked for, and `class_exists(Normalizer::class)`
 (MediaPlayerKeys) asks for one: on the desktop ext-intl answers before any

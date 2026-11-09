@@ -12,7 +12,8 @@ declare(strict_types=1);
 use MyPHP\{App, Menu, MenuItem, Shell, Window, WindowOptions};
 use MyPHP\UI\{Content, Image, SVG};
 
-require __DIR__ . '/../../src/autoload.php'; // MyPHP, and its declarative views (VStack, Text…)
+// MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
+class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
 /** The folder shown: its entries, how they are shown and chosen, the find bar. */
 final class Files
