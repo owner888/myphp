@@ -54,6 +54,14 @@ the cycle collector never ran. Headroom to the 16.6 ms budget is about
   with the instance kept alive in a property. `ObjC::import($p)` rebuilds
   the pointer from its integer address as a fresh CData in the ObjC scope;
   every foreign pointer goes through it before being stored.
+- A CData of a type an FFI instance declared needs that instance alive:
+  with `FFI::cdef()` kept in a local, a struct of function pointers built
+  from it read on Windows its field as an int, then, through a pointer,
+  as no struct at all, though Linux called both. Keep the instance in a
+  static, as `Com` does, and call a function pointer read from a struct's
+  field through a pointer to it (`Com::typed`), as a COM vtable's
+  (`Windows\MenuDraw`'s uxtheme functions, which Windows exports by
+  ordinal only).
 - `FFI::cast` from a pointer CData to a scalar, struct or array type
   dereferences the pointer (that is how `cast('float[n]', $buffer)` writes
   into GPU memory). So `cast('unsigned long', $obj)` reads the object's first
