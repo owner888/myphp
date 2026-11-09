@@ -52,6 +52,7 @@ final class iOS
             void myphp_ios_pick_files(const char **extensions, int count, int multiple, int photos, int callback_id);
             int myphp_ios_take_files_result(int callback_id, char *out, int max_len);
             float myphp_ios_get_keyboard_height(void);
+            void myphp_ios_set_caret_rect(float x, float y, float w, float h);
             int myphp_ios_is_dark(void);
             void* myphp_ios_get_over_view(void);
             void myphp_ios_log(int level, const char *message);

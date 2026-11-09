@@ -431,6 +431,7 @@ final class Window implements Platform\Window
         });
         $this->paintOver();
         $this->placeMaterials();
+        $this->placeCaret();
         if ($this->afterPresent !== null) {
             ($this->afterPresent)();
         }
@@ -574,6 +575,23 @@ final class Window implements Platform\Window
     }
 
     /** Gives the launcher the materials where the frame placed them (Runtime::$materialPlaces), when they changed: it places a UIVisualEffectView of each over the Metal view and under the view over the materials. */
+    /** Tells the text input where the caret of the field taking the keyboard is, in the view: a hardware keyboard's candidates show by it (as Linux\Window::placeCaret). */
+    private function placeCaret(): void
+    {
+        $input = $this->w->input;
+        if ($input === null || ($input->focus === null && $input->client === null && $input->textCaret === null)) {
+            return;
+        }
+        if ($input->client !== null) {
+            $r = $input->client->selection()->range->normalized();
+            [[$x, $y, $w, $h]] = $input->clientRect(new TextInputRange($r->start, $r->start));
+        } else {
+            $f = $input->focus;
+            [$x, $y, $w, $h] = $input->caretRect($f === null ? 0 : TextState::utf16Index($f->text, $f->cursor));
+        }
+        iOS::ffi()->myphp_ios_set_caret_rect($x, $y, max(1.0, $w), max(1.0, $h));
+    }
+
     private function placeMaterials(): void
     {
         $rt = $this->w->runtime;
