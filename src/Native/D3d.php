@@ -6,7 +6,7 @@ namespace MyPHP\Native;
 use FFI;
 use FFI\CData;
 use MyPHP\Logger;
-use MyPHP\UI\{Atlas, CanvasAtlas, DisplayList, ImageAtlas};
+use MyPHP\UI\{Atlas, Canvas, CanvasAtlas, DisplayList, ImageAtlas};
 use RuntimeException;
 
 /**
@@ -22,8 +22,9 @@ use RuntimeException;
  *
  * A list is drawn in one pass, split at each quad that reads the backdrop
  * (glass, blurs): what was drawn so far is copied and blurred at half
- * size, which the quads after read, as Gl's. Not yet here: canvases and
- * custom shaders.
+ * size, which the quads after read, as Gl's. Canvases are rendered first,
+ * each into a texture of its size, and copied to its place among the
+ * canvases' layers of the image texture. Not yet here: custom shaders.
  */
 final class D3d
 {
@@ -69,6 +70,8 @@ final class D3d
      */
     private array $glass = [];
     private array $backdropSize = [0, 0];
+    /** @var array<string, array{0: CData, 1: CData, 2: CData}> the textures canvases render into, by size, and those their blurs go through (targetTexture's) */
+    private array $canvasTargets = [], $canvasBlurTemps = [];
     private array $size = [0, 0];
     /** The values of the target being drawn: viewport in points, pixels per point, height in pixels. */
     private array $target = [1.0, 1.0, 1.0, 1.0];
@@ -467,8 +470,8 @@ final class D3d
         $c = self::$context;
         $list->showWide(false);
         $this->uploadAtlases();
-        if (CanvasAtlas::take() !== []) {
-            $this->warnOnce('canvases');
+        foreach (CanvasAtlas::take() as $canvas) {
+            $this->renderCanvas($canvas);
         }
         $this->target = [$pw / $scale, $ph / $scale, $scale, (float)$ph];
         self::renderTo($view, $pw, $ph);
@@ -563,11 +566,73 @@ final class D3d
         ($c->v->Draw)($c, 3, 0);
     }
 
-    /** A texture of $w × $h BGRA pixels drawn into and read: it, its render target's view, its shaders' view. @return array{0: CData, 1: CData, 2: CData} */
-    private static function targetTexture(int $w, int $h): array
+    /**
+     * Renders canvas $c from the list it was last drawn with into a texture
+     * of its size, transparent first, its alpha kept premultiplied as the
+     * image atlas holds it, blurred if it asks, then copies that to its
+     * place among the canvases' layers of the image texture: a draw may not
+     * read the texture it draws into, and the canvases inside it are in
+     * that texture (Gl::renderCanvas). Glass and blurs draw nothing in a
+     * canvas. Its list goes into the quads' buffers, which the frame's
+     * list takes after.
+     */
+    private function renderCanvas(Canvas $c): void
+    {
+        if ($c->loose()) {
+            $this->warnOnce("canvases larger than a page");
+            return;
+        }
+        $f = self::$f;
+        $ctx = self::$context;
+        $key = "{$c->w}x{$c->h}";
+        if (!isset($this->canvasTargets[$key]) && count($this->canvasTargets) > 16) {
+            $this->releaseCanvasTargets();
+        }
+        $target = $this->canvasTargets[$key] ??= self::targetTexture($c->w, $c->h, self::R8G8B8A8_UNORM);
+        self::renderTo($target[1], $c->w, $c->h);
+        $clear = $f->new('float[4]');
+        ($ctx->v->ClearRenderTargetView)($ctx, $target[1], $clear);
+        $list = $c->list;
+        if ($list->n > 0) {
+            $this->target = [(float)$c->w, (float)$c->h, 1.0, (float)$c->h];
+            $this->upload($this->quads, $list->buf, $list->n * DisplayList::FLOATS_PER_RECT * 4);
+            $this->upload($this->xforms, $list->xforms, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4);
+            $this->bind();
+            $this->drawRuns($list, 0, $list->n, true);
+        }
+        if ($c->blur > 0) {
+            // along rows into a texture of its size, then along columns back
+            $tmp = $this->canvasBlurTemps[$key] ??= self::targetTexture($c->w, $c->h, self::R8G8B8A8_UNORM);
+            $this->blurPass($target[2], $tmp[1], $c->w, $c->h, 1.0, 0.0, $c->blur);
+            $this->blurPass($tmp[2], $target[1], $c->w, $c->h, 0.0, 1.0, $c->blur);
+        }
+        if ($c->slot === null || self::$imagesTexture === null) {
+            return;
+        }
+        [$u, $v, $page] = $c->slot;
+        // the image texture the shaders read takes it: nothing reads it, nor writes the canvas's, as it is copied
+        $nulls = $f->new('void *[5]');
+        ($ctx->v->VSSetShaderResources)($ctx, 0, 5, $nulls);
+        ($ctx->v->PSSetShaderResources)($ctx, 0, 5, $nulls);
+        ($ctx->v->OMSetRenderTargets)($ctx, 0, null, null);
+        ($ctx->v->CopySubresourceRegion)($ctx, self::$imagesTexture, $page, $u, $v, 0, $target[0], 0, null);
+    }
+
+    private function releaseCanvasTargets(): void
+    {
+        foreach ([...$this->canvasTargets, ...$this->canvasBlurTemps] as $views) {
+            foreach (array_reverse($views) as $o) {
+                Com::release($o);
+            }
+        }
+        $this->canvasTargets = $this->canvasBlurTemps = [];
+    }
+
+    /** A texture of $w × $h pixels of $format (BGRA's, the targets') drawn into and read: it, its render target's view, its shaders' view. @return array{0: CData, 1: CData, 2: CData} */
+    private static function targetTexture(int $w, int $h, int $format = self::B8G8R8A8_UNORM): array
     {
         $d = self::$device;
-        [$tex, $target] = self::texture($w, $h, self::B8G8R8A8_UNORM, 1, self::BIND_RENDER_TARGET | self::BIND_SHADER_RESOURCE, false, null, 0, true);
+        [$tex, $target] = self::texture($w, $h, $format, 1, self::BIND_RENDER_TARGET | self::BIND_SHADER_RESOURCE, false, null, 0, true);
         $view = self::make(fn($out) => ($d->v->CreateShaderResourceView)($d, $tex, null, $out), 'CreateShaderResourceView');
         return [$tex, $target, $view];
     }
@@ -779,6 +844,7 @@ final class D3d
     public function release(): void
     {
         $this->releaseGlass();
+        $this->releaseCanvasTargets();
         foreach ([$this->backBuffer, $this->backTexture, $this->swapChain, $this->quadsView, $this->quads, $this->xformsView, $this->xforms] as $o) {
             Com::release($o);
         }
