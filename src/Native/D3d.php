@@ -248,7 +248,7 @@ final class D3d
         $text = static function (CData $p) use ($f): string {
             $b = $f->cast('ID3DBlob *', Mem::addr($p));
             $s = FFI::string(($b->v->GetBufferPointer)($b), ($b->v->GetBufferSize)($b));
-            ($b->v->Release)($b);
+            Com::release($b);
             return $s;
         };
         $messages = FFI::isNull($errors) ? '' : $text($errors);
