@@ -61,7 +61,7 @@ final class UtilsApi extends Api
     public function exec(string $file, array $args = [], ?string $cwd = null, ?Closure $stdoutHook = null, ?Closure $stderrHook = null): ?array
     {
         if (!$this->permitted(Plugin::FILE_SYSTEM)) { return null; }
-        if (!str_contains($file, '/')) {
+        if (strpbrk($file, PHP_OS_FAMILY === 'Windows' ? '/\\' : '/') === false) { // a name, looked for on the PATH
             $path = self::which($file) ?? throw new PluginError("Cannot find the binary $file", self::ERROR_BINARY_NOT_FOUND);
         } else {
             $path = \MyPHP\Native\Paths::isAbsolute($file) ? $file : $this->parsePath($file)[0];
