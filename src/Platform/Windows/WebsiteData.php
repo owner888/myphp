@@ -227,10 +227,12 @@ final class WebsiteData
         if ($view === null && self::$view === null) {
             $hwnd = App::backend()->hwnd() ?? throw new RuntimeException('cookies need the running app');
             $done = false; $why = null;
+            \MyPHP\Logger::debug('cookies: making a hidden web view', 'windows');
             WebView::hiddenView($hwnd, function (?CData $c, ?CData $v, ?string $error = null) use (&$done, &$why): void {
                 [self::$controller, self::$view, $why, $done] = [$c, $v, $error, true];
             });
             App::wait(fn() => $done);
+            \MyPHP\Logger::debug('cookies: the hidden web view ' . ($why ?? 'made'), 'windows');
             if (self::$view === null) {
                 throw new RuntimeException("cookies: $why");
             }

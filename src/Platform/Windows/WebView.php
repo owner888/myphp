@@ -234,8 +234,16 @@ final class WebView implements Platform\Page
         $f = self::f();
         if (self::$handlerVtbl === null) {
             $vt = self::$handlerVtbl = $f->new('HandlerVtbl', false);
-            $vt->QueryInterface = function ($self, $iid, $out): int {
-                $out[0] = $self; // IUnknown and the handler's own interface, which is all a handler is asked for
+            // IMarshal, IAgileObject and INoMarshal refused (mygo's handlerVtbl): a handler claiming them would be called
+            // beyond its vtable; IUnknown and the handler's own interface are what remains.
+            $refused = array_map(fn(string $g) => pack('Vvv', hexdec(substr($g, 0, 8)), hexdec(substr($g, 9, 4)), hexdec(substr($g, 14, 4))) . hex2bin(substr($g, 19, 4) . substr($g, 24)), // a GUID's bytes
+                ['00000003-0000-0000-c000-000000000046', '94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90', 'ecc8691b-c1db-4dc0-855e-65f6c551af49']);
+            $vt->QueryInterface = function ($self, $iid, $out) use ($refused): int {
+                if (in_array(Mem::read(Mem::addr($iid), 16), $refused, true)) {
+                    $out[0] = null;
+                    return Com::E_NOINTERFACE;
+                }
+                $out[0] = $self;
                 return 0;
             };
             $vt->AddRef = fn($self) => 1;
@@ -367,9 +375,11 @@ final class WebView implements Platform\Page
                 $e = Com::typed(self::f(), $env, 'Env *');
                 self::addRef($e);
                 self::$env = $e;
+                Logger::debug('the WebView2 environment made', 'windows');
             }
             $done();
         });
+        Logger::debug("making the WebView2 environment of $dll", 'windows');
         $hr = ($create->fn)(1, $fixed ? 1 : 0, Win32::wide($userData), null, $handler);
         if ($hr < 0) {
             self::$env = false;
