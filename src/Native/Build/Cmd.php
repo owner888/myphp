@@ -19,13 +19,18 @@ final class Cmd
     /** Runs $cmd and returns its exit status and what it wrote to stdout and stderr together. @param list<string> $cmd @return array{int, string} */
     public static function output(array $cmd, ?string $cwd = null): array
     {
-        $p = proc_open($cmd, [0 => ['file', self::NULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, $cwd);
+        // Into a file, read once it exited: a pipe stays open while a process it started holds it, as adb's server, which
+        // `adb devices` starts and which on Windows inherits the pipe, so reading it to its end never ended.
+        $file = (string)tempnam(sys_get_temp_dir(), 'myphp-cmd');
+        $p = proc_open($cmd, [0 => ['file', self::NULL, 'r'], 1 => ['file', $file, 'w'], 2 => ['redirect', 1]], $pipes, $cwd);
         if ($p === false) {
+            @unlink($file);
             throw new RuntimeException("cannot run {$cmd[0]}");
         }
-        $out = (string)stream_get_contents($pipes[1]);
-        fclose($pipes[1]);
-        return [proc_close($p), $out];
+        $code = proc_close($p);
+        $out = (string)file_get_contents($file);
+        @unlink($file); // on Windows not while a process it started still holds it: the temporary folder's then
+        return [$code, $out];
     }
 
     /** Runs $cmd, failing with its output unless it succeeds (mygo's command). @param list<string> $cmd */
