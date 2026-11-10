@@ -373,7 +373,7 @@ final class WebView implements Platform\Page
                 Logger::warn(sprintf('creating the WebView2 environment failed (0x%08X)', $a & 0xFFFFFFFF), 'windows');
             } else {
                 $e = Com::typed(self::f(), $env, 'Env *');
-                self::addRef($e);
+                Com::addRef($e);
                 self::$env = $e;
                 Logger::debug('the WebView2 environment made', 'windows');
             }
@@ -387,18 +387,6 @@ final class WebView implements Platform\Page
             Logger::warn(sprintf('creating the WebView2 environment failed (0x%08X)', $hr & 0xFFFFFFFF), 'windows');
             $done();
         }
-    }
-
-    private static function addRef(CData $obj): void
-    {
-        $u = Com::typed(self::comFfi(), $obj, 'IUnknown *');
-        ($u->v->AddRef)($u);
-    }
-
-    private static function comFfi(): FFI
-    {
-        static $c = null;
-        return $c ??= FFI::cdef('typedef struct { void *qi; uint32_t (*AddRef)(void *self); uint32_t (*Release)(void *self); } IUnknownVtbl; typedef struct { IUnknownVtbl *v; } IUnknown;');
     }
 
     /** @internal WebsiteData: the ICoreWebView2 of a page shown, the first one, null for none */
@@ -430,7 +418,7 @@ final class WebView implements Platform\Page
                 }
                 $f = self::f();
                 $c = Com::typed($f, $controller, 'Controller *');
-                self::addRef($c);
+                Com::addRef($c);
                 ($c->v->put_IsVisible)($c, 0);
                 $out = $f->new('void *');
                 ($c->v->get_CoreWebView2)($c, FFI::addr($out));
@@ -475,7 +463,7 @@ final class WebView implements Platform\Page
                     return;
                 }
                 $c = Com::typed(self::f(), $controller, 'Controller *');
-                self::addRef($c);
+                Com::addRef($c);
                 $this->setUp($c);
             }));
             if ($hr < 0) {
@@ -832,7 +820,7 @@ final class WebView implements Platform\Page
         if (($a->v->GetDeferral)($a, FFI::addr($d)) < 0 || FFI::isNull($d)) {
             return;
         }
-        self::addRef($a);
+        Com::addRef($a);
         $task = new SchemeTask(function (int $status, array $headers, string $body) use ($a, $d): void {
             $this->respond($a, Com::typed(self::f(), $d, 'Deferral *'), $status, $headers, $body);
         });
@@ -899,7 +887,7 @@ final class WebView implements Platform\Page
         }
         ($a->v->put_ResultFilePath)($a, Win32::wide(str_replace('/', '\\', $path)));
         ($a->v->put_Handled)($a, 1); // no download bubble
-        self::addRef($d);
+        Com::addRef($d);
         $tok = $f->new('Token');
         ($d->v->add_StateChanged)($d, self::handler(function (int $sender, $x) use ($d, $f, $url, $path): void {
             $state = $f->new('int32_t');

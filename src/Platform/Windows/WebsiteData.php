@@ -33,7 +33,6 @@ final class WebsiteData
     private const SAME_SITE = [Cookie::SAME_SITE_NONE => 0, Cookie::SAME_SITE_LAX => 1, Cookie::SAME_SITE_STRICT => 2];
     /** How long a change may take to show in GetCookies, in seconds. */
     private const SETTLE = 2.0;
-    private const IID_UNKNOWN = '00000000-0000-0000-c000-000000000046';
     /** Seconds WebView2 is waited for to answer a call, after which the call fails: one that never answers (a runtime gone wrong) holds no app. */
     private const ANSWER = 15;
     /** The calls waiting for WebView2's answer, in App::wait's nested loops. */
@@ -206,9 +205,10 @@ final class WebsiteData
             if (WebView::hr($a) < 0) {
                 $failed = sprintf('%s failed (HRESULT 0x%08X)', $what, $a & 0xFFFFFFFF);
             } elseif ($b !== null && !FFI::isNull($b)) {
-                $result = Com::query($b, self::IID_UNKNOWN); // held: WebView2 releases it once the handler returns
+                $result = Com::addRef(Com::typed(self::f(), $b, 'void *')); // held: WebView2 releases it once the handler returns; AddRef, as a QueryInterface of the list a page's cookie manager gives (a proxy) held the handler
             }
             $done = true;
+            \MyPHP\Logger::debug("$what: its handler done", 'windows');
         });
         \MyPHP\Logger::debug("{$what}…", 'windows');
         self::$waiting++;
