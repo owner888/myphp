@@ -51,6 +51,7 @@ final class Backend implements Platform\Backend
     private array $notifications = [];
     /** The system's icons, none yet (Headless stands them in through this property). */
     private ?Platform\Symbols $symbols = null;
+    private ?NowPlaying $nowPlaying = null;
 
     public function __construct(
         /** @internal what the backend reports to */
@@ -286,7 +287,7 @@ final class Backend implements Platform\Backend
     /** A page of WebView2, made as the window showing it does (WebView::attach). */
     public function newPage(int $width, int $height, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
     {
-        return new WebView($scripts, $onMessage, $devTools, $userAgent, $zoom, $pinch, $swipe);
+        return new WebView($scripts, $onMessage, $devTools, $userAgent, $zoom, $pinch, $swipe, $dataStore instanceof DataStore ? $dataStore : null);
     }
 
     public function focusedWindow(): ?\MyPHP\Window
@@ -377,7 +378,7 @@ final class Backend implements Platform\Backend
 
     public function nowPlaying(): Platform\NowPlaying
     {
-        throw new Unsupported('myphp: Now Playing is not on Windows yet');
+        return $this->nowPlaying ??= new NowPlaying($this, $this->h);
     }
 
     public function media(): Platform\Media

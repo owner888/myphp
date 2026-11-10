@@ -177,14 +177,14 @@ final class AvRenderers implements Platform\Renderers
         $this->received($d);
     }
 
-    /** A decoder of $t: video on Player::$videoThreads, with VA-API where $hardware asks and it can (which path, and why, told at debug). */
+    /** A decoder of $t: video on Player::$videoThreads, on the system's decoders (VA-API, D3D11VA) where $hardware asks and it can (which path, and why, told at debug). */
     private static function decoder(Track $t, bool $hardware): AvDecoder
     {
         if ($t->type !== Track::VIDEO) {
             return new AvDecoder($t, 1);
         }
         $d = new AvDecoder($t, Player::$videoThreads, $hardware);
-        Logger::debug($d->vaapi ? "video: {$t->codec} decodes with VA-API ({$d->name}), its frames copied to memory and converted by libswscale"
+        Logger::debug($d->accelerated ? "video: {$t->codec} decodes with " . AvDecoder::hardwareName() . " ({$d->name}), its frames copied to memory and converted by libswscale"
             : "video: {$t->codec} decodes in software ({$d->name}): {$d->software}", 'media');
         return $d;
     }
@@ -613,7 +613,7 @@ final class AvRenderers implements Platform\Renderers
         return "\x89PNG\r\n\x1a\n" . $chunk('IHDR', pack('NNCCCCC', $w, $h, 8, 6, 0, 0, 0)) . $chunk('IDAT', Zlib::deflate($raw, 15, 6)) . $chunk('IEND', '');
     }
 
-    /** Decodes the video with VA-API or not from the next packet on (the player gives it again from the keyframe before): its decoders made anew. */
+    /** Decodes the video on the system's decoders or not from the next packet on (the player gives it again from the keyframe before): its decoders made anew. */
     public function setHardware(bool $on): void
     {
         $this->hardware = $on;

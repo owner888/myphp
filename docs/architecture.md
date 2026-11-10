@@ -7993,7 +7993,18 @@ so `Av::ffi()` is an `AvFunctions` on Windows: the types' FFI, its
 `new()`/`cast()`, and every function a pointer of a struct GetProcAddress
 filled from the DLLs, read through a pointer (`Com::typed`) and called by
 name. The layouts are those of Linux (the same ABI: no `long` among them). CI takes FFmpeg 7.1's from a pinned
-release. Video decodes in software. The sound goes through WASAPI
+release. Video decodes with D3D11VA where hardware decoding is asked, the
+codec has it and a Direct3D 11 device opens (`AvDecoder::hardwareOf`, VA-API's
+path with Windows's device type: the frames copied to memory), else in
+software, as libavcodec falls back where the adapter has no decoder (WARP's
+on CI). JPEGs are WIC's (`Native\Wic`): pixels as a bitmap of memory,
+converted to the BGR the JPEG encoder takes, written at an ImageQuality
+into a stream of memory; decoded from a stream of the bytes, scaled by
+Fant's interpolation, converted to RGBA. What plays shows in the system's
+media controls (`Windows\NowPlaying`, SystemMediaTransportControls of the
+app's window through their interop, the Windows Runtime's classes by
+HSTRINGs of their names); their buttons and seeks are the player's, or the
+app's (AppHandler::mediaCommand), from the queue. The sound goes through WASAPI
 (`Native\Wasapi`): a shared-mode stream of the endpoint (the default, or
 one of `audioOutputs()`' "wasapi/<endpoint id>"), 32-bit floats the mixer
 converts (AUTOCONVERTPCM), its buffer AHEAD seconds; room is the buffer
@@ -9021,9 +9032,13 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   Content rules are matched in PHP (`Native\ContentRuleList`, mygo's
   contentrules): a page applying them asks about every request (a "*"
   filter), a blocked one redirected to data:, or a page's an empty 403,
-  and a script hides what css-display-none rules select. Not yet:
-  sessions (profiles of their own), the audio, capture and session
-  states, PDFs and a page's capture. `windows_webview_test` shows HTML,
+  and a script hides what css-display-none rules select. A session is a
+  WebView2 profile (`Windows\DataStore`: "myphp-" and its UUID, or an
+  InPrivate one of its own for an ephemeral session) named in the options
+  of its web views' controllers (ICoreWebView2Environment10, a runtime of
+  1.0.1185 or newer); its cookie calls take a web view of the profile, a
+  hidden one of its own before its pages show. Not yet: the audio, capture
+  and session states, PDFs and a page's capture. `windows_webview_test` shows HTML,
   reads its document, answers the bridge's call, serves a scheme's page
   and its fetch, sets and deletes cookies before a page shows and after,
   and applies content rules; `content_rule_list_test` matches rules on

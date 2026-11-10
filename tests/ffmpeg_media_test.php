@@ -6,7 +6,7 @@
 // thumbnail of its size; the renderers (Native\AvRenderers), paused at a
 // seek's time, decoding its frames from the keyframe, the ones before the
 // time dropped, the first after it shown as the image the window draws;
-// the thumbnails' JPEGs (GdkPixbuf's, on Linux); WASAPI's outputs.
+// the thumbnails' JPEGs (GdkPixbuf's on Linux, WIC's on Windows); WASAPI's outputs.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -51,6 +51,14 @@ $rgba = $thumbs->frame($key);
 same([80, 45, 80 * 45 * 4], [$thumbs->width, $thumbs->height, strlen($rgba)], 'a thumbnail 80 wide, of the track\'s shape');
 check(count(array_unique(str_split($rgba, 4))) > 8, 'of the frame\'s colors');
 check(strlen($thumbs->frame($r->keyframe(0.0))) === 80 * 45 * 4, 'and another, the decoder flushed after each');
+// The system's decoders asked (VA-API, D3D11VA): a frame either way, from software where they cannot (no GPU on CI).
+$d = new \MyPHP\Native\AvDecoder($video, 1, true);
+$d->send($key);
+$d->send(null);
+$frame = $d->receive();
+check($frame !== null && $frame->width === 160, 'the system\'s decoders asked: a frame, ' . ($d->accelerated ? 'with ' . \MyPHP\Native\AvDecoder::hardwareName() : "in software ({$d->software})"));
+if ($frame !== null) { \MyPHP\Native\AvDecoder::release($frame); }
+while (($rest = $d->receive()) !== null) { \MyPHP\Native\AvDecoder::release($rest); }
 
 $media = PHP_OS_FAMILY === 'Windows' ? new \MyPHP\Platform\Windows\Media(\MyPHP\App::backend()) : new \MyPHP\Platform\Linux\Media(\MyPHP\App::backend());
 $m = new Matroska(__DIR__ . '/testdata/clip.mkv');
@@ -71,11 +79,15 @@ same([1.3, null], [$out->time(), $out->failure()], 'the clock stays where the se
 $png = $out->snapshot();
 check($png !== null && str_starts_with($png, "\x89PNG") && unpack('N2', $png, 16) === [1 => 160, 2 => 90], 'a snapshot of it, a PNG of its size');
 
-if (PHP_OS_FAMILY === 'Linux') { // Windows's are not there yet
-    $jpeg = $media->jpeg($rgba, 80, 45, 0.85);
-    check(str_starts_with($jpeg, "\xFF\xD8"), 'a thumbnail as a JPEG, as the cache keeps it');
-    same(80 * 45 * 4, strlen($media->jpegPixels($jpeg, 80)), 'and its pixels again');
-} else {
+$jpeg = $media->jpeg($rgba, 80, 45, 0.85);
+check(str_starts_with($jpeg, "\xFF\xD8"), 'a thumbnail as a JPEG, as the cache keeps it');
+$back = $media->jpegPixels($jpeg, 80);
+same(80 * 45 * 4, strlen($back), 'and its pixels again');
+$near = 0;
+for ($i = 0; $i < strlen($rgba); $i += 4) { $near += abs(ord($rgba[$i]) - ord($back[$i])) < 48 ? 1 : 0; }
+check($near > 80 * 45 * 0.9, "of the colors it was made of: $near pixels of " . 80 * 45 . ' near in red');
+same(40 * 23 * 4, strlen($media->jpegPixels($jpeg, 40)), 'scaled down to 40 on a side');
+if (PHP_OS_FAMILY === 'Windows') {
     // WASAPI's outputs, by mpv's names of them (a runner may have none); the default one opened where there is one.
     $outs = $media->audioOutputs();
     check(array_filter(array_keys($outs), fn(string $k) => !str_starts_with($k, 'wasapi/')) === [], 'WASAPI\'s outputs: ' . json_encode($outs));

@@ -44,6 +44,7 @@ namespace MyPHP\Tests;
     foreach (['cookiesHidden' => 'before a page shows (a hidden web view\'s)', 'cookiesShown' => 'of a page shown'] as $k => $what) {
         same(['listed' => ['k=v;example.com;/;' . (new \DateTimeImmutable('+30 days 00:00 UTC'))->format('Y-m-d')], 'after' => 0], $r[$k] ?? null, "cookies set, listed and deleted $what");
     }
+    same([['named'], ['private'], []], $r['sessions'] ?? null, 'a named session\'s cookies and an ephemeral one\'s, apart from each other and from the default\'s');
     check(!isset($r['rulesError']), 'content rules compiled' . (isset($r['rulesError']) ? ": {$r['rulesError']}" : ''));
     same('none', $r['hidden'] ?? null, 'content rules hide what a css-display-none rule selects');
     same('false', $r['ran'] ?? null, 'content rules block a script');

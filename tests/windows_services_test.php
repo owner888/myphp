@@ -2,7 +2,8 @@
 // The system's services on Windows, in an app of its own (testdata/windows_services_app.php): a
 // global shortcut registered, its WM_HOTKEY told, the same keys refused a second time, unregistered;
 // a notification shown as a balloon of a temporary icon of the app's, its click told; a secret kept in
-// the Credential Manager, read back byte for byte, replaced, deleted; the network's status.
+// the Credential Manager, read back byte for byte, replaced, deleted; the network's status; what plays
+// shown in the system's media controls (SystemMediaTransportControls).
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -38,6 +39,7 @@ namespace MyPHP\Tests;
     same('second', $r['replaced'], 'and replaced');
     same('', $r['empty'], 'an empty one');
     check($r['deleted'], 'one deleted is not found, and deleting none succeeds');
+    same(true, $r['nowPlaying'] ?? null, 'what plays shown in the system\'s media controls, then nothing');
     same([true, 'other'], $r['network'], 'the runner online, the interface untold');
     same([true, true, 'cafe'], $r['html'], 'HTML on the clipboard read back, as CF_HTML too, its text besides');
     same([true, true, true, true, false], $r['image'], 'a PNG read back, as "PNG" and a bitmap too; a PNG an image, other bytes none');

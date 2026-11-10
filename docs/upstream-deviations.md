@@ -3086,3 +3086,11 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
     `Native\ContentRuleList::site`), the last two labels otherwise.
   - Why: the list is large and changes; PHP has none, and myphp adds no
     dependency for it.
+- **The media controls' events on Windows** (v1.178)
+  - mygo: the handlers of SystemMediaTransportControls' ButtonPressed and
+    PlaybackPositionChangeRequested are agile, called on the controls'
+    threads, their commands posted to the main thread.
+  - myphp: the handlers are not agile (no IAgileObject, no IMarshal), so
+    COM brings each call to the main thread's apartment.
+  - Why: PHP runs on its main thread alone; a callback of PHP's on another
+    thread would run PHP there.

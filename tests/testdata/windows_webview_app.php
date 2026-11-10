@@ -4,7 +4,8 @@
 // window's title set from JS), new HTML loaded; a page of a scheme PHP serves (from
 // http://<scheme>.localhost/, its URL the scheme's), its fetch of the scheme answered with the method
 // and body it sent; cookies set, listed and deleted before a page shows (a hidden web view's cookie
-// manager) and after (the page's); content rules blocking a script of a page and hiding an element.
+// manager) and after (the page's), a named session's and an ephemeral one's apart; content rules blocking
+// a script of a page and hiding an element.
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
@@ -92,6 +93,19 @@ App::whenReady(function () use (&$r, $log) {
                     $r['fetched'] = $e->getMessage();
                 }
                 $r['cookiesShown'] = $cookies();
+                // Sessions: a named one's profile and an ephemeral one's InPrivate profile, each its own cookies.
+                $log('sessions');
+                try {
+                    $named = \MyPHP\Session::newSession('wvtest');
+                    $private = \MyPHP\Session::newEphemeralSession();
+                    $named->cookies->set(new \MyPHP\Cookie('s', 'named', 'example.org'));
+                    $private->cookies->set(new \MyPHP\Cookie('s', 'private', 'example.org'));
+                    $of = fn(array $cookies) => array_values(array_map(fn($c) => $c->value, array_filter($cookies, fn($c) => $c->domain === 'example.org')));
+                    $r['sessions'] = [$of($named->cookies->list()), $of($private->cookies->list()), $of(\MyPHP\Cookies::list())];
+                    $named->cookies->clear();
+                } catch (\Throwable $e) {
+                    $r['sessions'] = $e->getMessage();
+                }
                 $log('content rules');
                 try {
                     $rules = \MyPHP\ContentRules::compile('wvtest', '[{"trigger":{"url-filter":"blocked\\\\.js"},"action":{"type":"block"}},{"trigger":{"url-filter":".*"},"action":{"type":"css-display-none","selector":".ad"}}]');
