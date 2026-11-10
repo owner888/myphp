@@ -201,29 +201,24 @@ final class WebsiteData
     {
         $done = false; $result = null; $failed = null;
         $handler = WebView::handler(function (int $a, $b) use (&$done, &$result, &$failed, $what): void {
-            \MyPHP\Logger::debug(sprintf('%s: its handler called (0x%08X)', $what, $a & 0xFFFFFFFF), 'windows');
             if (WebView::hr($a) < 0) {
                 $failed = sprintf('%s failed (HRESULT 0x%08X)', $what, $a & 0xFFFFFFFF);
             } elseif ($b !== null && !FFI::isNull($b)) {
-                $result = Com::addRef(Com::typed(self::f(), $b, 'void *')); // held: WebView2 releases it once the handler returns; AddRef, as a QueryInterface of the list a page's cookie manager gives (a proxy) held the handler
+                $result = Com::addRef(Com::typed(self::f(), $b, 'void *')); // held: WebView2 releases it once the handler returns
             }
             $done = true;
-            \MyPHP\Logger::debug("$what: its handler done", 'windows');
         });
         \MyPHP\Logger::debug("{$what}…", 'windows');
         self::$waiting++;
         try {
             $hr = $start($handler);
-            \MyPHP\Logger::debug(sprintf('%s: called (0x%08X)', $what, $hr & 0xFFFFFFFF), 'windows');
             if ($hr < 0) {
                 throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
             }
             $deadline = microtime(true) + self::ANSWER;
-            Backend::$trace = true; // the message a wait that never ended stopped at, last in the log
-            App::wait(fn() => $done || microtime(true) > $deadline);
+            App::wait(function () use (&$done, $deadline): bool { return $done || microtime(true) > $deadline; }); // by reference: an arrow function keeps the false it was made with
         } finally {
             self::$waiting--;
-            Backend::$trace = self::$waiting > 0;
         }
         \MyPHP\Logger::debug($done ? "$what answered" : "$what: no answer", 'windows');
         $done || throw new RuntimeException("$what: WebView2 did not answer in " . self::ANSWER . ' s');
@@ -234,10 +229,10 @@ final class WebsiteData
     }
 
     /**
-     * Closes the hidden web view from the outer message loop, once no call
-     * waits for WebView2 (mygo's closeCookieViewNow): a timer of the app's
-     * window runs in App::wait's nested loop too, where a controller closed
-     * held the loop and the call's answer never came.
+     * Closes the hidden web view from the message loop once no call waits
+     * for WebView2 (mygo's closeCookieView and closeCookieViewNow): a call
+     * may run in a completion handler, where closing a controller crashes
+     * the message loop, and one waiting may be using the view.
      */
     private static function closeLater(CData $c, CData $v): void
     {
@@ -257,8 +252,7 @@ final class WebsiteData
     {
         $view = WebView::shownView();
         if ($view !== null && self::$controller !== null) {
-            // Closed from the message loop, not here (mygo's closeCookieView): a call may run in a nested loop of
-            // App::wait, where closing a controller does not return.
+            // Closed from the message loop, not here (closeLater).
             [$c, $v] = [self::$controller, self::$view];
             self::$controller = self::$view = null;
             \MyPHP\Logger::debug('cookies: the hidden web view closes, a page shown', 'windows');
@@ -272,7 +266,7 @@ final class WebsiteData
                 [self::$controller, self::$view, $why, $done] = [$c, $v, $error, true];
             });
             $deadline = microtime(true) + self::ANSWER;
-            App::wait(fn() => $done || microtime(true) > $deadline);
+            App::wait(function () use (&$done, $deadline): bool { return $done || microtime(true) > $deadline; });
             $why = $done ? $why : 'WebView2 did not answer in ' . self::ANSWER . ' s';
             \MyPHP\Logger::debug('cookies: the hidden web view ' . ($why ?? 'made'), 'windows');
             if (self::$view === null) {

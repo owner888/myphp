@@ -24,8 +24,6 @@ final class Backend implements Platform\Backend
     /** @internal the notification area's callback message for the trays */
     public const WM_APP_TRAY = Win32::WM_APP + 3;
 
-    /** @internal whether step() logs each message it dispatches (WebsiteData's calls, while they wait) */
-    public static bool $trace = false;
     /** The app's hidden window, null before init. */
     private ?CData $hwnd = null;
     private bool $running = false;
@@ -213,41 +211,20 @@ final class Backend implements Platform\Backend
         }
     }
 
-    /**
-     * Waits 50 ms at most for a message, then handles those there are, for
-     * 50 ms at most (mygo's Step); WM_QUIT is posted again for the loop
-     * outside. mygo's drains the queue; App::wait steps in a loop of its
-     * own, and once a page's window showed, a step never returned to it
-     * (a cookie call's answer came, which it never saw). A step that hits
-     * the bound is logged, once a second at most.
-     */
+    /** Waits 50 ms at most for a message, then handles those there are (mygo's Step); WM_QUIT is posted again for the loop outside. */
     public function step(): void
     {
         $this->start();
         $u = Win32::user32();
         $u->MsgWaitForMultipleObjectsEx(0, null, 50, 0x04FF /* QS_ALLINPUT */, 0x0004 /* MWMO_INPUTAVAILABLE */);
         $m = $u->new('MSG');
-        $end = hrtime(true) + 50_000_000;
-        $n = 0;
         while ($u->PeekMessageW(\FFI::addr($m), null, 0, 0, 1 /* PM_REMOVE */) !== 0) {
             if ($m->message === Win32::WM_QUIT) {
                 $u->PostQuitMessage((int)$m->wParam);
                 return;
             }
-            if (self::$trace) {
-                \MyPHP\Logger::debug(sprintf('dispatching 0x%04X to %s', $m->message, \MyPHP\Native\Mem::addr($m->hwnd) === \MyPHP\Native\Mem::addr($this->hwnd) ? 'the app window' : sprintf('0x%X', \MyPHP\Native\Mem::addr($m->hwnd))), 'windows');
-            }
             $u->TranslateMessage(\FFI::addr($m));
             $u->DispatchMessageW(\FFI::addr($m));
-            $n++;
-            if (hrtime(true) >= $end) {
-                static $told = 0.0;
-                if (microtime(true) - $told >= 1.0) {
-                    $told = microtime(true);
-                    \MyPHP\Logger::debug(sprintf('a step bounded: %d messages in 50 ms, the last 0x%04X', $n, $m->message), 'windows');
-                }
-                return;
-            }
         }
     }
 
