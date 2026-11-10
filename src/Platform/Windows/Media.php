@@ -15,10 +15,14 @@ use MyPHP\Platform;
  * WASAPI (Native\Wasapi), the picture drawn by the window's own renderer
  * (Native\AvRenderers, this its MediaHost: the app window's timers, WASAPI,
  * the windows). Video decodes with D3D11VA where it can and hardware
- * decoding is asked (its frames copied to memory), else in software. JPEGs are WIC's (Native\Wic); staying awake is Power's.
+ * decoding is asked (its frames copied to memory), else in software. JPEGs
+ * are WIC's (Native\Wic), the film in the media controls
+ * Platform\PlayerNowPlaying's; staying awake is Power's.
  */
 final class Media implements Platform\Media, MediaHost
 {
+    use Platform\PlayerNowPlaying;
+
     /** @var array<int, Closure(): void> what each player does at a tick, by its object id */
     private array $ticks = [];
     private int $timer = 0;
@@ -153,45 +157,6 @@ final class Media implements Platform\Media, MediaHost
     public function pictureInPicture(Player $p, Closure $changed): ?object
     {
         return null;
-    }
-
-    /** MediaCommand's bits of the handlers' names (Native\NowPlaying's MEDIA, a position a seek), as Linux\Media's. */
-    private const COMMANDS = ['play' => 1, 'pause' => 2, 'toggle' => 4, 'stop' => 8, 'next' => 16, 'previous' => 32, 'position' => 64];
-
-    /** What showed the player's state last, by its id. */
-    private int $nowPlayingOwner = 0;
-
-    /**
-     * The film in the system's media controls (Windows\NowPlaying): its
-     * name, duration, position, rate and state, its commands calling
-     * $handlers with $owner (held weakly), as Linux\Media's do.
-     */
-    public function showNowPlaying(object $owner, array $handlers, string $path, float $duration, float $time, float $rate, bool $paused, int $index, int $count, int $chapter, int $chapters): void
-    {
-        $bits = 0;
-        foreach (self::COMMANDS as $name => $bit) {
-            if (isset($handlers[$name])) { $bits |= $bit; }
-        }
-        $this->nowPlayingOwner = spl_object_id($owner);
-        $ref = \WeakReference::create($owner);
-        $this->b->nowPlaying()->show(['title' => pathinfo($path, PATHINFO_FILENAME), 'artist' => '', 'album' => '', 'artwork' => '', 'duration' => $duration, 'position' => $time,
-            'rate' => $rate, 'state' => $paused ? 'paused' : 'playing', 'commands' => $bits], static function (int $cmd, float $at) use ($ref, $handlers): void {
-            $o = $ref->get();
-            $name = array_search($cmd, self::COMMANDS, true);
-            if ($o === null || $name === false || !isset($handlers[$name])) {
-                return;
-            }
-            $name === 'position' ? $handlers[$name]($o, $at) : $handlers[$name]($o);
-        });
-    }
-
-    public function endNowPlaying(object $owner): void
-    {
-        if ($this->nowPlayingOwner !== spl_object_id($owner)) {
-            return;
-        }
-        $this->nowPlayingOwner = 0;
-        $this->b->nowPlaying()->show(null, null);
     }
 
     /** WIC's JPEG (Native\Wic), its alpha left out. */
