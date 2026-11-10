@@ -42,7 +42,7 @@ namespace MyPHP\Tests;
     same('wvtest://localhost/index.html', $r['servedURL'] ?? null, 'its URL the scheme\'s, not WebView2\'s http://wvtest.localhost/');
     same('POST:hi', $r['fetched'] ?? null, 'its fetch of the scheme answered, with its method and body');
     foreach (['cookiesHidden' => 'before a page shows (a hidden web view\'s)', 'cookiesShown' => 'of a page shown'] as $k => $what) {
-        same(['listed' => ['k=v;example.com;/;2040'], 'after' => 0], $r[$k] ?? null, "cookies set, listed and deleted $what");
+        same(['listed' => ['k=v;example.com;/;' . (new \DateTimeImmutable('+30 days 00:00 UTC'))->format('Y-m-d')], 'after' => 0], $r[$k] ?? null, "cookies set, listed and deleted $what");
     }
     check(!isset($r['rulesError']), 'content rules compiled' . (isset($r['rulesError']) ? ": {$r['rulesError']}" : ''));
     same('none', $r['hidden'] ?? null, 'content rules hide what a css-display-none rule selects');
