@@ -36,6 +36,8 @@ final class WebsiteData
     private const IID_UNKNOWN = '00000000-0000-0000-c000-000000000046';
     /** Seconds WebView2 is waited for to answer a call, after which the call fails: one that never answers (a runtime gone wrong) holds no app. */
     private const ANSWER = 15;
+    /** The calls waiting for WebView2's answer, in App::wait's nested loops. */
+    private static int $waiting = 0;
 
     private static ?FFI $f = null;
     /** The hidden web view, while there is no page. */
@@ -208,17 +210,42 @@ final class WebsiteData
             $done = true;
         });
         \MyPHP\Logger::debug("{$what}…", 'windows');
-        $hr = $start($handler);
-        if ($hr < 0) {
-            throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
+        self::$waiting++;
+        try {
+            $hr = $start($handler);
+            if ($hr < 0) {
+                throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
+            }
+            $deadline = microtime(true) + self::ANSWER;
+            App::wait(fn() => $done || microtime(true) > $deadline);
+        } finally {
+            self::$waiting--;
         }
-        $deadline = microtime(true) + self::ANSWER;
-        App::wait(fn() => $done || microtime(true) > $deadline);
+        \MyPHP\Logger::debug($done ? "$what answered" : "$what: no answer", 'windows');
         $done || throw new RuntimeException("$what: WebView2 did not answer in " . self::ANSWER . ' s');
         if ($failed !== null) {
             throw new RuntimeException($failed);
         }
         return $result;
+    }
+
+    /**
+     * Closes the hidden web view from the outer message loop, once no call
+     * waits for WebView2 (mygo's closeCookieViewNow): a timer of the app's
+     * window runs in App::wait's nested loop too, where a controller closed
+     * held the loop and the call's answer never came.
+     */
+    private static function closeLater(CData $c, CData $v): void
+    {
+        App::backend()->timer(0.1, static function () use ($c, $v): void {
+            if (self::$waiting > 0) {
+                self::closeLater($c, $v);
+                return;
+            }
+            \MyPHP\Logger::debug('cookies: closing the hidden web view', 'windows');
+            WebView::closeHidden($c, $v);
+            \MyPHP\Logger::debug('cookies: the hidden web view closed', 'windows');
+        });
     }
 
     /** Runs $fn with a web view of the profile: a page's, else the hidden one, made now; the hidden one goes once a page shows. */
@@ -231,7 +258,7 @@ final class WebsiteData
             [$c, $v] = [self::$controller, self::$view];
             self::$controller = self::$view = null;
             \MyPHP\Logger::debug('cookies: the hidden web view closes, a page shown', 'windows');
-            App::backend()->timer(0, static fn() => WebView::closeHidden($c, $v));
+            self::closeLater($c, $v);
         }
         if ($view === null && self::$view === null) {
             $hwnd = App::backend()->hwnd() ?? throw new RuntimeException('cookies need the running app');
