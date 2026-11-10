@@ -34,9 +34,9 @@ App::whenReady(function () use (&$r, $log) {
         $out = [];
         try {
             $log('cookies set');
-            \MyPHP\Cookies::set(new \MyPHP\Cookie('k', 'v', 'example.com', expires: new DateTimeImmutable('2040-01-01')));
+            \MyPHP\Cookies::set(new \MyPHP\Cookie('k', 'v', 'example.com', expires: new DateTimeImmutable('+30 days 00:00 UTC'))); // within Chromium's 400 days, past which it shortens an expiry
             $log('cookies listed');
-            $out['listed'] = array_values(array_map(fn($c) => "$c->name=$c->value;$c->domain;$c->path;" . $c->expires?->format('Y'), array_filter(\MyPHP\Cookies::list(), fn($c) => $c->domain === 'example.com')));
+            $out['listed'] = array_values(array_map(fn($c) => "$c->name=$c->value;$c->domain;$c->path;" . $c->expires?->format('Y-m-d'), array_filter(\MyPHP\Cookies::list(), fn($c) => $c->domain === 'example.com')));
             $log('cookies deleted');
             \MyPHP\Cookies::delete(new \MyPHP\Cookie('k', '', 'example.com'));
             $out['after'] = count(array_filter(\MyPHP\Cookies::list(), fn($c) => $c->domain === 'example.com'));
@@ -107,7 +107,7 @@ App::whenReady(function () use (&$r, $log) {
                     } catch (\Throwable $e) {
                         $r['ran'] = $e->getMessage();
                     }
-                    echo json_encode($r), "\n";
+                    echo json_encode($r, JSON_PRESERVE_ZERO_FRACTION), "\n"; // a zoom of 1.0 a float still
                     App::quit();
                 });
             });
