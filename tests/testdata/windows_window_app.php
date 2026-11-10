@@ -49,6 +49,19 @@ App::whenReady(function () use (&$r, $at) {
         $r['hide'] = [...$hidden, $app->isHidden(), $w->native()->isVisible()];
         $app->addRecentDocument(__FILE__);
         $app->clearRecentDocuments();
+        // OLE's drag and drop: a data object of PHP's offering a file and text, read back as another app reads it; dropped on the window, its file told.
+        $dd = \MyPHP\Platform\Windows\DragDrop::class;
+        $w->on('fileDrop', function ($e) use (&$r) { $r['dropped'] = $e->paths === [__FILE__] ? true : $e->paths; });
+        $reps = array_map(fn($f) => \MyPHP\Transfer\Representation::bytes($f, \MyPHP\Transfer\Data::files(__FILE__)->read($f)), [\MyPHP\Transfer\Format::FILE_LIST, \MyPHP\Transfer\Format::URI_LIST]);
+        $reps[] = \MyPHP\Transfer\Representation::bytes(\MyPHP\Transfer\Format::TEXT, 'héllo');
+        $item = new \MyPHP\Transfer\Item(...$reps);
+        $data = $dd::testData(new \MyPHP\Transfer\Data($item), 'session-1');
+        $offer = $dd::testOffer($data);
+        $text = $dd::testRead($data, 13);
+        $r['dragData'] = [array_keys($offer['formats']), $offer['session'], $offer['files'], $text === null ? null : (string)iconv('UTF-16LE', 'UTF-8', rtrim($text, "\0")), $dd::testPaths($data) === [__FILE__]];
+        $r['dropEffect'] = $dd::testDrop($w->native(), $data, 100, 100);
+        \MyPHP\Native\Com::release($data);
+        $r['dragAlive'] = $dd::alive();
         $r['content'] = $w->contentSize();
         $b = $w->bounds(); $c = $w->contentBounds();
         $r['frameAround'] = $b->width > $c->width && $b->height > $c->height;

@@ -112,6 +112,7 @@ final class Window implements Platform\Window
             -0x80000000, -0x80000000, 100, 100, $parent instanceof self ? $parent->hwnd : null); // CW_USEDEFAULT: where Windows puts a new window
         self::$open[Mem::addr($this->hwnd)] = $this;
         if (Taskbar::hasAppIcon()) { Taskbar::applyIcon($this->hwnd); }
+        DragDrop::register($this); // drops on the content; OLE enumerates what a drag offers, so setDropFormats has nothing to set
         $this->topmost = $o->alwaysOnTop;
         if ($this->hasAppMenu() && $b->menus()->appMenu !== null) { $this->installMenu($b->menus()->appMenu); } // before its size, which counts the bar
         $this->sizeContent(max(1, $o->width), max(1, $o->height));
@@ -155,6 +156,7 @@ final class Window implements Platform\Window
                 if ($this->w->shouldClose()) { $u->DestroyWindow($this->hwnd); }
                 return 0;
             case Win32::WM_DESTROY:
+                DragDrop::revoke($this);
                 $this->dead = true;
                 $this->b->menus()->dropOwner($this->menuOwner); // the bar itself goes with the window
                 $this->d3d?->release();
@@ -1105,12 +1107,27 @@ final class Window implements Platform\Window
         return [($r->right - $r->left) / $s, ($r->bottom - $r->top) / $s];
     }
 
+    /** Drags $o's data out of the content, OLE's DoDragDrop (DragDrop::start), modal till it ends. */
     public function startDrag(array $o): void
     {
-        throw new Unsupported('myphp: dragging out of a window is not on Windows yet');
+        DragDrop::start($this, $o);
     }
 
-    public function cancelDrag(): void {}
+    public function cancelDrag(): void
+    {
+        DragDrop::cancel($this);
+    }
+
+    /** A point of the screen, in pixels, as the content's, in points. @return array{0: float, 1: float} */
+    public function screenToPoints(int $x, int $y): array
+    {
+        $u = Win32::user32();
+        $p = $u->new('POINT');
+        [$p->x, $p->y] = [$x, $y];
+        $u->ScreenToClient($this->hwnd, FFI::addr($p));
+        $s = $this->scale();
+        return [$p->x / $s, $p->y / $s];
+    }
 
     public function titleBar(): array
     {

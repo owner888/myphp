@@ -6,7 +6,7 @@ namespace MyPHP\Platform\Windows;
 use Closure;
 use FFI\CData;
 use MyPHP\Platform;
-use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
+use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler};
 
 /**
  * The Windows backend: Win32 over FFI (mygo's internal/windows). Its event
@@ -49,7 +49,7 @@ final class Backend implements Platform\Backend
     private int $nextTray = 0;
     /** @var array<string, Tray> the icons showing the notifications, by their ids */
     private array $notifications = [];
-    /** The system's icons, none yet (Headless stands them in through this property). */
+    /** The system's icons: the icon font's (Windows\Symbols); Headless stands them in through this property. */
     private ?Platform\Symbols $symbols = null;
     private ?NowPlaying $nowPlaying = null;
 
@@ -388,7 +388,7 @@ final class Backend implements Platform\Backend
 
     public function symbols(): Platform\Symbols
     {
-        return $this->symbols ?? throw new Unsupported('myphp: the system\'s symbols are not on Windows yet');
+        return $this->symbols ??= new Symbols();
     }
 
     public function secrets(): Platform\Secrets
