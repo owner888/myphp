@@ -37,7 +37,7 @@ final class DirectoryChanges implements Backend
 
     private CData $port;
     private int $next = 0;
-    /** @var array<int, array{target: int, handle: CData, subtree: bool, removed: bool, buffer: CData, overlap: CData}> by completion key, until their I/O completes */
+    /** @var array<int, array{target: int, path: string, handle: CData, subtree: bool, removed: bool, buffer: CData, overlap: CData}> by completion key, until their I/O completes */
     private array $sessions = [];
     /** @var array<int, int> the key of each target */
     private array $targets = [];
@@ -75,7 +75,7 @@ final class DirectoryChanges implements Backend
             $k->CloseHandle($h);
             throw new RuntimeException("CreateIoCompletionPort: error $err");
         }
-        $s = ['target' => $t->id, 'handle' => $h, 'subtree' => $t->subtree, 'removed' => false,
+        $s = ['target' => $t->id, 'path' => $t->path, 'handle' => $h, 'subtree' => $t->subtree, 'removed' => false,
             'buffer' => $k->new('uint8_t[' . self::BUFFER . ']', false), 'overlap' => $k->new('OVERLAPPED', false)];
         if (!$this->arm($s)) {
             $err = $k->GetLastError();
@@ -180,7 +180,11 @@ final class DirectoryChanges implements Backend
                 $notices[] = new Notice(err: new Overflow); // more changed than the buffer held
             } else {
                 try {
-                    array_push($notices, ...self::parse(FFI::string($s['buffer'], min($size, self::BUFFER)), $s['target']));
+                    foreach (self::parse(FFI::string($s['buffer'], min($size, self::BUFFER)), $s['target']) as $n) {
+                        if ($n->kind !== Notice::WRITE || !self::isDirectory("{$s['path']}/{$n->name}")) {
+                            $notices[] = $n;
+                        }
+                    }
                 } catch (RuntimeException) {
                     $notices[] = new Notice(err: new Overflow);
                 }
@@ -189,6 +193,21 @@ final class DirectoryChanges implements Backend
                 $this->finish($key);
                 $notices[] = new Notice($s['target'], Notice::LOST);
             }
+        }
+    }
+
+    /**
+     * Whether $path is a directory now: a directory's modification is its
+     * last write's time, which changes as an entry in it does, an entry a
+     * subtree target reports itself and a directory target not watching
+     * the tree has no use for; inotify and FSEvents tell no such change.
+     */
+    private static function isDirectory(string $path): bool
+    {
+        try {
+            return Fs::isDir(Fs::lstat($path));
+        } catch (FsError) {
+            return false; // gone: told as it is
         }
     }
 

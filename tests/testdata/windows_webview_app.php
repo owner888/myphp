@@ -66,7 +66,7 @@ App::whenReady(function () use (&$r, $log) {
         };
         App::after(0.2, $look);
     };
-    $until("document.getElementById('h')?.textContent", 'Hello', function ($v) use ($w, &$r, $log, $until) {
+    $until("document.getElementById('h')?.textContent", 'Hello', function ($v) use ($w, &$r, $log, $until, $cookies) {
         $r['heading'] = $v;
         $log('the bridge');
         try {
@@ -77,13 +77,13 @@ App::whenReady(function () use (&$r, $log) {
         $r['title'] = $w->title();
         $log('new HTML');
         $w->page()->loadHTML('<!doctype html><p id="p">Second</p>');
-        $until("document.getElementById('p')?.textContent", 'Second', function ($v) use ($w, &$r, $log) {
+        $until("document.getElementById('p')?.textContent", 'Second', function ($v) use ($w, &$r, $log, $until, $cookies) {
             $r['second'] = $v;
             $r['canGoBack'] = $w->page()->canGoBack();
             $r['zoom'] = $w->page()->zoomFactor();
             $log('a scheme');
             $w->page()->loadURL('wvtest://localhost/index.html');
-            $until("document.getElementById('s')?.textContent", 'served at wvtest://localhost/index.html', function ($v) use ($w, &$r) {
+            $until("document.getElementById('s')?.textContent", 'served at wvtest://localhost/index.html', function ($v) use ($w, &$r, $log, $until, $cookies) {
                 $r['served'] = $v;
                 $r['servedURL'] = $w->page()->url();
                 try {
