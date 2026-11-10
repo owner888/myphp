@@ -51,7 +51,8 @@ final class DWriteEngine implements \MyPHP\Text\Engine
         $this->f = $d->f;
     }
 
-    private function hasSystem(string $family): bool
+    /** Whether the system has font family $family (Windows\Symbols asks for the icon fonts by it). */
+    public function hasSystem(string $family): bool
     {
         $key = strtolower($family);
         if (!isset($this->exists[$key])) {

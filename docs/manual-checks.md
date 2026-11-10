@@ -89,3 +89,16 @@ instead.
     shows; the PDF opens, laid out for print, at the size asked; muting a
     page playing sound silences it, isAudible true while it plays; picture
     in picture floats the page's video and is told as on.
+17. [ ] **Dragging out** (the player's playlist, examples with draggable
+    items): a file dragged to Explorer copies it (Shift moves it), text
+    and a link dragged into Notepad, Word or Edge land there; the drag
+    shows its preview under the pointer, sharp at 150%; Escape cancels it;
+    dragging between two windows of the app moves the item as it is.
+18. [ ] **Dropping in**: files from Explorer, text from Word and a link
+    from Edge dropped on native UI are taken where the content takes
+    them (the pointer's badge shows copy, or none where it does not);
+    over a web page, the page takes them as Edge would.
+19. [ ] **The system's symbols** (the player's toolbar and menus, the log
+    viewer): each icon means what macOS's does, centered in its square
+    and as heavy as the text beside it; on Windows 10 (Segoe MDL2 Assets)
+    too. The ones drawn as Material Symbols do not clash.

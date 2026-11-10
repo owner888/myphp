@@ -20,7 +20,7 @@ use MyPHP\Transfer\{Data, Format, Item, Representation};
  * imageToDIB). Read back, they are HTML and PNG again, a bitmap's pixels
  * encoded (dibToImage). The data is copied as it is written (its
  * providers run then, and are released); OLE's data object, with what it
- * renders as asked, and files come with drag and drop's stage, as mygo's.
+ * renders as asked, is drag and drop's (DragDrop), as mygo's.
  */
 final class Clipboard implements Platform\Clipboard
 {
@@ -238,8 +238,8 @@ final class Clipboard implements Platform\Clipboard
         return $h === null ? null : self::bytes($h, $wide);
     }
 
-    /** CF_HTML of a fragment of markup: a header of byte offsets, the fragment in a document (mygo's htmlData). */
-    private static function htmlData(string $markup): string
+    /** @internal DragDrop's too: CF_HTML of a fragment of markup, a header of byte offsets, the fragment in a document (mygo's htmlData). */
+    public static function htmlData(string $markup): string
     {
         $header = "Version:0.9\r\nStartHTML:%010d\r\nEndHTML:%010d\r\nStartFragment:%010d\r\nEndFragment:%010d\r\n";
         [$prefix, $suffix] = ['<html><body><!--StartFragment-->', '<!--EndFragment--></body></html>'];
@@ -249,8 +249,8 @@ final class Clipboard implements Platform\Clipboard
         return sprintf($header, $h, $end + strlen($suffix), $start, $end) . $prefix . $markup . $suffix . "\0";
     }
 
-    /** The fragment of CF_HTML, by its header's offsets (mygo's ReadHTML); null for a header that does not hold. */
-    private static function fragment(string $data): ?string
+    /** @internal DragDrop's too: the fragment of CF_HTML, by its header's offsets (mygo's ReadHTML); null for a header that does not hold. */
+    public static function fragment(string $data): ?string
     {
         $data = rtrim($data, "\0");
         $at = fn(string $key): int => preg_match('/' . $key . '(-?\d+)\s*[\r\n]/', $data, $m) === 1 ? (int)$m[1] : -1;

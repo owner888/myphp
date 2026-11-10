@@ -8995,10 +8995,29 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   Applications folder's, each a shell item shell:AppsFolder\<ID>. Hiding
   the app hides its windows shown, unhiding shows them inactive;
   activating brings its highest window forward. The window's capture is
-  its last frame, read back, as a PNG (`Native\Wic::png`). Not yet:
-  dragging out of a window and dropping into one (OLE's IDataObject and
-  IDropSource, implemented in PHP: mygo's surface_drag.go), the system's
-  symbols (no SF Symbols; a mapping to Segoe Fluent Icons to decide).
+  its last frame, read back, as a PNG (`Native\Wic::png`).
+- Drag and drop (`Windows\DragDrop`: mygo's surface_drag.go,
+  surface_drop.go) is OLE's, its COM objects PHP's: structs of a vtable of
+  closures and an id, counted, freed at none (a destination such as
+  Explorer may hold a data object past the drop). Each window is a drop
+  target (RegisterDragDrop, after OleInitialize over Backend's apartment);
+  a page's web view, a child window, is WebView2's own target. A drag's
+  formats are enumerated, unread, as it moves (CF_UNICODETEXT, CF_HDROP,
+  CF_HTML, "PNG", UniformResourceLocatorW, names of types), the ones the
+  content took read once dropped; a drag of this process carries its
+  session, which the core resolves to its data as it is. A drag out is
+  DoDragDrop of a data object rendering each format as asked (HGLOBALs
+  only), keeping what the shell sets on it (the drag image's bits); it
+  starts only with the left button held, as DoDragDrop ends at once
+  without. A POINTL passed by value is one 64-bit integer to the closures.
+  `windows_window_test` reads a data object as another app would and
+  drops a file through the target's vtable.
+- The system's symbols (`Windows\Symbols`) are glyphs of Segoe Fluent
+  Icons, else Segoe MDL2 Assets (the same code points), DirectWrite's
+  coverage in the color asked, the font's em box the icon's square; a name
+  no Fluent icon means (`Symbols::GLYPHS` null), or one the font lacks, is
+  drawn as Android's, a Material Symbol. `windows_symbols_test` checks every
+  name Linux maps is mapped and every code point is a glyph of the font.
 - Secrets and the network (stage 5: mygo's secrets.go, network.go): a
   secret is a generic credential of the Credential Manager, as keytar keeps
   them (the target "service/account", the user name the account, persisting

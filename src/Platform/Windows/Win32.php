@@ -244,9 +244,12 @@ final class Win32
         return $buf;
     }
 
-    /** The UTF-16 string at $p, to its NUL or of $chars characters, as UTF-8; '' for null. */
+    /** The UTF-16 string at $p (a pointer, or an array of uint16_t), to its NUL or of $chars characters, as UTF-8; '' for null. */
     public static function str(?CData $p, ?int $chars = null): string
     {
+        if ($p !== null && FFI::typeof($p)->getKind() === \FFI\CType::TYPE_ARRAY) {
+            $p = FFI::addr($p[0]); // FFI::isNull and lstrlenW take a pointer
+        }
         if ($p === null || FFI::isNull($p)) {
             return '';
         }

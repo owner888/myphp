@@ -34,7 +34,7 @@ $answer = function (string $title, Closure $act) use ($u, $wide, &$r, &$answer):
     App::after(0.2, $look);
 };
 App::setName('DialogsTest');
-App::whenReady(function () use (&$r, $log, $u, $answer) {
+App::whenReady(function () use (&$r, $log, $u, $answer, $wide) {
     $d = App::backend()->dialogs();
     $close = fn($h) => $u->PostMessageW($h, 0x0010, 0, 0); // WM_CLOSE
     $log('open');
