@@ -65,7 +65,7 @@ final class Service
     /** $root with its path's symlinks resolved, and what it is. @return array{0: Root, 1: array{0: int, 1: int, 2: int, 3: int, 4: int}} */
     private static function canonical(Root $root): array
     {
-        if (!str_starts_with($root->path, '/')) {
+        if (!\MyPHP\Native\Paths::isAbsolute($root->path)) { // a drive's on Windows
             throw new RuntimeException('root must be absolute');
         }
         $root = new Root(Fs::realpath($root->path), $root->recursive, $root->ignore);

@@ -8,8 +8,8 @@ use FFI\CData;
 use RuntimeException;
 
 /**
- * A libavfilter graph the Linux player runs frames through (Platform\Linux\
- * Renderers): $graph, FFmpeg's filtergraph syntax, closed, from a source
+ * A libavfilter graph the Linux and Windows player runs frames through
+ * (AvRenderers): $graph, FFmpeg's filtergraph syntax, closed, from a source
  * named "in" (buffer@in, abuffer@in) to a sink named "out" (buffersink@out,
  * abuffersink@out). Frames pushed in come out of pull() as the filters
  * give them (a deinterlacer a frame later, atempo by its windows); null

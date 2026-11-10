@@ -381,6 +381,7 @@ final class WebView implements Platform\Page
         });
         Logger::debug("making the WebView2 environment of $dll", 'windows');
         $hr = ($create->fn)(1, $fixed ? 1 : 0, Win32::wide($userData), null, $handler);
+        Logger::debug(sprintf('CreateWebViewEnvironmentWithOptionsInternal: 0x%08X, its data in %s', $hr & 0xFFFFFFFF, $userData), 'windows');
         if ($hr < 0) {
             self::$env = false;
             Logger::warn(sprintf('creating the WebView2 environment failed (0x%08X)', $hr & 0xFFFFFFFF), 'windows');
@@ -486,6 +487,7 @@ final class WebView implements Platform\Page
     /** The controller made: its view's settings, scripts and events, its bounds, then the calls that waited (mygo's setUp). */
     private function setUp(CData $c): void
     {
+        Logger::debug('a WebView2 controller made', 'windows');
         $f = self::f();
         $this->controller = $c;
         $out = $f->new('void *');

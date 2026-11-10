@@ -17,8 +17,11 @@ use RuntimeException;
  * FFI instance has the functions of all five, whose structs are passed
  * among them; on Windows the DLLs of a shared build (avcodec-61.dll),
  * loaded by LoadLibraryW's search (the app's directory, PATH) or from
- * MYPHP_FFMPEG's directory, and one FFI of no library, whose functions PHP
- * looks for in every module loaded. The structs
+ * MYPHP_FFMPEG's directory. An FFI's functions are of one library there
+ * (PHP looks none up among the modules loaded), so ffi() is an
+ * AvFunctions on Windows: the types' FFI, and every function a pointer
+ * of a struct, of GetProcAddress in the DLLs, called through it as
+ * Com's vtables are (docs/architecture.md). The structs
  * are declared as far as they are read, at FFmpeg 6.1's layout (checked
  * against its headers: docs/architecture.md); another major version of
  * the libraries has other layouts and other sonames, and does not load.
@@ -113,17 +116,60 @@ final class Av
     /** The packets' and frames' times, microseconds. */
     public const SCALE = 1000000;
 
-    private static ?FFI $f = null;
+    private static FFI|AvFunctions|null $f = null;
+    /** @var list<CData> the DLLs loaded on Windows, whose functions GetProcAddress gives */
+    private static array $modules = [];
 
-    public static function ffi(): FFI
+    /** FFmpeg's functions and types: an FFI, or on Windows an AvFunctions, which has its new() and cast() too. */
+    public static function ffi(): FFI|AvFunctions
     {
         if (self::$f !== null) {
             return self::$f;
         }
-        PHP_OS_FAMILY === 'Windows' ? self::loadDlls() : self::loadSonames();
-        $f = FFI::cdef(self::declarations());
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::loadDlls();
+            $f = self::functions(self::declarations());
+        } else {
+            self::loadSonames();
+            $f = FFI::cdef(self::declarations());
+        }
         $f->av_log_set_level(-8); // AV_LOG_QUIET: on stderr, from its threads, else
         return self::$f = $f;
+    }
+
+    /**
+     * The functions of $code as pointers in a struct of them, each where
+     * GetProcAddress finds it among the DLLs loaded, the struct read
+     * through a pointer to it (a function pointer of an FFI is called so:
+     * Com::typed); the types are an FFI of no library. Throws for a
+     * function none of the DLLs has.
+     */
+    private static function functions(string $code): AvFunctions
+    {
+        $types = $fields = [];
+        $names = [];
+        foreach (explode("\n", $code) as $line) {
+            if (!str_starts_with(ltrim($line), 'typedef') && preg_match('/^\s*([\w ]+?[\s*]+)(\w+)\((.*)\);\s*$/', $line, $m) === 1) {
+                $fields[] = "{$m[1]}(*{$m[2]})({$m[3]});";
+                $names[] = $m[2];
+            } else {
+                $types[] = $line;
+            }
+        }
+        $ffi = FFI::cdef(implode("\n", $types) . "\ntypedef struct { " . implode(' ', $fields) . ' } AvFns;');
+        $k = FFI::cdef('void *GetProcAddress(void *module, const char *name);', 'kernel32.dll');
+        $fns = $ffi->new('AvFns', false);
+        $addresses = '';
+        foreach ($names as $name) {
+            $addr = null;
+            foreach (self::$modules as $module) {
+                if (($addr = $k->GetProcAddress($module, $name)) !== null) { break; }
+            }
+            $addr ?? throw new RuntimeException("myphp: FFmpeg's DLLs have no $name");
+            $addresses .= pack('P', Mem::addr($addr));
+        }
+        FFI::memcpy($fns, $addresses, strlen($addresses));
+        return new AvFunctions($ffi, $fns, Com::typed($ffi, FFI::addr($fns), 'AvFns *'));
     }
 
     /** The libraries of the first major version all there, loaded globally. */
@@ -176,9 +222,11 @@ final class Av
                 $k->FreeLibrary($h);
             }
             foreach ($dlls as $dll) { // kept loaded: its threads may outlive PHP's shutdown
-                if ($k->LoadLibraryExW($wide($path($dll)), null, $dir === '' ? 0 : 0x1100) === null) { // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | DEFAULT_DIRS: the others beside it
+                $h = $k->LoadLibraryExW($wide($path($dll)), null, $dir === '' ? 0 : 0x1100); // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | DEFAULT_DIRS: the others beside it
+                if ($h === null) {
                     throw new RuntimeException("myphp: FFmpeg's $dll does not load (error {$k->GetLastError()})");
                 }
+                self::$modules[] = $h;
             }
             self::$major = $major;
             return;
