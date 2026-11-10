@@ -398,7 +398,7 @@ final class Backend implements Platform\Backend
 
     public function applications(): array
     {
-        throw new Unsupported('myphp: the installed applications are not on Windows yet');
+        return Shell::installedApps();
     }
 
     /** A global shortcut (mygo's RegisterHotkey): RegisterHotKey on the app's window, its WM_HOTKEY told; its key held does not repeat it. */

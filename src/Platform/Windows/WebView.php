@@ -9,7 +9,6 @@ use FFI\CData;
 use MyPHP\Logger;
 use MyPHP\Native\{Com, ContentRuleList, Mem};
 use MyPHP\Platform;
-use MyPHP\Platform\Unsupported;
 
 /**
  * A page of WebView2 (mygo's windows webview.go, webview2.go): the
@@ -27,7 +26,9 @@ use MyPHP\Platform\Unsupported;
 final class WebView implements Platform\Page
 {
     private const IID_CONTROLLER2 = 'c979903e-d4ca-4228-92eb-47ee3fa96eab', IID_SETTINGS2 = 'ee9a0f68-f46c-4e32-ac23-ef8cac224d2a';
-    private const IID_VIEW4 = '20d02d59-6df2-42dc-bd06-f98a694b1302', IID_ENV10 = 'ee0eb9df-6f12-46ce-b53f-3f47b9c928e0';
+    private const IID_VIEW4 = '20d02d59-6df2-42dc-bd06-f98a694b1302', IID_ENV10 = 'ee0eb9df-6f12-46ce-b53f-3f47b9c928e0', IID_VIEW8 = 'e9632730-6e1e-43ab-b7b8-7b2c9e62e094';
+    /** How long a put of IsMuted holds the next back while its IsMutedChanged does not come, in seconds (mygo's mutePutTimeout). */
+    private const MUTE_PUT_TIMEOUT = 1.0;
     private const IID_SETTINGS3 = 'fdb5ab74-af33-4854-84f0-0a631deb5eba', IID_SETTINGS5 = '183e7052-1d03-43a0-ab99-98e043b66b39', IID_SETTINGS6 = '11cb3acd-9bc8-43b8-83bf-f40753714f87';
     private const CHANNELS = ['{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', '{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}', '{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}', '{65C35B14-6C1D-4122-AC46-7148CC9D6497}']; // Stable, Beta, Dev, Canary
     /** What hands the bridge's posts to WebView2's channel, before any script of the page. */
@@ -55,6 +56,9 @@ final class WebView implements Platform\Page
     /** @var list<string> the ids of the user scripts added, which setUserScripts removes */
     private array $scriptIds = [];
     private float $zoomFactor = 1.0;
+    /** The page's sound muted, as asked (setAudioMuted); when the put of IsMuted in flight was made (0: none). */
+    private bool $muted = false;
+    private float $mutePut = 0.0;
     /** @var list<ContentRuleList> the content rules applied; the script hiding what their css-display-none rules select; whether WebView2 asks about every request */
     private array $rules = [];
     private string $hiding = '';
@@ -145,7 +149,7 @@ final class WebView implements Platform\Page
                 int32_t (*AddScriptToExecuteOnDocumentCreated)(void *self, const void *script, void *handler);
                 int32_t (*RemoveScriptToExecuteOnDocumentCreated)(void *self, const void *id);
                 int32_t (*ExecuteScript)(void *self, const void *script, void *handler);
-                void *r30;
+                int32_t (*CapturePreview)(void *self, int32_t format, void *stream, void *handler);
                 int32_t (*Reload)(void *self);
                 void *r32[2];
                 int32_t (*add_WebMessageReceived)(void *self, void *handler, Token *token);
@@ -174,6 +178,17 @@ final class WebView implements Platform\Page
             } ViewVtbl;
             typedef struct { void *r0[75]; int32_t (*add_DownloadStarting)(void *self, void *handler, Token *token); } View4Vtbl;
             typedef struct { View4Vtbl *v; } View4;
+            typedef struct {
+                void *r0[81];
+                int32_t (*add_IsMutedChanged)(void *self, void *handler, Token *token);
+                void *r82;
+                int32_t (*get_IsMuted)(void *self, int32_t *muted);
+                int32_t (*put_IsMuted)(void *self, int32_t muted);
+                int32_t (*add_IsDocumentPlayingAudioChanged)(void *self, void *handler, Token *token);
+                void *r86;
+                int32_t (*get_IsDocumentPlayingAudio)(void *self, int32_t *playing);
+            } View8Vtbl;
+            typedef struct { View8Vtbl *v; } View8;
             typedef struct { void *r0[3]; int32_t (*get_Request)(void *self, void **request); void *r4; int32_t (*put_Response)(void *self, void *response); int32_t (*GetDeferral)(void *self, void **deferral); int32_t (*get_ResourceContext)(void *self, int32_t *context); } ResourceRequestedVtbl;
             typedef struct { ResourceRequestedVtbl *v; } ResourceRequested;
             typedef struct { void *r0[3]; int32_t (*get_Uri)(void *self, uint16_t **uri); void *r4; int32_t (*get_Method)(void *self, uint16_t **method); void *r6; int32_t (*get_Content)(void *self, void **stream); void *r8; int32_t (*get_Headers)(void *self, void **headers); } RequestVtbl;
@@ -626,6 +641,7 @@ final class WebView implements Platform\Page
             if ($why !== null) { ($this->onGone)?->__invoke($why); }
         }), FFI::addr($tok));
         $this->addStageTwoHandlers($v);
+        $this->addAudioHandlers($v);
         $this->filterAllRequests();
         ($c->v->put_IsVisible)($c, 1);
         $this->fit();
@@ -1066,16 +1082,90 @@ final class WebView implements Platform\Page
         return false;
     }
 
-    public function isAudible(): bool
+    // The page's sound (ICoreWebView2_8; a runtime older than it neither tells nor mutes).
+
+    /** The view's ICoreWebView2_8, held, or null. */
+    private function view8(): ?CData
     {
-        return false;
+        return $this->view === null || ($v8 = Com::query($this->view, self::IID_VIEW8)) === null ? null : Com::typed(self::f(), $v8, 'View8 *');
     }
 
-    public function setAudioMuted(bool $muted): void {}
+    /** IsDocumentPlayingAudioChanged told as onChange's '_isPlayingAudio', as WebKit's; IsMutedChanged puts the state asked again where it differs; a mute asked before the view was made applied (mygo's setUp). */
+    private function addAudioHandlers(CData $v): void
+    {
+        if (($v8 = $this->view8()) === null) {
+            return;
+        }
+        $tok = self::f()->new('Token');
+        ($v8->v->add_IsDocumentPlayingAudioChanged)($v8, self::handler(fn(int $sender, $args) => ($this->onChange)?->__invoke('_isPlayingAudio')), FFI::addr($tok));
+        ($v8->v->add_IsMutedChanged)($v8, self::handler(fn(int $sender, $args) => $this->mutedChanged()), FFI::addr($tok));
+        Com::release($v8);
+        if ($this->muted) {
+            $this->putMuted();
+        }
+    }
 
+    private function bool8(string $getter): bool
+    {
+        if (($v8 = $this->view8()) === null) {
+            return false;
+        }
+        $b = self::f()->new('int32_t');
+        $hr = ($v8->v->$getter)($v8, FFI::addr($b));
+        Com::release($v8);
+        return $hr >= 0 && $b->cdata !== 0;
+    }
+
+    /** ICoreWebView2_8's IsDocumentPlayingAudio (mygo's IsAudible). */
+    public function isAudible(): bool
+    {
+        return $this->bool8('get_IsDocumentPlayingAudio');
+    }
+
+    /**
+     * Puts ICoreWebView2_8's IsMuted, or keeps it till the view is made
+     * (mygo's SetAudioMuted). WebView2 may lose a put that follows another
+     * before IsMutedChanged told the first, or apply them out of order: one
+     * put is in flight at a time, $muted the state asked, put again once the
+     * runtime told its change if it differs; a put whose IsMutedChanged never
+     * comes (none does for no change) holds the next back MUTE_PUT_TIMEOUT
+     * seconds at most.
+     */
+    public function setAudioMuted(bool $muted): void
+    {
+        $this->muted = $muted;
+        if ($this->mutePut === 0.0 || microtime(true) - $this->mutePut >= self::MUTE_PUT_TIMEOUT) {
+            $this->putMuted();
+        }
+    }
+
+    private function putMuted(): void
+    {
+        $this->mutePut = 0.0;
+        if (($v8 = $this->view8()) === null) {
+            return;
+        }
+        $cur = self::f()->new('int32_t');
+        if (($v8->v->get_IsMuted)($v8, FFI::addr($cur)) < 0 || ($cur->cdata !== 0) !== $this->muted) {
+            $this->mutePut = microtime(true);
+        }
+        ($v8->v->put_IsMuted)($v8, $this->muted ? 1 : 0);
+        Com::release($v8);
+    }
+
+    /** IsMutedChanged: the put in flight landed; the state asked since is put if the view reports another. */
+    private function mutedChanged(): void
+    {
+        $this->mutePut = 0.0;
+        if ($this->bool8('get_IsMuted') !== $this->muted) {
+            $this->putMuted();
+        }
+    }
+
+    /** ICoreWebView2_8's IsMuted, or what setAudioMuted keeps till the view is made. */
     public function isAudioMuted(): bool
     {
-        return false;
+        return $this->view === null ? $this->muted : $this->bool8('get_IsMuted');
     }
 
     public function captureState(int $kind): int
@@ -1244,9 +1334,54 @@ final class WebView implements Platform\Page
         }));
     }
 
+    /** A PNG of the page as it shows (CapturePreview into a stream of memory, mygo's CapturePage); $done gets it or the error. @param Closure(?string, ?string): void $done */
     public function capture(Closure $done): void
     {
-        throw new Unsupported('myphp: a page\'s capture comes with the next stage of WebView2');
+        $this->run(function () use ($done): void {
+            [$ole] = self::memory();
+            $out = $ole->new('void *');
+            if (($hr = $ole->CreateStreamOnHGlobal(null, 1, FFI::addr($out))) < 0) {
+                $done(null, sprintf('myphp: capturing the page: CreateStreamOnHGlobal failed (0x%08X)', $hr & 0xFFFFFFFF));
+                return;
+            }
+            $stream = Com::typed($ole, $out, 'void *');
+            $hr = ($this->view->v->CapturePreview)($this->view, 0, $stream, self::handler(function (int $a, $b) use ($stream, $done): void { // COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG
+                $png = self::hr($a) >= 0 ? self::streamBytes($stream) : '';
+                Com::release($stream);
+                $png === '' ? $done(null, sprintf('myphp: capturing the page failed (0x%08X)', $a & 0xFFFFFFFF)) : $done($png, null);
+            }));
+            if ($hr < 0) {
+                Com::release($stream);
+                $done(null, sprintf('myphp: capturing the page: CapturePreview failed (0x%08X)', $hr & 0xFFFFFFFF));
+            }
+        });
+    }
+
+    /** ole32's streams of memory and kernel32's memory, FFIs of their own. @return array{0: FFI, 1: FFI} */
+    private static function memory(): array
+    {
+        static $m = null;
+        return $m ??= [
+            FFI::cdef('int32_t CreateStreamOnHGlobal(void *global, int32_t deleteOnRelease, void **stream); int32_t GetHGlobalFromStream(void *stream, void **global);', 'ole32.dll'),
+            FFI::cdef('size_t GlobalSize(void *mem); void *GlobalLock(void *mem); int32_t GlobalUnlock(void *mem);', 'kernel32.dll'),
+        ];
+    }
+
+    /** The bytes a stream CreateStreamOnHGlobal made holds (mygo's hglobalBytes), '' for none. */
+    private static function streamBytes(CData $stream): string
+    {
+        [$ole, $k] = self::memory();
+        $mem = $ole->new('void *');
+        if ($ole->GetHGlobalFromStream($stream, FFI::addr($mem)) < 0 || FFI::isNull($mem)) {
+            return '';
+        }
+        $p = $k->GlobalLock($mem);
+        if ($p === null) {
+            return '';
+        }
+        $bytes = FFI::string($p, $k->GlobalSize($mem));
+        $k->GlobalUnlock($mem);
+        return $bytes;
     }
 
     /** The markup as the page (NavigateToString), which knows no base URL. */
@@ -1275,21 +1410,51 @@ final class WebView implements Platform\Page
         $this->evaluate('window.print()');
     }
 
+    /**
+     * The page as a PDF through the DevTools protocol, as Chromium's
+     * headless mode prints it (mygo's PrintToPDF): paper of $width × $height
+     * inches, margins in inches; $done gets the bytes or the error.
+     * @param Closure(?string, ?string): void $done
+     */
     public function printToPDF($window, float $width, float $height, bool $landscape, array $margins, bool $background, Closure $done): void
     {
-        throw new Unsupported('myphp: printing a page to PDF comes with the next stage of WebView2');
+        [$top, $right, $bottom, $left] = $margins;
+        $params = json_encode(['landscape' => $landscape, 'printBackground' => $background, 'paperWidth' => $width, 'paperHeight' => $height,
+            'marginTop' => $top, 'marginRight' => $right, 'marginBottom' => $bottom, 'marginLeft' => $left, 'preferCSSPageSize' => false], JSON_THROW_ON_ERROR);
+        $this->run(fn() => $this->devToolsCall('Page.printToPDF', $params, function (?string $json, ?string $error) use ($done): void {
+            $pdf = $error === null ? base64_decode((string)(json_decode((string)$json, true)['data'] ?? ''), true) : false;
+            $pdf === false || $pdf === '' ? $done(null, 'myphp: printing to PDF: ' . ($error ?? 'no PDF came')) : $done($pdf, null);
+        }));
     }
 
+    /** Chromium plays a video in picture in picture as a page asks it. */
     public function allowsPictureInPicture(): ?bool
     {
-        return null;
+        return true;
     }
 
-    public function togglePictureInPicture(string $script): void {}
+    /** Runs $script through the DevTools protocol as a user's gesture, which requestPictureInPicture() needs (mygo's TogglePictureInPicture). */
+    public function togglePictureInPicture(string $script): void
+    {
+        $params = json_encode(['expression' => $script, 'userGesture' => true], JSON_THROW_ON_ERROR);
+        $this->run(fn() => $this->devToolsCall('Runtime.evaluate', $params, function (?string $json, ?string $error): void {
+            if ($error !== null) { Logger::warn("picture in picture: $error", 'windows'); }
+        }));
+    }
 
+    /** Whether the page's document.pictureInPictureElement is there: asked, the app's events handled meanwhile (2 s at most); false before the view is made. */
     public function pictureInPictureActive(): bool
     {
-        return false;
+        if (!$this->ready || $this->closed) {
+            return false;
+        }
+        $answer = null;
+        $this->devToolsCall('Runtime.evaluate', '{"expression":"!!document.pictureInPictureElement","returnByValue":true}', function (?string $json, ?string $error) use (&$answer): void {
+            $answer = $error === null && (json_decode((string)$json, true)['result']['value'] ?? false) === true;
+        });
+        $deadline = microtime(true) + 2.0;
+        \MyPHP\App::wait(function () use (&$answer, $deadline): bool { return $answer !== null || microtime(true) > $deadline; });
+        return $answer === true;
     }
 
     public function leavingPage(bool $pip): void {}

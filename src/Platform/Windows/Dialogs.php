@@ -16,7 +16,8 @@ use MyPHP\Platform\Unsupported;
  * to their window or the app; messages as task dialogs (TaskDialogIndirect,
  * of version 6 of the common controls, which an activation context of
  * shell32's manifest brings to an executable without one, as PHP's), a
- * plain message box where there are none.
+ * plain message box where there are none; prompts and logins as dialogs of
+ * a template made here (form()), which upstream has none of on Windows.
  */
 final class Dialogs implements Platform\Dialogs
 {
@@ -27,7 +28,7 @@ final class Dialogs implements Platform\Dialogs
     private const SIGDN_FILESYSPATH = 0x80058000;
     private const FIRST_BUTTON = 100;
 
-    private static ?FFI $f = null, $shell = null;
+    private static ?FFI $f = null, $shell = null, $formFfi = null;
     /** TaskDialogIndirect, once: a struct holding it read through a pointer, as Com's vtables (docs/architecture.md); false where there is none. */
     private static CData|false|null $taskDialog = null;
     private static ?CData $taskDialogFns = null;
@@ -308,18 +309,156 @@ final class Dialogs implements Platform\Dialogs
         return new MessageResult($button, false);
     }
 
+    /** A prompt: $prompt over $detail and a field of $default, $check's complaint ('' when none) under it as it is typed, OK disabled while there is one; the text, null when canceled. */
     public function prompt(?Window $window, string $prompt, string $default, string $detail = '', ?\Closure $check = null): ?string
     {
-        throw new Unsupported('myphp: a prompt is not on Windows yet');
+        return self::form($window, $prompt, $detail, [['text' => $default, 'cue' => '', 'secret' => false]], $check)[0] ?? null;
     }
 
+    /** A user's name and password: $prompt over $detail and a field of each, $user and $password their placeholders, the password's hidden; null when canceled. @return ?array{0: string, 1: string} */
     public function login(?Window $window, string $prompt, string $detail, string $user, string $password): ?array
     {
-        throw new Unsupported('myphp: a login dialog is not on Windows yet');
+        $got = self::form($window, $prompt, $detail, [['text' => '', 'cue' => $user, 'secret' => false], ['text' => '', 'cue' => $password, 'secret' => true]], null);
+        return $got === null ? null : [$got[0], $got[1]];
     }
 
+    /** A page's file input: an open dialog over its window, null when canceled (WebView2 shows its own; a page of another engine asks here). @return ?list<string> */
     public function chooseForPage(Window $window, bool $multiple, bool $dirs): ?array
     {
-        throw new Unsupported('myphp: web pages are not on Windows yet');
+        $paths = $this->open(new OpenDialogOptions($window, directory: $dirs, multiple: $multiple));
+        return $paths === [] ? null : $paths;
+    }
+
+    private const FORM_FIELD = 10, FORM_ERROR = 20, IDOK = 1, IDCANCEL = 2;
+    private const WM_INITDIALOG = 0x0110, WM_COMMAND = 0x0111, EN_CHANGE = 0x0300, EM_SETCUEBANNER = 0x1501;
+    /** The dialog procedure, once (a struct holding it, as Win32's window procedure), and the form it runs now: a form is modal, one at a time. */
+    private static ?CData $formProc = null;
+    private static ?\Closure $formHandler = null;
+
+    /**
+     * A dialog of $prompt, $detail and a field of each of $fields, OK and
+     * Cancel (DialogBoxIndirectParamW of a template made here: the dialog
+     * manager's loop, Tab, Enter and Escape, its controls version 6's under
+     * the activation context taskDialog() brings, cue banners theirs). Its
+     * size is estimated from the texts' widths in dialog units (an average
+     * character 4 wide, a wide one 8, a line 9 high). The fields' texts, null
+     * when canceled. @param list<array{text: string, cue: string, secret: bool}> $fields @return ?list<string>
+     */
+    private static function form(?Window $window, string $prompt, string $detail, array $fields, ?\Closure $check): ?array
+    {
+        self::taskDialog();
+        $u = self::formFfi();
+        $t = \MyPHP\L10n::in(\MyPHP\App::locale());
+        [$width, $margin] = [262, 7];
+        $inner = $width - 2 * $margin;
+        $lines = function (string $s) use ($inner): int {
+            $n = 0;
+            foreach (explode("\n", $s) as $line) { $n += max(1, (int)ceil(mb_strwidth($line) * 4 / $inner)); }
+            return $n;
+        };
+        $items = [];
+        $item = function (int $style, int $ex, int $x, int $y, int $w, int $h, int $id, int $atom, string $text) use (&$items): void {
+            $items[] = [$style, $ex, $x, $y, $w, $h, $id, $atom, $text];
+        };
+        [$static, $child] = [0x50000080, 0x50010000]; // WS_CHILD | WS_VISIBLE, SS_NOPREFIX; WS_TABSTOP
+        $y = $margin;
+        foreach ([$prompt, $detail] as $text) {
+            if ($text !== '') {
+                $h = $lines($text) * 9;
+                $item($static, 0, $margin, $y, $inner, $h, 0xFFFF, 0x82, $text);
+                $y += $h + 5;
+            }
+        }
+        foreach ($fields as $i => $field) {
+            $item($child | 0x80 | ($field['secret'] ? 0x20 : 0), 0x200, $margin, $y, $inner, 14, self::FORM_FIELD + $i, 0x81, $field['text']); // ES_AUTOHSCROLL, ES_PASSWORD; WS_EX_CLIENTEDGE
+            $y += 19;
+        }
+        if ($check !== null) {
+            $item($static, 0, $margin, $y, $inner, 18, self::FORM_ERROR, 0x82, '');
+            $y += 21;
+        }
+        $y += 2;
+        $item($child | 0x1, 0, $width - $margin - 104, $y, 50, 14, self::IDOK, 0x80, $t->get('ok')); // BS_DEFPUSHBUTTON
+        $item($child, 0, $width - $margin - 50, $y, 50, 14, self::IDCANCEL, 0x80, $t->get('cancel'));
+        $height = $y + 14 + $margin;
+        $wide = fn(string $s): string => (string)iconv('UTF-8', 'UTF-16LE', $s) . "\0\0";
+        // DLGTEMPLATE: WS_POPUP | WS_CAPTION | WS_SYSMENU, DS_MODALFRAME | DS_SHELLFONT | DS_SETFOREGROUND | DS_CENTER; then each DLGITEMTEMPLATE on a DWORD.
+        $tpl = pack('VVvvvvv', 0x80C80000 | 0x80 | 0x48 | 0x200 | 0x800, 0, count($items), 0, 0, $width, $height) . "\0\0\0\0" . $wide(\MyPHP\App::name()) . pack('v', 9) . $wide('Segoe UI');
+        foreach ($items as [$style, $ex, $x, $iy, $w, $h, $id, $atom, $text]) {
+            $tpl .= str_repeat("\0", (4 - strlen($tpl) % 4) % 4) . pack('VVvvvvvvv', $style, $ex, $x, $iy, $w, $h, $id, 0xFFFF, $atom) . $wide($text) . "\0\0";
+        }
+        $buf = $u->new('uint32_t[' . intdiv(strlen($tpl) + 3, 4) . ']');
+        FFI::memcpy($buf, $tpl, strlen($tpl));
+
+        $text = function (CData $dlg, int $id) use ($u): string {
+            $n = $u->GetWindowTextLengthW($u->GetDlgItem($dlg, $id));
+            $out = $u->new('uint16_t[' . ($n + 1) . ']');
+            $u->GetDlgItemTextW($dlg, $id, $out, $n + 1);
+            return Win32::str($out, $n);
+        };
+        $wrong = function (CData $dlg) use ($check, $text, $u): string {
+            if ($check === null) { return ''; }
+            $complaint = $check($text($dlg, self::FORM_FIELD));
+            $u->SetDlgItemTextW($dlg, self::FORM_ERROR, Win32::wide($complaint));
+            $u->EnableWindow($u->GetDlgItem($dlg, self::IDOK), $complaint === '' ? 1 : 0);
+            return $complaint;
+        };
+        $got = null;
+        self::$formHandler = function (CData $dlg, int $msg, int $wp) use ($fields, $u, $text, $wrong, &$got): int {
+            if ($msg === self::WM_INITDIALOG) {
+                foreach ($fields as $i => $field) {
+                    if ($field['cue'] !== '') { $u->SendMessageW($u->GetDlgItem($dlg, self::FORM_FIELD + $i), self::EM_SETCUEBANNER, 1, Mem::addr(FFI::addr(Win32::wide($field['cue'])[0]))); }
+                }
+                $wrong($dlg);
+                return 1; // the first field focused
+            }
+            if ($msg !== self::WM_COMMAND) { return 0; }
+            [$id, $code] = [$wp & 0xFFFF, ($wp >> 16) & 0xFFFF];
+            if ($id === self::FORM_FIELD && $code === self::EN_CHANGE) {
+                $wrong($dlg);
+            } elseif ($id === self::IDOK && $wrong($dlg) === '') {
+                $got = array_map(fn(int $i) => $text($dlg, self::FORM_FIELD + $i), array_keys($fields));
+                $u->EndDialog($dlg, self::IDOK);
+            } elseif ($id === self::IDCANCEL) {
+                $u->EndDialog($dlg, self::IDCANCEL);
+            } else {
+                return 0;
+            }
+            return 1;
+        };
+        try {
+            $r = $u->DialogBoxIndirectParamW(Win32::instance(), $buf, self::owner($window), self::formProc()->fn, 0);
+        } finally {
+            self::$formHandler = null;
+        }
+        if ($r === -1 || $r === 0) {
+            throw new \RuntimeException('myphp: cannot show a dialog (error ' . Win32::kernel32()->GetLastError() . ')');
+        }
+        return $got;
+    }
+
+    private static function formFfi(): FFI
+    {
+        return self::$formFfi ??= FFI::cdef(<<<'C'
+            typedef intptr_t (*DLGPROC)(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
+            typedef struct { DLGPROC fn; } DlgProc;
+            intptr_t DialogBoxIndirectParamW(void *inst, const void *tmpl, void *owner, DLGPROC proc, intptr_t param);
+            int32_t EndDialog(void *hwnd, intptr_t result);
+            void *GetDlgItem(void *hwnd, int32_t id);
+            int32_t SetDlgItemTextW(void *hwnd, int32_t id, const void *text);
+            uint32_t GetDlgItemTextW(void *hwnd, int32_t id, uint16_t *text, int32_t max);
+            int32_t GetWindowTextLengthW(void *hwnd);
+            int32_t EnableWindow(void *hwnd, int32_t enable);
+            intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);
+            C, 'user32.dll');
+    }
+
+    private static function formProc(): CData
+    {
+        if (self::$formProc === null) {
+            self::$formProc = self::formFfi()->new('DlgProc', false);
+            self::$formProc->fn = static fn($hwnd, int $msg, int $wp, int $lp): int => self::$formHandler !== null ? (self::$formHandler)($hwnd, $msg, $wp) : 0;
+        }
+        return self::$formProc;
     }
 }

@@ -114,12 +114,25 @@ App::whenReady(function () use (&$r, $log) {
                     $r['rulesError'] = $e->getMessage();
                 }
                 $w->page()->loadURL('wvtest://localhost/rules.html');
-                $until("document.getElementById('r') ? getComputedStyle(document.getElementById('ad')).display : ''", 'none', function ($v) use ($w, &$r) {
+                $until("document.getElementById('r') ? getComputedStyle(document.getElementById('ad')).display : ''", 'none', function ($v) use ($w, &$r, $log) {
                     $r['hidden'] = $v;
                     try {
                         $r['ran'] = $w->page()->eval("return String(window.ran === 1)");
                     } catch (\Throwable $e) {
                         $r['ran'] = $e->getMessage();
+                    }
+                    // The page captured as a PNG, printed as a PDF, muted and read back.
+                    $log('capture, print, mute');
+                    try {
+                        $png = $w->page()->capture();
+                        $r['capture'] = substr($png, 0, 8) === "\x89PNG\r\n\x1a\n" && getimagesizefromstring($png) !== false;
+                        $r['pdf'] = substr($w->page()->printToPDF(), 0, 5);
+                        $w->page()->setAudioMuted(true);
+                        $deadline = microtime(true) + 3;
+                        App::wait(function () use ($w, $deadline): bool { return $w->page()->isAudioMuted() || microtime(true) > $deadline; });
+                        $r['muted'] = [$w->page()->isAudioMuted(), $w->page()->isAudible()];
+                    } catch (\Throwable $e) {
+                        $r['capture'] = $e->getMessage();
                     }
                     echo json_encode($r, JSON_PRESERVE_ZERO_FRACTION), "\n"; // a zoom of 1.0 a float still
                     App::quit();

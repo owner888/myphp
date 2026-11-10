@@ -95,6 +95,17 @@ App::whenReady(function () use (&$r, $log) {
     } catch (\Throwable $e) {
         $r['nowPlaying'] = $e->getMessage();
     }
+    // The shell's icons: PHP's executable's, as a file's and as the app's, 48 pixels; the Start menu's apps.
+    $log('icons and apps');
+    try {
+        $sh = App::backend()->shell();
+        $size = fn(string $png) => ($i = getimagesizefromstring($png)) === false ? null : [$i[0], $i[1]];
+        $apps = App::backend()->applications();
+        $r['icons'] = [$size($sh->fileIcon(PHP_BINARY, 48)), $size($sh->appIcon(48)), $size($sh->fileIcon(sys_get_temp_dir(), 32))];
+        $r['apps'] = [count($apps) > 0, $apps === [] || str_starts_with($apps[0]->path, 'shell:AppsFolder\\')];
+    } catch (\Throwable $e) {
+        $r['icons'] = $e->getMessage();
+    }
     $log('the network');
     $n = App::backend()->network();
     $status = $n->status();

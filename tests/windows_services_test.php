@@ -41,6 +41,8 @@ namespace MyPHP\Tests;
     check($r['deleted'], 'one deleted is not found, and deleting none succeeds');
     same(true, $r['nowPlaying'] ?? null, 'what plays shown in the system\'s media controls, then nothing');
     same([true, 'other'], $r['network'], 'the runner online, the interface untold');
+    same([[48, 48], [48, 48], [32, 32]], $r['icons'] ?? null, "the shell's icons: a file's, the app's, a folder's, of the sizes asked");
+    same([true, true], $r['apps'] ?? null, 'the Start menu\'s apps, each a shell item of the Applications folder');
     same([true, true, 'cafe'], $r['html'], 'HTML on the clipboard read back, as CF_HTML too, its text besides');
     same([true, true, true, true, false], $r['image'], 'a PNG read back, as "PNG" and a bitmap too; a PNG an image, other bytes none');
     same([2, 2, [9, 8, 7, 255, 12, 11, 10, 255], true], $r['bitmap'], 'another app\'s bitmap read as a PNG, its rows bottom up');

@@ -48,4 +48,7 @@ namespace MyPHP\Tests;
     check(!isset($r['rulesError']), 'content rules compiled' . (isset($r['rulesError']) ? ": {$r['rulesError']}" : ''));
     same('none', $r['hidden'] ?? null, 'content rules hide what a css-display-none rule selects');
     same('false', $r['ran'] ?? null, 'content rules block a script');
+    same(true, $r['capture'] ?? null, 'the page captured as a PNG');
+    same('%PDF-', $r['pdf'] ?? null, 'the page printed as a PDF');
+    same([true, false], $r['muted'] ?? null, 'the page muted, read back; silent');
 })();

@@ -1,6 +1,7 @@
 <?php
 // The dialogs on Windows (windows_dialogs_test.php): an open and a save dialog shown and canceled; a
-// task dialog's button pressed, its check box checked, then one closed as its cancel button. Each is
+// task dialog's button pressed, its check box checked, then one closed as its cancel button; a prompt, its
+// check refusing OK, one canceled, and a login. Each is
 // modal: a timer, which its loop runs, finds its window by its title and answers it.
 declare(strict_types=1);
 
@@ -10,7 +11,7 @@ require __DIR__ . '/../../src/autoload.php';
 
 $log = function (string $where): void { fwrite(STDERR, "at: $where\n"); fflush(STDERR); };
 $r = [];
-$u = FFI::cdef('void *FindWindowW(const uint16_t *cls, const uint16_t *title); int32_t PostMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp); intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);', 'user32.dll');
+$u = FFI::cdef('void *FindWindowW(const uint16_t *cls, const uint16_t *title); int32_t PostMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp); intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp); int32_t SetDlgItemTextW(void *hwnd, int32_t id, const uint16_t *text); uint32_t GetDlgItemTextW(void *hwnd, int32_t id, uint16_t *text, int32_t max);', 'user32.dll');
 $wide = function (string $s) use ($u): FFI\CData {
     $w = (string)iconv('UTF-8', 'UTF-16LE', $s) . "\0\0";
     $buf = $u->new('uint16_t[' . (strlen($w) >> 1) . ']');
@@ -56,6 +57,28 @@ App::whenReady(function () use (&$r, $log, $u, $answer) {
     $answer('Cancel test', $close);
     $m = $d->message(new MessageOptions(title: 'Cancel test', message: 'Closed as canceled'), ['OK', 'Cancel'], 1);
     $r['canceled'] = [$m->button, $m->checkboxChecked];
+    // A prompt (its dialog titled the app's name): OK refused while the check complains, then its text taken; one canceled; a login's two fields.
+    $log('a prompt');
+    $answer('DialogsTest', function ($h) use ($u, $wide, &$r) {
+        $u->SetDlgItemTextW($h, 10, $wide('ab'));
+        $u->SendMessageW($h, 0x0111, 1, 0); // WM_COMMAND IDOK, refused
+        $buf = $u->new('uint16_t[64]');
+        $n = $u->GetDlgItemTextW($h, 20, $buf, 64);
+        $r['complaint'] = (string)iconv('UTF-16LE', 'UTF-8', FFI::string($buf, $n * 2));
+        $u->SetDlgItemTextW($h, 10, $wide('abc'));
+        $u->PostMessageW($h, 0x0111, 1, 0);
+    });
+    $r['prompt'] = $d->prompt(null, 'Name it', 'x', 'Three letters at least', fn(string $s) => strlen($s) < 3 ? 'Too short' : '');
+    $log('a prompt canceled');
+    $answer('DialogsTest', $close);
+    $r['promptCanceled'] = $d->prompt(null, 'Name it', 'x');
+    $log('a login');
+    $answer('DialogsTest', function ($h) use ($u, $wide) {
+        $u->SetDlgItemTextW($h, 10, $wide('me'));
+        $u->SetDlgItemTextW($h, 11, $wide('pw'));
+        $u->PostMessageW($h, 0x0111, 1, 0);
+    });
+    $r['login'] = $d->login(null, 'Sign in', 'to the server', 'User name', 'Password');
     echo json_encode($r), "\n";
     App::quit();
 });

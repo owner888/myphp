@@ -29,6 +29,26 @@ App::whenReady(function () use (&$r, $at) {
         $px = fn(int $x, int $y): array => $pix === '' ? [] : array_values(unpack('C4', substr($pix, ($y * $pw + $x) * 4, 4)));
         $s = $r['scale'];
         $r['frame'] = [$pw, $ph, $px((int)(50 * $s), (int)(50 * $s)), $px((int)(200 * $s), (int)(150 * $s))];
+        $png = $w->capturePage();
+        $size = getimagesizefromstring($png);
+        $r['capture'] = [substr($png, 0, 8) === "\x89PNG\r\n\x1a\n", $size === false ? null : [$size[0], $size[1]]];
+        // The app's icon on the window, then the executable's again (WM_GETICON's ICON_BIG); a progress and a flash on its taskbar button.
+        $u = FFI::cdef('intptr_t SendMessageW(void *hwnd, uint32_t msg, uintptr_t wp, intptr_t lp);', 'user32.dll');
+        \MyPHP\Dock::setIcon(\MyPHP\Native\Wic::png(str_repeat("\0\0\xff\xff", 32 * 32), 32, 32));
+        $iconSet = $u->SendMessageW($w->native()->hwnd, 0x007F, 1, 0) !== 0;
+        \MyPHP\Dock::setIcon('');
+        $r['icon'] = [$iconSet, $u->SendMessageW($w->native()->hwnd, 0x007F, 1, 0) !== 0];
+        $w->setProgressBar(new \MyPHP\ProgressBar(value: 0.5));
+        $r['bounce'] = \MyPHP\Dock::bounce();
+        \MyPHP\Dock::cancelBounce($r['bounce']);
+        // The app hidden, its window with it, then shown again; the recent documents told and cleared.
+        $app = App::backend()->app();
+        $app->hide();
+        $hidden = [$app->isHidden(), $w->native()->isVisible()];
+        $app->unhide();
+        $r['hide'] = [...$hidden, $app->isHidden(), $w->native()->isVisible()];
+        $app->addRecentDocument(__FILE__);
+        $app->clearRecentDocuments();
         $r['content'] = $w->contentSize();
         $b = $w->bounds(); $c = $w->contentBounds();
         $r['frameAround'] = $b->width > $c->width && $b->height > $c->height;

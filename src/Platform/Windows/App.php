@@ -6,12 +6,13 @@ namespace MyPHP\Platform\Windows;
 use FFI;
 use MyPHP\{AboutPanelOptions, ActivationPolicy};
 use MyPHP\Platform;
-use MyPHP\Platform\{Menu, Unsupported};
+use MyPHP\Platform\Menu;
 
 /**
  * The app as Windows has it (mygo's appController): the user's languages
- * and regional formats (locale.go). The taskbar's, the about panel and the
- * pages' website data come with their stages.
+ * and regional formats (locale.go), its icon and its buttons' flashing on
+ * the taskbar (Taskbar), the about panel as a message, its windows hidden
+ * and brought forward together, its recent documents (jumplist.go).
  */
 final class App implements Platform\AppController
 {
@@ -19,20 +20,58 @@ final class App implements Platform\AppController
 
     public function setActivationPolicy(ActivationPolicy $policy): void {}
 
-    public function activate(): void {}
+    /** The windows hide() hid, which unhide() shows. @var list<Window> */
+    private array $hidden = [];
 
-    public function hide(): void {}
+    /**
+     * Brings the app forward as macOS does, its windows in their order
+     * (mygo's Activate): a window of the app in front stays there, else the
+     * highest of its windows shown comes forward; a flyout that never takes
+     * the keyboard brings nothing forward.
+     */
+    public function activate(): void
+    {
+        if (Window::active() !== null) {
+            return;
+        }
+        $u = FFI::cdef('void *GetTopWindow(void *hwnd); void *GetWindow(void *hwnd, uint32_t cmd);', 'user32.dll');
+        $open = [];
+        foreach (Window::all() as $w) { $open[\MyPHP\Native\Mem::addr($w->hwnd)] = $w; }
+        for ($h = $u->GetTopWindow(null); $h !== null; $h = $u->GetWindow($h, 2)) { // GW_HWNDNEXT
+            $w = $open[\MyPHP\Native\Mem::addr($h)] ?? null;
+            if ($w === null || !$w->isVisible() || (($f = $w->w->flyoutState()) !== null && !$f['focusable'])) {
+                continue;
+            }
+            $w->focus();
+            return;
+        }
+    }
 
-    public function unhide(): void {}
+    /** Hides the app's windows shown, as macOS hides an app (mygo's Hide). */
+    public function hide(): void
+    {
+        $this->hidden = array_values(array_filter(Window::all(), fn(Window $w): bool => $w->isVisible()));
+        foreach ($this->hidden as $w) { $w->hide(); }
+    }
+
+    /** Shows the windows hide() hid again, without taking the keyboard (mygo's Unhide). */
+    public function unhide(): void
+    {
+        foreach ($this->hidden as $w) {
+            if (!$w->isDead()) { $w->showInactive(); }
+        }
+        $this->hidden = [];
+    }
 
     public function isHidden(): bool
     {
-        return false;
+        return $this->hidden !== [];
     }
 
+    /** Whether the window in front is one of the app's (mygo's IsActive). */
     public function isActive(): bool
     {
-        return false;
+        return Window::active() !== null;
     }
 
     public function setBadge(string $label): void
@@ -45,16 +84,26 @@ final class App implements Platform\AppController
         return $this->badge;
     }
 
+    /** Flashes the windows' taskbar buttons till one comes to the front: the title bars too when $critical (mygo's Bounce). */
     public function bounce(bool $critical): int
     {
-        return 0;
+        foreach (Window::all() as $w) {
+            Taskbar::flash($w->hwnd, ($critical ? 0x3 : 0x2) | 0xC); // FLASHW_ALL or FLASHW_TRAY, FLASHW_TIMERNOFG
+        }
+        return 1;
     }
 
-    public function cancelBounce(int $id): void {}
+    public function cancelBounce(int $id): void
+    {
+        foreach (Window::all() as $w) {
+            Taskbar::flash($w->hwnd, 0);
+        }
+    }
 
+    /** The app's icon, on the windows' title bars and taskbar buttons (mygo's SetDockIcon). */
     public function setDockIcon(string $png): void
     {
-        throw new Unsupported('myphp: the taskbar icon is not on Windows yet');
+        Taskbar::setAppIcon($png);
     }
 
     public function setDockMenu(?Menu $menu): void {}
@@ -103,9 +152,16 @@ final class App implements Platform\AppController
         return \MyPHP\Native\ContentRuleList::parse($rules);
     }
 
+    /** A message of the app's name over its versions, copyright and credits, titled "About" it, as mygo's: Windows has no standard about panel. */
     public function showAboutPanel(AboutPanelOptions $opts): void
     {
-        throw new Unsupported('myphp: the about panel is not on Windows yet');
+        $detail = $opts->applicationVersion . ($opts->version !== '' ? " ({$opts->version})" : '');
+        foreach ([$opts->copyright, $opts->credits] as $s) {
+            if ($s !== '') { $detail .= "\n$s"; }
+        }
+        $t = \MyPHP\L10n::in(\MyPHP\App::locale());
+        $name = $opts->applicationName !== '' ? $opts->applicationName : \MyPHP\App::name();
+        \MyPHP\App::backend()->dialogs()->message(new \MyPHP\MessageOptions(type: 'info', title: $t->get('menuAbout', ['app' => $name]), message: $name, detail: ltrim($detail, "\n")), [$t->get('ok')], 0);
     }
 
     /** The display languages of Settings > Time & language, in order (GetUserPreferredUILanguages, as mygo's). */
@@ -156,7 +212,28 @@ final class App implements Platform\AppController
         return $n > 0 ? Win32::str($k->cast('uint16_t *', FFI::addr($buf[0])), $n - 1) : '';
     }
 
-    public function addRecentDocument(string $path): void {}
+    /** Tells the shell the app opened $path: the Recent category of its jump list (of the types the app opens) and the user's recent files list it (SHAddToRecentDocs, SHARD_PATHW; mygo's). */
+    public function addRecentDocument(string $path): void
+    {
+        FFI::cdef('void SHAddToRecentDocs(uint32_t flags, const void *path);', 'shell32.dll')->SHAddToRecentDocs(3, Win32::wide($path));
+    }
 
-    public function clearRecentDocuments(): void {}
+    /** Removes the app's destinations, the Recent category of its jump list (IApplicationDestinations::RemoveAllDestinations; mygo's): SHAddToRecentDocs(NULL) would clear every app's recent files. */
+    public function clearRecentDocuments(): void
+    {
+        $f = FFI::cdef(<<<'C'
+            typedef struct { void *r0[5]; int32_t (*RemoveAllDestinations)(void *self); } IApplicationDestinationsVtbl;
+            typedef struct { IApplicationDestinationsVtbl *v; } IApplicationDestinations;
+            int32_t CoCreateInstance(const void *clsid, void *outer, uint32_t context, const void *iid, void *out);
+            C, 'ole32.dll');
+        $out = $f->new('void *');
+        [$c, $i] = [\MyPHP\Native\Com::guid('86c14003-4d6b-4ef3-a7b4-0506663b2e68'), \MyPHP\Native\Com::guid('12337d35-94c6-48a0-bce7-6a9c69d4d600')];
+        \MyPHP\Native\Com::check($f->CoCreateInstance(FFI::addr($c), null, 1, FFI::addr($i), FFI::addr($out)), 'creating ApplicationDestinations');
+        $ad = \MyPHP\Native\Com::typed($f, $out, 'IApplicationDestinations *');
+        try {
+            \MyPHP\Native\Com::check(($ad->v->RemoveAllDestinations)($ad), 'IApplicationDestinations::RemoveAllDestinations');
+        } finally {
+            \MyPHP\Native\Com::release($out);
+        }
+    }
 }

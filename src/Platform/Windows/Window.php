@@ -96,6 +96,8 @@ final class Window implements Platform\Window
     private ?WebView $page = null;
     private int $menuOwner = 0;
     private array $accels = [];
+    /** The taskbar button's progress, its state and value, put again when Explorer makes the button. @var array{0: string, 1: float} */
+    private array $progress = ['', 0.0];
 
     public function __construct(private readonly Backend $b, public readonly \MyPHP\Window $w, WindowOptions $o, private readonly bool $panel)
     {
@@ -109,6 +111,7 @@ final class Window implements Platform\Window
         $this->hwnd = Win32::createWindow('MyPHPWindow', $o->title, $style | self::WS_CLIPCHILDREN, $ex, fn(int $m, int $wp, int $lp): ?int => $this->message($m, $wp, $lp),
             -0x80000000, -0x80000000, 100, 100, $parent instanceof self ? $parent->hwnd : null); // CW_USEDEFAULT: where Windows puts a new window
         self::$open[Mem::addr($this->hwnd)] = $this;
+        if (Taskbar::hasAppIcon()) { Taskbar::applyIcon($this->hwnd); }
         $this->topmost = $o->alwaysOnTop;
         if ($this->hasAppMenu() && $b->menus()->appMenu !== null) { $this->installMenu($b->menus()->appMenu); } // before its size, which counts the bar
         $this->sizeContent(max(1, $o->width), max(1, $o->height));
@@ -142,6 +145,10 @@ final class Window implements Platform\Window
         // The menus in the appearance and Windows 11's style: the bar the window draws, the popups' items drawn here.
         if (($this->hmenu !== null && ($r = MenuDraw::barMessage($this->hwnd, $m, $wp, $lp)) !== null) || ($r = MenuDraw::message($this->hwnd, $m, $wp, $lp)) !== null) {
             return $r;
+        }
+        if ($m === Taskbar::created()) {
+            Taskbar::progress($this->hwnd, ...$this->progress);
+            return 0;
         }
         switch ($m) {
             case Win32::WM_CLOSE:
@@ -989,7 +996,11 @@ final class Window implements Platform\Window
         return $this->refreshRate();
     }
 
-    public function setProgressBar(string $state, float $value): void {}
+    public function setProgressBar(string $state, float $value): void
+    {
+        $this->progress = [$state, $value];
+        Taskbar::progress($this->hwnd, $state, $value);
+    }
 
     public function lastDraw(): string
     {
@@ -1057,9 +1068,14 @@ final class Window implements Platform\Window
         return [$this->d3d->readBack($this->d3d->lastList(), $pw, $ph, $scale, $clear), $pw, $ph];
     }
 
+    /** A PNG of native UI as it is: the last frame read back, premultiplied BGRA, which WIC encodes (Native\Wic::png). */
     public function capture(): string
     {
-        throw new \RuntimeException('myphp: capturePage: nothing drawn yet');
+        [$bgra, $w, $h] = $this->lastFrame();
+        if ($w === 0) {
+            throw new \RuntimeException('myphp: capturePage: nothing drawn yet');
+        }
+        return \MyPHP\Native\Wic::png($bgra, $w, $h);
     }
 
     public function underFrame(): ?array
@@ -1430,21 +1446,28 @@ final class Window implements Platform\Window
     /** Flashes the taskbar button and the title bar till the window comes to the front (FLASHW_ALL | FLASHW_TIMERNOFG), or stops. */
     public function flashFrame(bool $flash): void
     {
-        $u = Win32::user32();
-        $info = $u->new('FLASHWINFO');
-        $info->cbSize = FFI::sizeof($info);
-        $info->hwnd = $this->hwnd;
-        $info->dwFlags = $flash ? 0x3 | 0xC : 0;
-        $u->FlashWindowEx(FFI::addr($info));
+        Taskbar::flash($this->hwnd, $flash ? 0x3 | 0xC : 0);
     }
 
     public function setVisibleOnAllWorkspaces(bool $on): void {}
 
     public function placePopover(): void {}
 
+    /** The part of the last frame at ($x, $y), $w × $h points, as an image (Linux's). */
     public function snapshot(float $x, float $y, int $w, int $h): Image
     {
-        throw new Unsupported('myphp: a window\'s snapshot comes with Windows\'s renderer');
+        [$bgra, $pw, $ph] = $this->lastFrame();
+        $s = $this->drawn[2];
+        [$x0, $y0, $cw, $ch] = [(int)round($x * $s), (int)round($y * $s), max(1, (int)round($w * $s)), max(1, (int)round($h * $s))];
+        $out = '';
+        for ($r = 0; $r < $ch; $r++) {
+            $row = $y0 + $r;
+            $line = $row >= 0 && $row < $ph ? substr($bgra, ($row * $pw + max(0, $x0)) * 4, max(0, min($cw, $pw - max(0, $x0))) * 4) : '';
+            $out .= str_pad($line, $cw * 4, "\0");
+        }
+        $rgba = '';
+        for ($i = 0, $n = strlen($out); $i < $n; $i += 4) { $rgba .= $out[$i + 2] . $out[$i + 1] . $out[$i] . $out[$i + 3]; }
+        return Image::fromPixels($cw, $ch, $rgba);
     }
 
     public function framePending(): bool
