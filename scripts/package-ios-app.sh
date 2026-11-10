@@ -9,6 +9,7 @@ BUNDLE_ID="${2:-com.owner888.myphp}"
 APP_NAME="${3:-MyphpApp}"
 OUT_DIR="${4:-dist/ios}"
 APP_VERSION="${5:-1.0.0}"
+DISPLAY_NAME="${6:-${APP_NAME}}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # MYPHP_IOS_SDK=iphonesimulator packages for the simulator (its runtime under build/ios-simulator), a device by default
@@ -67,7 +68,9 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>${APP_NAME}</string>
+    <string>${DISPLAY_NAME}</string>
+    <key>CFBundleDisplayName</key>
+    <string>${DISPLAY_NAME}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -76,6 +79,8 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <string>${APP_VERSION}</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
@@ -117,9 +122,18 @@ cp "${ENTRY}" "${APP_DIR}/app.php"
 cp -R "${ROOT_DIR}/src" "${APP_DIR}/src"
 ENTRY_DIR="$(dirname "${ENTRY}")"
 if [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
-    (cd "${ENTRY_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './.*') | while read -r rel; do
+    [ -f "${ENTRY_DIR}/myphp.json" ] && cp "${ENTRY_DIR}/myphp.json" "${APP_DIR}/myphp.json"
+    (cd "${ENTRY_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './tests/*' -not -path './test/*' -not -name '*.local.php' -not -path './.*') | while read -r rel; do
         rel="${rel#./}"
         [ "${ENTRY_DIR}/$rel" = "${ENTRY}" ] && continue
+        if [ -n "${MYPHP_EXCLUDE:-}" ]; then
+            skip=0
+            IFS=':' read -ra PATS <<< "${MYPHP_EXCLUDE}"
+            for pat in "${PATS[@]}"; do
+                case "$rel" in $pat|*/$pat) skip=1; break ;; esac
+            done
+            [ "$skip" = "1" ] && continue
+        fi
         mkdir -p "$(dirname "${APP_DIR}/$rel")"
         cp "${ENTRY_DIR}/$rel" "${APP_DIR}/$rel"
     done

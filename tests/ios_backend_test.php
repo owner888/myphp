@@ -1,20 +1,25 @@
 <?php
-// The iOS backend's contracts and phone guardrails (Platform\iOS, not mygo's):
-// the bundle's flat layout (Info.plist and resources at the bundle's root,
-// App::version() and App::path('resources') reading them); the system locale
-// (preferredLanguages, region, saveLocale); what a phone does not have
-// throwing Platform\Unsupported (a second window, the menu bar, context menus,
-// the tray, global shortcuts, the Dock, the about panel, window placement,
-// Dialog::save, Dialog::prompt, Dialog::login, Dialog::open of a directory);
-// the event loop's timers and signal() draining App::later().
+// The iOS backend's contracts, Device form factors, and mobile UI fixes:
+// - iOS bundle layout (Info.plist and resources at the bundle's root)
+// - Device::type() (Desktop, Mobile, Pad, Tv) and Device::isMobile / isPad / isDesktop / isTv / isTouch
+// - TextState::deleteBack() (used by iOS and Android deleteBackward)
+// - Switching between ScrollView and TabView at the same tree position without state collision
+// - Button with a custom label and frame(maxWidth: INF) stretching across the row
+// - LazyVGrid with GridItem::flexible() and GridItem::fixed(), and clickable custom Buttons inside
+// - TabView following ->tint() and hiding the floating tab bar on ->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar)
+// - LinearGradient view, HStack(alignment: VerticalAlignment::firstTextBaseline), Toggle with ?bool null binding
+// - Android Secrets AES-256-GCM encrypted store
+// - What a phone does not have throwing Platform\Unsupported
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\{AboutPanelOptions, App, AppHandler, Dock, GlobalShortcut, Menu, MenuItem, OpenDialogOptions, PathName, Rectangle, SaveDialogOptions, Tray, TrayOptions};
-use MyPHP\Native\{Bundle, Plist};
-use MyPHP\Platform\iOS\{AppController, Backend, Dialogs};
+use MyPHP\{AboutPanelOptions, App, AppHandler, Device, DeviceType, Dock, Menu, MenuItem, OpenDialogOptions, PathName, SaveDialogOptions, SecretNotFound};
+use MyPHP\Native\Bundle;
+use MyPHP\Platform\Android\Secrets as AndroidSecrets;
+use MyPHP\Platform\iOS\Backend;
 use MyPHP\Platform\Unsupported;
+use MyPHP\UI\{Content, TextState};
 
 (function (): void {
     $throwsUnsupported = function (\Closure $fn): bool {
@@ -26,7 +31,150 @@ use MyPHP\Platform\Unsupported;
         }
     };
 
-    // 1. iOS bundle layout: Info.plist and resources sit in the .app root, not Contents/.
+    // 1. Device form factor classification (Desktop, Mobile, Pad, Tv).
+    same(DeviceType::Desktop, Device::type(), 'on desktop host Device::type() is Desktop');
+    check(Device::isDesktop() && !Device::isMobile() && !Device::isPad() && !Device::isTv() && !Device::isTouch(), 'Desktop predicates');
+    Device::setType(DeviceType::Mobile);
+    check(Device::isMobile() && Device::isTouch() && !Device::isDesktop() && !Device::isPad(), 'Mobile predicates');
+    Device::setType(DeviceType::Pad);
+    check(Device::isPad() && Device::isTouch() && !Device::isMobile() && !Device::isDesktop(), 'Pad predicates');
+    Device::setType(DeviceType::Tv);
+    check(Device::isTv() && !Device::isTouch() && !Device::isDesktop(), 'Tv predicates');
+    Device::setType(null);
+
+    // 2. TextState::deleteBack() (called by iOS and Android backspace handlers).
+    $ts = new TextState('你好a');
+    $ts->deleteBack();
+    same('你好', $ts->text, 'TextState::deleteBack deletes the character before the caret');
+    $ts->deleteBack();
+    same('你', $ts->text, 'TextState::deleteBack deletes a multi-byte UTF-8 character');
+
+    // 3. Switching between a login ScrollView and a TabView at the same node position without crashing.
+    $loggedIn = false;
+    $tab = 'home';
+    $h = new Headless(Content::view(function () use (&$loggedIn, &$tab) {
+        if (!$loggedIn) {
+            return ScrollView()(
+                Text('Login Page'),
+                Button('Sign In', action: function () use (&$loggedIn) { $loggedIn = true; }),
+            );
+        }
+        return TabView(selection: $tab)(
+            Tab('Home', systemImage: 'house', value: 'home')(Text('Welcome Home')),
+            Tab('Me', systemImage: 'person', value: 'me')(Text('Profile')),
+        );
+    })->view, 390, 844);
+    $h->rt->touch = true;
+    $h->frame();
+    check($h->byText('Login Page') !== null, 'login ScrollView shows first');
+    $h->clickText('Sign In');
+    $h->frame();
+    check($loggedIn && $h->byText('Welcome Home') !== null, 'switching to TabView at the same position succeeds without state collision');
+
+    // 4. Custom-label Button with frame(maxWidth: INF) stretches across the parent and its inner card fills it.
+    $cardClicked = 0;
+    $h = new Headless(Content::view(function () use (&$cardClicked) {
+        return VStack()(
+            Button(action: function () use (&$cardClicked) { $cardClicked++; }, label:
+                VStack(alignment: \HorizontalAlignment::leading)(
+                    Text('Full Width Card'),
+                )->padding(12)->frame(maxWidth: INF, alignment: \Alignment::leading)->background(\Color::secondarySystemBackground)
+            )->buttonStyle(\ButtonStyle::plain),
+        )->padding(16);
+    })->view, 390, 844);
+    $h->frame();
+    $btnNode = $h->root->kids[0]->kids[0];
+    $cardNode = $btnNode->kids[0];
+    $br = $h->rect($btnNode);
+    same([358.0, 358.0], [$br[2], $h->rect($cardNode)[2]], 'both the Button and its inner card stretch across the 358 pt width');
+    $h->click($br[0] + $br[2] - 10, $br[1] + $br[3] / 2); // click near the trailing edge of the card, far from the text
+    same(1, $cardClicked, 'clicking the stretched trailing area of the custom Button triggers its action');
+
+    // 5. LazyVGrid with GridItem::flexible() and GridItem::fixed(), and clickable custom Buttons.
+    $gridClicks = [];
+    $h = new Headless(Content::view(function () use (&$gridClicks) {
+        return ScrollView()(
+            LazyVGrid(columns: [\GridItem::fixed(100), \GridItem::flexible()], spacing: 10)(
+                Each(['A', 'B', 'C', 'D'])(function (string $s) use (&$gridClicks) {
+                    return Button(action: function () use (&$gridClicks, $s) { $gridClicks[] = $s; }, label:
+                        VStack()(Text("Item $s"))->padding(8)->frame(maxWidth: INF)
+                    )->buttonStyle(\ButtonStyle::plain);
+                }),
+            )->padding(10),
+        );
+    })->view, 390, 844);
+    $h->frame();
+    $gridNode = $h->root->kids[0]->kids[0];
+    same([100.0, 260.0], [$h->rect($gridNode->kids[0])[2], $h->rect($gridNode->kids[1])[2]], 'GridItem::fixed(100) and GridItem::flexible() size columns to 100 and 260');
+    $h->clickText('Item A');
+    $h->clickText('Item D');
+    same(['A', 'D'], $gridClicks, 'Buttons inside LazyVGrid fire their actions on click');
+
+    // 6. TabView follows ->tint() and hides the floating tab bar when a pushed page sets toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar).
+    $activeTab = 'home';
+    $navPath = new \NavigationPath();
+    $h = new Headless(Content::view(function () use (&$activeTab, $navPath) {
+        return TabView(selection: $activeTab)(
+            Tab('Home', systemImage: 'house', value: 'home')(
+                NavigationStack(path: $navPath)(
+                    VStack()(
+                        Text('Root Page'),
+                        NavigationLink('Go Detail', value: '/detail'),
+                    )->navigationTitle('Home'),
+                )->navigationDestination(for: '/detail', destination: fn() =>
+                    VStack()(Text('Detail Page'))
+                        ->navigationTitle('Detail')
+                        ->toolbarVisibility(\Visibility::hidden, for: \ToolbarPlacement::tabBar)
+                ),
+            ),
+            Tab('Settings', systemImage: 'gearshape', value: 'settings')(Text('Settings Page')),
+        )->tint(\Color::orange);
+    })->view, 390, 844);
+    $h->rt->touch = true;
+    $h->frame();
+    $tabHome = null;
+    $findTab = static function (\MyPHP\UI\Node $n) use (&$findTab, &$tabHome): void {
+        if (($n->kind === \MyPHP\UI\Node::RICH ? $n->plainText() : $n->text) === 'Home' && $n->fontSize == 10.0) { $tabHome = $n; }
+        foreach ($n->kids as $k) { $findTab($k); }
+    };
+    $findTab($h->root);
+    $findTab = null;
+    same(\Color::orange->resolve($h->theme), $tabHome?->fg, 'TabView tab bar uses the ->tint() color for the selected tab');
+    $h->clickText('Go Detail');
+    $h->frame(2);
+    check($h->byText('Detail Page') !== null && $h->byText('Settings') === null, 'pushed page with toolbarVisibility(hidden, tabBar) hides the floating tab bar');
+
+    // 7. LinearGradient, VerticalAlignment::firstTextBaseline, and Toggle with ?bool null binding.
+    $nullableOn = null;
+    $h = new Headless(Content::view(function () use (&$nullableOn) {
+        return VStack()(
+            LinearGradient(colors: [\Color::blue, \Color::purple], startPoint: \UnitPoint::topLeading, endPoint: \UnitPoint::bottomTrailing)
+                ->frame(height: 40),
+            HStack(alignment: \VerticalAlignment::firstTextBaseline)(
+                Text('Title')->font(\Font::title),
+                Text('subtitle')->font(\Font::caption),
+            ),
+            Toggle('Allow', isOn: $nullableOn),
+        );
+    })->view, 390, 844);
+    $h->frame();
+    same(false, $nullableOn, 'Toggle initializes a null binding to false');
+    check($h->root->kids[0]->kids[0]->gradient !== null || ($h->root->kids[0]->kids[0]->kids[0]->gradient ?? null) !== null, 'LinearGradient sets a linearGradient on its node');
+
+    // 8. Android AES-256-GCM Secrets store.
+    $sec = new AndroidSecrets();
+    $sec->setSecret('myphp.test', 'token', 'secret-value-123');
+    same('secret-value-123', $sec->secret('myphp.test', 'token'), 'Android Secrets encrypts and reads back the secret');
+    $sec->deleteSecret('myphp.test', 'token');
+    $notFound = false;
+    try {
+        $sec->secret('myphp.test', 'token');
+    } catch (SecretNotFound) {
+        $notFound = true;
+    }
+    check($notFound, 'deleted Android secret throws SecretNotFound');
+
+    // 9. iOS bundle layout and Unsupported guardrails.
     $tmp = sys_get_temp_dir() . '/myphp-ios-bundle-' . bin2hex(random_bytes(4)) . '.app';
     mkdir($tmp, 0755, true);
     file_put_contents("$tmp/Info.plist", \MyPHP\Native\Build\Bundle::xml([
@@ -37,7 +185,6 @@ use MyPHP\Platform\Unsupported;
         'CFBundleExecutable' => 'PhoneDemo',
         'MyPHPProduction' => true,
     ]));
-    file_put_contents("$tmp/sample.txt", 'ios resource');
 
     $refLaunched = new \ReflectionProperty(Bundle::class, 'launched');
     $refInfo = new \ReflectionProperty(Bundle::class, 'info');
@@ -58,7 +205,6 @@ use MyPHP\Platform\Unsupported;
         same(["$tmp/PhoneDemo"], Bundle::command(), 'Bundle::command() points to <bundle>/<Executable> on iOS');
         same(false, App::isDev(), 'MyPHPProduction in <bundle>/Info.plist turns App::isDev() off');
 
-        // 2. What a phone does not have throws Platform\Unsupported (docs/mobile.md).
         check($throwsUnsupported(fn() => App::setMenu(new Menu([new MenuItem('File')]))), 'App::setMenu throws Unsupported on iOS');
         same(null, Menu::default(), 'Menu::default() is null on iOS');
         check($throwsUnsupported(fn() => Dock::setMenu(new Menu())), 'Dock::setMenu throws Unsupported on iOS');
@@ -67,7 +213,7 @@ use MyPHP\Platform\Unsupported;
 
         $b = new Backend(new AppHandler());
         same('ios/metal', $b->name(), 'Backend::name()');
-        check($throwsUnsupported(fn() => $b->popupMenu(new Menu()->snapshot(), null, null)), 'Backend::popupMenu throws Unsupported on iOS');
+        check($throwsUnsupported(fn() => $b->popupMenu((new Menu())->snapshot(), null, null)), 'Backend::popupMenu throws Unsupported on iOS');
         check($throwsUnsupported(fn() => $b->newTray(new class implements \MyPHP\Platform\TrayHandler {
             public function clicked(): void {}
             public function rightClicked(): void {}
@@ -101,7 +247,6 @@ use MyPHP\Platform\Unsupported;
         $refInfo->setValue(null, $prevInfo);
         putenv($prevPlatform === false ? 'MYPHP_PLATFORM' : "MYPHP_PLATFORM=$prevPlatform");
         @unlink("$tmp/Info.plist");
-        @unlink("$tmp/sample.txt");
         @rmdir($tmp);
     }
 })();

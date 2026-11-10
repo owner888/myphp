@@ -68,8 +68,9 @@ final class ScrollView extends View
         };
         $rt = $c->runtime;
         if ($env->refresh !== null) {
+            $id = $c->upcomingId();
             $kept = $rt === null ? (object)['scroll' => new ScrollState(), 'refreshing' => false]
-                : $rt->local($c->upcomingId(), fn() => (object)['scroll' => $large ?? new ScrollState(), 'refreshing' => false]);
+                : $rt->local($id, fn() => (object)['scroll' => $large ?? new ScrollState(), 'refreshing' => false], \stdClass::class, 'refreshing');
             $was = $kept->refreshing;
             $n = $c->refreshable($large ?? $kept->scroll, $kept->refreshing, $content);
             if ($kept->refreshing && !$was) { // pulled: the action in a fiber, the spinner until it ends

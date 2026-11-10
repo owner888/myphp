@@ -48,11 +48,11 @@ final class NavigationStack extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $rt = $c->runtime;
-        $this->router = $this->path ?? ($rt === null ? new Router('/') : $rt->local($c->upcomingId(), fn() => new Router('/')));
+        $this->router = $this->path ?? ($rt === null ? new Router('/') : $rt->local($c->upcomingId(), fn() => new Router('/'), Router::class));
         $entry = $this->router->entry();
         $large = $entry->largeTitle ?? null;
         $n = $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
-        $backdrop = (object)['color' => null];
+        $backdrop = (object)['color' => null, 'tabBarHidden' => $env->backdrop->tabBarHidden ?? false, 'navBarHidden' => false];
           $toolbar = $entry->toolbar ?? null;
           $c->navigationBar($this->router->title(), $this->router,
               $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); },
@@ -68,6 +68,9 @@ final class NavigationStack extends View
               });
           });
         $c->end();
+        if ($env->backdrop !== null && $backdrop->tabBarHidden) {
+            $env->backdrop->tabBarHidden = true;
+        }
         if ($backdrop->color !== null && ($c->runtime?->touch ?? false)) { // a phone's bar is clear: the page's color behind it, up to the window's top
             $n->background($backdrop->color);
             if ($env->backdrop !== null) { $env->backdrop->color ??= $backdrop->color; }

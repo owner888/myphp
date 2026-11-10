@@ -12,17 +12,22 @@ use MyPHP\UI\{Context, Node};
 final class Shape extends View
 {
     public const RECTANGLE = 0, ROUNDED = 1, CIRCLE = 2, CAPSULE = 3, ELLIPSE = 4;
-    private ?ColorValue $fill = null;
+    private ColorValue|LinearGradientView|\MyPHP\UI\LinearGradient|null $fill = null;
     private ?array $stroke = null;
 
     public function __construct(public readonly int $kind, public readonly float $cornerRadius = 0) {}
 
-    public function fill(\Color|ColorValue $color): static { $this->fill = ColorValue::of($color); return $this; }
+    public function fill(\Color|ColorValue|LinearGradientView|\MyPHP\UI\LinearGradient $color): static
+    {
+        $this->fill = $color instanceof LinearGradientView || $color instanceof \MyPHP\UI\LinearGradient ? $color : ColorValue::of($color);
+        return $this;
+    }
 
     /** Outlines it $lineWidth wide, or as $style says: dashed, with dashes. */
-    public function stroke(\Color|ColorValue|\MyPHP\UI\ConicGradient $color, float $lineWidth = 1, ?StrokeStyle $style = null): static
+    public function stroke(\Color|ColorValue|LinearGradientView|\MyPHP\UI\LinearGradient|\MyPHP\UI\ConicGradient $color, float $lineWidth = 1, ?StrokeStyle $style = null): static
     {
-        $this->stroke = [$color instanceof \MyPHP\UI\ConicGradient ? $color : ColorValue::of($color), $style?->lineWidth ?? $lineWidth, $style !== null && $style->dash !== []]; // a ConicGradient: SwiftUI's AngularGradient
+        $g = $color instanceof LinearGradientView || $color instanceof \MyPHP\UI\LinearGradient || $color instanceof \MyPHP\UI\ConicGradient ? $color : ColorValue::of($color);
+        $this->stroke = [$g, $style?->lineWidth ?? $lineWidth, $style !== null && $style->dash !== []];
         return $this;
     }
 
@@ -32,8 +37,14 @@ final class Shape extends View
         $n = $c->column(0, 0, 1);
         $c->end();
         $n->alignSelf(Node::STRETCH);
-        if ($color !== null) { $n->background($color->rgb($env), $color->alpha); }
+        if ($color instanceof LinearGradientView) { $n->linearGradient($color->toGradient($env)); }
+        elseif ($color instanceof \MyPHP\UI\LinearGradient) { $n->linearGradient($color); }
+        elseif ($color !== null) { $n->background($color->rgb($env), $color->alpha); }
         if ($this->stroke !== null && $this->stroke[0] instanceof \MyPHP\UI\ConicGradient) { $n->border($this->stroke[1])->borderConicGradient($this->stroke[0]); }
+        elseif ($this->stroke !== null && ($this->stroke[0] instanceof LinearGradientView || $this->stroke[0] instanceof \MyPHP\UI\LinearGradient)) {
+            $g = $this->stroke[0] instanceof LinearGradientView ? $this->stroke[0]->toGradient($env) : $this->stroke[0];
+            $n->border($this->stroke[1])->borderLinearGradient($g);
+        }
         elseif ($this->stroke !== null && $this->stroke[0]->alpha > 0) { $n->border($this->stroke[1], $this->stroke[0]->rgb($env)); if ($this->stroke[2]) { $n->borderStyle(\MyPHP\UI\BorderStyle::Dashed); } }
         $this->clip($n);
         return $n;

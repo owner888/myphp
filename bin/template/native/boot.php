@@ -8,5 +8,6 @@ if (class_exists(\MyPHP\App::class)) {
     return;
 }
 $framework = is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp'
-    : (getenv('MYPHP_HOME') ?: json_decode(file_get_contents(__DIR__ . '/myphp.json'), true)['framework']);
+    : (is_dir(__DIR__ . '/src') && is_file(__DIR__ . '/src/autoload.php') ? __DIR__
+    : (getenv('MYPHP_HOME') ?: (is_file(__DIR__ . '/myphp.json') ? json_decode((string)file_get_contents(__DIR__ . '/myphp.json'), true)['framework'] : __DIR__)));
 require $framework . '/src/autoload.php';

@@ -113,7 +113,7 @@ enum Alignment
 enum HorizontalAlignment { case leading; case center; case trailing; }
 
 /** SwiftUI's VerticalAlignment, an HStack's. */
-enum VerticalAlignment { case top; case center; case bottom; }
+enum VerticalAlignment { case top; case center; case bottom; case firstTextBaseline; case lastTextBaseline; }
 
 enum TextAlignment
 {
@@ -246,6 +246,8 @@ enum DatePickerComponents { case date; case hourAndMinute; }
 
 /** The type of every view, for a parameter or return type: fn(): View => …. */
 class_alias(D\View::class, 'View');
+class_alias(\MyPHP\Device::class, 'Device');
+class_alias(\MyPHP\DeviceType::class, 'DeviceType');
 
 /** What a GeometryReader gives its content: fn(GeometryProxy $g) => …. */
 class_alias(D\GeometryProxy::class, 'GeometryProxy');
@@ -298,7 +300,12 @@ function VStack(HorizontalAlignment $alignment = HorizontalAlignment::center, ?f
 /** The views across a row: HStack(spacing: 8)( Text('a'), Spacer(), Button(…) ). */
 function HStack(VerticalAlignment $alignment = VerticalAlignment::center, ?float $spacing = null): D\Stack
 {
-    return new D\Stack(Node::ROW, match ($alignment) { VerticalAlignment::top => Node::START, VerticalAlignment::center => Node::CENTER, VerticalAlignment::bottom => Node::END }, $spacing);
+    return new D\Stack(Node::ROW, match ($alignment) {
+        VerticalAlignment::top => Node::START,
+        VerticalAlignment::center => Node::CENTER,
+        VerticalAlignment::bottom => Node::END,
+        VerticalAlignment::firstTextBaseline, VerticalAlignment::lastTextBaseline => Node::BASELINE,
+    }, $spacing);
 }
 
 /** The views one over the other: ZStack(alignment: Alignment::bottomTrailing)( Color(…), Text('badge') ). */
@@ -374,6 +381,18 @@ function Image(UIImage|SVG|null $image = null, ?string $file = null, ?string $sy
 {
     if ($file !== null) { $image = str_ends_with(strtolower($file), '.svg') ? SVG::fromFile($file) : UIImage::fromFile($file); }
     return new D\ImageView($image, $systemName);
+}
+
+/** A picture loaded from $url over HTTP(S) in a fiber and cached in memory: AsyncImage('https://…'). */
+function AsyncImage(?string $url, float $scale = 1.0, ?Closure $content = null, ?Closure $placeholder = null): D\AsyncImage
+{
+    return new D\AsyncImage($url, $scale, $content, $placeholder);
+}
+
+/** A linear gradient view: LinearGradient(colors: [Color::blue, Color::purple], startPoint: UnitPoint::topLeading, endPoint: UnitPoint::bottomTrailing). */
+function LinearGradient(array $colors = [], UnitPoint $startPoint = UnitPoint::top, UnitPoint $endPoint = UnitPoint::bottom, ?float $angle = null, array $stops = []): D\LinearGradientView
+{
+    return new D\LinearGradientView($colors, $startPoint, $endPoint, $angle, $stops);
 }
 
 /** A color as a view, filling its room: Color(Color::blue), Color(Color::rgb(0x336699)). */
@@ -692,8 +711,11 @@ enum AnnotationPosition { case automatic; case top; case bottom; case leading; c
 /** The side of the plot an axis's labels are on. */
 enum AxisMarkPosition { case automatic; case leading; case trailing; }
 
-/** Whether something shows, as SwiftUI's Visibility: a chart's legend. */
+/** Whether something shows, as SwiftUI's Visibility: a chart's legend, a bar (toolbarVisibility). */
 enum Visibility { case automatic; case visible; case hidden; }
+
+/** Which bar toolbarVisibility() shows or hides, as SwiftUI's ToolbarPlacement. */
+enum ToolbarPlacement { case automatic; case tabBar; case navigationBar; }
 
 /** A drag that moves the window, of a view standing in for its title bar, as SwiftUI's WindowDragGesture: ->gesture(WindowDragGesture()). */
 final class WindowDragGesture {}
@@ -784,8 +806,22 @@ function LazyVGrid(array $columns, float $spacing = 8, mixed &$selection = D\Laz
 /** Its views one under another, only those in view built, in a ScrollView: ScrollView()( LazyVStack(spacing: 16)( Each(…) ) ). */
 function LazyVStack(HorizontalAlignment $alignment = HorizontalAlignment::center, float $spacing = 8): D\LazyVStack { return new D\LazyVStack($alignment, $spacing); }
 
-/** A point of a view, as SwiftUI's UnitPoint: where a ScrollView starts (defaultScrollAnchor), where scrollTo() puts a row. */
-enum UnitPoint { case top; case center; case bottom; }
+/** A point of a view, as SwiftUI's UnitPoint: where a ScrollView starts (defaultScrollAnchor), where scrollTo() puts a row, and the endpoints of a LinearGradient. */
+enum UnitPoint
+{
+    case top; case center; case bottom; case leading; case trailing;
+    case topLeading; case topTrailing; case bottomLeading; case bottomTrailing;
+
+    /** @internal @return array{0: float, 1: float} */
+    public function coords(): array
+    {
+        return match ($this) {
+            self::topLeading => [0.0, 0.0], self::top => [0.5, 0.0], self::topTrailing => [1.0, 0.0],
+            self::leading => [0.0, 0.5], self::center => [0.5, 0.5], self::trailing => [1.0, 0.5],
+            self::bottomLeading => [0.0, 1.0], self::bottom => [0.5, 1.0], self::bottomTrailing => [1.0, 1.0],
+        };
+    }
+}
 
 /** MyPHP's code editor of $state (MyPHP\UI\Editor\State): its buffer edited, highlighted, completed and diagnosed as $state says; it takes the room. */
 function CodeEditor(MyPHP\UI\Editor\State $state): D\Representable { return new D\Representable(static fn(MyPHP\UI\Context $c) => $state->view($c), true); }

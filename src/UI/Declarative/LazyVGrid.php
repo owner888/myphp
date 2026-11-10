@@ -57,13 +57,27 @@ final class LazyVGrid extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $min = $this->columns[0]->minimum ?? throw new \LogicException('LazyVGrid takes an adaptive column: LazyVGrid(columns: [GridItem::adaptive(minimum: 132)])');
-        if ($this->selects) { return $this->chooser($c, $env, $min); }
-        $width = $c->runtime?->rectOf($c->upcomingId())[2] ?? $c->width;
-        $columns = max(1, (int)floor(($width + $this->spacing) / ($min + $this->spacing)));
-        $n = $c->grid(array_fill(0, $columns, Track::fr()), $this->spacing);
+        $first = $this->columns[0] ?? throw new \LogicException('LazyVGrid needs at least one GridItem');
+        if ($this->selects) { return $this->chooser($c, $env, $first->minimum ?? 120.0); }
+        $tracks = [];
+        foreach ($this->columns as $col) {
+            if ($col->kind === GridItem::ADAPTIVE) {
+                $min = $col->minimum ?? 120.0;
+                $width = $c->runtime?->rectOf($c->upcomingId())[2] ?? $c->width;
+                $cols = max(1, (int)floor(($width + $this->spacing) / ($min + $this->spacing)));
+                array_push($tracks, ...array_fill(0, $cols, Track::fr()));
+            } else {
+                $tracks[] = $col->track();
+            }
+        }
+        $cellEnv = $env->along(Node::COLUMN);
+        $n = $c->grid($tracks, $this->spacing);
           foreach (ListView::flat($this->content) as $v) {
-              $v->render($c, $env->along(Node::ROW))?->justifySelf(Node::STRETCH);
+              $k = $v->render($c, $cellEnv);
+              if ($k !== null) {
+                  $k->justifySelf(Node::STRETCH);
+                  if ($v instanceof Button && $v->label !== null) { $k->alignSelf(Node::STRETCH); }
+              }
           }
         $c->end();
         View::takeRoom($n, $env->axis, View::FLEX_X);

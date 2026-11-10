@@ -90,6 +90,7 @@ if [ ! -f "${SYSROOT}/lib/libcurl.a" ]; then
         --with-ca-fallback --without-ca-bundle --without-ca-path \
         --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-mqtt --disable-smb \
         --without-libpsl --without-libidn2 --without-brotli --without-zstd --without-nghttp2 --without-librtmp \
+        --disable-symbol-hiding \
         --disable-manual --disable-docs \
         CC="${CC}" CFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -I${SYSROOT}/include" \
         CPPFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -I${SYSROOT}/include" \
@@ -188,7 +189,10 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
             ac_cv_func_setpgrp=yes \
             ac_cv_func_getpgrp_void=yes \
             ac_cv_func_setpgrp_void=yes \
-            ac_cv_func_posix_spawn_file_actions_addchdir_np=no
+            ac_cv_func_posix_spawn_file_actions_addchdir_np=no \
+            ac_cv_shm_mmap_anon=yes \
+            ac_cv_shm_mmap_posix=no \
+            ac_cv_shm_ipc=no
 
         # Patch Darwin/Apple headers
         sed -i '' 's/#define uid_t int/\/* #undef uid_t *\//' main/php_config.h || true

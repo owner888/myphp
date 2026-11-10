@@ -284,9 +284,11 @@ final class Backend implements Platform\Backend
         return $this->symbols ??= new Symbols; // Material Symbols for SF Symbol names
     }
 
+    private ?Secrets $secrets = null;
+
     public function secrets(): Platform\Secrets
     {
-        throw new Platform\Unsupported('Secrets not implemented on Android yet');
+        return $this->secrets ??= new Secrets();
     }
 
     public function applications(): array

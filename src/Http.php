@@ -35,9 +35,57 @@ final class Http
     private const OPT_COPYPOSTFIELDS = 10165, OPT_TIMEOUT_MS = 155;
 
     /** GET $url with $headers (name => value). */
-    public static function get(string $url, array $headers = []): HttpResponse
+    public static function get(string $url, array $headers = [], float $timeout = 0.0): HttpResponse
     {
-        return self::request('GET', $url, $headers);
+        return self::request('GET', $url, $headers, null, $timeout);
+    }
+
+    /**
+     * POST $url with $body: a raw string, an array of fields or file paths
+     * (encoded as multipart/form-data when a value is a file path or a
+     * CURLFile, else JSON when Content-Type is application/json, else
+     * multipart/form-data), with $headers.
+     * @param array<string, mixed>|string|null $body
+     * @param array<string, string> $headers
+     */
+    public static function post(string $url, array|string|null $body = null, array $headers = [], float $timeout = 0.0): HttpResponse
+    {
+        if (is_array($body)) {
+            [$body, $headers] = self::encodeBody($body, $headers);
+        }
+        return self::request('POST', $url, $headers, $body, $timeout);
+    }
+
+    /** @param array<string, mixed> $fields @param array<string, string> $headers @return array{0: string, 1: array<string, string>} */
+    private static function encodeBody(array $fields, array $headers): array
+    {
+        foreach ($headers as $k => $v) {
+            if (strcasecmp($k, 'content-type') === 0 && stripos($v, 'application/json') !== false) {
+                return [json_encode($fields, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), $headers];
+            }
+        }
+        $boundary = '----MyPHPFormBoundary' . bin2hex(random_bytes(12));
+        $parts = '';
+        foreach ($fields as $name => $val) {
+            $qName = str_replace('"', '%22', (string)$name);
+            if ($val instanceof \CURLFile) {
+                $file = $val->getFilename();
+                $postName = str_replace('"', '%22', $val->getPostFilename() !== '' ? $val->getPostFilename() : basename($file));
+                $mime = $val->getMimeType() !== '' ? $val->getMimeType() : 'application/octet-stream';
+                $data = (string)@file_get_contents($file);
+                $parts .= "--$boundary\r\nContent-Disposition: form-data; name=\"$qName\"; filename=\"$postName\"\r\nContent-Type: $mime\r\n\r\n$data\r\n";
+            } elseif (is_string($val) && ($val !== '' && ($val[0] === '/' || str_starts_with($val, 'file://') || preg_match('/^[A-Za-z]:[\\\/]/', $val) === 1)) && is_file($val)) {
+                $postName = str_replace('"', '%22', basename($val));
+                $data = (string)@file_get_contents($val);
+                $parts .= "--$boundary\r\nContent-Disposition: form-data; name=\"$qName\"; filename=\"$postName\"\r\nContent-Type: application/octet-stream\r\n\r\n$data\r\n";
+            } else {
+                $str = is_scalar($val) || $val === null ? (string)$val : json_encode($val, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                $parts .= "--$boundary\r\nContent-Disposition: form-data; name=\"$qName\"\r\n\r\n$str\r\n";
+            }
+        }
+        $parts .= "--$boundary--\r\n";
+        $headers['Content-Type'] = "multipart/form-data; boundary=$boundary";
+        return [$parts, $headers];
     }
 
     /**

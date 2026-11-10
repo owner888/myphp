@@ -16,9 +16,10 @@ final class Toggle extends View
     private ?array $sources = null;
 
     /** $isOn: a variable, or a Binding(get:set:), whose set() a switch by the user runs, not a change of the app's. */
-    public function __construct(public readonly string $title, bool|Binding &$isOn)
+    public function __construct(public readonly string $title, bool|Binding|null &$isOn)
     {
         if ($isOn instanceof Binding) { $this->binding = $isOn; $this->isOn = (bool)$isOn->get(); return; }
+        if ($isOn === null) { $isOn = false; }
         $this->isOn = &$isOn;
     }
 
