@@ -77,11 +77,17 @@ use MyPHP\Native\Build\Windows;
     same(['app', true, '1', true, 'an argument'], json_decode((string)@file_get_contents("$dir\\ran.json"), true), 'the app run in app/, ffi on, its extensions loaded, its arguments passed on');
     // The installer, silent, into a folder of the test's: the app's files, the uninstaller, the entry of Settings > Apps; the uninstaller, silent, removes them.
     $into = "$root\\installed";
-    $run = function (array $cmd): int {
+    // A program waited for 120 s at most; one that does not end says what it and its children were running then.
+    $run = function (array $cmd) use ($mark): int {
         $p = proc_open($cmd, [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w']], $pipes);
         $start = microtime(true);
         while (($st = proc_get_status($p))['running'] && microtime(true) - $start < 120) { usleep(100000); }
-        if ($st['running']) { proc_terminate($p); }
+        if ($st['running']) {
+            [, $tree] = \MyPHP\Native\Build\Cmd::output(['powershell', '-NoProfile', '-NonInteractive', '-InputFormat', 'None', '-Command',
+                "Get-CimInstance Win32_Process | Where-Object { \$_.ProcessId -eq {$st['pid']} -or \$_.ParentProcessId -eq {$st['pid']} } | ForEach-Object { \$_.ProcessId.ToString() + ' ' + \$_.CommandLine }"]);
+            $mark('still running after 120 s: ' . str_replace(["\r", "\n"], ' / ', trim($tree)));
+            proc_terminate($p);
+        }
         proc_close($p);
         return $st['running'] ? -1 : $st['exitcode'];
     };

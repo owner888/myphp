@@ -249,7 +249,8 @@ final class Nsis
         foreach (explode("\n", self::CLOSE_APP_PS1) as $line) {
             $write .= '  FileWrite $2 ' . self::str($line . "\r\n") . "\n";
         }
-        $command = "'\"\$1\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& ([scriptblock]::Create([IO.File]::ReadAllText(\$\$env:MYPHP_APP_SCRIPT)))\"'";
+        // -InputFormat None: nsExec gives PowerShell a stdin pipe, which it otherwise waits on and never ends (a silent install hung).
+        $command = "'\"\$1\" -NoProfile -NonInteractive -InputFormat None -ExecutionPolicy Bypass -Command \"& ([scriptblock]::Create([IO.File]::ReadAllText(\$\$env:MYPHP_APP_SCRIPT)))\"'";
         $running = self::str("$name is running. Close it to continue?");
         $stuck = self::str("$name is still running. Quit it, then try again.");
         $out = '';
