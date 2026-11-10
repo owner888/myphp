@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.185.0';
+const VERSION = '1.186.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -671,6 +671,7 @@ function changeSummary(string $root, array $paths): string
  */
 function devInputs(string $dir, array $c): array
 {
+    clearstatcache();
     $skip = [path($dir, $c['out']), "$dir/vendor", "$dir/node_modules", "$dir/myphp"];
     if (($c['frontendDist'] ?? '') !== '') {
         $skip[] = rtrim(path($dir, $c['frontendDist']), '/');
@@ -1257,14 +1258,11 @@ function buildIOS(string $dir, array $c, string $arch, array $opts): array
     is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
     $name = orElse($c['name'], 'app');
     $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
-    $mainPhp = $dir . '/main.php';
-    if (!file_exists($mainPhp)) {
-        $mainPhp = $dir . '/app.php';
-    }
+    $mainPhp = path($dir, $c['entry']);
     logf("Making ios/$arch: $out/$name.ipa");
     $script = dirname(__DIR__) . '/scripts/package-ios-app.sh';
     is_executable($script) || chmod($script, 0755);
-    $cmd = [$script, $mainPhp, $bundleId, $name, $out];
+    $cmd = [$script, $mainPhp, $bundleId, $name, $out, $c['version']];
     sh($cmd, $dir) === 0 || fail("Failed to package iOS App");
     return ["$out/$name.app", "$out/$name.ipa"];
 }
@@ -3249,39 +3247,49 @@ function runCommand(array $args): void
             phoneHot($targetDev, ANDROID_PACKAGE, $name, fn() => phoneFiles($dir, 'android', ''), $seen, $step));
     } elseif ($targetDev->platform === 'ios') {
         // 2. iOS Workflow
-        if ($targetDev->status === 'shutdown') {
-            $say("Booting iOS Simulator {$targetDev->name}...");
-            $step(['xcrun', 'simctl', 'boot', $targetDev->id]);
+        if ($targetDev->type === 'simulator') {
+            if ($targetDev->status === 'shutdown') {
+                $say("Booting iOS Simulator {$targetDev->name}...");
+                $step(['xcrun', 'simctl', 'boot', $targetDev->id]);
+            }
+            // the Simulator app (or DeviceHub on Xcode 27+) showing this device, and the device ready for an install
+            if (Cmd::output(['open', '-Ra', 'Simulator'])[0] === 0) {
+                $step(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', $targetDev->id]);
+            } elseif (Cmd::output(['open', '-Rb', 'com.apple.dt.Devices'])[0] === 0) {
+                $step(['open', '-b', 'com.apple.dt.Devices', "devices://device/open?id={$targetDev->id}"]);
+            }
+            $step(['xcrun', 'simctl', 'bootstatus', $targetDev->id, '-b']);
         }
-        // the Simulator app (or DeviceHub on Xcode 27+) showing this device, and the device ready for an install
-        if (Cmd::output(['open', '-Ra', 'Simulator'])[0] === 0) {
-            $step(['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', $targetDev->id]);
-        } elseif (Cmd::output(['open', '-Rb', 'com.apple.dt.Devices'])[0] === 0) {
-            $step(['open', '-b', 'com.apple.dt.Devices', "devices://device/open?id={$targetDev->id}"]);
-        }
-        $step(['xcrun', 'simctl', 'bootstatus', $targetDev->id, '-b']);
         $out = path($dir, $c['out']);
         is_dir($out) || mkdir($out, 0755, true);
         $name = orElse($c['name'], 'app');
         logf("building $name for iOS");
         $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
-        $mainPhp = file_exists($dir . '/main.php') ? $dir . '/main.php' : $dir . '/app.php';
+        $mainPhp = path($dir, $c['entry']);
         $script = FRAMEWORK . '/scripts/package-ios-app.sh';
         $seen = fileStamps(phoneFiles($dir, 'ios', $mainPhp)); // before the build: what changes during it is restarted with
         putenv('MYPHP_IOS_SDK=' . ($targetDev->type === 'simulator' ? 'iphonesimulator' : 'iphoneos')); // the simulator's runtime and binary are another architecture slice
-        $step([$script, $mainPhp, $bundleId, $name, $out], $dir) === 0 || fail("Failed to build iOS application");
+        $step([$script, $mainPhp, $bundleId, $name, $out, $c['version']], $dir) === 0 || fail("Failed to build iOS application");
 
         $appBundle = "$out/$name.app";
-        $say("Installing app on simulator {$targetDev->id}...");
-        $step(['xcrun', 'simctl', 'install', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on iOS simulator");
+        if ($targetDev->type === 'device') {
+            $say("Installing app on device {$targetDev->id}...");
+            $step(['xcrun', 'devicectl', 'device', 'install', 'app', '--device', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on {$targetDev->name} (physical devices require a signed .app with a provisioning profile)");
+            $say("Launching application ($bundleId)...");
+            logf("$name is running on {$targetDev->name}; its log follows, Ctrl+C quits");
+            sh(['xcrun', 'devicectl', 'device', 'process', 'launch', '--console', '--terminate-existing', '--device', $targetDev->id, $bundleId]);
+        } else {
+            $say("Installing app on simulator {$targetDev->id}...");
+            $step(['xcrun', 'simctl', 'install', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on iOS simulator");
 
-        $say("Launching application ($bundleId)...");
-        $step(['xcrun', 'simctl', 'launch', $targetDev->id, $bundleId]) === 0 || fail("Failed to launch app on iOS simulator");
+            $say("Launching application ($bundleId)...");
+            $step(['xcrun', 'simctl', 'launch', $targetDev->id, $bundleId]) === 0 || fail("Failed to launch app on iOS simulator");
 
-        logf("$name is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
-        // the app's own lines (os_log, PHP's output), and the system's about it: a crash says why
-        streamLog('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level debug --predicate ' . escapeshellarg("(process == \"$name\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$name\" AND messageType == error) OR (eventMessage CONTAINS \"$name\" AND eventMessage CONTAINS \"exited\")"), 'ios', $all,
-            phoneHot($targetDev, $bundleId, $name, fn() => phoneFiles($dir, 'ios', $mainPhp), $seen, $step));
+            logf("$name is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
+            // the app's own lines (os_log, PHP's output), and the system's about it: a crash says why
+            streamLog('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level debug --predicate ' . escapeshellarg("(process == \"$name\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$name\" AND messageType == error) OR (eventMessage CONTAINS \"$name\" AND eventMessage CONTAINS \"exited\")"), 'ios', $all,
+                phoneHot($targetDev, $bundleId, $name, fn() => phoneFiles($dir, 'ios', $mainPhp), $seen, $step));
+        }
     } else {
         // 3. Desktop Workflow
         logf("Running on desktop...");

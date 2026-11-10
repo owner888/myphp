@@ -44,11 +44,11 @@ final class Bundle
         return self::$launched === false ? null : self::$launched;
     }
 
-    /** Where the bundle's resources are (App::path('resources')): Contents/Resources, on Linux and Windows the app's directory; null without a bundle. */
+    /** Where the bundle's resources are (App::path('resources')): Contents/Resources on macOS, the bundle itself on iOS, on Linux and Windows the app's directory; null without a bundle. */
     public static function resources(): ?string
     {
         $app = self::path();
-        return $app === null ? null : (self::flat() ? $app : "$app/Contents/Resources");
+        return $app === null ? null : (self::flat() || \MyPHP\App::isIOS() ? $app : "$app/Contents/Resources");
     }
 
     /** Whether the bundle is a directory of the launcher, app/ and info.json (Build\Linux::INFO), as Linux's and Windows's are, rather than a .app. */
@@ -74,9 +74,10 @@ final class Bundle
                 $info = $json === false ? throw new \RuntimeException("myphp: $app has no " . Build\Linux::INFO . ': build the app with myphp build') : json_decode($json, true);
                 return self::$info = is_array($info) ? $info : throw new \RuntimeException("$app/" . Build\Linux::INFO . ' is no object');
             }
-            $xml = $app === null ? false : @file_get_contents("$app/Contents/Info.plist");
+            $plistFile = $app === null ? '' : (\MyPHP\App::isIOS() ? "$app/Info.plist" : "$app/Contents/Info.plist");
+            $xml = $plistFile === '' ? false : @file_get_contents($plistFile);
             $plist = $xml === false ? [] : Plist::parse($xml);
-            self::$info = is_array($plist) ? $plist : throw new \RuntimeException("$app/Contents/Info.plist is no dictionary");
+            self::$info = is_array($plist) ? $plist : throw new \RuntimeException("$plistFile is no dictionary");
         }
         return self::$info;
     }
@@ -100,7 +101,7 @@ final class Bundle
         $app = self::path();
         $exe = $app === null ? null : self::info('CFBundleExecutable');
         if ($app !== null && $exe !== null) {
-            return [self::flat() ? "$app/$exe" : "$app/Contents/MacOS/$exe"];
+            return [self::flat() || \MyPHP\App::isIOS() ? "$app/$exe" : "$app/Contents/MacOS/$exe"];
         }
         return [PHP_BINARY, '-d', 'ffi.enable=1', ...array_slice($_SERVER['argv'] ?? [], 0)];
     }

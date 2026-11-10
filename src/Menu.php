@@ -177,6 +177,9 @@ final class Menu
      */
     public static function default(): ?self
     {
+        if (App::isIOS() || App::isAndroid()) {
+            return null;
+        }
         if (PHP_OS_FAMILY !== 'Darwin') {
             return Native\Docs\Registry::has() ? new self([new MenuItem(role: 'fileMenu'), new MenuItem(role: 'editMenu')]) : null;
         }

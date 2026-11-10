@@ -18,17 +18,40 @@ final class Page implements Platform\Page
 
     public readonly int $id;
     private bool $closed = false;
+    private string $url = '';
 
     /** @var ?Closure(string): void */
     public ?Closure $onMessage = null;
+    public ?Closure $onNavigate = null;
+    public ?Closure $onCommit = null;
+    public ?Closure $onFinish = null;
+    public ?Closure $onFail = null;
+    public ?Closure $onGone = null;
+    public ?Closure $onTitle = null;
+    public ?Closure $onChange = null;
+    public ?Closure $onOpen = null;
+    public ?Closure $onClosedByPage = null;
+    public ?Closure $onPanel = null;
+    public ?Closure $onContextMenu = null;
+    public ?Closure $onPermission = null;
+    public ?Closure $onDownload = null;
+    public ?Closure $onDownloadDone = null;
+    public ?Closure $onScheme = null;
+    public ?Closure $onSchemeDownload = null;
+    public ?Closure $onAuth = null;
+    public ?Closure $onCertificate = null;
+    public mixed $scrollTo = null;
 
-    public function __construct(?Closure $onMessage = null)
+    public function __construct(?Closure $onMessage = null, array $scripts = [])
     {
         $this->id = self::$nextId++;
         $this->onMessage = $onMessage;
         self::$pages[$this->id] = $this;
 
         Android::ffi()->myphp_create_web_view($this->id);
+        if ($scripts !== []) {
+            $this->setUserScripts($scripts);
+        }
     }
 
     public static function onWebMessage(int $pageId, string $message): void
@@ -97,24 +120,26 @@ final class Page implements Platform\Page
 
     public function capture(Closure $done): void
     {
-        $done(null);
+        $done(null, 'myphp: page capture is not supported on Android');
     }
 
     public function loadHTML(string $html, string $baseURL = ''): void
     {
         if (!$this->closed) {
+            $this->url = $baseURL !== '' ? $baseURL : 'about:blank';
             Android::ffi()->myphp_load_html($this->id, $html, $baseURL);
         }
     }
 
     public function url(): string
     {
-        return '';
+        return $this->url;
     }
 
     public function loadURL(string $url): void
     {
         if (!$this->closed) {
+            $this->url = $url;
             Android::ffi()->myphp_load_url($this->id, $url);
         }
     }
@@ -122,7 +147,7 @@ final class Page implements Platform\Page
     public function print($window): void {}
     public function printToPDF($window, float $width, float $height, bool $landscape, array $margins, bool $background, Closure $done): void
     {
-        $done(null);
+        $done(null, 'myphp: printToPDF is not supported on Android');
     }
 
     public function allowsPictureInPicture(): ?bool { return false; }
@@ -144,8 +169,7 @@ final class Page implements Platform\Page
         $this->evaluate($script);
     }
 
-    public function contextMenu(array $menu, array $event, \MyPHP\EventListen $listen): void {}
-    public function scrollTo(): mixed { return null; }
+    public function showContextMenu($menu, $event, Closure $listen): void {}
 
     public function close(): void
     {

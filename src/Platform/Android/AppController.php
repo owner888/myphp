@@ -16,12 +16,12 @@ final class AppController implements Platform\AppController
     public function unhide(): void {}
     public function isHidden(): bool { return false; }
     public function isActive(): bool { return true; }
-    public function setBadge(string $label): void { $this->badge = $label; }
-    public function badge(): string { return $this->badge; }
-    public function bounce(bool $critical): int { return 0; }
-    public function cancelBounce(int $id): void {}
-    public function setDockIcon(string $png): void {}
-    public function setDockMenu(?Menu $menu): void {}
+    public function setBadge(string $label): void { throw new Platform\Unsupported('Dock is not supported on Android'); }
+    public function badge(): string { throw new Platform\Unsupported('Dock is not supported on Android'); }
+    public function bounce(bool $critical): int { throw new Platform\Unsupported('Dock is not supported on Android'); }
+    public function cancelBounce(int $id): void { throw new Platform\Unsupported('Dock is not supported on Android'); }
+    public function setDockIcon(string $png): void { throw new Platform\Unsupported('Dock is not supported on Android'); }
+    public function setDockMenu(?Menu $menu): void { throw new Platform\Unsupported('Dock is not supported on Android'); }
     public function newDataStore(DataStoreOptions $opts): DataStore
     {
         throw new Platform\Unsupported('DataStore not implemented on Android yet');

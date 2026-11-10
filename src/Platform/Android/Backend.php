@@ -204,7 +204,7 @@ final class Backend implements Platform\Backend
 
     public function newPage(int $width, int $height, array $scripts, \Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
     {
-        return new Page($onMessage);
+        return new Page($onMessage, $scripts);
     }
 
     public function focusedWindow(): ?\MyPHP\Window

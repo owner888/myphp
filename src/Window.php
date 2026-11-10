@@ -196,28 +196,30 @@ final class Window
         }
         self::$open[$this->id] = $this;
         [$fullScreen, $maximized] = [$o->fullScreen, $o->maximized];
-        if ($this->flyout !== null) {
-            $this->placeFlyout();
-        } elseif ($saved !== null) { // where the state key left it, as long as it shows on a display; else at its size, as far as the display allows, centered (mygo's restoreWindowState)
-            $r = new Rectangle($saved->x, $saved->y, $saved->width, $saved->height);
-            $this->native->restoreFrame($r, WindowStates::onDisplay($r, array_map(fn(Display $d) => $d->workArea, Screen::displays())));
-            [$fullScreen, $maximized] = [$saved->fullScreen, $saved->maximized];
-        } else {
-            if ($o->x === 0 && $o->y === 0) {
-                $this->center();
+        if (!App::isIOS() && !App::isAndroid()) {
+            if ($this->flyout !== null) {
+                $this->placeFlyout();
+            } elseif ($saved !== null) { // where the state key left it, as long as it shows on a display; else at its size, as far as the display allows, centered (mygo's restoreWindowState)
+                $r = new Rectangle($saved->x, $saved->y, $saved->width, $saved->height);
+                $this->native->restoreFrame($r, WindowStates::onDisplay($r, array_map(fn(Display $d) => $d->workArea, Screen::displays())));
+                [$fullScreen, $maximized] = [$saved->fullScreen, $saved->maximized];
             } else {
-                $b = $this->bounds();
-                $this->setBounds(new Rectangle($o->x, $o->y, $b->width, $b->height));
+                if ($o->x === 0 && $o->y === 0) {
+                    $this->center();
+                } else {
+                    $b = $this->bounds();
+                    $this->setBounds(new Rectangle($o->x, $o->y, $b->width, $b->height));
+                }
+                if ($this->stateKey !== '') { // the bounds it asked for, which a window that starts maximized or full screen has not shown yet (mygo's initState)
+                    $b = $this->bounds();
+                    WindowStates::set($this->stateKey, new WindowState($b->x, $b->y, $b->width, $b->height, $maximized, $fullScreen));
+                }
             }
-            if ($this->stateKey !== '') { // the bounds it asked for, which a window that starts maximized or full screen has not shown yet (mygo's initState)
-                $b = $this->bounds();
-                WindowStates::set($this->stateKey, new WindowState($b->x, $b->y, $b->width, $b->height, $maximized, $fullScreen));
+            if ($fullScreen) {
+                $this->native->startFullScreen();
+            } elseif ($maximized) {
+                $this->native->startMaximized();
             }
-        }
-        if ($fullScreen) {
-            $this->native->startFullScreen();
-        } elseif ($maximized) {
-            $this->native->startMaximized();
         }
         $this->maximized = $this->isMaximized();
         if (!$o->hidden) {

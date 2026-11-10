@@ -427,7 +427,9 @@ final class Window implements Platform\Window
         Metal::setClearColor($this->view, App::theme()->background);
         $this->metal->render($this->view, function (DisplayList $list): void {
             $bounds = ObjC::msg('r:', $this->view, 'bounds');
-            ($this->frame)($list, (float)$bounds->w, (float)$bounds->h);
+            $this->width = (float)$bounds->w;
+            $this->height = (float)$bounds->h;
+            ($this->frame)($list, $this->width, $this->height);
         });
         $this->paintOver();
         $this->placeMaterials();
@@ -488,7 +490,21 @@ final class Window implements Platform\Window
     public function startMaximized(): void {}
     public function isLegacyFullScreen(): bool { return false; }
     public function hasPopover(): bool { return false; }
-    public function placeWebViews(): void {}
+    public function placeWebViews(): void
+    {
+        $views = $this->w->webViewList();
+        if ($views === [] || ($rt = $this->w->runtime) === null) {
+            return;
+        }
+        $places = [];
+        foreach ($rt->webPlaces as $p) {
+            $places[spl_object_id($p['view'])] = $p;
+        }
+        foreach ($views as $v) {
+            $p = $places[spl_object_id($v)] ?? null;
+            $v->place($p === null ? null : $rt->windowRect($p['frame']), $p === null ? null : $rt->windowRect($p['clip']), 0.0);
+        }
+    }
     public function placeVideos(): void {}
     public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
     {
@@ -638,8 +654,15 @@ final class Window implements Platform\Window
     public function setDropFormats(array $formats): void {}
     public function command(string $cmd): void {}
     public function passThrough(Closure $at): void {}
-    public function lastFrame(): array { return []; }
-    public function capture(): string { return ''; }
+    public function lastFrame(): array
+    {
+        return Backend::metal()->lastFrame($this->view);
+    }
+    public function capture(): string
+    {
+        [$frame, $w, $h] = $this->lastFrame();
+        return \MyPHP\Native\ImageIO::pngFromBGRA($frame, $w, $h);
+    }
     public function underFrame(): ?array { return null; }
     public function pageDrag(): void {}
     public function hasHiddenTitleBar(): bool { return true; }
@@ -657,18 +680,18 @@ final class Window implements Platform\Window
     public function focus(): void {}
     public function blur(): void {}
     public function isFocused(): bool { return true; }
-    public function minimize(): void {}
+    public function minimize(): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
     public function isMinimized(): bool { return false; }
-    public function maximize(): void {}
-    public function unmaximize(): void {}
+    public function maximize(): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
+    public function unmaximize(): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
     public function isMaximized(): bool { return true; }
-    public function restore(): void {}
-    public function setFullScreen(bool $on): void {}
+    public function restore(): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
+    public function setFullScreen(bool $on): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
     public function isFullScreen(): bool { return true; }
-    public function setLegacyFullScreen(bool $on): void {}
-    public function center(): void {}
-    public function setBounds(Rectangle $r): void {}
-    public function setContentBounds(Rectangle $r): void {}
+    public function setLegacyFullScreen(bool $on): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
+    public function center(): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
+    public function setBounds(Rectangle $r): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
+    public function setContentBounds(Rectangle $r): void { throw new Platform\Unsupported('window placement is not supported on iOS'); }
     public function magnify(float $by): void {}
     public function fitVideo(array $o): void {}
     public function setMinimumSize(int $width, int $height): void {}
@@ -700,7 +723,24 @@ final class Window implements Platform\Window
     public function placePopover(): void {}
     public function snapshot(float $x, float $y, int $w, int $h): Image
     {
-        throw new Platform\Unsupported('snapshot not implemented on iOS yet');
+        $scale = $this->scale;
+        [$frame, $fw, $fh] = Backend::metal()->lastFrame($this->view);
+        $out = str_repeat("\0", $w * $h * 4);
+        for ($row = 0; $row < $h; $row++) {
+            $py = (int)(($y + $row) * $scale);
+            if ($py < 0 || $py >= $fh) {
+                continue;
+            }
+            for ($col = 0; $col < $w; $col++) {
+                $px = (int)(($x + $col) * $scale);
+                if ($px < 0 || $px >= $fw) {
+                    continue;
+                }
+                $i = ($py * $fw + $px) * 4; $j = ($row * $w + $col) * 4;
+                $out[$j] = $frame[$i + 2]; $out[$j + 1] = $frame[$i + 1]; $out[$j + 2] = $frame[$i]; $out[$j + 3] = $frame[$i + 3]; // BGRA to RGBA
+            }
+        }
+        return Image::fromPixels($w, $h, $out);
     }
     public function framePending(): bool { return $this->asked; }
     public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void {}
