@@ -1982,7 +1982,10 @@ renames no directory beneath an open handle; a handle's file index must
 be the scan's lstat's inode (PHP gives Windows's), and its records parse
 in the pure `DirectoryChanges::parse()`, which the tests check on every
 system; `close()` waits for the canceled I/O, whose buffers are kept for
-good after five seconds. Stats are PHP's `lstat` with its stat cache
+good after five seconds. A directory written to is no notice: Windows
+tells a directory modified as an entry in it changes (its last write's
+time), which inotify and FSEvents do not, and the hints were a level up
+(`sub` for a file new in `sub/deep`); the entry's own record comes too. Stats are PHP's `lstat` with its stat cache
 cleared first (it keeps the last path's), and when one fails libc's
 `lstat` again for its errno (`__error`, `__errno_location`), which PHP
 doesn't give, so that not found and permission denied are told apart as
@@ -4472,6 +4475,12 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   as they were before a drag reordered them, the glass example's toolbar
   the checkboxes' state before their click; both take `$s` by reference
   now. The others read `$this`, objects, or values meant as they were.
+  Windows's cookie calls broke it again (`App::wait(fn() => $done || …)`,
+  each waiting out its 15 s; the test ran out of time and looked hung,
+  which several rounds of CI went after the message loop for):
+  `tests/arrow_capture_test.php` now reads every function's tokens and
+  fails on an `App::wait` arrow function reading a variable a closure of
+  the same function takes by reference.
 
 
 ## yt-dlp's order, YouTube's ads, secondary subtitles (v1.53)
@@ -7977,10 +7986,13 @@ sound (`Native\SoundDevice`) mixes from a 10 ms timer what the device takes.
 
 On Windows FFmpeg is the DLLs of a shared build (avcodec-61.dll…), loaded
 by LoadLibraryW's search (the app's directory, PATH) or from MYPHP_FFMPEG's
-directory, each looked for first as a data file, then kept loaded; the one
-FFI is of no library, as PHP on Windows looks a function up in every module
-loaded (there is no RTLD_GLOBAL), and the layouts are those of Linux (the
-same ABI: no `long` among them). CI takes FFmpeg 7.1's from a pinned
+directory, each looked for first as a data file, then kept loaded. An FFI's
+functions there are its library's alone (there is no RTLD_GLOBAL, and an FFI
+of no library found none: "Failed resolving C function" at the first call),
+so `Av::ffi()` is an `AvFunctions` on Windows: the types' FFI, its
+`new()`/`cast()`, and every function a pointer of a struct GetProcAddress
+filled from the DLLs, read through a pointer (`Com::typed`) and called by
+name. The layouts are those of Linux (the same ABI: no `long` among them). CI takes FFmpeg 7.1's from a pinned
 release. Video decodes in software. The sound goes through WASAPI
 (`Native\Wasapi`): a shared-mode stream of the endpoint (the default, or
 one of `audioOutputs()`' "wasapi/<endpoint id>"), 32-bit floats the mixer
@@ -8980,7 +8992,9 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   window as the window shows it, the calls made meanwhile waiting; its view
   fills the client area and follows it. The handlers WebView2 calls are COM
   objects of PHP's sharing one vtable, Invoke(result or sender, args)
-  dispatched by the handler's number; an HRESULT comes in a 64-bit
+  dispatched by the handler's number; their QueryInterface refuses IMarshal,
+  IAgileObject and INoMarshal (mygo's), any other interface answered by the
+  handler itself, and a result kept is held by AddRef, not asked for again; an HRESULT comes in a 64-bit
   register, its upper half undefined. The page's bridge posts to
   window.webkit.messageHandlers.myphp, as WebKit's: a script added before
   the page's hands its posts to chrome.webview, whose WebMessageReceived
