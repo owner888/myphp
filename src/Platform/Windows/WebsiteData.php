@@ -202,6 +202,7 @@ final class WebsiteData
     {
         $done = false; $result = null; $failed = null;
         $handler = WebView::handler(function (int $a, $b) use (&$done, &$result, &$failed, $what): void {
+            \MyPHP\Logger::debug(sprintf('%s: its handler called (0x%08X)', $what, $a & 0xFFFFFFFF), 'windows');
             if (WebView::hr($a) < 0) {
                 $failed = sprintf('%s failed (HRESULT 0x%08X)', $what, $a & 0xFFFFFFFF);
             } elseif ($b !== null && !FFI::isNull($b)) {
@@ -213,6 +214,7 @@ final class WebsiteData
         self::$waiting++;
         try {
             $hr = $start($handler);
+            \MyPHP\Logger::debug(sprintf('%s: called (0x%08X)', $what, $hr & 0xFFFFFFFF), 'windows');
             if ($hr < 0) {
                 throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
             }
