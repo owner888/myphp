@@ -71,6 +71,14 @@ final class Com
         return self::typed($f, $out, 'void *');
     }
 
+    /** Holds COM object $obj once more (AddRef), which Release lets go: a reference kept, not asked for (no QueryInterface, which a proxy calls across apartments). Returns $obj. */
+    public static function addRef(CData $obj): CData
+    {
+        $u = self::typed(self::f(), $obj, 'IUnknown *');
+        ($u->v->AddRef)($u);
+        return $obj;
+    }
+
     /** Releases COM object $obj, unless it is none. */
     public static function release(?CData $obj): void
     {
