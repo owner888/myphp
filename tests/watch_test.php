@@ -188,7 +188,7 @@ function watchActive(Service $s): int
     mkdir("$parent/real");
     symlink("$parent/real", "$parent/alias");
     [$s] = watchFixture(new Options(roots: ['project' => new Root("$parent/alias")]));
-    same("$parent/real", \Closure::bind(fn() => $this->opts->roots['project']->path, $s, Service::class)(), 'a root\'s symlinks resolved');
+    same(realpath("$parent/real"), \Closure::bind(fn() => $this->opts->roots['project']->path, $s, Service::class)(), 'a root\'s symlinks resolved');
     touch("$parent/real/config.json");
     $opts = new Options(roots: ['project' => new Root("$parent/real"), 'config' => new Root("$parent/real/config.json")]);
     $p = Watch::new($opts);
