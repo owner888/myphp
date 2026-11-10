@@ -1111,14 +1111,10 @@ final class WebView implements Platform\Page
         $this->run(fn() => ($this->controller->v->put_ZoomFactor)($this->controller, $f));
     }
 
+    /** The zoom set (mygo's Zoom), not the controller's. */
     public function zoom(): float
     {
-        if ($this->controller === null) {
-            return $this->zoomFactor;
-        }
-        $z = self::f()->new('double');
-        ($this->controller->v->get_ZoomFactor)($this->controller, FFI::addr($z));
-        return $z->cdata;
+        return $this->zoomFactor;
     }
 
     public function setUserAgent(string $ua): void
@@ -1202,8 +1198,7 @@ final class WebView implements Platform\Page
         }
         $p = self::f()->new('uint16_t *');
         ($this->view->v->get_Source)($this->view, FFI::addr($p));
-        $u = self::take($p);
-        return $u === 'about:blank' ? '' : self::appURL($u);
+        return self::appURL(self::take($p)); // about:blank for HTML the app loaded, an origin the app's own, as WebKit's (mygo's URL)
     }
 
     public function loadURL(string $url): void
