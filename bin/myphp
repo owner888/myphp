@@ -1488,9 +1488,12 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
         // The PHP building the app, as php/: its executable, its DLLs and its extensions; the launcher loads those it has loaded.
         $phpDir = dirname((string)realpath(PHP_BINARY));
         $extDir = Windows::extensionDir();
-        copyTree($phpDir, "$app/php", ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib'], false);
-        if (!is_dir("$app/php/ext") && is_dir($extDir)) {
-            copyTree($extDir, "$app/php/ext", []);
+        copyTree($phpDir, "$app/php", ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib', 'ext', basename($extDir)], false);
+        @mkdir("$app/php/ext", 0755, true); // of the extensions, those loaded alone (Windows::extensionFlags loads them)
+        foreach (glob("$extDir/php_*.dll") ?: [] as $dll) {
+            if (in_array(strtolower(substr(basename($dll, '.dll'), 4)), array_map(fn(string $e) => strtolower($e === 'Zend OPcache' ? 'opcache' : $e), get_loaded_extensions()), true)) {
+                copy($dll, "$app/php/ext/" . basename($dll));
+            }
         }
         $sources = appSources($dir, $c);
         if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MediaPlayer')) {

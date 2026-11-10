@@ -7,11 +7,12 @@ declare(strict_types=1);
 // php tests/run.php --each: each test in a process of its own, the failures gathered, one that crashes its process
 // among them; on GitHub Actions all of them in one annotation, as a step shows ten at most (CI's windows job).
 if (($argv[1] ?? '') === '--each') {
-    $timeout = 120; // seconds a test may take
+    $default = 120; // seconds a test may take, unless its header says "@timeout <seconds>" (a build, an install)
     $byTest = []; $checks = 0; $failed = 0;
     foreach (glob(__DIR__ . '/*_test.php') as $file) {
         $name = basename($file, '_test.php');
         echo "$name\n";
+        $timeout = preg_match('/@timeout (\d+)/', (string)file_get_contents($file, false, null, 0, 2048), $tm) === 1 ? (int)$tm[1] : $default;
         // Its output to files, which a process that hangs leaves readable (Windows selects no pipes): ended after TIMEOUT seconds.
         $logs = [tempnam(sys_get_temp_dir(), 'myphp-out'), tempnam(sys_get_temp_dir(), 'myphp-err')];
         $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __FILE__, $name], [0 => ['file', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null', 'r'], 1 => ['file', $logs[0], 'w'], 2 => ['file', $logs[1], 'w']], $pipes, null, getenv() + ['MYPHP_TEST_CHILD' => '1']);
