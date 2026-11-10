@@ -21,9 +21,13 @@ use MyPHP\Native\Build\Windows;
     }
     $mark = function (string $what): void { if (getenv('MYPHP_TEST_CHILD') !== false) { echo "  at: $what\n"; } }; // run.php --each: where a hang came
     $myphp = function (string ...$args): array {
-        $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', ...$args], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-        $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
-        return [proc_close($p), $out];
+        // Into a file, not pipes: adb's server, which myphp devices starts, inherits the handles and would hold a pipe open.
+        $log = (string)tempnam(sys_get_temp_dir(), 'myphp-out');
+        $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', ...$args], [0 => ['file', DEVNULL, 'r'], 1 => ['file', $log, 'w'], 2 => ['redirect', 1]], $pipes);
+        $code = proc_close($p);
+        $out = (string)file_get_contents($log);
+        @unlink($log);
+        return [$code, $out];
     };
     $mark('devices');
     [$code, $out] = $myphp('devices');
