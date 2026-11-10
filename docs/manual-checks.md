@@ -112,3 +112,18 @@ instead.
     dims when the window is inactive; the content's own backgrounds draw
     over it; resizing does not flash black. On Windows 10 the window is as
     without one. `blur()` hands the keyboard to the window below.
+21. [ ] **The installer** (`myphp build`, then the setup .exe): it installs
+    for the user without asking for administrator rights, in Chinese on a
+    Chinese Windows; the Start menu shortcut and, when ticked, the desktop
+    one open the app with its icon; Settings > Apps lists it with its
+    version and publisher and uninstalls it cleanly; installing over a
+    running app asks to close it first; a file of the app's type opens in
+    it from Explorer, a link of its URL scheme from the browser.
+22. [ ] **Signing** (windows.certificate with a real .pfx, or
+    signCommand): the launcher, the installer and Uninstall.exe show a
+    valid signature in their properties; SmartScreen names the publisher.
+23. [ ] **Updates** (updates in myphp.json, two versions published):
+    the older one finds the newer, downloads it (a delta when published),
+    installs it once it quits, relaunches after App::relaunch(), the
+    uninstaller still there; `irm <url>/install.ps1 | iex` installs the
+    latest on another PC, and again over a running one.

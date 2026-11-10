@@ -40,7 +40,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload, Windows};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -337,7 +337,9 @@ function nodeTypeScriptFlags(string $node): ?array
  * ({"keychainProfile": …, "keychain": …}); linux (mygo's): maintainer
  * (package.json's author, else the name), comment, categories, depends,
  * webview (a bool, else whether the app shows pages, Linux::usesPages) and
- * command (a name or a list of them, kept as a list).
+ * command (a name or a list of them, kept as a list); windows
+ * (mygo's, Native\Build\Windows::config): displayName, installDirName,
+ * publisher, certificate, signCommand, timestampUrl, installerInclude.
  *
  * @return array{dir: string, config: array}
  */
@@ -406,6 +408,7 @@ function project(array $args): array
         $bad($e->getMessage());
     }
     $c['linux'] = $l;
+    $c['windows'] = Windows::config($c['windows'] ?? null, $c['name'], packageAuthor($dir), $bad);
     $c['resources'] ??= [];
     is_array($c['resources']) && array_is_list($c['resources']) || $bad('resources is a list of files and directories');
     foreach ($c['urlSchemes'] ?? [] as $scheme) {
@@ -1043,12 +1046,20 @@ the app indicator when it has a tray icon, the PHP of the exec launcher
 (php<version>-cli and the extensions MyPHP uses) and linux.depends.
 
 For windows/amd64 and windows/arm64, built on Windows of that architecture,
-it makes <out>/windows-<arch>: the launcher, <name>.exe (compiled with
-MinGW's gcc or MSVC's cl, its icon the app's), the PHP building the app in
-php/ with the extensions it has loaded (and FFmpeg's DLLs when the app plays
-media), the app's PHP files and the framework's in app/, the frontend, the
-resources (resources/windows, resources/windows-<arch>) and the icon next to
-it; and the app as <slug>-<version>-windows-<arch>.zip.
+it makes <out>/windows-<arch>: the app's folder (windows.installDirName,
+the name by default) of the launcher, <name>.exe (compiled with MinGW's gcc
+or MSVC's cl, its icon the app's), the PHP building the app in php/ with the
+extensions it has loaded (and FFmpeg's DLLs when the app plays media), the
+app's PHP files and the framework's in app/, the frontend and the resources
+(resources/windows, resources/windows-<arch>); the installer,
+<slug>-setup-<version>-<arch>.exe, made with NSIS, which myphp build
+downloads on Windows when it is not installed (-skip-installer leaves it
+out): a per-user install in %LOCALAPPDATA%\Programs with Start menu and
+desktop shortcuts, the file associations and an uninstaller; the folder as
+<slug>-<version>-windows-<arch>.zip; with updates, install.ps1; and
+SHA256SUMS. windows.certificate (a .pfx, its password in
+MYPHP_WINDOWS_CERTIFICATE_PASSWORD) or windows.signCommand signs the
+launcher, the installer and its uninstaller.
 
 Set macos.signingIdentity in myphp.json (or -sign) to a Developer ID to ship
 outside the Mac App Store, and macos.notarize to notarize the disk image.
@@ -1066,6 +1077,7 @@ Flags:
   -skip-build-command   do not run buildCommand
   -skip-dmg             do not create a disk image
   -skip-notarize        do not notarize even when macos.notarize is set
+  -skip-installer       do not create the Windows installer (<slug>-setup-<version>-<arch>.exe), nor download NSIS for it
   -sign identity        signing identity (default: macos.signingIdentity, or "-" for ad hoc)
   -o dir                output directory (default: out from myphp.json, or dist)
   -upload               upload the disk images and updates to the GitHub release of this version (updates.github), as a draft, or to the bucket of updates.s3
@@ -1091,7 +1103,7 @@ function build(array $args): void
     $php = option($args, 'php');
     $sign = option($args, 'sign', '');
     $out = option($args, 'o', '');
-    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'launcher' => $launcher];
+    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer'), 'launcher' => $launcher];
     $skipBuildCommand = flag($args, 'skip-build-command');
     $upload = flag($args, 'upload');
     ['dir' => $dir, 'config' => $c] = project($args);
@@ -1435,11 +1447,15 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
 
 /**
  * Builds the app for windows/$arch into <out>/windows-$arch (Windows) and
- * returns the artifacts: the launcher, named after the app, compiled with
- * its icon; the PHP building the app in php/, its extensions loaded by the
- * launcher's flags, FFmpeg's DLLs beside it when the app plays media; app/,
- * frontend/, info.json and the resources next to it, in a staging directory
- * that replaces the platform directory; then a zip of it (Windows's tar).
+ * returns the artifacts. The app, as installed, is the folder of
+ * windows.installDirName: the launcher, named after the app, compiled with
+ * its icon and signed (WinSign); the PHP building the app in php/, its
+ * extensions loaded by the launcher's flags, FFmpeg's DLLs beside it when
+ * the app plays media; app/, frontend/, info.json and the resources. Next
+ * to it: with updates, its signed archive, delta updates and
+ * update-windows-<arch>.json (Publish::writeFlat) and install.ps1; the
+ * installer, unless -skip-installer (Nsis, signed with its uninstaller); a
+ * zip of the folder (Windows's tar); and SHA256SUMS of them.
  *
  * @return list<string>
  */
@@ -1450,52 +1466,58 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
     $stage = "$out/.staging-windows-$arch-" . getmypid();
     mkdir($stage, 0755);
     try {
+        $w = $c['windows'];
         $framework = frameworkOf($c);
         $slug = Slug::ofConfig($c);
-        $exe = preg_replace('/[<>:"\/\\|?*\x00-\x1f]/', '', orElse($c['name'], $slug)) . '.exe';
-        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'windows', $arch, natives($dir, $framework, $arch, 'windows'), [$exe, 'php', ...Linux::reserved($slug)]);
+        $exe = Windows::exeName($c);
+        $folder = $w['installDirName'];
+        $app = "$stage/$folder";
+        mkdir($app, 0755);
+        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'windows', $arch, natives($dir, $framework, $arch, 'windows'), [$exe, 'php', 'Uninstall.exe', ...Linux::reserved($slug)]);
         if (($other = Resources::otherArch($dir, 'windows', $arch)) !== '') {
             warnf('No ' . Resources::DIR . "/windows-$arch for windows/$arch, though there is " . Resources::DIR . "/$other");
         }
         logf("Making windows/$arch");
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
-        copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
-        copyTree("$framework/src", "$stage/app/myphp/src", []);
-        copyTree("$framework/plugins", "$stage/app/myphp/plugins", ['.DS_Store']);
+        copyTree($dir, "$app/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree("$framework/src", "$app/app/myphp/src", []);
+        copyTree("$framework/plugins", "$app/app/myphp/plugins", ['.DS_Store']);
         if (($c['frontendDist'] ?? '') !== '') {
-            copyTree(path($dir, $c['frontendDist']), "$stage/frontend", ['.DS_Store']);
+            copyTree(path($dir, $c['frontendDist']), "$app/frontend", ['.DS_Store']);
         }
         // The PHP building the app, as php/: its executable, its DLLs and its extensions; the launcher loads those it has loaded.
         $phpDir = dirname((string)realpath(PHP_BINARY));
         $extDir = Windows::extensionDir();
-        copyTree($phpDir, "$stage/php", ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib'], false);
-        if (!is_dir("$stage/php/ext") && is_dir($extDir)) {
-            copyTree($extDir, "$stage/php/ext", []);
+        copyTree($phpDir, "$app/php", ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib'], false);
+        if (!is_dir("$app/php/ext") && is_dir($extDir)) {
+            copyTree($extDir, "$app/php/ext", []);
         }
         $sources = appSources($dir, $c);
         if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MediaPlayer')) {
             $ffmpeg = windowsFfmpeg();
-            foreach ($ffmpeg as $dll) { copy($dll, "$stage/php/" . basename($dll)); }
+            foreach ($ffmpeg as $dll) { copy($dll, "$app/php/" . basename($dll)); }
             $ffmpeg !== [] || warnf('no FFmpeg 7 or 6 DLLs (avcodec-61.dll, avcodec-60.dll) on PATH: the app plays no media till they are next to php/php.exe');
         }
         // The launcher, its icon the app's when there is one (windres or rc compiles it in).
         $compiler = Windows::compiler();
         $tmp = (string)tempnam(sys_get_temp_dir(), 'myphp');
         $cFile = "$tmp.c";
-        file_put_contents($cFile, Windows::launcherSource([...PHP_FLAGS, ...Windows::extensionFlags("$stage/php/ext")], $c['entry']));
+        file_put_contents($cFile, Windows::launcherSource([...PHP_FLAGS, ...Windows::extensionFlags("$app/php/ext")], $c['entry']));
         $resFile = '';
         $png = null;
+        $ico = '';
         if (($c['icon'] ?? '') !== '') {
             $png = @file_get_contents(path($dir, $c['icon']));
             $png !== false || fail("icon {$c['icon']}: cannot read it");
-            file_put_contents("$stage/$slug.png", $png);
+            file_put_contents("$app/$slug.png", $png);
             try {
                 [$iw, $ih, $px] = MyPHP\Native\Build\Png::decode($png);
                 file_put_contents("$tmp.ico", Windows::ico(max($iw, $ih) > 256 ? Icns::resize($iw, $ih, $px, 256) : $png)); // an .ico's PNG is 256 pixels at most, as Explorer's largest
+                $ico = "$tmp.ico";
             } catch (RuntimeException $e) {
                 fail("icon {$c['icon']}: {$e->getMessage()}");
             }
-            file_put_contents("$tmp.rc", '1 ICON "' . str_replace('\\', '/', "$tmp.ico") . "\"\n");
+            file_put_contents("$tmp.rc", '1 ICON "' . str_replace('\\', '/', $ico) . "\"\n");
             if ($compiler[1] === 'gnu' && ($windres = Cmd::look('windres')) !== '') {
                 $resFile = "$tmp.o";
                 sh([$windres, "$tmp.rc", '-O', 'coff', '-o', $resFile]) === 0 || fail('compiling the icon failed');
@@ -1506,27 +1528,145 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
                 warnf('no resource compiler (windres, rc): the launcher shows no icon in Explorer, its windows the app\'s');
             }
         }
-        $code = sh(Windows::compileCommand($compiler, $cFile, "$stage/$exe", $resFile));
-        foreach ([$tmp, $cFile, "$tmp.ico", "$tmp.rc", "$tmp.o", "$tmp.res"] as $f) { @unlink($f); }
-        $code === 0 || fail('compiling the launcher failed');
-        $info = Linux::info($c, $exe, !$opts['debug']) + ($png !== null ? ['MyPHPIcon' => "$slug.png"] : []); // the windows' icon (Windows\Taskbar), php.exe's being PHP's
-        file_put_contents("$stage/" . Linux::INFO, json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
-        Resources::copy($res, $stage);
-        $installed = array_values(array_diff(scandir($stage) ?: [], ['.', '..']));
+        $artifacts = [];
+        try {
+            $code = sh(Windows::compileCommand($compiler, $cFile, "$app/$exe", $resFile));
+            $code === 0 || fail('compiling the launcher failed');
+            $info = Linux::info($c, $exe, !$opts['debug']) + ($png !== null ? ['MyPHPIcon' => "$slug.png"] : []) + updatePlist($dir, $c, "windows-$arch"); // the windows' icon (Windows\Taskbar), php.exe's being PHP's; the update feed
+            file_put_contents("$app/" . Linux::INFO, json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+            Resources::copy($res, $app);
+            $signs = WinSign::signs($w);
+            try {
+                if ($signs) {
+                    logf("Signing $exe");
+                    WinSign::sign($w, $dir, "$app/$exe");
+                    WinSign::signUnsigned($w, $dir, array_map(fn(array $r) => "$app/{$r['name']}", array_filter($res, fn(array $r) => !str_contains($r['name'], '/'))));
+                }
+            } catch (RuntimeException $e) {
+                fail($e->getMessage());
+            }
+            $installed = array_values(array_diff(scandir($app) ?: [], ['.', '..']));
+            // The update, of the app's folder as installed, before anything else is next to it.
+            if (isset($c['updates'])) {
+                $p = publisher($dir, $c);
+                try {
+                    array_push($artifacts, ...$p->writeFlat($app, $installed, $stage, "windows-$arch", fn(string $line) => logf($line)));
+                } catch (RuntimeException $e) {
+                    fail($e->getMessage());
+                }
+                file_put_contents("$stage/" . MyPHP\Native\Build\InstallPs1::NAME, MyPHP\Native\Build\InstallPs1::script($c, $p));
+                $artifacts[] = "$stage/" . MyPHP\Native\Build\InstallPs1::NAME;
+            }
+            if (!$opts['skipInstaller']) {
+                $setup = windowsInstaller($dir, $c, $stage, $folder, $installed, $exe, $arch, $ico);
+                if ($setup !== '') {
+                    $artifacts[] = $setup;
+                }
+            }
+        } finally {
+            foreach ([$tmp, $cFile, "$tmp.ico", "$tmp.rc", "$tmp.o", "$tmp.res"] as $f) { @unlink($f); }
+        }
         $zip = "$stage/$slug-{$c['version']}-windows-$arch.zip";
         $tar = rtrim((string)getenv('SystemRoot'), '\\') . '\\System32\\tar.exe'; // bsdtar, which zips (-a), not Git's GNU tar ahead of it on PATH
-        sh([$tar, '-a', '-c', '-f', $zip, '-C', $stage, ...$installed]) === 0 || fail('making the zip failed (Windows\'s tar)');
+        sh([$tar, '-a', '-c', '-f', $zip, '-C', $stage, $folder]) === 0 || fail('making the zip failed (Windows\'s tar)');
+        $artifacts[] = $zip;
         logf('Packaged ' . basename($zip));
-        if (isset($c['updates'])) {
-            warnf("Not writing an update for windows/$arch: Windows apps do not update themselves yet");
+        if (($sums = MyPHP\Native\Build\Checksums::write($stage, $artifacts)) !== '') {
+            $artifacts[] = $sums;
         }
         $final = "$out/windows-$arch";
         replacePath($stage, $final);
-        return ["$final/$exe", "$final/" . basename($zip)];
+        return ["$final/$folder/$exe", ...array_map(fn(string $a) => "$final/" . basename($a), $artifacts)];
     } finally {
         if (is_dir($stage)) {
             removeTree($stage);
         }
+    }
+}
+
+/**
+ * The installer of the app's folder $folder in $stage (Nsis), the launcher
+ * $exe among $installed, its icon $ico: "<slug>-setup-<version>-<arch>.exe"
+ * in $stage, signed with its uninstaller when the app signs; '' without NSIS
+ * (a warning), which is downloaded on Windows.
+ * @param list<string> $installed
+ */
+function windowsInstaller(string $dir, array $c, string $stage, string $folder, array $installed, string $exe, string $arch, string $ico): string
+{
+    $w = $c['windows'];
+    try {
+        $tool = MyPHP\Native\Build\Nsis::compiler(fn(string $l) => logf($l));
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
+    }
+    if ($tool === '') {
+        warnf('Skipping the Windows installer: install NSIS (makensis), or build with -skip-installer');
+        return '';
+    }
+    $out = "$stage/" . MyPHP\Native\Build\Nsis::installerName($c, $arch);
+    $signing = '';
+    $env = [];
+    if (WinSign::signs($w)) {
+        [$major, $minor] = MyPHP\Native\Build\Nsis::version($tool);
+        if ($major > 3 || $major === 3 && $minor >= 8) { // makensis signs the uninstaller it made with myphp sign-uninstaller, "= 0" failing the build when that fails
+            $signing = "!uninstfinalize '\"%MYPHP_SIGNER_PHP%\" -d ffi.enable=1 \"%MYPHP_SIGNER%\" sign-uninstaller \"%1\"' = 0\n";
+            $env = ['MYPHP_SIGNER_PHP' => PHP_BINARY, 'MYPHP_SIGNER' => __FILE__, WinSign::SETTINGS_ENV => json_encode(['root' => $dir, 'windows' => $w])];
+        } else {
+            warnf("Not signing Uninstall.exe: that needs NSIS 3.08 or later, not $tool");
+        }
+    }
+    $include = $w['installerInclude'] !== '' ? path($dir, $w['installerInclude']) : '';
+    try {
+        $script = MyPHP\Native\Build\Nsis::script($c, $out, "$stage/$folder", $installed, $exe, $ico, MyPHP\Native\Build\Nsis::languageMacros(windowsLanguages($dir, $c)), $signing, $include);
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
+    }
+    $nsi = "$stage/.installer.nsi";
+    MyPHP\Native\Build\Nsis::write($nsi, $script);
+    logf('Creating ' . basename($out));
+    $p = proc_open([$tool, '-V2', $nsi], [0 => ['file', Cmd::NULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, $env + getenv());
+    $log = (string)stream_get_contents($pipes[1]);
+    $code = proc_close($p);
+    @unlink($nsi);
+    $code === 0 || fail("makensis: exit status $code\n$log");
+    if (WinSign::signs($w)) {
+        try {
+            WinSign::sign($w, $dir, $out);
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        }
+    }
+    logf('Created ' . basename($out));
+    return $out;
+}
+
+/** The app's languages for the Windows installer: each catalog's tag and its myphp.desktopShortcut, the source's first. @return list<array{0: string, 1: string}> */
+function windowsLanguages(string $dir, array $c): array
+{
+    if (($i = i18nConfig($dir, $c)) === null) {
+        return [];
+    }
+    $langs = [];
+    $files = glob("{$i['path']}/*.json") ?: [];
+    sort($files, SORT_STRING);
+    foreach ($files as $f) {
+        $catalog = json_decode((string)file_get_contents($f), true);
+        $label = is_array($catalog) && is_string($catalog['myphp.desktopShortcut'] ?? null) ? $catalog['myphp.desktopShortcut'] : '';
+        $l = [basename($f, '.json'), $label];
+        $l[0] === $i['source'] ? array_unshift($langs, $l) : $langs[] = $l;
+    }
+    return $langs;
+}
+
+/** Signs the file makensis names, the uninstaller it made, for the build that runs makensis (MYPHP_SIGN_SETTINGS). */
+function signUninstaller(array $args): void
+{
+    $s = json_decode((string)getenv(MyPHP\Native\Build\WinSign::SETTINGS_ENV), true);
+    count($args) === 1 && is_array($s) && is_array($s['windows'] ?? null) || fail('sign-uninstaller is for makensis, which myphp build runs');
+    try {
+        WinSign::sign($s['windows'], (string)$s['root'], $args[0]);
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
     }
 }
 
@@ -3191,6 +3331,7 @@ function run(string $cmd, array $args): void
         'generate', 'gen' => generate($args),
         'i18n' => i18nCheck($args),
         'build' => build($args),
+        'sign-uninstaller' => signUninstaller($args),
         'run' => runCommand($args),
         'devices' => devices($args),
         'emulators' => emulators($args),

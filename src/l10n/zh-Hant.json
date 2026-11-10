@@ -1385,5 +1385,6 @@
   "iinaStoreUpdatedAgo": "Updated {ago}",
   "iinaStoreUpdatedOn": "Updated on {date}",
   "iinaPluginCheckForUpdates": "檢查更新",
-  "iinaMenuDeveloperTool": "開發者工具"
+  "iinaMenuDeveloperTool": "開發者工具",
+  "desktopShortcut": "建立桌面捷徑"
 }

@@ -364,5 +364,6 @@
   "iinaAlertAddWatchTitle": "視聴プロパティを追加",
   "iinaAlertAddWatchMessage": "有効なmpvのプロパティ名を入力してください。",
   "iinaMenuInspector": "インスペクタ",
-  "iinaMenuAudioDevice": "オーディオデバイス"
+  "iinaMenuAudioDevice": "オーディオデバイス",
+  "desktopShortcut": "デスクトップにショートカットを作成"
 }
