@@ -21,7 +21,10 @@ final class Upload
         'dmg' => 'application/x-apple-diskimage',
         'gz' => 'application/gzip',
         'json' => 'application/json',
-    ]; // mygo's .exe, .deb and install.sh come with the Linux and Windows builds
+        'exe' => 'application/vnd.microsoft.portable-executable',
+        'zip' => 'application/zip',
+        'ps1' => 'text/plain; charset=utf-8',
+    ]; // mygo's .deb and install.sh come with Linux's updates
 
     /** Checks, before a build, that --upload has somewhere to upload to. @param array<string, mixed> $c myphp.json */
     public static function check(array $c, string $configName): void
@@ -53,8 +56,9 @@ final class Upload
             $name = basename($a);
             if (str_starts_with($name, 'update-') && str_ends_with($name, '.json')) {
                 $manifests[] = $a;
-            } elseif (str_ends_with($name, '.dmg') || str_ends_with($name, '.tar.gz') || str_ends_with($name, '.delta')) {
-                $files[] = $a;
+            } elseif (str_ends_with($name, '.dmg') || str_ends_with($name, '.tar.gz') || str_ends_with($name, '.delta') || str_contains($name, '-setup-') && str_ends_with($name, '.exe')
+                || str_ends_with($name, '.zip') || $name === InstallPs1::NAME || $name === Checksums::NAME) {
+                $files[] = $a; // the Windows installers, the zips of the apps, install.ps1 and SHA256SUMS too
             }
         }
         if ($files === [] && $manifests === []) {
@@ -76,6 +80,13 @@ final class Upload
         if (isset($u['s3'])) {
             $bucket = S3::client($u['s3']);
             [$files, $manifests] = self::uploads($artifacts);
+            self::mergeChecksums($files, function (string $dir) use ($u): ?string {
+                try {
+                    return \MyPHP\Native\Update\Http::get(rtrim($u['url'], '/') . '/' . Checksums::NAME, 4 << 20);
+                } catch (RuntimeException) {
+                    return null; // none published yet
+                }
+            });
             foreach ([...$files, ...$manifests] as $f) {
                 $name = basename($f);
                 $bucket->put($bucket->key($name), $f, self::headers($name), $userAgent);
@@ -125,6 +136,10 @@ final class Upload
             }
             $log("Created the draft release $tag of $repo");
         }
+        self::mergeChecksums($files, function (string $dir) use ($gh, $tag, $repo): ?string {
+            [$code] = Cmd::output([$gh, 'release', 'download', $tag, '--repo', $repo, '--pattern', Checksums::NAME, '--dir', $dir, '--clobber']);
+            return $code === 0 ? (string)@file_get_contents("$dir/" . Checksums::NAME) : null;
+        });
         foreach ([$files, $manifests] as $batch) {
             if ($batch === []) {
                 continue;
@@ -138,11 +153,36 @@ final class Upload
         $log("Uploaded to the release $tag of $repo; publish it when every platform is there:\n  gh release edit $tag --repo $repo --draft=false$latest");
     }
 
+    /**
+     * Adds to the SHA256SUMS among $files the lines of the one published
+     * already, which $earlier fetches into a directory it is given (null
+     * for none): another architecture's build, uploaded to the same
+     * release, keeps its sums. @param list<string> $files @param Closure(string): ?string $earlier
+     */
+    private static function mergeChecksums(array $files, Closure $earlier): void
+    {
+        foreach ($files as $f) {
+            if (basename($f) !== Checksums::NAME) {
+                continue;
+            }
+            $dir = sys_get_temp_dir() . '/myphp-sums-' . bin2hex(random_bytes(4));
+            mkdir($dir, 0o700, true);
+            try {
+                $old = $earlier($dir);
+                if ($old !== null && $old !== '') {
+                    file_put_contents($f, Checksums::merge((string)file_get_contents($f), $old));
+                }
+            } finally {
+                \MyPHP\Update::removeAll($dir);
+            }
+        }
+    }
+
     /** The headers of an uploaded file: its type and, for the files whose names stay from version to version, that caches must check them again. @return array<string, string> */
     public static function headers(string $name): array
     {
         $h = ['Content-Type' => self::TYPES[pathinfo($name, PATHINFO_EXTENSION)] ?? 'application/octet-stream'];
-        if (str_starts_with($name, 'update-') && str_ends_with($name, '.json')) {
+        if (str_starts_with($name, 'update-') && str_ends_with($name, '.json') || $name === InstallPs1::NAME || $name === Checksums::NAME) {
             $h['Cache-Control'] = 'no-cache';
         }
         return $h;

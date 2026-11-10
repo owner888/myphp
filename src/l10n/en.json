@@ -5712,5 +5712,9 @@
   "iinaMenuDeveloperTool": "Developer Tool",
   "@iinaMenuDeveloperTool": {
     "description": "IINA's \"menu.developer_tool\" (Localizable.strings)."
+  },
+  "desktopShortcut": "Create a desktop shortcut",
+  "@desktopShortcut": {
+    "description": "The finish page of the Windows installer: whether it makes a desktop shortcut of the app (mygo's desktopShortcut)."
   }
 }

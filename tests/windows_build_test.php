@@ -41,10 +41,17 @@ use MyPHP\Native\Build\Windows;
     $arch = in_array(strtolower((string)getenv('PROCESSOR_ARCHITECTURE')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64';
     [$code, $out] = $myphp('build', '-platform', "windows/$arch", "$root\\w");
     same(0, $code, 'myphp build windows: ' . $out);
-    $dir = "$root\\w\\build\\windows-$arch";
+    $build = "$root\\w\\build\\windows-$arch";
+    $setup = "win-demo-setup-0.1.0-$arch.exe";
+    $listed = array_values(array_diff(scandir($build) ?: [], ['.', '..']));
+    sort($listed);
+    same(['SHA256SUMS', 'Win Demo', "win-demo-0.1.0-windows-$arch.zip", $setup], $listed, "the app's folder, the zip, the installer and their sums");
+    $dir = "$build\\Win Demo";
     $files = array_values(array_diff(scandir($dir) ?: [], ['.', '..']));
     sort($files);
-    same(['Win Demo.exe', 'app', 'icon.png', 'info.json', 'notes.txt', 'php', 'win-demo-0.1.0-windows-' . $arch . '.zip', 'win-demo.png'], $files, 'the launcher, the PHP, the app, info.json, the resources, the icon and the zip');
+    same(['Win Demo.exe', 'app', 'icon.png', 'info.json', 'notes.txt', 'php', 'win-demo.png'], $files, 'the launcher, the PHP, the app, info.json, the resources and the icon');
+    $sums = \MyPHP\Native\Build\Checksums::parse((string)file_get_contents("$build\\SHA256SUMS"));
+    same([hash_file('sha256', "$build\\$setup"), hash_file('sha256', "$build\\win-demo-0.1.0-windows-$arch.zip")], [$sums[$setup] ?? null, $sums["win-demo-0.1.0-windows-$arch.zip"] ?? null], 'SHA256SUMS');
     check(is_file("$dir\\php\\php.exe") && is_file("$dir\\app\\$entry") && is_file("$dir\\app\\myphp\\src\\App.php"), 'php.exe, the app and the framework');
     same(['Win Demo', 'Win Demo.exe'], [json_decode((string)file_get_contents("$dir\\info.json"), true)['CFBundleName'] ?? null, json_decode((string)file_get_contents("$dir\\info.json"), true)['CFBundleExecutable'] ?? null], 'info.json');
     $p = proc_open(["$dir\\Win Demo.exe", 'an argument'], [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w']], $pipes);
@@ -55,6 +62,23 @@ use MyPHP\Native\Build\Windows;
     proc_close($p);
     same(7, $code, "the launcher gives back the app's exit code");
     same(['app', true, '1', true, 'an argument'], json_decode((string)@file_get_contents("$dir\\ran.json"), true), 'the app run in app/, ffi on, its extensions loaded, its arguments passed on');
+    // The installer, silent, into a folder of the test's: the app's files, the uninstaller, the entry of Settings > Apps; the uninstaller, silent, removes them.
+    $into = "$root\\installed";
+    $run = function (array $cmd): int {
+        $p = proc_open($cmd, [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w']], $pipes);
+        $start = microtime(true);
+        while (($st = proc_get_status($p))['running'] && microtime(true) - $start < 120) { usleep(100000); }
+        if ($st['running']) { proc_terminate($p); }
+        proc_close($p);
+        return $st['running'] ? -1 : $st['exitcode'];
+    };
+    same(0, $run(["$build\\$setup", '/S', "/D=$into"]), 'the installer, silent');
+    check(is_file("$into\\Win Demo.exe") && is_file("$into\\php\\php.exe") && is_file("$into\\Uninstall.exe"), 'it installs the app and its uninstaller');
+    $key = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' . (json_decode((string)file_get_contents("$dir\\info.json"), true)['CFBundleIdentifier'] ?? '');
+    [, $reg] = \MyPHP\Native\Build\Cmd::output(['reg', 'query', $key, '/v', 'DisplayName']);
+    check(str_contains($reg, 'Win Demo'), 'its entry in Settings > Apps: ' . $reg);
+    $run(["$into\\Uninstall.exe", '/S', "_?=$into"]); // _?= runs it in place, waited for
+    check(!is_file("$into\\Win Demo.exe"), 'the uninstaller removes it');
     [$code, $out] = $myphp('build', '-platform', 'windows/' . ($arch === 'amd64' ? 'arm64' : 'amd64'), "$root\\w");
     check($code !== 0 && str_contains($out, 'is built on Windows of that architecture'), 'another architecture refused: ' . $out);
 })();

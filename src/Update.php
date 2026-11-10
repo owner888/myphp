@@ -77,7 +77,7 @@ final class Update
             if ($d !== null) {
                 try {
                     $this->applyDelta($d, $pub, $target, $work, $unpacked, $progress, $canceled);
-                    self::stageBundle($work, $unpacked, $target);
+                    self::stage($work, $unpacked, $target);
                     $staged = true;
                     return;
                 } catch (Native\Update\Canceled $e) {
@@ -95,7 +95,7 @@ final class Update
             $this->download((string)$m['url'], $size, (string)$m['signature'], $pub, $archive, $progress, $canceled);
             mkdir($unpacked, 0o755);
             Archive::extract($archive, $unpacked);
-            self::stageBundle($work, $unpacked, $target);
+            self::stage($work, $unpacked, $target);
             $staged = true;
         } finally {
             if (!$staged) { self::removeAll($work); } // a staged update's goes as the helper installs it
@@ -116,6 +116,10 @@ final class Update
         }
         $path = "$work/update.delta";
         $this->download($d['url'], $d['size'], $d['signature'], $pub, $path, $progress, $canceled);
+        if (self::flat()) { // the app's directory made anew, as its archive holds it
+            Delta::apply($path, $d['size'], $d['from'], $this->version, $target, $dir);
+            return;
+        }
         if (!@mkdir($dir, 0o755)) {
             throw new RuntimeException("cannot make $dir");
         }
@@ -136,8 +140,89 @@ final class Update
      */
     public static int $appPid = 0;
 
-    /** The update staged (stageBundle): the directory it was made in, and the pid of the helper that installs it. @var ?array{0: string, 1: int} */
+    /** The update staged (stageBundle, stageFlat): the directory it was made in, and the pid of the helper that installs it. @var ?array{0: string, 1: int} */
     private static ?array $staged = null;
+
+    /** Whether the app is a directory of files the update replaces one by one (Windows's), rather than a bundle. */
+    private static function flat(): bool
+    {
+        return PHP_OS_FAMILY === 'Windows';
+    }
+
+    private static function stage(string $work, string $dir, string $target): void
+    {
+        self::flat() ? self::stageFlat($work, $dir, $target) : self::stageBundle($work, $dir, $target);
+    }
+
+    /**
+     * Leaves the files in $dir to replace those of the app's directory
+     * $target once the app has exited (mygo's swapFiles, after the exit as
+     * Windows keeps a running program's files): a PowerShell helper,
+     * detached (Native\Detached), waits for the app's process and the
+     * others running from $target (the launcher), moves each file of the
+     * update in, the old one aside and back if one cannot be moved, keeps
+     * those the update does not hold (the uninstaller), removes $work and
+     * opens the app again when App::relaunch() asked (relaunchStaged).
+     */
+    private static function stageFlat(string $work, string $dir, string $target): void
+    {
+        if ((array_diff(scandir($dir) ?: [], ['.', '..'])) === []) {
+            throw new RuntimeException('the update is empty');
+        }
+        $exe = Native\Bundle::info('CFBundleExecutable') ?? throw new RuntimeException('the app names no executable (info.json)');
+        $script = sys_get_temp_dir() . '/myphp-update-' . bin2hex(random_bytes(6)) . '.ps1';
+        file_put_contents($script, self::SWAP_AFTER_EXIT);
+        $ps = rtrim((string)getenv('SystemRoot'), '\\/') . '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+        $args = [$ps, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $script, '-AppPid', (string)(self::$appPid ?: getmypid()),
+            '-Target', str_replace('/', '\\', $target), '-New', str_replace('/', '\\', $dir), '-Work', str_replace('/', '\\', $work), '-Exe', $exe, ...array_slice($_SERVER['argv'] ?? [], 1)];
+        $pid = Native\Detached::start($args);
+        if (self::$staged !== null) { // the update staged before gives way
+            Native\Detached::kill(self::$staged[1]);
+            self::removeAll(self::$staged[0]);
+        }
+        self::$staged = [$work, $pid];
+    }
+
+    /** The helper of stageFlat (mygo's swapFiles, run once the app exited); it removes its own script. */
+    private const SWAP_AFTER_EXIT = <<<'PS'
+        param([int]$AppPid, [string]$Target, [string]$New, [string]$Work, [string]$Exe)
+        $ErrorActionPreference = 'SilentlyContinue'
+        try { (Get-Process -Id $AppPid -ErrorAction Stop).WaitForExit() } catch {}
+        # The launcher, and whatever else runs from the app's folder, exits too.
+        $dir = $Target.TrimEnd('') + ''
+        for ($i = 0; $i -lt 300; $i++) {
+        	$left = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ProcessId -ne $PID -and $_.ExecutablePath.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) })
+        	if ($left.Count -eq 0) { break }
+        	Start-Sleep -Milliseconds 100
+        }
+        $suffix = '.old-' + $PID
+        $moved = New-Object System.Collections.ArrayList
+        $ok = $true
+        foreach ($e in @(Get-ChildItem -LiteralPath $New -Force)) {
+        	$dst = Join-Path $Target $e.Name
+        	if (Test-Path -LiteralPath $dst) {
+        		$aside = Join-Path $Target ('.' + $e.Name + $suffix)
+        		try { Move-Item -LiteralPath $dst -Destination $aside -ErrorAction Stop } catch { $ok = $false; break }
+        		[void]$moved.Add(@($dst, $aside))
+        	}
+        	try { Move-Item -LiteralPath $e.FullName -Destination $dst -ErrorAction Stop } catch { $ok = $false; break }
+        }
+        if ($ok) {
+        	foreach ($m in $moved) { Remove-Item -LiteralPath $m[1] -Recurse -Force }
+        } else {
+        	for ($i = $moved.Count - 1; $i -ge 0; $i--) {
+        		$m = $moved[$i]
+        		Remove-Item -LiteralPath $m[0] -Recurse -Force
+        		Move-Item -LiteralPath $m[1] -Destination $m[0]
+        	}
+        }
+        $relaunch = Test-Path -LiteralPath (Join-Path $Work 'relaunch')
+        Remove-Item -LiteralPath $Work -Recurse -Force
+        Remove-Item -LiteralPath $PSCommandPath -Force
+        if ($relaunch) {
+        	if ($args.Count -gt 0) { Start-Process -FilePath (Join-Path $Target $Exe) -ArgumentList $args } else { Start-Process -FilePath (Join-Path $Target $Exe) }
+        }
+        PS;
 
     /**
      * Leaves the bundle in $dir to replace the one at $target once the app

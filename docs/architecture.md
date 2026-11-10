@@ -9045,7 +9045,34 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   windows take its icon (info.json's MyPHPIcon); FFmpeg's DLLs go next to
   php.exe for an app that plays media. The zip is Windows's own tar's
   (bsdtar: Git's GNU tar, often ahead of it on PATH, makes no zip).
-  `windows_build_test` builds an app and runs its launcher.
+  `windows_build_test` builds an app, runs its launcher, installs it with
+  its installer and uninstalls it.
+- Shipping a Windows app (mygo's nsis.go, winsign.go, installps1.go,
+  checksums.go; myphp.json's windows, `Native\Build\Windows::config`): the
+  build lays the app out as its folder (windows.installDirName) with the
+  files next to it. The installer is NSIS's (`Nsis`), downloaded into
+  %LOCALAPPDATA%\myphp on Windows when none is installed, its SHA-256
+  checked (Windows's own curl and tar fetch and unpack it): a per-user
+  install in %LOCALAPPDATA%\Programs, the install folder kept in the
+  uninstall entry so that updates and install.ps1 find it, Start menu and
+  desktop shortcuts, the file associations and URL schemes in HKCU, the
+  app quit first (a PowerShell script written line by line: NSIS strings
+  hold 1024 characters), its script UTF-8 with a BOM (NSIS reads one
+  without in the code page). Signing (`WinSign`) is signtool's of a .pfx
+  or the app's own command; makensis signs the uninstaller it makes by
+  running `myphp sign-uninstaller` (!uninstfinalize, NSIS 3.08). With
+  updates, the archive holds the folder's files at its top
+  (`Publish::writeFlat`, deltas of the folder too); `Update` stages them
+  for a PowerShell helper started with CreateProcessW
+  (`Native\Detached`: proc_open's would hold PHP's exit) that waits for
+  the app and the launcher to exit, then moves each file in, the old one
+  aside and back on a failure, the uninstaller kept, and opens the app
+  again after App::relaunch. install.ps1 installs the latest installer
+  for the machine's architecture after checking it against SHA256SUMS,
+  which an upload merges with the one the release holds (another
+  architecture's build). `windows_package_test` checks the scripts, the
+  sums, the PE signature check and an update of a folder on every
+  system.
 - Secrets and the network (stage 5: mygo's secrets.go, network.go): a
   secret is a generic credential of the Credential Manager, as keytar keeps
   them (the target "service/account", the user name the account, persisting

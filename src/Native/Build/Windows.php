@@ -25,6 +25,47 @@ final class Windows
     public const ARCHES = ['amd64', 'arm64'];
 
     /**
+     * myphp.json's windows, checked, its defaults filled in (mygo's
+     * Windows): displayName, the name Windows shows the app by (its
+     * shortcuts, Settings > Apps, the installer), the name's by default;
+     * installDirName, its folder in %LOCALAPPDATA%\Programs, the name's by
+     * default; publisher, Settings > Apps's, package.json's author's by
+     * default; certificate, signCommand and timestampUrl (WinSign); and
+     * installerInclude, an NSIS script of the app's own (Nsis::hooks).
+     * $bad fails with a message.
+     * @param \Closure(string): never $bad
+     */
+    public static function config(mixed $w, string $name, string $author, \Closure $bad): array
+    {
+        $w ??= [];
+        is_array($w) && ($w === [] || !array_is_list($w)) || $bad('windows is an object');
+        foreach (['displayName', 'installDirName', 'publisher', 'certificate', 'signCommand', 'timestampUrl', 'installerInclude'] as $k) {
+            $w[$k] ??= '';
+            is_string($w[$k]) || $bad("windows.$k is a string");
+        }
+        $w['displayName'] = $w['displayName'] !== '' ? $w['displayName'] : $name;
+        $w['installDirName'] = $w['installDirName'] !== '' ? $w['installDirName'] : $name;
+        preg_match('/[<>:"\/\\|?*\x00-\x1f]/', $w['installDirName']) === 0 && !in_array(rtrim($w['installDirName'], '. '), ['', '.', '..'], true) || $bad('windows.installDirName ' . json_encode($w['installDirName']) . ' is not a folder name');
+        $w['publisher'] = $w['publisher'] !== '' ? $w['publisher'] : trim(explode('<', $author)[0]);
+        $w['certificate'] === '' || $w['signCommand'] === '' || $bad('windows has certificate or signCommand, not both');
+        return $w;
+    }
+
+    /** The launcher's file name: the app's name, its characters a file name cannot hold left out, ".exe". */
+    public static function exeName(array $c): string
+    {
+        $base = trim((string)preg_replace('/[<>:"\/\\|?*\x00-\x1f]/', '', $c['name']), '. ');
+        return ($base !== '' ? $base : Slug::ofConfig($c)) . '.exe';
+    }
+
+    /** The name of the app's shortcuts: windows.displayName, its characters a file name cannot hold left out (the launcher's name where none is left). */
+    public static function shortcutName(array $c): string
+    {
+        $name = trim((string)preg_replace('/[<>:"\/\\|?*\x00-\x1f]/', '', $c['windows']['displayName']), '. ');
+        return $name !== '' ? $name : pathinfo(self::exeName($c), PATHINFO_FILENAME);
+    }
+
+    /**
      * The flags of php.exe that load $php's extensions, as it has them
      * loaded now, from the bundle's php\ext: each one whose DLL is in its
      * extension directory (php_<name>.dll), OPcache as a Zend extension.

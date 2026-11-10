@@ -82,6 +82,18 @@ final class Publish
         $this->tagPrefix = $prefix === '' ? 'v' : $prefix;
     }
 
+    /** updates.github, "owner/name", '' for updates.url. */
+    public function github(): string
+    {
+        return $this->github;
+    }
+
+    /** The prefix of the releases' tags, "v" by default. */
+    public function tagPrefix(): string
+    {
+        return $this->tagPrefix;
+    }
+
     private function version(): string
     {
         return (string)($this->config['version'] ?? '0.1.0');
@@ -159,7 +171,7 @@ final class Publish
     }
 
     /**
-     * With the signing key, writes next to the app $entry for $target in $out its
+     * With the signing key, writes next to the app $entry (a bundle) for $target in $out its
      * signed archive, delta updates from the versions before, and the
      * manifest, and returns the files written; none without the key, which
      * $log says (mygo's writeArchive).
@@ -168,6 +180,26 @@ final class Publish
      * @return list<string>
      */
     public function write(string $out, string $entry, string $target, Closure $log): array
+    {
+        return $this->writeArchive($out, [$entry], "$out/$entry", $out, $target, false, $log);
+    }
+
+    /**
+     * As write(), for an app that is a directory of $entries in $root rather
+     * than one bundle (Windows's, Linux's): the archive holds them at its
+     * top, a delta update makes $root anew, and the files go in $out.
+     *
+     * @param list<string> $entries
+     * @param Closure(string): void $log
+     * @return list<string>
+     */
+    public function writeFlat(string $root, array $entries, string $out, string $target, Closure $log): array
+    {
+        return $this->writeArchive($root, $entries, $root, $out, $target, true, $log);
+    }
+
+    /** @param list<string> $entries @param Closure(string): void $log @return list<string> */
+    private function writeArchive(string $root, array $entries, string $app, string $out, string $target, bool $flat, Closure $log): array
     {
         $key = $this->signingKey();
         if ($key === null) {
@@ -178,7 +210,7 @@ final class Publish
         $slug = \MyPHP\Native\Build\Slug::ofConfig($this->config);
         $version = $this->version();
         $name = "$slug-$version-$target.tar.gz";
-        $sum = Archive::write("$out/$name", $out, [$entry]);
+        $sum = Archive::write("$out/$name", $root, $entries);
         $m = ['version' => $version] + ($notes !== '' ? ['notes' => $notes] : []) + [
             'date' => gmdate('Y-m-d\TH:i:s\Z'),
             'url' => $this->file($name, false),
@@ -187,7 +219,7 @@ final class Publish
         ];
         $files = ["$out/$name"];
         if ($this->deltas > 0) {
-            array_push($files, ...$this->writeDeltas($key, $out, $entry, $target, $slug, $m, $log));
+            array_push($files, ...$this->writeDeltas($key, $out, $app, $flat ? $entries : null, $target, $slug, $m, $log));
         }
         $manifest = "$out/" . Format::manifestName($target);
         file_put_contents($manifest, json_encode($m, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
@@ -206,7 +238,8 @@ final class Publish
      * @param Closure(string): void $log
      * @return list<string>
      */
-    private function writeDeltas(string $key, string $out, string $entry, string $target, string $slug, array &$m, Closure $log): array
+    /** @param ?list<string> $flat the entries of an app that is a directory of them (writeFlat), null for a bundle */
+    private function writeDeltas(string $key, string $out, string $app, ?array $flat, string $target, string $slug, array &$m, Closure $log): array
     {
         Http::$userAgent = 'myphp/' . App::VERSION;
         $token = getenv('GH_TOKEN');
@@ -252,12 +285,17 @@ final class Publish
                 }
                 mkdir("$work/app");
                 Archive::extract("$work/archive.tar.gz", "$work/app");
-                $apps = array_values(array_diff(scandir("$work/app") ?: [], ['.', '..']));
-                if (count($apps) !== 1 || !str_ends_with($apps[0], '.app')) {
-                    throw new RuntimeException('its archive holds no app bundle');
+                $old = "$work/app";
+                if ($flat === null) {
+                    $apps = array_values(array_diff(scandir("$work/app") ?: [], ['.', '..']));
+                    if (count($apps) !== 1 || !str_ends_with($apps[0], '.app')) {
+                        throw new RuntimeException('its archive holds no app bundle');
+                    }
+                    $old = "$work/app/{$apps[0]}";
                 }
                 $t = microtime(true);
-                $dsum = Delta::write("$out/$name", $base['version'], $version, "$work/app/{$apps[0]}", "$out/$entry", null);
+                if ($flat !== null) { sort($flat, SORT_STRING); }
+                $dsum = Delta::write("$out/$name", $base['version'], $version, $old, $app, $flat);
                 $size = (int)filesize("$out/$name");
                 if ($size >= $m['size']) {
                     unlink("$out/$name");
