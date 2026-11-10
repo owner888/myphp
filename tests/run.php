@@ -44,7 +44,7 @@ if (($argv[1] ?? '') === '--each') {
         $lines = [];
         foreach ($byTest as $t => $f) {
             $lines[] = sprintf('%s: %d failed', $t, count($f));
-            foreach (array_slice($f, 0, 2) as $one) { $lines[] = '  - ' . mb_strcut(str_replace(["\r", "\n"], ' ', $one), 0, 200); }
+            foreach (array_slice($f, 0, 6) as $one) { $lines[] = '  - ' . mb_strcut(str_replace(["\r", "\n"], ' ', $one), 0, 600); } // enough of each to tell why
         }
         // An annotation holds 4 KB or so, a step ten: the lines in chunks of that.
         $chunks = [''];
