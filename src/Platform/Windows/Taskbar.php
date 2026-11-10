@@ -120,9 +120,19 @@ final class Taskbar
         $u->SendMessageW($hwnd, self::WM_SETICON, 1, $icon); // ICON_BIG
     }
 
-    /** Whether the app's icon was set. */
+    private static bool $bundleIcon = false;
+
+    /** Whether the app has an icon: set, or a built app's (MyPHPIcon of info.json, its PNG next to the launcher, as php.exe's windows would show PHP's otherwise), loaded once. */
     public static function hasAppIcon(): bool
     {
+        if (self::$icon === null && !self::$bundleIcon) {
+            self::$bundleIcon = true;
+            $dir = \MyPHP\Native\Bundle::path();
+            $name = $dir === null ? null : \MyPHP\Native\Bundle::info('MyPHPIcon');
+            if ($name !== null && ($png = @file_get_contents("$dir/$name")) !== false) {
+                self::setAppIcon($png);
+            }
+        }
         return self::$icon !== null;
     }
 }

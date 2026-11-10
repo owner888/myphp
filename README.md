@@ -266,7 +266,7 @@ myphp init my-app                  # a native-UI project (-template web for a pa
 myphp doctor                       # the toolchain: PHP, the NDK, Xcode, adb, the phone runtimes
 myphp devices                      # phones over adb, and the simulators
 myphp emulators --launch <id>      # starts an Android emulator or the iOS Simulator (--create makes one)
-myphp run -d macos|linux|android|ios   # packages, installs, starts, follows the log (the first run builds a phone's PHP runtime)
+myphp run -d macos|linux|windows|android|ios   # packages, installs, starts, follows the log (the first run builds a phone's PHP runtime); on Windows bin\myphp.cmd is the command
 myphp dev                          # the desktop app in development: restarts on changes, regenerates the TS client
 myphp build                        # build/darwin-arm64/my-app.app and its .dmg; -platform linux/amd64 the Linux packages, android/arm64 the APK, ios/arm64 the .ipa
 myphp build -launcher micro        # one static binary: fetches static-php-cli and builds phpmicro the first time
@@ -641,7 +641,7 @@ myphp init my-app                  # 原生 UI 项目（-template web 是调用 
 myphp doctor                       # 检查工具链：PHP、NDK、Xcode、adb、手机运行时
 myphp devices                      # adb 连着的手机和模拟器
 myphp emulators --launch <id>      # 启动 Android 模拟器或 iOS 模拟器（--create 新建一个）
-myphp run -d macos|linux|android|ios   # 打包、安装、启动、跟日志（手机第一次运行会先编它的 PHP 运行时）
+myphp run -d macos|linux|windows|android|ios   # 打包、安装、启动、跟日志（手机第一次运行会先编它的 PHP 运行时）；Windows 上命令是 bin\myphp.cmd
 myphp dev                          # 桌面开发模式：文件改动自动重启，重新生成 TS client
 myphp build                        # build/darwin-arm64/my-app.app 和 .dmg；-platform linux/amd64 出 Linux 包，android/arm64 出 APK，ios/arm64 出 .ipa
 myphp build -launcher micro        # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro

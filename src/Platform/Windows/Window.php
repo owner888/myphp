@@ -41,7 +41,9 @@ final class Window implements Platform\Window
 {
     private const WS_OVERLAPPEDWINDOW = 0x00CF0000, WS_POPUP = 0x80000000, WS_CLIPCHILDREN = 0x02000000;
     private const WS_THICKFRAME = 0x00040000, WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000, WS_CAPTION = 0x00C00000, WS_SYSMENU = 0x00080000;
-    private const WS_EX_TOPMOST = 0x8, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80, WS_EX_LAYERED = 0x80000;
+    private const WS_EX_TOPMOST = 0x8, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80, WS_EX_LAYERED = 0x80000, WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
+    /** DWMWA_SYSTEMBACKDROP_TYPE, and the backdrops: none, Mica, Acrylic, Mica Alt (DWM_SYSTEMBACKDROP_TYPE). */
+    private const DWMWA_SYSTEMBACKDROP_TYPE = 38, BACKDROP_NONE = 1, BACKDROP_MICA = 2, BACKDROP_ACRYLIC = 3, BACKDROP_MICA_ALT = 4;
     private const GWL_STYLE = -16, GWL_EXSTYLE = -20;
     private const SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_FRAMECHANGED = 0x20;
     private const SW_HIDE = 0, SW_MAXIMIZE = 3, SW_SHOW = 5, SW_MINIMIZE = 6, SW_SHOWNA = 8, SW_RESTORE = 9;
@@ -60,6 +62,9 @@ final class Window implements Platform\Window
     private ?\Closure $frame = null;
     private ?\Closure $afterPresent = null;
     private bool $transparent = false;
+    /** The material behind the content (WindowOptions::$vibrancy), '' for none; whether the window has no redirection bitmap, which a material behind the content needs, made so as it was made with one on a Windows that draws backdrops. */
+    private string $vibrancy = '';
+    private bool $noRedirect = false;
     /** Native UI's renderer, made with its surface. */
     private ?D3d $d3d = null;
     /** Whether a frame was asked for and not drawn yet; whether every ask since the last frame only paints again; whether the frame drawing now was such; whether one is drawing; whether the frame drawing asked for another. */
@@ -107,12 +112,15 @@ final class Window implements Platform\Window
         $style = $o->frameless || $flyout ? self::WS_POPUP : self::WS_OVERLAPPEDWINDOW;
         if ($o->disableResize) { $style &= ~(self::WS_THICKFRAME | self::WS_MAXIMIZEBOX); }
         $ex = ($panel || $flyout ? self::WS_EX_TOOLWINDOW : 0) | ($o->alwaysOnTop ? self::WS_EX_TOPMOST : 0);
+        $this->noRedirect = $o->vibrancy !== '' && MenuDraw::build() >= 22621; // Windows 11 22H2's system backdrops (mygo's systemBackdrops)
+        if ($this->noRedirect) { $ex |= self::WS_EX_NOREDIRECTIONBITMAP; }
         $parent = $w->parent()?->native();
         $this->hwnd = Win32::createWindow('MyPHPWindow', $o->title, $style | self::WS_CLIPCHILDREN, $ex, fn(int $m, int $wp, int $lp): ?int => $this->message($m, $wp, $lp),
             -0x80000000, -0x80000000, 100, 100, $parent instanceof self ? $parent->hwnd : null); // CW_USEDEFAULT: where Windows puts a new window
         self::$open[Mem::addr($this->hwnd)] = $this;
         if (Taskbar::hasAppIcon()) { Taskbar::applyIcon($this->hwnd); }
         DragDrop::register($this); // drops on the content; OLE enumerates what a drag offers, so setDropFormats has nothing to set
+        if ($o->vibrancy !== '') { $this->setVibrancy($o->vibrancy); }
         $this->topmost = $o->alwaysOnTop;
         if ($this->hasAppMenu() && $b->menus()->appMenu !== null) { $this->installMenu($b->menus()->appMenu); } // before its size, which counts the bar
         $this->sizeContent(max(1, $o->width), max(1, $o->height));
@@ -686,7 +694,7 @@ final class Window implements Platform\Window
     /** What native UI clears to: transparent, the background set, or the theme's. @return array{0: float, 1: float, 2: float, 3: float} */
     private function clearColor(): array
     {
-        if ($this->transparent) {
+        if ($this->transparent || $this->hasVibrancy()) {
             return [0.0, 0.0, 0.0, 0.0];
         }
         if ($this->background !== null) {
@@ -780,6 +788,7 @@ final class Window implements Platform\Window
         }
         $this->page = $page;
         $page->attach($this);
+        if ($this->hasVibrancy()) { $page->background([0, 0, 0, 0]); } // the material through the page
     }
 
     /** Native UI's surface: a renderer of Direct3D 11 drawing into the window, the text system's atlases its, the first frame asked for. */
@@ -793,7 +802,7 @@ final class Window implements Platform\Window
         $this->d3d->attachAtlas($text->atlas, $text->scale());
         $this->d3d->attachImages($text->images);
         [$pw, $ph] = $this->clientPixels();
-        $this->d3d->attach($this->hwnd, $pw, $ph);
+        $this->d3d->attach($this->hwnd, $pw, $ph, $this->noRedirect);
         $this->requestFrame();
     }
 
@@ -941,9 +950,10 @@ final class Window implements Platform\Window
         $this->requestFrame();
     }
 
+    /** Whether the material shows behind the content: it has one, and no redirection bitmap covers it (mygo's ShowsMaterial). */
     public function hasVibrancy(): bool
     {
-        return false;
+        return $this->noRedirect && $this->vibrancy !== '';
     }
 
     public function hasSystemMaterials(): bool
@@ -1177,7 +1187,35 @@ final class Window implements Platform\Window
         $u->SetCursor($cursor === Cursor::None ? null : $u->LoadCursorW(null, self::CURSORS[$cursor->value] ?? 32512));
     }
 
-    public function setVibrancy(string $material): void {}
+    /**
+     * Windows 11's backdrop of $material behind the window (mygo's
+     * SetVibrancy, backdropFor): Mica for a window's, Mica Alt for "tabbed",
+     * Acrylic for a popover's, a menu's and the rest; the frame extended
+     * over the whole client area, where it shows. It shows behind the
+     * content only in a window made with a material (no redirection bitmap,
+     * its frames composed: D3d::attach), elsewhere in the title bar alone; a
+     * page shows it through a transparent background.
+     */
+    public function setVibrancy(string $material): void
+    {
+        $this->vibrancy = $material;
+        $backdrop = match ($material) {
+            '' => self::BACKDROP_NONE,
+            'tabbed' => self::BACKDROP_MICA_ALT,
+            'acrylic', 'menu', 'popover', 'hud', 'sheet', 'tooltip', 'selection', 'fullscreen-ui', 'glass', 'glass-clear' => self::BACKDROP_ACRYLIC,
+            default => self::BACKDROP_MICA,
+        };
+        $d = Win32::dwmapi();
+        $m = FFI::cdef('typedef struct { int32_t left, right, top, bottom; } MARGINS; int32_t DwmExtendFrameIntoClientArea(void *hwnd, const MARGINS *m);', 'dwmapi.dll');
+        $margins = $m->new('MARGINS');
+        if ($material !== '') { [$margins->left, $margins->right, $margins->top, $margins->bottom] = [-1, -1, -1, -1]; } // a sheet of glass over the whole window
+        $m->DwmExtendFrameIntoClientArea($this->hwnd, FFI::addr($margins));
+        $type = Win32::user32()->new('int32_t');
+        $type->cdata = $backdrop;
+        $d->DwmSetWindowAttribute($this->hwnd, self::DWMWA_SYSTEMBACKDROP_TYPE, FFI::addr($type), 4);
+        $this->page?->background(array_map(fn(float $c): int => (int)round($c * 255), $this->clearColor())); // transparent over a material
+        $this->requestFrame();
+    }
 
     public function showing(): bool
     {
@@ -1196,7 +1234,12 @@ final class Window implements Platform\Window
         $u->SetForegroundWindow($this->hwnd);
     }
 
-    public function blur(): void {}
+    /** Gives the foreground to the window below this one, as mygo's Blur. */
+    public function blur(): void
+    {
+        $next = FFI::cdef('void *GetWindow(void *hwnd, uint32_t cmd);', 'user32.dll')->GetWindow($this->hwnd, 2); // GW_HWNDNEXT
+        if ($next !== null) { Win32::user32()->SetForegroundWindow($next); }
+    }
 
     public function isFocused(): bool
     {

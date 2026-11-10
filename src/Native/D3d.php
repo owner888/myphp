@@ -189,6 +189,8 @@ final class D3d
             typedef struct { IDXGIObjectVtbl *v; } IDXGIObject;
             typedef struct { void *r0[15];
                 int32_t (*CreateSwapChainForHwnd)(void *self, void *device, void *hwnd, const DXGI_SWAP_CHAIN_DESC1 *desc, const void *fullscreen, void *output, void **out);
+                void *r16[8];
+                int32_t (*CreateSwapChainForComposition)(void *self, void *device, const DXGI_SWAP_CHAIN_DESC1 *desc, void *output, void **out);
             } IDXGIFactory2Vtbl;
             typedef struct { IDXGIFactory2Vtbl *v; } IDXGIFactory2;
             typedef struct { void *r0[8];
@@ -354,8 +356,15 @@ final class D3d
         return $this->lists[($this->frame + 1) % 2];
     }
 
-    /** Draws into window $hwnd from now: a flip-model swap chain of two BGRA buffers, which draw() resizes to the frame's size. */
-    public function attach(CData $hwnd, int $pw, int $ph): void
+    /**
+     * Draws into window $hwnd from now: a flip-model swap chain of two BGRA
+     * buffers, which draw() resizes to the frame's size. $composed, for a
+     * window without a redirection bitmap (a material behind its content):
+     * a swap chain of premultiplied alpha shown through DirectComposition, a
+     * visual of it the root of the window's target, its transparent pixels
+     * the material's (mygo's compositor.go).
+     */
+    public function attach(CData $hwnd, int $pw, int $ph, bool $composed = false): void
     {
         $f = self::$f;
         $d = self::$device;
@@ -382,12 +391,56 @@ final class D3d
         $desc->SwapEffect = 4;
         $fac = Com::typed(self::$f, $factory, 'IDXGIFactory2 *');
         $chain = $f->new('void *');
-        $hr = ($fac->v->CreateSwapChainForHwnd)($fac, $d, $hwnd, FFI::addr($desc), null, null, FFI::addr($chain));
-        Com::release($factory);
-        self::hr($hr, 'IDXGIFactory2::CreateSwapChainForHwnd');
+        if ($composed) {
+            $desc->AlphaMode = 1; // DXGI_ALPHA_MODE_PREMULTIPLIED: what the renderer draws
+            $hr = ($fac->v->CreateSwapChainForComposition)($fac, $d, FFI::addr($desc), null, FFI::addr($chain));
+            Com::release($factory);
+            self::hr($hr, 'IDXGIFactory2::CreateSwapChainForComposition');
+            $this->compose($hwnd, $chain);
+        } else {
+            $hr = ($fac->v->CreateSwapChainForHwnd)($fac, $d, $hwnd, FFI::addr($desc), null, null, FFI::addr($chain));
+            Com::release($factory);
+            self::hr($hr, 'IDXGIFactory2::CreateSwapChainForHwnd');
+        }
         $this->swapChain = Com::typed(self::$f, $chain, 'IDXGISwapChain *');
         $this->size = [max(1, $pw), max(1, $ph)];
         [$this->backTexture, $this->backBuffer] = $this->backBufferView();
+    }
+
+    /** DirectComposition's device, the window's target and the visual of the swap chain, held while it draws. @var list<CData> */
+    private array $composition = [];
+
+    /** Shows swap chain $chain in window $hwnd through DirectComposition: a device of the renderer's, a target of the window (under its child windows: the web views), a visual of the chain its root. */
+    private function compose(CData $hwnd, CData $chain): void
+    {
+        $c = FFI::cdef(<<<'C'
+            typedef struct { void *r0[3]; int32_t (*Commit)(void *self); void *r4[2]; int32_t (*CreateTargetForHwnd)(void *self, void *hwnd, int32_t topmost, void **target); int32_t (*CreateVisual)(void *self, void **visual); } IDCompositionDeviceVtbl;
+            typedef struct { IDCompositionDeviceVtbl *v; } IDCompositionDevice;
+            typedef struct { void *r0[3]; int32_t (*SetRoot)(void *self, void *visual); } IDCompositionTargetVtbl;
+            typedef struct { IDCompositionTargetVtbl *v; } IDCompositionTarget;
+            typedef struct { void *r0[15]; int32_t (*SetContent)(void *self, void *content); } IDCompositionVisualVtbl;
+            typedef struct { IDCompositionVisualVtbl *v; } IDCompositionVisual;
+            int32_t DCompositionCreateDevice(void *dxgi, const void *iid, void **out);
+            C, 'dcomp.dll');
+        $dxgi = Com::query(self::$device, self::IID_DXGIDEVICE) ?? throw new RuntimeException('myphp: Direct3D 11: the device is no IDXGIDevice');
+        $out = $c->new('void *');
+        $iid = Com::guid('c37ea93a-e7aa-450d-b16f-9746cb0407f3'); // IDCompositionDevice
+        $hr = $c->DCompositionCreateDevice($dxgi, FFI::addr($iid), FFI::addr($out));
+        Com::release($dxgi);
+        self::hr($hr, 'DCompositionCreateDevice');
+        $dev = Com::typed($c, $out, 'IDCompositionDevice *');
+        $this->composition[] = Com::typed($c, $out, 'void *');
+        $target = $c->new('void *');
+        self::hr(($dev->v->CreateTargetForHwnd)($dev, $hwnd, 0, FFI::addr($target)), 'IDCompositionDevice::CreateTargetForHwnd');
+        $this->composition[] = Com::typed($c, $target, 'void *');
+        $visual = $c->new('void *');
+        self::hr(($dev->v->CreateVisual)($dev, FFI::addr($visual)), 'IDCompositionDevice::CreateVisual');
+        $this->composition[] = Com::typed($c, $visual, 'void *');
+        $v = Com::typed($c, $visual, 'IDCompositionVisual *');
+        self::hr(($v->v->SetContent)($v, $chain), 'IDCompositionVisual::SetContent');
+        $t = Com::typed($c, $target, 'IDCompositionTarget *');
+        self::hr(($t->v->SetRoot)($t, $visual), 'IDCompositionTarget::SetRoot');
+        self::hr(($dev->v->Commit)($dev), 'IDCompositionDevice::Commit');
     }
 
     /** The swap chain's back buffer and its view, to draw into. @return array{0: CData, 1: CData} */
@@ -1009,6 +1062,10 @@ final class D3d
             Com::release($o);
         }
         $this->backBuffer = $this->backTexture = $this->swapChain = null;
+        foreach (array_reverse($this->composition) as $o) {
+            Com::release($o);
+        }
+        $this->composition = [];
         foreach ($this->lists as $l) {
             FFI::free($l->buf);
             FFI::free($l->xforms);

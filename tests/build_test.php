@@ -763,5 +763,5 @@ if (PHP_OS_FAMILY === 'Linux') {
     check(str_contains(file_get_contents("$stub/log"), "cc -O2 -Wall -o $root/l/build/.staging-linux-$arch-"), 'the launcher compiled with cc');
     same(['linux-' . $arch], array_values(array_diff(scandir("$root/l/build"), ['.', '..'])), 'no staging left');
     [$code, $out] = $myphp('build', '-platform', 'linux/riscv64', "$root/l");
-    check($code !== 0 && str_contains($out, 'linux/amd64 or linux/arm64, not linux/riscv64'), 'a platform it does not build: ' . $out);
+    check($code !== 0 && str_contains($out, 'linux/arm64, windows/amd64 or windows/arm64, not linux/riscv64'), 'a platform it does not build: ' . $out);
 }

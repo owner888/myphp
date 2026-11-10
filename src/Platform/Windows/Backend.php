@@ -81,6 +81,9 @@ final class Backend implements Platform\Backend
         }
         Win32::ole32()->CoInitializeEx(null, 2); // apartment threaded, as a UI thread's COM
         Win32::user32()->SetProcessDpiAwarenessContext(-4); // per monitor v2: the windows' sizes in pixels, scaled by their display's DPI
+        if (\MyPHP\Native\Bundle::path() !== null && ($id = \MyPHP\Native\Bundle::info('CFBundleIdentifier')) !== null) { // a built app's windows grouped on the taskbar as its own, not php.exe's
+            \FFI::cdef('int32_t SetCurrentProcessExplicitAppUserModelID(const void *id);', 'shell32.dll')->SetCurrentProcessExplicitAppUserModelID(Win32::wide($id));
+        }
         Win32::registerClass('MyPHPApp');
         return $this->hwnd = Win32::createWindow('MyPHPApp', '', 0, 0, fn(int $msg, int $wp, int $lp): ?int => $this->message($msg, $wp, $lp));
     }

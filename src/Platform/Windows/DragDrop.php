@@ -97,6 +97,7 @@ final class DragDrop
                 int32_t (*DragLeave)(void *self);
                 int32_t (*Drop)(void *self, void *data, uint32_t keys, uint64_t pt, uint32_t *effect);
             } IDropTargetVtbl;
+            typedef struct { IDropTargetVtbl *v; } IDropTarget;
             typedef struct { void *v; int64_t id; } Obj;
             typedef struct { int32_t cx, cy; POINT ptOffset; void *hbmpDragImage; uint32_t crColorKey; } SHDRAGIMAGE;
             typedef struct { void *r0[3]; int32_t (*InitializeFromBitmap)(void *self, SHDRAGIMAGE *image, void *data); } IDragSourceHelperVtbl;
@@ -832,6 +833,28 @@ final class DragDrop
     public static function testOffer(CData $data): array
     {
         return self::offer($data);
+    }
+
+    /**
+     * @internal the tests': $data dragged into $w and dropped at ($x, $y)
+     * of its content, in pixels, through its drop target's vtable, as OLE
+     * calls it (DragEnter, Drop): the effect the drop had.
+     */
+    public static function testDrop(Window $w, CData $data, int $x, int $y): int
+    {
+        $f = self::f();
+        $id = self::$targets[Mem::addr($w->hwnd)] ?? throw new \RuntimeException('myphp: the window is no drop target');
+        $t = $f->cast('IDropTarget *', FFI::addr(self::$mem[$id]));
+        $p = Win32::user32()->new('POINT');
+        [$p->x, $p->y] = [$x, $y];
+        Win32::user32()->ClientToScreen($w->hwnd, FFI::addr($p));
+        $pt = ($p->x & 0xFFFFFFFF) | (($p->y & 0xFFFFFFFF) << 32);
+        $effect = $f->new('uint32_t');
+        $effect->cdata = Operation::COPY;
+        ($t->v->DragEnter)($t, $data, self::MK_LBUTTON, $pt, FFI::addr($effect));
+        $effect->cdata = Operation::COPY;
+        ($t->v->Drop)($t, $data, 0, $pt, FFI::addr($effect));
+        return $effect->cdata;
     }
 
     /** @internal the tests': the files of its CF_HDROP. @return list<string> */
