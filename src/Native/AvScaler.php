@@ -8,7 +8,7 @@ use FFI\CData;
 
 /**
  * libswscale's conversion of decoded video frames to RGBA of a size
- * (Platform\Linux\Renderers' picture, Thumbnails): bilinear, from the
+ * (AvRenderers' picture, AvThumbnails): bilinear, from the
  * frame's colors as it says them (BT.709, BT.601 or BT.2020's matrix,
  * limited or full range; unsaid, BT.709 from 720 lines up, as FFmpeg's
  * players guess), its context made again only as the frames change.

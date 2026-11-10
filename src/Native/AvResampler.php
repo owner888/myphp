@@ -8,7 +8,7 @@ use FFI\CData;
 
 /**
  * libswresample's conversion of decoded audio frames to what the Linux
- * player's output plays (Platform\Linux\Renderers): interleaved 32-bit
+ * and Windows player's output plays (AvRenderers): interleaved 32-bit
  * floats of $channels channels at $rate (mixed down or up as
  * libswresample's matrix does), its context made again only as the
  * frames' format, rate or channels change.

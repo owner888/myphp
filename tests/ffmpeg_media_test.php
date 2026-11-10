@@ -1,21 +1,21 @@
 <?php
-// The player's system on Linux (Platform\Linux\Media, over FFmpeg): what
-// libavformat reads (an MP4, an Ogg), its tracks named as Matroska names
-// them; a picture and a film not named as one refused, as AVFoundation
-// refuses them; a keyframe decoded into a thumbnail of its size; the
-// renderers, paused at a seek's time, decoding its frames from the
-// keyframe, the ones before the time dropped, the first after it shown
-// as the image the window draws; the thumbnails' JPEGs (GdkPixbuf's).
+// The player's system over FFmpeg, on Linux and Windows (Platform\Linux\
+// Media, Platform\Windows\Media): what libavformat reads (an MP4, an Ogg),
+// its tracks named as Matroska names them; a picture and a film not named
+// as one refused, as AVFoundation refuses them; a keyframe decoded into a
+// thumbnail of its size; the renderers (Native\AvRenderers), paused at a
+// seek's time, decoding its frames from the keyframe, the ones before the
+// time dropped, the first after it shown as the image the window draws;
+// the thumbnails' JPEGs (GdkPixbuf's, on Linux); WASAPI's outputs.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
 use MyPHP\Media\{Matroska, Track};
-use MyPHP\Native\{Av, AvReader};
-use MyPHP\Platform\Linux\{Media, Renderers, Thumbnails};
+use MyPHP\Native\{Av, AvReader, AvRenderers, AvThumbnails};
 
-if (PHP_OS_FAMILY !== 'Linux') {
-    echo "  skipped: Linux's\n";
+if (PHP_OS_FAMILY !== 'Linux' && PHP_OS_FAMILY !== 'Windows') {
+    echo "  skipped: Linux's and Windows's\n";
     return;
 }
 try {
@@ -40,20 +40,21 @@ $refused = function (string $path): string {
         return $e->getMessage();
     }
 };
-$notes = sys_get_temp_dir() . '/myphp-linux-media-' . getmypid() . '.txt';
+$notes = sys_get_temp_dir() . '/myphp-ffmpeg-media-' . getmypid() . '.txt';
 copy(__DIR__ . '/testdata/clip.mkv', $notes);
 check(str_contains($refused(__DIR__ . '/testdata/upright.jpg'), 'is a picture') && str_contains($refused($notes), 'is not named as'), 'a picture is no film, nor a film named notes.txt');
 unlink($notes);
 
 $video = $r->tracks()[0];
-$thumbs = new Thumbnails($video, 80);
+$thumbs = new AvThumbnails($video, 80);
 $rgba = $thumbs->frame($key);
 same([80, 45, 80 * 45 * 4], [$thumbs->width, $thumbs->height, strlen($rgba)], 'a thumbnail 80 wide, of the track\'s shape');
 check(count(array_unique(str_split($rgba, 4))) > 8, 'of the frame\'s colors');
 check(strlen($thumbs->frame($r->keyframe(0.0))) === 80 * 45 * 4, 'and another, the decoder flushed after each');
 
+$media = PHP_OS_FAMILY === 'Windows' ? new \MyPHP\Platform\Windows\Media(\MyPHP\App::backend()) : new \MyPHP\Platform\Linux\Media(\MyPHP\App::backend());
 $m = new Matroska(__DIR__ . '/testdata/clip.mkv');
-$out = new Renderers();
+$out = new AvRenderers($media);
 $out->setRate(0.0, 1.3);
 $m->seek(1.3); // from the keyframe at 1 s
 $given = 0; $hidden = 0;
@@ -70,10 +71,26 @@ same([1.3, null], [$out->time(), $out->failure()], 'the clock stays where the se
 $png = $out->snapshot();
 check($png !== null && str_starts_with($png, "\x89PNG") && unpack('N2', $png, 16) === [1 => 160, 2 => 90], 'a snapshot of it, a PNG of its size');
 
-$media = new Media(\MyPHP\App::backend());
-$jpeg = $media->jpeg($rgba, 80, 45, 0.85);
-check(str_starts_with($jpeg, "\xFF\xD8"), 'a thumbnail as a JPEG, as the cache keeps it');
-same(80 * 45 * 4, strlen($media->jpegPixels($jpeg, 80)), 'and its pixels again');
+if (PHP_OS_FAMILY === 'Linux') { // Windows's are not there yet
+    $jpeg = $media->jpeg($rgba, 80, 45, 0.85);
+    check(str_starts_with($jpeg, "\xFF\xD8"), 'a thumbnail as a JPEG, as the cache keeps it');
+    same(80 * 45 * 4, strlen($media->jpegPixels($jpeg, 80)), 'and its pixels again');
+} else {
+    // WASAPI's outputs, by mpv's names of them (a runner may have none); the default one opened where there is one.
+    $outs = $media->audioOutputs();
+    check(array_filter(array_keys($outs), fn(string $k) => !str_starts_with($k, 'wasapi/')) === [], 'WASAPI\'s outputs: ' . json_encode($outs));
+    try {
+        $s = \MyPHP\Native\Wasapi::open(48000, 2, 0.2);
+        $room = $s->room();
+        $s->write(str_repeat("\0", 480 * 8));
+        check($room > 0 && $s->room() === $room - 480 && $s->delay() === 480, "WASAPI's default output: $room frames of room, 480 written held");
+        $s->flush();
+        same(0, $s->delay(), 'flushed, nothing held');
+        $s->close();
+    } catch (\RuntimeException $e) {
+        check($outs === [] && str_contains($e->getMessage(), 'no output device'), 'no output: ' . $e->getMessage());
+    }
+}
 check($media->playable($video) && !$media->playable(new Track(9, Track::AUDIO, 'A_NONE', '', 'und', '', false, 0, 0, 0, 0, 0)), 'what FFmpeg decodes plays, not what it knows not');
 
 // libavfilter (Native\AvFilter): a second of sound through atempo at 1.5 is two thirds of one, its pitch kept by atempo.

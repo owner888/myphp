@@ -81,6 +81,15 @@ jobs:
         run: |
           php -v
           php -m
+      # FFmpeg 7's DLLs, which the player decodes with (Native\Av): a shared build of 7.1, on PATH.
+      - name: Install FFmpeg
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-full_build-shared.zip -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath C:\myphp-ffmpeg
+          $bin = (Get-ChildItem C:\myphp-ffmpeg -Recurse -Filter avcodec-61.dll | Select-Object -First 1).DirectoryName
+          Write-Host "FFmpeg's DLLs: $bin"
+          $bin | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
       - name: Windows probe
         run: php tests/testdata/windows_probe.php
       # The suite, as the backend grows, each test in a process of its own: what fails on Windows yet is listed in one annotation, the job not failed by it.

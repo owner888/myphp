@@ -22,9 +22,9 @@ use RuntimeException;
  * $ahead seconds, room() what it says is free. delay() is what was
  * written and is not heard yet, which the player's clock goes by.
  *
- * @internal Platform\Linux\Renderers, Platform\Linux\AudioOutput
+ * @internal AvRenderers, SoundDevice
  */
-final class Pcm
+final class Pcm implements Sound
 {
     /** PA_SAMPLE_FLOAT32LE, PA_CONTEXT_NOAUTOSPAWN, PA_CONTEXT_READY, PA_STREAM_READY, PA_STREAM_INTERPOLATE_TIMING | AUTO_TIMING_UPDATE | ADJUST_LATENCY, PA_SEEK_RELATIVE. */
     private const PA_FLOAT32LE = 5, PA_NOAUTOSPAWN = 1, PA_CONTEXT_READY = 4, PA_STREAM_READY = 2, PA_FLAGS = 0x2 | 0x8 | 0x2000, PA_SEEK_RELATIVE = 0;
@@ -296,6 +296,11 @@ final class Pcm
             }
         }
         return self::$alsa;
+    }
+
+    public function name(): string
+    {
+        return $this->system;
     }
 
     /** The frames it takes now without waiting. */
