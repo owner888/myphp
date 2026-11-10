@@ -30,7 +30,8 @@ final class Emulators
     public static function androidSdk(): string
     {
         $home = (string)getenv('HOME');
-        foreach ([getenv('ANDROID_HOME') ?: '', getenv('ANDROID_SDK_ROOT') ?: '', "$home/Library/Android/sdk", "$home/Android/Sdk", '/opt/homebrew/share/android-commandlinetools'] as $dir) {
+        $local = (string)getenv('LOCALAPPDATA'); // Android Studio's on Windows
+        foreach ([getenv('ANDROID_HOME') ?: '', getenv('ANDROID_SDK_ROOT') ?: '', "$home/Library/Android/sdk", "$home/Android/Sdk", '/opt/homebrew/share/android-commandlinetools', $local !== '' ? "$local/Android/Sdk" : ''] as $dir) {
             if ($dir !== '' && is_dir($dir)) {
                 return rtrim($dir, '/');
             }
@@ -48,8 +49,10 @@ final class Emulators
             default => ["$sdk/cmdline-tools/latest/bin/$name", ...array_reverse(glob("$sdk/cmdline-tools/*/bin/$name") ?: [])],
         };
         foreach ($in as $path) {
-            if ($sdk !== '' && is_file($path) && is_executable($path)) {
-                return $path;
+            foreach (PHP_OS_FAMILY === 'Windows' ? ["$path.exe", "$path.bat"] : [$path] as $p) {
+                if ($sdk !== '' && is_file($p) && is_executable($p)) {
+                    return $p;
+                }
             }
         }
         return Cmd::look($name);

@@ -20,9 +20,17 @@ App::whenReady(function () use (&$r, $at) {
         $w->on($e, function () use (&$r, $e) { $r['events'][] = $e; });
     }
     $w->show();
+    // A window of a material: Mica behind its content, which clears to transparent, where Windows draws backdrops (11 22H2, build 22621); its frames composed.
+    $mw = new Window(new WindowOptions(title: 'Material', width: 200, height: 150, vibrancy: 'mica', content: Content::view(fn() => Color(Color::rgb(0x0000ff))->frame(width: 20, height: 20)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading))));
+    $mw->show();
     $at('shown');
     $step = function (float $seconds, Closure $then) { App::after($seconds, $then); };
-    $step(0.3, function () use ($w, &$r, $at, $step) {
+    $step(0.3, function () use ($w, $mw, &$r, $at, $step) {
+        [$mpix, $mpw] = $mw->native()->lastFrame();
+        $ms = $mw->native()->backingScale();
+        $alpha = fn(int $x, int $y): ?int => $mpix === '' ? null : ord($mpix[($y * $mpw + $x) * 4 + 3]);
+        $r['material'] = [$mw->native()->hasVibrancy(), \MyPHP\Platform\Windows\MenuDraw::build() >= 22621, $mw->native()->lastDraw(), $alpha((int)(5 * $ms), (int)(5 * $ms)), $alpha((int)(100 * $ms), (int)(100 * $ms))];
+        $mw->close();
         $r['scale'] = $w->native()->backingScale();
         $r['draw'] = $w->native()->lastDraw();
         [$pix, $pw, $ph] = $w->native()->lastFrame();
@@ -58,7 +66,7 @@ App::whenReady(function () use (&$r, $at) {
         $data = $dd::testData(new \MyPHP\Transfer\Data($item), 'session-1');
         $offer = $dd::testOffer($data);
         $text = $dd::testRead($data, 13);
-        $r['dragData'] = [array_keys($offer['formats']), $offer['session'], $offer['files'], $text === null ? null : (string)iconv('UTF-16LE', 'UTF-8', rtrim($text, "\0")), $dd::testPaths($data) === [__FILE__]];
+        $r['dragData'] = [array_keys($offer['formats']), $offer['session'], $offer['files'], $text === null ? null : rtrim((string)iconv('UTF-16LE', 'UTF-8', $text), "\0"), $dd::testPaths($data) === [__FILE__]];
         $r['dropEffect'] = $dd::testDrop($w->native(), $data, 100, 100);
         \MyPHP\Native\Com::release($data);
         $r['dragAlive'] = $dd::alive();

@@ -9018,6 +9018,34 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   no Fluent icon means (`Symbols::GLYPHS` null), or one the font lacks, is
   drawn as Android's, a Material Symbol. `windows_symbols_test` checks every
   name Linux maps is mapped and every code point is a glyph of the font.
+- A window's material (`Window::setVibrancy`, mygo's SetVibrancy) is
+  Windows 11 22H2's system backdrop (DWMWA_SYSTEMBACKDROP_TYPE: Mica, Mica
+  Alt for "tabbed", Acrylic for the rest), the frame extended over the
+  whole client area. It shows behind the content only where nothing
+  covers it: a window made with a material on a Windows that draws
+  backdrops has no redirection bitmap (WS_EX_NOREDIRECTIONBITMAP, fixed at
+  creation), its frames a swap chain of premultiplied alpha shown through
+  DirectComposition (`D3d::attach`, a visual of it the root of the
+  window's target), cleared transparent, a page's background transparent;
+  elsewhere it shows in the title bar alone, as upstream's.
+- The command line on Windows is `bin\myphp.cmd` (cmd runs no shebang).
+  `myphp devices` lists the Windows desktop, `run -d windows` runs the app
+  on the PHP running myphp, as the other desktops do; `Cmd` runs tools
+  without a shell (NUL, PATHEXT). `myphp build -platform windows/<arch>`,
+  on Windows of that architecture (`Native\Build\Windows`), makes the app
+  as Linux's is laid out (app/, info.json, the resources next to the
+  launcher; `Bundle` reads it the same) with the PHP building it in php/,
+  Windows having no package to depend on: its launcher is a C program of
+  the GUI subsystem (MinGW's gcc or MSVC's cl; its icon an .ico of the
+  app's PNG, compiled in when windres or rc is there) that runs php.exe
+  with no console window (CREATE_NO_WINDOW), no php.ini but the
+  extensions the building PHP had loaded, and gives back its exit code.
+  The process is php.exe's, so a built app names itself to the taskbar
+  (SetCurrentProcessExplicitAppUserModelID of its identifier) and its
+  windows take its icon (info.json's MyPHPIcon); FFmpeg's DLLs go next to
+  php.exe for an app that plays media. The zip is Windows's own tar's
+  (bsdtar: Git's GNU tar, often ahead of it on PATH, makes no zip).
+  `windows_build_test` builds an app and runs its launcher.
 - Secrets and the network (stage 5: mygo's secrets.go, network.go): a
   secret is a generic credential of the Credential Manager, as keytar keeps
   them (the target "service/account", the user name the account, persisting

@@ -8,7 +8,7 @@ final class TargetDevice
     public function __construct(
         public readonly string $id,
         public readonly string $name,
-        public readonly string $platform, // 'darwin', 'android', 'ios', 'linux'
+        public readonly string $platform, // 'darwin', 'android', 'ios', 'linux', 'windows'
         public readonly string $type,     // 'desktop', 'device', 'simulator'
         public readonly string $status,   // 'connected', 'booted', 'shutdown'
     ) {
@@ -41,11 +41,20 @@ final class DeviceManager
                 type: 'desktop',
                 status: 'connected',
             );
+        } elseif (PHP_OS_FAMILY === 'Windows') {
+            $arch = in_array(strtolower((string)getenv('PROCESSOR_ARCHITECTURE')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64';
+            $devices[] = new TargetDevice(
+                id: 'windows',
+                name: "Windows Desktop ($arch)",
+                platform: 'windows',
+                type: 'desktop',
+                status: 'connected',
+            );
         }
 
         // 2. Android Devices via adb
         if (($adb = Emulators::tool('adb')) !== '') {
-            $adbOut = (string)@shell_exec(escapeshellarg($adb) . ' devices -l 2>/dev/null');
+            [, $adbOut] = Cmd::output([$adb, 'devices', '-l']); // no shell: Windows's has no /dev/null
             foreach (explode("\n", $adbOut) as $line) {
                 $line = trim($line);
                 if ($line === '' || str_starts_with($line, 'List of devices')) {

@@ -109,7 +109,7 @@ final class Symbols implements Platform\Symbols
     private ?\MyPHP\Platform\Android\Symbols $material = null;
     /** The icon font the system has, '' for none; null till asked. */
     private ?string $font = null;
-    /** @var array<int, ?int> the glyph of each code point in the icon font, null for none */
+    /** @var array<int, ?array{0: int, 1: int}> the face and glyph of each code point in the icon font, null for none */
     private array $glyphs = [];
     /** @var array<string, true> the names told in the log as drawn as Material Symbols, their glyph missing */
     private array $told = [];
@@ -160,11 +160,17 @@ final class Symbols implements Platform\Symbols
         return [$px, $px, $out];
     }
 
-    /** The id of the icon font's face $name's glyph is in, null where GLYPHS maps it to none or the font lacks it. */
-    private function glyph(string $name): ?int
+    /** The icon font's face and $name's glyph in it, null where GLYPHS maps it to none or the font lacks it. @return ?array{0: int, 1: int} */
+    private function glyph(string $name): ?array
     {
         $cp = self::GLYPHS[$name] ?? null;
-        if ($cp === null || $this->font() === '') {
+        return $cp === null ? null : $this->codePoint($cp);
+    }
+
+    /** The icon font's face and the glyph of code point $cp in it, null where the font lacks it (DirectWrite falling back to another font). @return ?array{0: int, 1: int} */
+    public function codePoint(int $cp): ?array
+    {
+        if ($this->font() === '') {
             return null;
         }
         if (!array_key_exists($cp, $this->glyphs)) {
@@ -175,16 +181,16 @@ final class Symbols implements Platform\Symbols
             foreach ($engine->shape([$cp], $style, [], 0, false, false) as $line) {
                 foreach ($line['runs'] as $run) {
                     foreach ($run['glyphs'] as $g) {
-                        if ($run['font']?->id === $id && $g->id !== 0) { $this->glyphs[$cp] = $g->id; } // its own font's glyph, not a fallback font's
+                        if ($id !== null && $run['font']?->id === $id && $g->id !== 0) { $this->glyphs[$cp] = [$id, $g->id]; } // its own font's glyph, not a fallback font's
                     }
                 }
             }
         }
-        return $this->glyphs[$cp] === null ? null : $this->dw()->engine()->font(new Style($this->font(), 12))?->id;
+        return $this->glyphs[$cp];
     }
 
     /** The first of FONTS the system has, '' for none. */
-    private function font(): string
+    public function font(): string
     {
         if ($this->font === null) {
             $this->font = '';

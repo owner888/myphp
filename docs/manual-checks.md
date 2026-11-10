@@ -9,10 +9,14 @@ instead.
 
 ## Windows
 
-0. [ ] **Running the app**: `myphp devices` lists the Windows desktop and
-   `myphp run -d windows <dir>` runs an app there, as `-d macos` and
-   `-d linux` do. Not there yet (`Native\Build\DeviceManager` knows
-   macOS, Linux and the phones): the checks below need it first.
+0. [ ] **Running and building the app** (`bin\myphp.cmd` is the command
+   on Windows): `myphp doctor` shows the Windows section (build, WebView2,
+   FFmpeg, a C compiler) right; `myphp devices` lists the Windows desktop;
+   `myphp run -d windows <dir>` runs an app with its log in the terminal;
+   `myphp build <dir>` makes build\windows-amd64, whose <Name>.exe starts
+   the app with no console window, shows the app's icon in Explorer, on
+   its windows and on the taskbar (one button, not PHP's), and runs from
+   another folder and another machine once the zip is unpacked there.
 
 ### The player
 
@@ -102,3 +106,9 @@ instead.
     viewer): each icon means what macOS's does, centered in its square
     and as heavy as the text beside it; on Windows 10 (Segoe MDL2 Assets)
     too. The ones drawn as Material Symbols do not clash.
+20. [ ] **Materials** (a window with `vibrancy: 'mica'`, a popover's
+    `'popover'`): on Windows 11 22H2 or later, Mica (or Acrylic) shows
+    behind the content and the page, follows the desktop's wallpaper and
+    dims when the window is inactive; the content's own backgrounds draw
+    over it; resizing does not flash black. On Windows 10 the window is as
+    without one. `blur()` hands the keyboard to the window below.

@@ -40,7 +40,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload, Windows};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -1042,6 +1042,14 @@ packages depend on GTK 3, libsecret, WebKitGTK when the app shows pages,
 the app indicator when it has a tray icon, the PHP of the exec launcher
 (php<version>-cli and the extensions MyPHP uses) and linux.depends.
 
+For windows/amd64 and windows/arm64, built on Windows of that architecture,
+it makes <out>/windows-<arch>: the launcher, <name>.exe (compiled with
+MinGW's gcc or MSVC's cl, its icon the app's), the PHP building the app in
+php/ with the extensions it has loaded (and FFmpeg's DLLs when the app plays
+media), the app's PHP files and the framework's in app/, the frontend, the
+resources (resources/windows, resources/windows-<arch>) and the icon next to
+it; and the app as <slug>-<version>-windows-<arch>.zip.
+
 Set macos.signingIdentity in myphp.json (or -sign) to a Developer ID to ship
 outside the Mac App Store, and macos.notarize to notarize the disk image.
 
@@ -1051,7 +1059,7 @@ delta updates from the last versions published (updates.deltas), and
 update-<platform>.json: publish them where updates point to, or with -upload.
 
 Flags:
-  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64, android/arm64, ios/arm64 (default: this machine's)
+  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64, windows/amd64, windows/arm64, android/arm64, ios/arm64 (default: this machine's)
   -launcher exec|micro  exec runs the PHP that built the app; micro makes one static binary (see myphp micro)
   -php version          the PHP version of micro.sfx, when myphp micro builds it
   -debug                keep development features such as the inspector
@@ -1064,6 +1072,12 @@ Flags:
 TXT;
 
 /** This machine's architecture, as the targets name it. */
+/** The system of this machine, as -platform names it: darwin, linux or windows. */
+function hostOs(): string
+{
+    return match (PHP_OS_FAMILY) { 'Linux' => 'linux', 'Windows' => 'windows', default => 'darwin' };
+}
+
 function hostArch(): string
 {
     return in_array(strtolower(php_uname('m')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64';
@@ -1072,7 +1086,7 @@ function hostArch(): string
 function build(array $args): void
 {
     help($args, BUILD_USAGE);
-    $platforms = option($args, 'platform', (PHP_OS_FAMILY === 'Linux' ? 'linux/' : 'darwin/') . hostArch());
+    $platforms = option($args, 'platform', hostOs() . '/' . hostArch());
     $launcher = option($args, 'launcher', 'exec');
     $php = option($args, 'php');
     $sign = option($args, 'sign', '');
@@ -1088,9 +1102,11 @@ function build(array $args): void
     $targets = [];
     foreach (array_filter(array_map('trim', explode(',', $platforms))) as $p) {
         [$os, $arch] = array_pad(explode('/', $p, 2), 2, '');
-        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch]) || ($os === 'android' && in_array($arch, ['arm64', 'aarch64'], true)) || ($os === 'ios' && in_array($arch, ['arm64', 'aarch64'], true))
-            || fail("myphp builds macOS, Linux, Android and iOS apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, android/arm64, ios/arm64, linux/amd64 or linux/arm64, not $p");
-        $host = (PHP_OS_FAMILY === 'Linux' ? 'linux/' : 'darwin/') . hostArch();
+        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch]) || $os === 'windows' && in_array($arch, Windows::ARCHES, true) || ($os === 'android' && in_array($arch, ['arm64', 'aarch64'], true)) || ($os === 'ios' && in_array($arch, ['arm64', 'aarch64'], true))
+            || fail("myphp builds macOS, Linux, Windows, Android and iOS apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, android/arm64, ios/arm64, linux/amd64, linux/arm64, windows/amd64 or windows/arm64, not $p");
+        $host = hostOs() . '/' . hostArch();
+        $os !== 'windows' || $launcher === 'exec' || fail('-launcher micro is not for Windows apps: they hold the PHP that builds them (-launcher exec)');
+        $os !== 'windows' || "$os/$arch" === $host || fail("windows/$arch is built on Windows of that architecture: its app holds the PHP that builds it, which is $host's");
         $launcher !== 'micro' || "$os/$arch" === $host || fail("-launcher micro builds for this machine, $host: micro.sfx is of its system and architecture");
         $targets[] = [$os, $arch];
     }
@@ -1116,6 +1132,12 @@ function build(array $args): void
                 trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
             } elseif ($os === 'linux') {
                 linuxCompiler($arch);
+            } elseif ($os === 'windows') {
+                try {
+                    Windows::compiler();
+                } catch (RuntimeException $e) {
+                    fail($e->getMessage());
+                }
             }
         }
     } else {
@@ -1127,7 +1149,7 @@ function build(array $args): void
     generateBindings($dir, $c);
     if (($c['buildCommand'] ?? '') !== '' && !$skipBuildCommand) {
         logf('Building the frontend');
-        sh(['/bin/sh', '-c', $c['buildCommand']], $dir) === 0 || fail("{$c['buildCommand']} failed");
+        sh(PHP_OS_FAMILY === 'Windows' ? ['cmd', '/c', $c['buildCommand']] : ['/bin/sh', '-c', $c['buildCommand']], $dir) === 0 || fail("{$c['buildCommand']} failed");
         logf('Built the frontend');
     }
     if (($c['frontendDist'] ?? '') !== '') {
@@ -1143,6 +1165,7 @@ function build(array $args): void
         try {
             $artifacts = match ($os) {
                 'linux' => buildLinux($dir, $c, $arch, $opts),
+                'windows' => buildWindows($dir, $c, $arch, $opts),
                 'android' => buildAndroid($dir, $c, $arch, $opts),
                 'ios' => buildIOS($dir, $c, $arch, $opts),
                 default => buildPlatform($dir, $c, $arch, $opts),
@@ -1410,6 +1433,116 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
     }
 }
 
+/**
+ * Builds the app for windows/$arch into <out>/windows-$arch (Windows) and
+ * returns the artifacts: the launcher, named after the app, compiled with
+ * its icon; the PHP building the app in php/, its extensions loaded by the
+ * launcher's flags, FFmpeg's DLLs beside it when the app plays media; app/,
+ * frontend/, info.json and the resources next to it, in a staging directory
+ * that replaces the platform directory; then a zip of it (Windows's tar).
+ *
+ * @return list<string>
+ */
+function buildWindows(string $dir, array $c, string $arch, array $opts): array
+{
+    $out = path($dir, $c['out']);
+    is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
+    $stage = "$out/.staging-windows-$arch-" . getmypid();
+    mkdir($stage, 0755);
+    try {
+        $framework = frameworkOf($c);
+        $slug = Slug::ofConfig($c);
+        $exe = preg_replace('/[<>:"\/\\|?*\x00-\x1f]/', '', orElse($c['name'], $slug)) . '.exe';
+        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'windows', $arch, natives($dir, $framework, $arch, 'windows'), [$exe, 'php', ...Linux::reserved($slug)]);
+        if (($other = Resources::otherArch($dir, 'windows', $arch)) !== '') {
+            warnf('No ' . Resources::DIR . "/windows-$arch for windows/$arch, though there is " . Resources::DIR . "/$other");
+        }
+        logf("Making windows/$arch");
+        $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
+        copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree("$framework/src", "$stage/app/myphp/src", []);
+        copyTree("$framework/plugins", "$stage/app/myphp/plugins", ['.DS_Store']);
+        if (($c['frontendDist'] ?? '') !== '') {
+            copyTree(path($dir, $c['frontendDist']), "$stage/frontend", ['.DS_Store']);
+        }
+        // The PHP building the app, as php/: its executable, its DLLs and its extensions; the launcher loads those it has loaded.
+        $phpDir = dirname((string)realpath(PHP_BINARY));
+        $extDir = Windows::extensionDir();
+        copyTree($phpDir, "$stage/php", ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib'], false);
+        if (!is_dir("$stage/php/ext") && is_dir($extDir)) {
+            copyTree($extDir, "$stage/php/ext", []);
+        }
+        $sources = appSources($dir, $c);
+        if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MediaPlayer')) {
+            $ffmpeg = windowsFfmpeg();
+            foreach ($ffmpeg as $dll) { copy($dll, "$stage/php/" . basename($dll)); }
+            $ffmpeg !== [] || warnf('no FFmpeg 7 or 6 DLLs (avcodec-61.dll, avcodec-60.dll) on PATH: the app plays no media till they are next to php/php.exe');
+        }
+        // The launcher, its icon the app's when there is one (windres or rc compiles it in).
+        $compiler = Windows::compiler();
+        $tmp = (string)tempnam(sys_get_temp_dir(), 'myphp');
+        $cFile = "$tmp.c";
+        file_put_contents($cFile, Windows::launcherSource([...PHP_FLAGS, ...Windows::extensionFlags("$stage/php/ext")], $c['entry']));
+        $resFile = '';
+        $png = null;
+        if (($c['icon'] ?? '') !== '') {
+            $png = @file_get_contents(path($dir, $c['icon']));
+            $png !== false || fail("icon {$c['icon']}: cannot read it");
+            file_put_contents("$stage/$slug.png", $png);
+            try {
+                [$iw, $ih, $px] = MyPHP\Native\Build\Png::decode($png);
+                file_put_contents("$tmp.ico", Windows::ico(max($iw, $ih) > 256 ? Icns::resize($iw, $ih, $px, 256) : $png)); // an .ico's PNG is 256 pixels at most, as Explorer's largest
+            } catch (RuntimeException $e) {
+                fail("icon {$c['icon']}: {$e->getMessage()}");
+            }
+            file_put_contents("$tmp.rc", '1 ICON "' . str_replace('\\', '/', "$tmp.ico") . "\"\n");
+            if ($compiler[1] === 'gnu' && ($windres = Cmd::look('windres')) !== '') {
+                $resFile = "$tmp.o";
+                sh([$windres, "$tmp.rc", '-O', 'coff', '-o', $resFile]) === 0 || fail('compiling the icon failed');
+            } elseif ($compiler[1] === 'msvc' && ($rc = Cmd::look('rc')) !== '') {
+                $resFile = "$tmp.res";
+                sh([$rc, '/nologo', '/fo', $resFile, "$tmp.rc"]) === 0 || fail('compiling the icon failed');
+            } else {
+                warnf('no resource compiler (windres, rc): the launcher shows no icon in Explorer, its windows the app\'s');
+            }
+        }
+        $code = sh(Windows::compileCommand($compiler, $cFile, "$stage/$exe", $resFile));
+        foreach ([$tmp, $cFile, "$tmp.ico", "$tmp.rc", "$tmp.o", "$tmp.res"] as $f) { @unlink($f); }
+        $code === 0 || fail('compiling the launcher failed');
+        $info = Linux::info($c, $exe, !$opts['debug']) + ($png !== null ? ['MyPHPIcon' => "$slug.png"] : []); // the windows' icon (Windows\Taskbar), php.exe's being PHP's
+        file_put_contents("$stage/" . Linux::INFO, json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+        Resources::copy($res, $stage);
+        $installed = array_values(array_diff(scandir($stage) ?: [], ['.', '..']));
+        $zip = "$stage/$slug-{$c['version']}-windows-$arch.zip";
+        $tar = rtrim((string)getenv('SystemRoot'), '\\') . '\\System32\\tar.exe'; // bsdtar, which zips (-a), not Git's GNU tar ahead of it on PATH
+        sh([$tar, '-a', '-c', '-f', $zip, '-C', $stage, ...$installed]) === 0 || fail('making the zip failed (Windows\'s tar)');
+        logf('Packaged ' . basename($zip));
+        if (isset($c['updates'])) {
+            warnf("Not writing an update for windows/$arch: Windows apps do not update themselves yet");
+        }
+        $final = "$out/windows-$arch";
+        replacePath($stage, $final);
+        return ["$final/$exe", "$final/" . basename($zip)];
+    } finally {
+        if (is_dir($stage)) {
+            removeTree($stage);
+        }
+    }
+}
+
+/** FFmpeg's DLLs of a shared build on PATH, FFmpeg 7's or 6's (Native\Av loads them): those of the directory holding avcodec-61.dll or avcodec-60.dll. @return list<string> */
+function windowsFfmpeg(): array
+{
+    foreach (['avcodec-61.dll', 'avcodec-60.dll'] as $codec) {
+        foreach (explode(PATH_SEPARATOR, (string)getenv('PATH')) as $d) {
+            if ($d !== '' && is_file("$d/$codec")) {
+                return array_values(array_filter(glob("$d/*.dll") ?: [], fn(string $f): bool => preg_match('/^(av[a-z]+|sw[a-z]+|postproc)-\d+\.dll$/i', basename($f)) === 1));
+            }
+        }
+    }
+    return [];
+}
+
 /** The app's PHP, as one string, which says what it uses (natives, Linux::usesPages). */
 function appSources(string $dir, array $c): string
 {
@@ -1480,7 +1613,7 @@ function replacePath(string $src, string $dst): void
     $old = '';
     if (file_exists($dst) || is_link($dst)) {
         $old = dirname($dst) . '/.old-' . getmypid() . '-' . basename($dst);
-        sh(['rm', '-rf', $old]);
+        removeTree($old);
         rename($dst, $old) || fail("cannot move $dst away");
     }
     if (!rename($src, $dst)) {
@@ -1490,7 +1623,7 @@ function replacePath(string $src, string $dst): void
         fail("cannot move the build to $dst");
     }
     if ($old !== '') {
-        sh(['rm', '-rf', $old]);
+        removeTree($old);
     }
 }
 
@@ -1698,6 +1831,24 @@ function fetchNative(array $f): string
 }
 
 /** Copies the tree $from to $to, but the names $skip lists, and with $hidden false those starting with a dot. */
+/** Removes $path, a file or a directory with all it holds, as rm -rf, on every system (Windows has no rm); a link is removed, not followed. */
+function removeTree(string $path): void
+{
+    if (is_link($path) || is_file($path)) {
+        @unlink($path) || (PHP_OS_FAMILY === 'Windows' && @rmdir($path)) || fail("cannot remove $path"); // a directory's junction is a directory to Windows
+        return;
+    }
+    if (!is_dir($path)) {
+        return;
+    }
+    foreach (scandir($path) ?: fail("cannot read $path") as $name) {
+        if ($name !== '.' && $name !== '..') {
+            removeTree("$path/$name");
+        }
+    }
+    rmdir($path) || fail("cannot remove $path");
+}
+
 function copyTree(string $from, string $to, array $skip, bool $hidden = true): void
 {
     @mkdir($to, 0755, true);
@@ -2625,18 +2776,36 @@ function doctor(array $args): void
         ]);
     }
 
+    // The Windows desktop: WebView2 shows the pages, FFmpeg's DLLs play media, a C compiler makes the launcher of myphp build
+    if (PHP_OS_FAMILY === 'Windows') {
+        $webView2 = '';
+        foreach (['HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients', 'HKLM\\SOFTWARE\\Microsoft\\EdgeUpdate\\Clients', 'HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients'] as $key) {
+            [$code, $out] = Cmd::output(['reg', 'query', "$key\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", '/v', 'pv']); // the Evergreen runtime's
+            if ($code === 0 && preg_match('/pv\s+REG_SZ\s+(\S+)/', $out, $m) === 1 && $m[1] !== '0.0.0.0') { $webView2 = $m[1]; break; }
+        }
+        $build = preg_match('/build (\d+)/', php_uname('v'), $m) === 1 ? (int)$m[1] : 0;
+        $ffmpeg = windowsFfmpeg();
+        try { [$cc] = Windows::compiler(); } catch (RuntimeException) { $cc = ''; }
+        $section('Windows Desktop', [
+            [$build >= 17763, "Windows build $build" . ($build >= 22621 ? ' (system backdrops)' : ''), 'Windows 10 1809 (build 17763) or later is needed'],
+            [$webView2 !== '', $webView2 !== '' ? "WebView2 Runtime $webView2 (web pages)" : 'WebView2 Runtime not found: only apps without a web page run', 'Install the Evergreen WebView2 Runtime: https://developer.microsoft.com/microsoft-edge/webview2/'],
+            [$ffmpeg !== [], $ffmpeg !== [] ? 'FFmpeg (media): ' . dirname($ffmpeg[0]) : 'FFmpeg 7 or 6 shared DLLs not on PATH: media does not play', 'Install a shared build of FFmpeg 7 (winget install Gyan.FFmpeg.Shared) and add its bin to PATH'],
+            [$cc !== '', $cc !== '' ? "C compiler for myphp build ($cc)" : 'No C compiler: myphp build cannot make the launcher', 'Install MinGW-w64 (winget install MSYS2.MSYS2, then pacman -S mingw-w64-ucrt-x86_64-gcc) or use a Visual Studio developer prompt'],
+        ]);
+    }
+
     // 3. Android Toolchain
-    $adb = trim((string)@shell_exec('command -v adb 2>/dev/null'));
-    $javac = trim((string)@shell_exec('command -v javac 2>/dev/null'));
+    $adb = Emulators::tool('adb');
+    $javac = Cmd::look('javac');
     $androidSdk = Emulators::androidSdk();
     $sdkOk = $androidSdk !== '';
-    $aapt2 = trim((string)@shell_exec("find '$androidSdk' -name aapt2 -type f 2>/dev/null | head -n 1"));
+    $aapt2 = $sdkOk ? (string)(glob("$androidSdk/build-tools/*/aapt2" . (PHP_OS_FAMILY === 'Windows' ? '.exe' : '')) ?: [''])[0] : '';
     $ndk = getenv('ANDROID_NDK_HOME') ?: '';
     if ($ndk === '' && $sdkOk) { $ndks = glob("$androidSdk/ndk/*", GLOB_ONLYDIR) ?: []; natsort($ndks); $ndk = $ndks === [] ? '' : end($ndks); }
     $ndkOk = $ndk !== '' && is_dir("$ndk/toolchains/llvm");
     $section("Android Toolchain", [
         [$adb !== '', $adb !== '' ? "Android Debug Bridge ($adb)" : "adb not found", "Install platform-tools or add adb to PATH"],
-        [$javac !== '', $javac !== '' ? "Java Development Kit ($javac)" : "JDK javac not found", PHP_OS_FAMILY === 'Darwin' ? "Install OpenJDK 17+ (brew install openjdk@17)" : "Install OpenJDK 17+ (sudo apt install openjdk-17-jdk, or sudo dnf install java-17-openjdk-devel)"],
+        [$javac !== '', $javac !== '' ? "Java Development Kit ($javac)" : "JDK javac not found", match (PHP_OS_FAMILY) { 'Darwin' => 'Install OpenJDK 17+ (brew install openjdk@17)', 'Windows' => 'Install OpenJDK 17+ (winget install Microsoft.OpenJDK.17)', default => 'Install OpenJDK 17+ (sudo apt install openjdk-17-jdk, or sudo dnf install java-17-openjdk-devel)' }],
         [$sdkOk, $sdkOk ? "Android SDK ($androidSdk)" : "Android SDK not found", "Set ANDROID_HOME environment variable"],
         [$aapt2 !== '', $aapt2 !== '' ? "Android Build-Tools (aapt2, d8, zipalign)" : "Android Build-Tools missing", "Install build-tools via sdkmanager"],
         [$ndkOk, $ndkOk ? "Android NDK ($ndk)" : "Android NDK not found", "Install the NDK via sdkmanager, or set ANDROID_NDK_HOME"],
@@ -2897,7 +3066,7 @@ function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, 
 
 function runCommand(array $args): void
 {
-    help($args, "run [flags] [dir] [args...]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop, and prints its log:\nthe app's own lines, PHP's warnings and errors, and the system's warnings and errors about it.\nOn the desktop, what follows dir goes to the app, its \$argv, a path made absolute: myphp run -d macos examples/photos ~/Pictures.\n\nOn a phone, as Flutter's run: a saved PHP file, or r, hot reloads the app: it loads its views of files\n(Content::file) again, its state kept; R hot restarts it, its state lost; c clears the console, q quits.\nNeither builds it again; a change to the native code (the launcher, the Java, the runtime) needs myphp run again.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux)\n  -v, --verbose              the build's output and every line of the log");
+    help($args, "run [flags] [dir] [args...]\n\nBuilds and runs the application on an Android device, iOS simulator, or desktop, and prints its log:\nthe app's own lines, PHP's warnings and errors, and the system's warnings and errors about it.\nOn the desktop, what follows dir goes to the app, its \$argv, a path made absolute: myphp run -d macos examples/photos ~/Pictures.\n\nOn a phone, as Flutter's run: a saved PHP file, or r, hot reloads the app: it loads its views of files\n(Content::file) again, its state kept; R hot restarts it, its state lost; c clears the console, q quits.\nNeither builds it again; a change to the native code (the launcher, the Java, the runtime) needs myphp run again.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform keyword (android, ios, macos, linux, windows)\n  -v, --verbose              the build's output and every line of the log");
     $deviceId = option($args, 'd') ?: (option($args, 'device') ?: (option($args, '-device') ?: ''));
     $all = flag($args, 'v') || flag($args, 'verbose');
     $step = fn(array $cmd, ?string $cwd = null): int => $all ? sh($cmd, $cwd) : quiet($cmd, $cwd); // the build's output only when it fails
