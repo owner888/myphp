@@ -24,6 +24,8 @@ final class Backend implements Platform\Backend
     /** @internal the notification area's callback message for the trays */
     public const WM_APP_TRAY = Win32::WM_APP + 3;
 
+    /** @internal whether step() logs each message it dispatches (WebsiteData's calls, while they wait) */
+    public static bool $trace = false;
     /** The app's hidden window, null before init. */
     private ?CData $hwnd = null;
     private bool $running = false;
@@ -231,6 +233,9 @@ final class Backend implements Platform\Backend
             if ($m->message === Win32::WM_QUIT) {
                 $u->PostQuitMessage((int)$m->wParam);
                 return;
+            }
+            if (self::$trace) {
+                \MyPHP\Logger::debug(sprintf('dispatching 0x%04X to %s', $m->message, \MyPHP\Native\Mem::addr($m->hwnd) === \MyPHP\Native\Mem::addr($this->hwnd) ? 'the app window' : sprintf('0x%X', \MyPHP\Native\Mem::addr($m->hwnd))), 'windows');
             }
             $u->TranslateMessage(\FFI::addr($m));
             $u->DispatchMessageW(\FFI::addr($m));

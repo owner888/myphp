@@ -219,9 +219,11 @@ final class WebsiteData
                 throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
             }
             $deadline = microtime(true) + self::ANSWER;
+            Backend::$trace = true; // the message a wait that never ended stopped at, last in the log
             App::wait(fn() => $done || microtime(true) > $deadline);
         } finally {
             self::$waiting--;
+            Backend::$trace = self::$waiting > 0;
         }
         \MyPHP\Logger::debug($done ? "$what answered" : "$what: no answer", 'windows');
         $done || throw new RuntimeException("$what: WebView2 did not answer in " . self::ANSWER . ' s');
