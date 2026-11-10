@@ -24,7 +24,8 @@ namespace MyPHP\Tests;
     // How it ended, then where it got to (the app's "at:" lines), then the log's end: what fits in a failure's message first.
     $log = (string)file_get_contents($logs[1]);
     preg_match_all('/^at: .*$/m', $log, $at);
-    $err = ($hung ? 'hung' : "exit $code") . ', at ' . implode(', ', array_map(fn(string $l) => substr(trim($l), 4), $at[0])) . ' | ' . substr($log, -1200);
+    preg_match_all('/\[windows\]\[\w\] .*$/m', $log, $said); // what the backend said of WebView2 (its steps, debug), first: a failure's message is cut
+    $err = ($hung ? 'hung' : "exit $code") . ', at ' . implode(', ', array_map(fn(string $l) => substr(trim($l), 4), $at[0])) . ' | ' . implode(' / ', array_map('trim', $said[0])) . ' | ' . substr($log, -1200);
     $oneLine = fn(string $s): string => str_replace(["\r\n", "\n", "\r"], ' / ', trim($s)); // a failure's message is one line (run.php --each reads them so)
     array_map('unlink', $logs);
     $line = array_values(array_filter(explode("\n", $out), fn(string $l) => str_starts_with($l, '{')))[0] ?? '';

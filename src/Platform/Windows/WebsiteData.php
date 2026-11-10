@@ -34,6 +34,8 @@ final class WebsiteData
     /** How long a change may take to show in GetCookies, in seconds. */
     private const SETTLE = 2.0;
     private const IID_UNKNOWN = '00000000-0000-0000-c000-000000000046';
+    /** Seconds WebView2 is waited for to answer a call, after which the call fails: one that never answers (a runtime gone wrong) holds no app. */
+    private const ANSWER = 15;
 
     private static ?FFI $f = null;
     /** The hidden web view, while there is no page. */
@@ -209,7 +211,9 @@ final class WebsiteData
         if ($hr < 0) {
             throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
         }
-        App::wait(fn() => $done);
+        $deadline = microtime(true) + self::ANSWER;
+        App::wait(fn() => $done || microtime(true) > $deadline);
+        $done || throw new RuntimeException("$what: WebView2 did not answer in " . self::ANSWER . ' s');
         if ($failed !== null) {
             throw new RuntimeException($failed);
         }
@@ -231,7 +235,9 @@ final class WebsiteData
             WebView::hiddenView($hwnd, function (?CData $c, ?CData $v, ?string $error = null) use (&$done, &$why): void {
                 [self::$controller, self::$view, $why, $done] = [$c, $v, $error, true];
             });
-            App::wait(fn() => $done);
+            $deadline = microtime(true) + self::ANSWER;
+            App::wait(fn() => $done || microtime(true) > $deadline);
+            $why = $done ? $why : 'WebView2 did not answer in ' . self::ANSWER . ' s';
             \MyPHP\Logger::debug('cookies: the hidden web view ' . ($why ?? 'made'), 'windows');
             if (self::$view === null) {
                 throw new RuntimeException("cookies: $why");

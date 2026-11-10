@@ -331,8 +331,9 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
     // A file is watched through its directory: written, replaced as editors save, removed and created again, then gone with its directory.
     $dir = watchDir() . '/dir';
     mkdir($dir);
-    $file = "$dir/config.json";
-    file_put_contents($file, 'a');
+    file_put_contents("$dir/config.json", 'a');
+    $file = realpath("$dir/config.json"); // as the watch has it, in Windows's separators there
+    $dir = dirname($file);
     touch("$dir/sibling");
     $w = App::watchFiles($file, $noDebounce());
     $enrolled = watchTargets();
