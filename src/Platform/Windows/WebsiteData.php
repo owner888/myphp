@@ -207,6 +207,7 @@ final class WebsiteData
             }
             $done = true;
         });
+        \MyPHP\Logger::debug("$what…", 'windows');
         $hr = $start($handler);
         if ($hr < 0) {
             throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
@@ -225,8 +226,12 @@ final class WebsiteData
     {
         $view = WebView::shownView();
         if ($view !== null && self::$controller !== null) {
-            WebView::closeHidden(self::$controller, self::$view);
+            // Closed from the message loop, not here (mygo's closeCookieView): a call may run in a nested loop of
+            // App::wait, where closing a controller does not return.
+            [$c, $v] = [self::$controller, self::$view];
             self::$controller = self::$view = null;
+            \MyPHP\Logger::debug('cookies: the hidden web view closes, a page shown', 'windows');
+            App::backend()->timer(0, static fn() => WebView::closeHidden($c, $v));
         }
         if ($view === null && self::$view === null) {
             $hwnd = App::backend()->hwnd() ?? throw new RuntimeException('cookies need the running app');
