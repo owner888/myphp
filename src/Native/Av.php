@@ -9,12 +9,16 @@ use MyPHP\Media\Track;
 use RuntimeException;
 
 /**
- * FFmpeg's libraries over FFI, for the player on Linux (Platform\Linux\
- * Renderers, AvReader, AvDecoder): libavformat, libavcodec and libavutil,
- * libswscale and libswresample of FFmpeg 6 (libavcodec 60, libavutil 58),
- * the sonames Ubuntu 24.04 and Debian 12 ship. They are loaded into the
- * global namespace (dlopen RTLD_GLOBAL) so that one FFI instance has the
- * functions of all five, whose structs are passed among them. The structs
+ * FFmpeg's libraries over FFI, for the player on Linux and Windows
+ * (AvRenderers, AvReader, AvDecoder): libavformat, libavcodec and
+ * libavutil, libswscale and libswresample of FFmpeg 6 (libavcodec 60,
+ * libavutil 58), the sonames Ubuntu 24.04 and Debian 12 ship, or 7. They
+ * are loaded into the global namespace (dlopen RTLD_GLOBAL) so that one
+ * FFI instance has the functions of all five, whose structs are passed
+ * among them; on Windows the DLLs of a shared build (avcodec-61.dll),
+ * loaded by LoadLibraryW's search (the app's directory, PATH) or from
+ * MYPHP_FFMPEG's directory, and one FFI of no library, whose functions PHP
+ * looks for in every module loaded. The structs
  * are declared as far as they are read, at FFmpeg 6.1's layout (checked
  * against its headers: docs/architecture.md); another major version of
  * the libraries has other layouts and other sonames, and does not load.
@@ -88,6 +92,11 @@ final class Av
             } AVFormatContext;
             C,
     ];
+    /** The DLLs of FFmpeg 7 and 6 on Windows, as LIBRARIES. */
+    public const DLLS = [
+        61 => ['avutil-59.dll', 'swresample-5.dll', 'swscale-8.dll', 'avcodec-61.dll', 'avformat-61.dll', 'avfilter-10.dll'],
+        60 => ['avutil-58.dll', 'swresample-4.dll', 'swscale-7.dll', 'avcodec-60.dll', 'avformat-60.dll', 'avfilter-9.dll'],
+    ];
     /** The major version of libavcodec loaded (61: FFmpeg 7, 60: FFmpeg 6). */
     public static int $major = 0;
     /** Matroska's codec ids (the core names codecs so) and FFmpeg's codec names of them. */
@@ -111,6 +120,15 @@ final class Av
         if (self::$f !== null) {
             return self::$f;
         }
+        PHP_OS_FAMILY === 'Windows' ? self::loadDlls() : self::loadSonames();
+        $f = FFI::cdef(self::declarations());
+        $f->av_log_set_level(-8); // AV_LOG_QUIET: on stderr, from its threads, else
+        return self::$f = $f;
+    }
+
+    /** The libraries of the first major version all there, loaded globally. */
+    private static function loadSonames(): void
+    {
         $dl = FFI::cdef('void* dlopen(const char*, int); int dlclose(void*); char* dlerror(void);', 'libc.so.6');
         $missing = [];
         foreach (self::LIBRARIES as $major => $libs) {
@@ -133,7 +151,45 @@ final class Av
         if (self::$major === 0) {
             throw new RuntimeException('myphp: neither FFmpeg 7 nor 6 is there (' . implode(', ', $missing) . ' missing): the player on Linux decodes with it (apt install ffmpeg)');
         }
-        $f = FFI::cdef(<<<'C'
+    }
+
+    /**
+     * The DLLs of the first major version all there: each looked for alone
+     * (LOAD_LIBRARY_AS_DATAFILE, which runs nothing), then loaded for good,
+     * from MYPHP_FFMPEG's directory where it is set, else as LoadLibraryW
+     * searches (the executable's directory, the system's, PATH).
+     */
+    private static function loadDlls(): void
+    {
+        $k = FFI::cdef('void *LoadLibraryExW(const void *name, void *file, uint32_t flags); int32_t FreeLibrary(void *module); uint32_t GetLastError(void);', 'kernel32.dll');
+        $dir = (string)getenv('MYPHP_FFMPEG');
+        $path = fn(string $dll): string => $dir === '' ? $dll : rtrim($dir, '\\/') . '\\' . $dll;
+        $wide = fn(string $s) => \MyPHP\Platform\Windows\Win32::wide($s);
+        $missing = [];
+        foreach (self::DLLS as $major => $dlls) {
+            foreach ($dlls as $dll) {
+                $h = $k->LoadLibraryExW($wide($path($dll)), null, 0x2); // LOAD_LIBRARY_AS_DATAFILE
+                if ($h === null) {
+                    $missing[] = $dll;
+                    continue 2;
+                }
+                $k->FreeLibrary($h);
+            }
+            foreach ($dlls as $dll) { // kept loaded: its threads may outlive PHP's shutdown
+                if ($k->LoadLibraryExW($wide($path($dll)), null, $dir === '' ? 0 : 0x1100) === null) { // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | DEFAULT_DIRS: the others beside it
+                    throw new RuntimeException("myphp: FFmpeg's $dll does not load (error {$k->GetLastError()})");
+                }
+            }
+            self::$major = $major;
+            return;
+        }
+        throw new RuntimeException('myphp: neither FFmpeg 7 nor 6 is there (' . implode(', ', $missing) . ' missing): the player on Windows decodes with the DLLs of a shared build of it, beside the app, on PATH or in MYPHP_FFMPEG\'s directory');
+    }
+
+    /** The declarations of FFmpeg's functions and structs, at the layouts of the version loaded. */
+    private static function declarations(): string
+    {
+        return <<<'C'
             typedef struct { int num, den; } AVRational;
             typedef struct { int order; int nb_channels; uint64_t mask; void *opaque; } AVChannelLayout;
             typedef struct { const char *key; char *value; } AVDictionaryEntry;
@@ -220,9 +276,7 @@ final class Av
             int av_hwframe_transfer_data(AVFrame*, const AVFrame*, int);
             int av_frame_copy_props(AVFrame*, const AVFrame*);
             int av_get_pix_fmt(const char*);
-            C);
-        $f->av_log_set_level(-8); // AV_LOG_QUIET: on stderr, from its threads, else
-        return self::$f = $f;
+            C;
     }
 
     /** FFmpeg's message of error $code. */

@@ -14,8 +14,9 @@ use RuntimeException;
  * PHP reads the file's packets (Matroska and WebM in PHP; MP4, MOV and
  * M4V through the system's reader: Platform\Media) and the system decodes
  * and plays them: on macOS AVFoundation, the video shown straight by the
- * window server, on threads of its own; on Linux FFmpeg, PulseAudio (or
- * ALSA) and the window's renderer (Platform\Linux\Renderers). A timer on
+ * window server, on threads of its own; on Linux and Windows FFmpeg,
+ * PulseAudio (or ALSA) or WASAPI, and the window's renderer
+ * (Native\AvRenderers). A timer on
  * the main thread keeps two seconds ahead of the clock.
  * Codecs: H.264 and HEVC (VP9 and AV1 where decoded in hardware); AAC,
  * AC-3, E-AC-3, MP3, Opus and FLAC. It opens paused on

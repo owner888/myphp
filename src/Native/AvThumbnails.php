@@ -1,15 +1,15 @@
 <?php
 declare(strict_types=1);
 
-namespace MyPHP\Platform\Linux;
+namespace MyPHP\Native;
 
 use MyPHP\Media\{Packet, Track};
-use MyPHP\Native\{AvDecoder, AvScaler};
 use MyPHP\Platform;
 use RuntimeException;
 
 /**
- * Decodes keyframes of a video track into small pictures on Linux, away
+ * Decodes keyframes of a video track into small pictures on Linux and
+ * Windows over FFmpeg, away
  * from what plays (Player::thumbnail), as Native\ThumbnailDecoder does on
  * macOS: a libavcodec decoder of its own, on one thread, each keyframe
  * sent alone and drained (the decoder flushed after), its frame scaled by
@@ -17,7 +17,7 @@ use RuntimeException;
  *
  * @internal
  */
-final class Thumbnails implements Platform\Thumbnails
+final class AvThumbnails implements Platform\Thumbnails
 {
     /** The size of the pictures. */
     public readonly int $width, $height;

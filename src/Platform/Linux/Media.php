@@ -6,18 +6,19 @@ namespace MyPHP\Platform\Linux;
 use Closure;
 use MyPHP\Audio\Device;
 use MyPHP\Media\{Player, Track};
-use MyPHP\Native\{Av, AvDecoder, AvReader, MediaTicker, Pcm};
+use MyPHP\Native\{Av, AvDecoder, AvReader, AvRenderers, AvThumbnails, MediaHost, MediaTicker, Pcm, Sound, SoundDevice};
 use MyPHP\Platform;
 
 /**
  * The player's system on Linux: FFmpeg (libavformat reads what the core
  * does not, libavcodec decodes, libswscale and libswresample convert), the
  * sound through PulseAudio or ALSA, the picture drawn by the window's own
- * renderer (Linux\Renderers). Video decodes with VA-API where it can and
+ * renderer (Native\AvRenderers, this its MediaHost: GLib's timers, Pcm,
+ * the windows). Video decodes with VA-API where it can and
  * hardware decoding is asked (its frames copied to memory), else in
  * software.
  */
-final class Media implements Platform\Media
+final class Media implements Platform\Media, MediaHost
 {
     /** @var array<int, Closure(): void> what each player does at a tick, by its object id */
     private array $ticks = [];
@@ -47,12 +48,12 @@ final class Media implements Platform\Media
 
     public function output(bool $hardware): Platform\Renderers
     {
-        return new Renderers($hardware);
+        return new AvRenderers($this, $hardware);
     }
 
     public function thumbnails(Track $video, int $width, bool $hardware): Platform\Thumbnails
     {
-        return new Thumbnails($video, $width);
+        return new AvThumbnails($video, $width);
     }
 
     /** With VA-API where it is asked, the codec has it and a device opens (Native\AvDecoder::vaapiFor). */
@@ -269,6 +270,27 @@ final class Media implements Platform\Media
 
     public function audioDevice(): Device
     {
-        return new AudioOutput();
+        return new SoundDevice($this);
+    }
+
+    public function timeout(float $seconds, Closure $fn): int
+    {
+        return Gtk::timeout($seconds, $fn);
+    }
+
+    public function cancel(int $id): void
+    {
+        Gtk::cancel($id);
+    }
+
+    /** PulseAudio's, else ALSA's (Native\Pcm), named as the app. */
+    public function sound(int $rate, int $channels, float $ahead, ?string $device): Sound
+    {
+        return Pcm::open($rate, $channels, $ahead, \MyPHP\App::name(), $device);
+    }
+
+    public function windows(): array
+    {
+        return Window::all();
     }
 }

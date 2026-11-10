@@ -1,16 +1,16 @@
 <?php
 declare(strict_types=1);
 
-namespace MyPHP\Platform\Linux;
+namespace MyPHP\Native;
 
 use MyPHP\App;
 use MyPHP\Audio\{Device, Mixer, Output};
 use MyPHP\Logger;
-use MyPHP\Native\Pcm;
 
 /**
- * The app's sound output on Linux (mygo's output_linux.go, Media::
- * audioDevice): PulseAudio, else ALSA (Native\Pcm), of 48 kHz stereo
+ * The app's sound output on Linux and Windows (mygo's output_linux.go,
+ * Media::audioDevice): the system's (MediaHost::sound: PulseAudio, else
+ * ALSA; WASAPI), of 48 kHz stereo
  * floats, holding as much ahead as the latency keeps (Latency::buffers of
  * Output::FRAMES), as Native\AudioQueue does on macOS. mygo mixes on a
  * goroutine that waits in the device's write; here a timer on the main
@@ -18,17 +18,17 @@ use MyPHP\Native\Pcm;
  * so that PHP never waits on it.
  * @internal
  */
-final class AudioOutput implements Device
+final class SoundDevice implements Device
 {
     /** Seconds between the mixes, as mygo writes 10 ms at a time. */
     private const TICK = 0.01;
-    private Pcm $pcm;
+    private Sound $pcm;
     private int $timer = 0;
     private bool $closed = false;
 
-    public function __construct()
+    public function __construct(private readonly MediaHost $host)
     {
-        $this->pcm = Pcm::open(Mixer::RATE, Mixer::CHANNELS, $this->held() / Mixer::RATE, App::name());
+        $this->pcm = $host->sound(Mixer::RATE, Mixer::CHANNELS, $this->held() / Mixer::RATE, null);
     }
 
     public function start(): void
@@ -51,7 +51,7 @@ final class AudioOutput implements Device
             return;
         }
         $self = \WeakReference::create($this);
-        $this->timer = Gtk::timeout(self::TICK, static function () use ($self): void { $self->get()?->fill(); });
+        $this->timer = $this->host->timeout(self::TICK, static function () use ($self): void { $self->get()?->fill(); });
     }
 
     /** The frames it keeps ahead (Latency::buffers of Output::FRAMES), as it opened. */
@@ -66,7 +66,7 @@ final class AudioOutput implements Device
             return;
         }
         $this->closed = true;
-        if ($this->timer !== 0) { Gtk::cancel($this->timer); }
+        if ($this->timer !== 0) { $this->host->cancel($this->timer); }
         $this->pcm->close();
     }
 }

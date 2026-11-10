@@ -189,9 +189,26 @@ final class Backend implements Platform\Backend
             if (count($this->posted) === 1) { Win32::user32()->PostMessageW($this->hwnd, self::WM_APP_RUN, 0, 0); }
             return;
         }
+        $this->timeout($seconds, $fn);
+    }
+
+    /** @internal a timer of the app's window (SetTimer, 10 ms at least) running $fn once, cancel() takes back: its id */
+    public function timeout(float $seconds, Closure $fn): int
+    {
+        $this->start();
         $id = ++$this->nextTimer;
         $this->timers[$id] = $fn;
         Win32::user32()->SetTimer($this->hwnd, $id, max(10, (int)round($seconds * 1000)), null);
+        return $id;
+    }
+
+    /** @internal removes a timer timeout() made, unless it ran */
+    public function cancel(int $id): void
+    {
+        if (isset($this->timers[$id])) {
+            unset($this->timers[$id]);
+            Win32::user32()->KillTimer($this->hwnd, $id);
+        }
     }
 
     /** Waits 50 ms at most for a message, then handles those there are (mygo's Step); WM_QUIT is posted again for the loop outside. */

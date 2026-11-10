@@ -1,24 +1,25 @@
 <?php
 declare(strict_types=1);
 
-namespace MyPHP\Platform\Linux;
+namespace MyPHP\Native;
 
 use FFI\CData;
 use MyPHP\Logger;
 use MyPHP\Media\{AudioFilters, Packet, Player, Track};
-use MyPHP\Native\{Av, AvDecoder, AvFilter, AvScaler, Equalizer, Pcm, Zlib};
 use MyPHP\Platform;
 use MyPHP\UI\Image;
 
 /**
- * What decodes and plays a Player's packets on Linux, as Native\Renderers
- * does on macOS, on the main thread in slices: libavcodec decodes them
+ * What decodes and plays a Player's packets on Linux and Windows over
+ * FFmpeg, as Native\Renderers does on macOS, on the main thread in
+ * slices: libavcodec decodes them
  * as they are given (Native\AvDecoder; its frame threads decode video
  * while the packets are sent, the frames received later). The sound goes
  * through a libavfilter graph (Native\AvFilter: the equalizer's bands, the
  * gain, the audio filters, as FFmpeg's filters of mpv's af) that makes it
- * 48 kHz stereo floats, kept at the film's speed and written to PulseAudio
- * (or ALSA: Native\Pcm) 10 ms at a time from a timer, only what the device
+ * 48 kHz stereo floats, kept at the film's speed and written to the
+ * system's output (MediaHost::sound: PulseAudio or ALSA, WASAPI) 10 ms at a
+ * time from a timer of the main loop (MediaHost::timeout), only what the device
  * takes then (it holds AHEAD seconds), never waiting on it; at a rate but 1
  * through atempo (its pitch kept, as AVSampleBufferAudioRenderer's time
  * pitch). The sound is the clock, as AVSampleBufferRenderSynchronizer's:
@@ -36,7 +37,7 @@ use MyPHP\UI\Image;
  *
  * @internal
  */
-final class Renderers implements Platform\Renderers
+final class AvRenderers implements Platform\Renderers
 {
     public ?\Closure $videoWanted = null;
     public float $audioDelay = 0.0;
@@ -88,7 +89,7 @@ final class Renderers implements Platform\Renderers
     private int $timer = 0;
 
     /** The sound's output, opened at the first audio packet; why it did not open. */
-    private ?Pcm $pcm = null;
+    private ?Sound $pcm = null;
     private ?string $pcmFailed = null;
     /** The sound decoded and not heard: its bytes, the clock's time of its first frame (null: none since a flush), the frames of it written. */
     private string $sound = '';
@@ -98,7 +99,7 @@ final class Renderers implements Platform\Renderers
     private bool $muted = false;
     private ?string $failed = null;
 
-    public function __construct(private bool $hardware = true)
+    public function __construct(private readonly MediaHost $host, private bool $hardware = true)
     {
         $this->scaler = new AvScaler();
     }
@@ -122,7 +123,7 @@ final class Renderers implements Platform\Renderers
         if ($this->pollTimer !== 0) {
             return;
         }
-        $this->pollTimer = Gtk::timeout(self::POLL, $this->later(static function (self $r): void {
+        $this->pollTimer = $this->host->timeout(self::POLL, $this->later(static function (self $r): void {
             $r->pollTimer = 0;
             if ($r->videoWanted !== null) { ($r->videoWanted)(); }
         }));
@@ -341,16 +342,16 @@ final class Renderers implements Platform\Renderers
     {
         if ($this->device !== null) {
             try {
-                $this->pcm = Pcm::open(self::RATE, self::CHANNELS, self::AHEAD, \MyPHP\App::name(), $this->device);
-                Logger::debug("the film's sound plays through {$this->pcm->system}, on {$this->device}", 'media');
+                $this->pcm = $this->host->sound(self::RATE, self::CHANNELS, self::AHEAD, $this->device);
+                Logger::debug("the film's sound plays through {$this->pcm->name()}, on {$this->device}", 'media');
                 return;
             } catch (\RuntimeException $e) {
                 Logger::warn("the audio device {$this->device} does not open ({$e->getMessage()}): the film plays on the default one", 'media');
             }
         }
         try {
-            $this->pcm = Pcm::open(self::RATE, self::CHANNELS, self::AHEAD, \MyPHP\App::name());
-            Logger::debug("the film's sound plays through {$this->pcm->system}", 'media');
+            $this->pcm = $this->host->sound(self::RATE, self::CHANNELS, self::AHEAD, null);
+            Logger::debug("the film's sound plays through {$this->pcm->name()}", 'media');
         } catch (\RuntimeException $e) {
             $this->pcmFailed = $e->getMessage();
             Logger::warn($e->getMessage() . ': the film plays without its sound, on the system\'s clock', 'media');
@@ -450,7 +451,7 @@ final class Renderers implements Platform\Renderers
         }
         $this->image === null ? $this->image = Image::fromPixels($w, $h, $rgba) : $this->image->update($w, $h, $rgba);
         [$this->shown, $this->fresh] = [$frame, false];
-        foreach (Window::all() as $win) { // those whose last frame showed it: their nodes painted again
+        foreach ($this->host->windows() as $win) { // those whose last frame showed it: their nodes painted again
             foreach ($win->w->runtime?->videoPlaces ?? [] as $place) {
                 if ($place['view'] instanceof Player && $place['view']->out === $this) {
                     $win->requestFrame(1, true);
@@ -473,7 +474,7 @@ final class Renderers implements Platform\Renderers
             $this->failed = $e->getMessage();
         }
         $this->present();
-        $this->timer = Gtk::timeout(self::TICK, $this->later(static fn(self $r) => $r->tick()));
+        $this->timer = $this->host->timeout(self::TICK, $this->later(static fn(self $r) => $r->tick()));
     }
 
     /** $fn of these renderers for a timer, which holds them weakly: renderers let go (their player's) stop ticking. */
@@ -643,9 +644,9 @@ final class Renderers implements Platform\Renderers
         $this->rewind($now); // what the device holds goes: it plays again from the clock's time
         [$this->base, $this->since, $this->rate] = [$now, hrtime(true), $rate];
         if ($rate > 0 && $this->timer === 0) {
-            $this->timer = Gtk::timeout(0, $this->later(static fn(self $r) => $r->tick()));
+            $this->timer = $this->host->timeout(0, $this->later(static fn(self $r) => $r->tick()));
         } elseif ($rate <= 0 && $this->timer !== 0) {
-            Gtk::cancel($this->timer);
+            $this->host->cancel($this->timer);
             $this->timer = 0;
         }
     }
@@ -665,7 +666,7 @@ final class Renderers implements Platform\Renderers
         return $this->failed;
     }
 
-    /** The device chosen, mpv's name of it ("pulse/<sink>", "alsa/<device>": Media::audioOutputs), null for the default. */
+    /** The device chosen, mpv's name of it ("pulse/<sink>", "alsa/<device>", "wasapi/<endpoint id>": Media::audioOutputs), null for the default. */
     private ?string $device = null;
 
     /**
@@ -719,8 +720,8 @@ final class Renderers implements Platform\Renderers
 
     public function __destruct()
     {
-        if ($this->timer !== 0) { Gtk::cancel($this->timer); }
-        if ($this->pollTimer !== 0) { Gtk::cancel($this->pollTimer); }
+        if ($this->timer !== 0) { $this->host->cancel($this->timer); }
+        if ($this->pollTimer !== 0) { $this->host->cancel($this->pollTimer); }
         foreach ($this->pictures as [, $f]) { AvDecoder::release($f); }
         foreach ($this->raws as $f) { AvDecoder::release($f); }
         $this->pcm?->close();

@@ -1973,11 +1973,21 @@ on the main thread and only then. Its flags map to notices in the pure
 `FsEvents::notice()`, which the tests check without a stream. On Linux,
 where the tests run, inotify, an instance per watch, read without
 blocking, each target checked against the scan's stat so that a
-replacement racing the enrollment is not watched. Stats are PHP's `lstat` with its stat cache
+replacement racing the enrollment is not watched. On Windows
+ReadDirectoryChangesW (`DirectoryChanges`, mygo's windows watch.go): a
+handle per directory target, opened to share deletes and not to follow
+reparse points, its I/O completing on one completion port `poll()`
+waits on; a recursive watch is the root's one subtree target, as Windows
+renames no directory beneath an open handle; a handle's file index must
+be the scan's lstat's inode (PHP gives Windows's), and its records parse
+in the pure `DirectoryChanges::parse()`, which the tests check on every
+system; `close()` waits for the canceled I/O, whose buffers are kept for
+good after five seconds. Stats are PHP's `lstat` with its stat cache
 cleared first (it keeps the last path's), and when one fails libc's
 `lstat` again for its errno (`__error`, `__errno_location`), which PHP
 doesn't give, so that not found and permission denied are told apart as
-Go's errors are. PHP keeps array keys like "42" as integers, so the scan
+Go's errors are; on Windows the Win32 error of GetFileAttributesW, as the
+errno of the same meaning. PHP keeps array keys like "42" as integers, so the scan
 reads keys back as strings. The tests send notices through a fake backend
 (`Backends::$fake`, mygo's fake.FileWatch), then use the system's.
 
@@ -7927,7 +7937,10 @@ demuxers (image2, *_pipe) and a file whose extension is not one of its
 demuxer's (av_match_ext). FFmpeg's log is off (its threads would call PHP);
 return codes are thrown or logged.
 
-`Linux\Renderers` decodes on the main thread as the packets are given, the
+`Native\AvRenderers` (Linux's and Windows's: what differs, the main
+loop's timers, the sound's output and the windows, is the platform's
+`Media`, a `Native\MediaHost`) decodes on the main thread as the packets
+are given, the
 video's give limited to a 10 ms slice (as Native\Renderers): libavcodec's
 frame threads decode while packets are sent, the frames received later; at
 most 8 decoded frames wait, ready() false beyond. A packet given not to be
@@ -7947,6 +7960,9 @@ windows whose last frame showed the player (their `videoPlaces`) are asked
 to repaint, and `Painter::nativeHole` draws `Renderers::frame()` where macOS
 opens a hole: black, the picture as `Player::picture` lays it out, from the
 image's own slot (a level of it would be halved in PHP each frame).
+Thumbnails are `Native\AvThumbnails`', the app's own sound
+`Native\SoundDevice`'s, both over the same host; the sound outputs are
+`Native\Sound`s.
 
 The sound goes through `Native\Pcm`: PulseAudio, else ALSA's default device
 opened non-blocking. mygo uses PulseAudio's simple API from a goroutine
@@ -7957,7 +7973,22 @@ asynchronous API on a threaded main loop with no callback (PHP never runs
 on its thread): states polled under the loop's lock, `pa_stream_writable_size`
 the room, ADJUST_LATENCY, a prebuffer of 10 ms (a short end after a seek
 would otherwise never start). A write now takes under 0.1 ms. The app's own
-sound (`Linux\AudioOutput`) mixes from a 10 ms timer what the device takes.
+sound (`Native\SoundDevice`) mixes from a 10 ms timer what the device takes.
+
+On Windows FFmpeg is the DLLs of a shared build (avcodec-61.dll…), loaded
+by LoadLibraryW's search (the app's directory, PATH) or from MYPHP_FFMPEG's
+directory, each looked for first as a data file, then kept loaded; the one
+FFI is of no library, as PHP on Windows looks a function up in every module
+loaded (there is no RTLD_GLOBAL), and the layouts are those of Linux (the
+same ABI: no `long` among them). CI takes FFmpeg 7.1's from a pinned
+release. Video decodes in software. The sound goes through WASAPI
+(`Native\Wasapi`): a shared-mode stream of the endpoint (the default, or
+one of `audioOutputs()`' "wasapi/<endpoint id>"), 32-bit floats the mixer
+converts (AUTOCONVERTPCM), its buffer AHEAD seconds; room is the buffer
+less its padding, delay the padding, a flush Stop and Reset, started again
+at the next write; timers are the app window's (SetTimer, of 10 ms at
+least, which modal loops dispatch). A runner without an output plays on
+the system's clock, as Linux without a device.
 
 Measured here (Xvfb, PulseAudio's null sink, its monitor recorded): an
 H.264/AAC MP4, a VP9/Opus WebM, an AV1/Vorbis MKV and an MP3 play, the

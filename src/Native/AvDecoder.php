@@ -9,8 +9,8 @@ use MyPHP\Media\{Packet, Track};
 use RuntimeException;
 
 /**
- * libavcodec's decoder of a track's packets (Platform\Linux\Renderers,
- * Thumbnails): made of the track as the core reads it, its codec
+ * libavcodec's decoder of a track's packets (AvRenderers,
+ * AvThumbnails): made of the track as the core reads it, its codec
  * Matroska's id and its CodecPrivate the decoder's extradata (an avcC,
  * an AudioSpecificConfig, an OpusHead, Vorbis's Xiph-laced headers…, as
  * FFmpeg's Matroska demuxer gives them), its packets' times microseconds.
