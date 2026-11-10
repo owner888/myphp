@@ -27,7 +27,7 @@ use MyPHP\Platform\Unsupported;
 final class WebView implements Platform\Page
 {
     private const IID_CONTROLLER2 = 'c979903e-d4ca-4228-92eb-47ee3fa96eab', IID_SETTINGS2 = 'ee9a0f68-f46c-4e32-ac23-ef8cac224d2a';
-    private const IID_VIEW4 = '20d02d59-6df2-42dc-bd06-f98a694b1302';
+    private const IID_VIEW4 = '20d02d59-6df2-42dc-bd06-f98a694b1302', IID_ENV10 = 'ee0eb9df-6f12-46ce-b53f-3f47b9c928e0';
     private const IID_SETTINGS3 = 'fdb5ab74-af33-4854-84f0-0a631deb5eba', IID_SETTINGS5 = '183e7052-1d03-43a0-ab99-98e043b66b39', IID_SETTINGS6 = '11cb3acd-9bc8-43b8-83bf-f40753714f87';
     private const CHANNELS = ['{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', '{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}', '{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}', '{65C35B14-6C1D-4122-AC46-7148CC9D6497}']; // Stable, Beta, Dev, Canary
     /** What hands the bridge's posts to WebView2's channel, before any script of the page. */
@@ -41,6 +41,8 @@ final class WebView implements Platform\Page
     /** The handlers' shared vtable, and each handler's closure by its number. @var array<int, Closure> */
     private static ?CData $handlerVtbl = null;
     private static array $handlers = [];
+    /** @var array<int, list<string>> the interfaces a handler made with $only answers for, by its number */
+    private static array $only = [];
     private static int $nextHandler = 0;
 
     private ?CData $controller = null, $view = null, $settings = null;
@@ -80,7 +82,9 @@ final class WebView implements Platform\Page
     public ?Closure $onChange = null, $onOpen = null, $onScheme = null, $onDownload = null, $onDownloadDone = null, $onSchemeDownload = null, $onAuth = null, $onCertificate = null, $onPermission = null, $onPanel = null, $onContextMenu = null;
 
     /** @param list<string|array{0: string, 1: bool}> $scripts */
-    public function __construct(private array $scripts, private readonly Closure $onMessage, private readonly bool $devTools, private string $userAgent, float $zoom, private readonly bool $pinch, private readonly bool $swipe)
+    public function __construct(private array $scripts, private readonly Closure $onMessage, private readonly bool $devTools, private string $userAgent, float $zoom, private readonly bool $pinch, private readonly bool $swipe,
+        /** The session's profile, null for the default one. */
+        public readonly ?DataStore $store = null)
     {
         $this->zoomFactor = $zoom > 0 ? $zoom : 1.0;
     }
@@ -101,6 +105,10 @@ final class WebView implements Platform\Page
             };
             typedef struct { void *r0[3]; int32_t (*CreateCoreWebView2Controller)(void *self, void *hwnd, void *handler); int32_t (*CreateWebResourceResponse)(void *self, void *content, int32_t status, const void *reason, const void *headers, void **response); } EnvVtbl;
             typedef struct { EnvVtbl *v; } Env;
+            typedef struct { void *r0[20]; int32_t (*CreateCoreWebView2ControllerOptions)(void *self, void **options); int32_t (*CreateCoreWebView2ControllerWithOptions)(void *self, void *hwnd, void *options, void *handler); } Env10Vtbl;
+            typedef struct { Env10Vtbl *v; } Env10;
+            typedef struct { void *r0[4]; int32_t (*put_ProfileName)(void *self, const void *name); void *r5; int32_t (*put_IsInPrivateModeEnabled)(void *self, int32_t on); } ControllerOptionsVtbl;
+            typedef struct { ControllerOptionsVtbl *v; } ControllerOptions;
             typedef struct {
                 void *r0[4];
                 int32_t (*put_IsVisible)(void *self, int32_t visible);
@@ -228,18 +236,29 @@ final class WebView implements Platform\Page
 
     // The handlers: COM objects of PHP's.
 
-    /** @internal WebsiteData: a handler whose Invoke calls $fn(a, b): a completed one's (HRESULT, result), an event's (sender, args); it lives as long as the process (WebView2 may call it till it goes). */
-    public static function handler(Closure $fn): CData
+    /**
+     * @internal WebsiteData, NowPlaying: a handler whose Invoke calls $fn(a,
+     * b): a completed one's (HRESULT, result), an event's (sender, args); it
+     * lives as long as the process (WebView2 may call it till it goes).
+     * With $only (IIDs), it is IUnknown and those interfaces alone, as a
+     * Windows Runtime event's source asks of a delegate (mygo's
+     * newSMTCHandler): one claiming IWeakReferenceSource would be called
+     * beyond its vtable.
+     * @param ?list<string> $only
+     */
+    public static function handler(Closure $fn, ?array $only = null): CData
     {
         $f = self::f();
         if (self::$handlerVtbl === null) {
             $vt = self::$handlerVtbl = $f->new('HandlerVtbl', false);
             // IMarshal, IAgileObject and INoMarshal refused (mygo's handlerVtbl): a handler claiming them would be called
             // beyond its vtable; IUnknown and the handler's own interface are what remains.
-            $refused = array_map(fn(string $g) => pack('Vvv', hexdec(substr($g, 0, 8)), hexdec(substr($g, 9, 4)), hexdec(substr($g, 14, 4))) . hex2bin(substr($g, 19, 4) . substr($g, 24)), // a GUID's bytes
-                ['00000003-0000-0000-c000-000000000046', '94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90', 'ecc8691b-c1db-4dc0-855e-65f6c551af49']);
-            $vt->QueryInterface = function ($self, $iid, $out) use ($refused): int {
-                if (in_array(Mem::read(Mem::addr($iid), 16), $refused, true)) {
+            $refused = array_map(self::iidBytes(...), ['00000003-0000-0000-c000-000000000046', '94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90', 'ecc8691b-c1db-4dc0-855e-65f6c551af49']);
+            $unknown = self::iidBytes('00000000-0000-0000-c000-000000000046');
+            $vt->QueryInterface = function ($self, $iid, $out) use ($refused, $unknown, $f): int {
+                $asked = Mem::read(Mem::addr($iid), 16);
+                $only = self::$only[$f->cast('Handler *', $self)->id] ?? null;
+                if (in_array($asked, $refused, true) || $only !== null && $asked !== $unknown && !in_array($asked, $only, true)) {
                     $out[0] = null;
                     return Com::E_NOINTERFACE;
                 }
@@ -263,7 +282,16 @@ final class WebView implements Platform\Page
         $h->v = FFI::addr(self::$handlerVtbl);
         $h->id = ++self::$nextHandler;
         self::$handlers[$h->id] = $fn;
+        if ($only !== null) {
+            self::$only[$h->id] = array_map(self::iidBytes(...), $only);
+        }
         return FFI::addr($h);
+    }
+
+    /** The 16 bytes of the GUID of text $g, as they are in memory. */
+    private static function iidBytes(string $g): string
+    {
+        return pack('Vvv', hexdec(substr($g, 0, 8)), hexdec(substr($g, 9, 4)), hexdec(substr($g, 14, 4))) . hex2bin(substr($g, 19, 4) . substr($g, 24));
     }
 
     /** @internal An HRESULT passed in a register of 64 bits, its upper half undefined, as a signed 32-bit one. */
@@ -389,29 +417,66 @@ final class WebView implements Platform\Page
         }
     }
 
-    /** @internal WebsiteData: the ICoreWebView2 of a page shown, the first one, null for none */
-    public static function shownView(): ?CData
+    /** @internal WebsiteData: the ICoreWebView2 of a page shown of the profile $store (null: the default one), the first one, null for none */
+    public static function shownView(?DataStore $store): ?CData
     {
         foreach (self::$shown as $page) {
-            return $page->view;
+            if ($page->store === $store) {
+                return $page->view;
+            }
         }
         return null;
     }
 
     /**
-     * @internal WebsiteData: makes a controller in $hwnd, not visible, for
-     * what only a web view has (a cookie manager); then $done(controller,
-     * view), or $done(null, null, why).
+     * Asks the environment for a controller in $hwnd of the profile $store,
+     * null for the default one, through $handler (mygo's createController):
+     * a profile's name, InPrivate for an ephemeral one, in the options of
+     * ICoreWebView2Environment10 (a runtime of 1.0.1185 or newer). An
+     * HRESULT.
      */
-    public static function hiddenView(CData $hwnd, Closure $done): void
+    private static function createController(?DataStore $store, CData $hwnd, CData $handler): int
     {
-        self::environment(function () use ($hwnd, $done): void {
+        $env = self::$env;
+        if ($store === null) {
+            return ($env->v->CreateCoreWebView2Controller)($env, $hwnd, $handler);
+        }
+        $f = self::f();
+        $e10 = Com::query($env, self::IID_ENV10);
+        if ($e10 === null) {
+            Logger::warn('sessions need a newer WebView2 Runtime (profiles, 1.0.1185 or newer)', 'windows');
+            return Com::E_NOINTERFACE;
+        }
+        $e = Com::typed($f, $e10, 'Env10 *');
+        $out = $f->new('void *');
+        try {
+            if (($hr = ($e->v->CreateCoreWebView2ControllerOptions)($e, FFI::addr($out))) < 0 || FFI::isNull($out)) {
+                return $hr < 0 ? $hr : Com::E_NOINTERFACE;
+            }
+            $o = Com::typed($f, $out, 'ControllerOptions *');
+            if (($hr = ($o->v->put_ProfileName)($o, Win32::wide($store->profile))) >= 0 && $store->private) {
+                $hr = ($o->v->put_IsInPrivateModeEnabled)($o, 1);
+            }
+            return $hr < 0 ? $hr : ($e->v->CreateCoreWebView2ControllerWithOptions)($e, $hwnd, $o, $handler);
+        } finally {
+            if (!FFI::isNull($out)) { Com::release($out); }
+            Com::release($e10);
+        }
+    }
+
+    /**
+     * @internal WebsiteData: makes a controller in $hwnd of the profile
+     * $store, not visible, for what only a web view has (a cookie manager);
+     * then $done(controller, view), or $done(null, null, why).
+     */
+    public static function hiddenView(CData $hwnd, ?DataStore $store, Closure $done): void
+    {
+        self::environment(function () use ($hwnd, $store, $done): void {
             if (self::$env === false) {
                 $done(null, null, 'no WebView2 Runtime');
                 return;
             }
-            $env = self::$env;
-            $hr = ($env->v->CreateCoreWebView2Controller)($env, $hwnd, self::handler(function (int $a, $controller) use ($done): void {
+            $hr = self::createController($store, $hwnd, self::handler(function (int $a, $controller) use ($done): void {
                 if (self::hr($a) < 0 || $controller === null) {
                     $done(null, null, sprintf('creating a WebView2 controller failed (0x%08X)', $a & 0xFFFFFFFF));
                     return;
@@ -453,8 +518,7 @@ final class WebView implements Platform\Page
                 Logger::warn('the page shows nothing: no WebView2', 'windows');
                 return;
             }
-            $env = self::$env;
-            $hr = ($env->v->CreateCoreWebView2Controller)($env, $this->host, self::handler(function (int $a, $controller): void {
+            $hr = self::createController($this->store, $this->host, self::handler(function (int $a, $controller): void {
                 if ($this->closed || $this->window === null || $this->window->isDead()) {
                     return;
                 }

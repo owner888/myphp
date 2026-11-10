@@ -56,16 +56,16 @@ final class Media implements Platform\Media, MediaHost
         return new AvThumbnails($video, $width);
     }
 
-    /** With VA-API where it is asked, the codec has it and a device opens (Native\AvDecoder::vaapiFor). */
+    /** With VA-API where it is asked, the codec has it and a device opens (Native\AvDecoder::hardwareFor). */
     public function hardwareDecodes(Track $video, bool $hardware): bool
     {
-        return $hardware && AvDecoder::vaapiFor($video)[0];
+        return $hardware && AvDecoder::hardwareFor($video)[0];
     }
 
     /** Where VA-API decodes it: either way, as software decodes every track. */
     public function decodingSwitchable(Track $video): bool
     {
-        return AvDecoder::vaapiFor($video)[0];
+        return AvDecoder::hardwareFor($video)[0];
     }
 
     /** FFmpeg's decoder of the track, by its name ("FFmpeg h264", "FFmpeg h264 (VA-API)"). */

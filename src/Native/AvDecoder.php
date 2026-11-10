@@ -17,10 +17,10 @@ use RuntimeException;
  * With $threads 0 it decodes on as many threads as the cores (FFmpeg's
  * frame threads: a packet sent returns before its frame is decoded,
  * which a later receive() gives). With $hardware, a video track decodes
- * with VA-API where the codec has it and a device opens (vaapi()), its
- * surfaces copied to memory as they come out (av_hwframe_transfer_data:
- * NV12 or P010, which libswscale converts as any); else in software, why
- * in $software.
+ * on the system's decoders where the codec has them and a device opens
+ * (hardwareOf: VA-API on Linux, D3D11VA on Windows), its surfaces copied to
+ * memory as they come out (av_hwframe_transfer_data: NV12 or P010, which
+ * libswscale converts as any); else in software, why in $software.
  *
  * @internal
  */
@@ -31,17 +31,17 @@ final class AvDecoder
     private CData $packet;
     /** FFmpeg's name of the decoder ("h264", "libdav1d"). */
     public readonly string $name;
-    /** Whether it decodes with VA-API; why not, where hardware was asked. */
-    public readonly bool $vaapi;
+    /** Whether it decodes on the system's decoders (hardwareName()'s); why not, where hardware was asked. */
+    public readonly bool $accelerated;
     public readonly ?string $software;
     /** AVCodecContext's hw_device_ctx, by libavcodec's major version (FFmpeg 7.1's and 6.1's headers). */
     private const HW_DEVICE = [61 => 560, 60 => 864];
-    /** AV_HWDEVICE_TYPE_VAAPI, AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX. */
-    private const VAAPI = 3, HW_DEVICE_CTX = 1;
-    /** The VA-API device (an AVBufferRef*), opened once; why it did not open; AV_PIX_FMT_VAAPI. */
+    /** AV_HWDEVICE_TYPE_VAAPI, AV_HWDEVICE_TYPE_D3D11VA, AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX. */
+    private const VAAPI = 3, D3D11VA = 7, HW_DEVICE_CTX = 1;
+    /** The system's device (an AVBufferRef*), opened once; why it did not open; its frames' format (AV_PIX_FMT_VAAPI, AV_PIX_FMT_D3D11). */
     private static ?CData $device = null;
     private static ?string $deviceFailed = null;
-    private static int $vaapiFormat = -1;
+    private static int $hardwareFormat = -1;
 
     public function __construct(public readonly Track $track, int $threads, bool $hardware = false)
     {
@@ -71,11 +71,11 @@ final class AvDecoder
         } finally {
             $f->avcodec_parameters_free(FFI::addr($par));
         }
-        $why = !$hardware ? null : ($track->type !== Track::VIDEO ? 'not a video track' : self::vaapiOf($codec));
-        if ($hardware && $why === null) { // libavcodec's own get_format picks VA-API's surfaces once the device is set, falling back to software where it cannot (no PHP on its threads)
+        $why = !$hardware ? null : ($track->type !== Track::VIDEO ? 'not a video track' : self::hardwareOf($codec));
+        if ($hardware && $why === null) { // libavcodec's own get_format picks the device's surfaces once it is set, falling back to software where it cannot (no PHP on its threads)
             $f->cast('void**', $f->cast('char*', $ctx) + self::HW_DEVICE[Av::$major])[0] = $f->av_buffer_ref(self::$device);
         }
-        [$this->vaapi, $this->software] = [$hardware && $why === null, $hardware ? $why : 'software asked'];
+        [$this->accelerated, $this->software] = [$hardware && $why === null, $hardware ? $why : 'software asked'];
         $tb = $f->new('AVRational');
         [$tb->num, $tb->den] = [1, Av::SCALE];
         $f->av_opt_set_q($ctx, 'pkt_timebase', $tb, 0);
@@ -127,10 +127,10 @@ final class AvDecoder
         $f = Av::ffi();
         $frame = $f->av_frame_alloc();
         $st = $f->avcodec_receive_frame($this->ctx, $frame);
-        if ($st === 0 && $frame->format === self::$vaapiFormat && $this->vaapi) { // a VA-API surface: its pixels copied to memory
+        if ($st === 0 && $frame->format === self::$hardwareFormat && $this->accelerated) { // the device's surface: its pixels copied to memory
             $sw = $f->av_frame_alloc();
             try {
-                Av::check($f->av_hwframe_transfer_data($sw, $frame, 0), 'copying a VA-API frame to memory');
+                Av::check($f->av_hwframe_transfer_data($sw, $frame, 0), 'copying a ' . self::hardwareName() . ' frame to memory');
                 $f->av_frame_copy_props($sw, $frame);
             } catch (RuntimeException $e) {
                 self::release($sw);
@@ -150,44 +150,53 @@ final class AvDecoder
         throw new RuntimeException("myphp: decoding {$this->track->codec}: " . Av::error($st));
     }
 
+    /** The system's decoders: "VA-API" on Linux, "D3D11VA" on Windows. */
+    public static function hardwareName(): string
+    {
+        return PHP_OS_FAMILY === 'Windows' ? 'D3D11VA' : 'VA-API';
+    }
+
     /**
-     * Why codec $codec does not decode with VA-API here, null where it does:
-     * the codec has no VA-API configuration, or no device opens (the render
-     * node $MYPHP_VAAPI_DEVICE, else libva's choice: /dev/dri/renderD128…).
-     * The device is opened once, for every decoder.
+     * Why codec $codec does not decode on the system's decoders here, null
+     * where it does: the codec has no configuration of the system's device
+     * type, or no device opens (Linux: the render node $MYPHP_VAAPI_DEVICE,
+     * else libva's choice, /dev/dri/renderD128…; Windows: the default
+     * adapter's Direct3D 11 device). The device is opened once, for every
+     * decoder.
      */
-    private static function vaapiOf(CData $codec): ?string
+    private static function hardwareOf(CData $codec): ?string
     {
         $f = Av::ffi();
+        [$type, $format] = PHP_OS_FAMILY === 'Windows' ? [self::D3D11VA, 'd3d11'] : [self::VAAPI, 'vaapi'];
         $has = false;
         for ($i = 0; ($c = $f->avcodec_get_hw_config($codec, $i)) !== null; $i++) {
-            if ($c->device_type === self::VAAPI && ($c->methods & self::HW_DEVICE_CTX) !== 0) { $has = true; }
+            if ($c->device_type === $type && ($c->methods & self::HW_DEVICE_CTX) !== 0) { $has = true; }
         }
         if (!$has) {
-            return 'its decoder (' . FFI::string($codec->name) . ') has no VA-API';
+            return 'its decoder (' . FFI::string($codec->name) . ') has no ' . self::hardwareName();
         }
         if (self::$device === null && self::$deviceFailed === null) {
             $dev = $f->new('void*');
-            $node = getenv('MYPHP_VAAPI_DEVICE');
-            $st = $f->av_hwdevice_ctx_create(FFI::addr($dev), self::VAAPI, $node === false || $node === '' ? null : $node, null, 0);
+            $node = PHP_OS_FAMILY === 'Windows' ? false : getenv('MYPHP_VAAPI_DEVICE');
+            $st = $f->av_hwdevice_ctx_create(FFI::addr($dev), $type, $node === false || $node === '' ? null : $node, null, 0);
             if ($st < 0) {
-                self::$deviceFailed = 'no VA-API device opens (' . ($node === false || $node === '' ? 'the default' : $node) . '): ' . Av::error($st);
+                self::$deviceFailed = 'no ' . self::hardwareName() . ' device opens (' . ($node === false || $node === '' ? 'the default' : $node) . '): ' . Av::error($st);
             } else {
-                [self::$device, self::$vaapiFormat] = [$dev, $f->av_get_pix_fmt('vaapi')];
+                [self::$device, self::$hardwareFormat] = [$dev, $f->av_get_pix_fmt($format)];
             }
         }
         return self::$deviceFailed;
     }
 
-    /** Whether track $t decodes with VA-API here, and why not ([bool, ?string]): Linux\Media::hardwareDecodes, the Inspector's. @return array{0: bool, 1: ?string} */
-    public static function vaapiFor(Track $t): array
+    /** Whether track $t decodes on the system's decoders here, and why not ([bool, ?string]): Media::hardwareDecodes, the Inspector's. @return array{0: bool, 1: ?string} */
+    public static function hardwareFor(Track $t): array
     {
         $id = Av::codecId($t);
         $codec = $id === null ? null : Av::ffi()->avcodec_find_decoder($id);
         if ($t->type !== Track::VIDEO || $codec === null) {
             return [false, 'not a video track FFmpeg decodes'];
         }
-        $why = self::vaapiOf($codec);
+        $why = self::hardwareOf($codec);
         return [$why === null, $why];
     }
 

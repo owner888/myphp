@@ -5,9 +5,8 @@ namespace MyPHP\Platform\Windows;
 
 use Closure;
 use MyPHP\Media\{Player, Track};
-use MyPHP\Native\{Av, AvReader, AvRenderers, AvThumbnails, MediaHost, MediaTicker, Sound, SoundDevice, Wasapi};
+use MyPHP\Native\{Av, AvDecoder, AvReader, AvRenderers, AvThumbnails, MediaHost, MediaTicker, Sound, SoundDevice, Wasapi, Wic};
 use MyPHP\Platform;
-use MyPHP\Platform\Unsupported;
 
 /**
  * The player's system on Windows: FFmpeg, as on Linux (libavformat reads
@@ -15,8 +14,8 @@ use MyPHP\Platform\Unsupported;
  * convert: the DLLs of a shared build, Native\Av), the sound through
  * WASAPI (Native\Wasapi), the picture drawn by the window's own renderer
  * (Native\AvRenderers, this its MediaHost: the app window's timers, WASAPI,
- * the windows). Video decodes in software; Now Playing and JPEGs are not
- * here yet, and staying awake is Power's.
+ * the windows). Video decodes with D3D11VA where it can and hardware
+ * decoding is asked (its frames copied to memory), else in software. JPEGs are WIC's (Native\Wic); staying awake is Power's.
  */
 final class Media implements Platform\Media, MediaHost
 {
@@ -46,10 +45,9 @@ final class Media implements Platform\Media, MediaHost
         return $id !== null && Av::ffi()->avcodec_find_decoder($id) !== null;
     }
 
-    /** Software decoding: VA-API is Linux's, and D3D11VA not here yet. */
     public function output(bool $hardware): Platform\Renderers
     {
-        return new AvRenderers($this, false);
+        return new AvRenderers($this, $hardware);
     }
 
     public function thumbnails(Track $video, int $width, bool $hardware): Platform\Thumbnails
@@ -57,20 +55,22 @@ final class Media implements Platform\Media, MediaHost
         return new AvThumbnails($video, $width);
     }
 
+    /** With D3D11VA where it is asked, the codec has it and a Direct3D 11 device opens (Native\AvDecoder::hardwareFor). */
     public function hardwareDecodes(Track $video, bool $hardware): bool
     {
-        return false;
+        return $hardware && AvDecoder::hardwareFor($video)[0];
     }
 
+    /** Where D3D11VA decodes it: either way, as software decodes every track. */
     public function decodingSwitchable(Track $video): bool
     {
-        return false;
+        return AvDecoder::hardwareFor($video)[0];
     }
 
-    /** FFmpeg's decoder of the track, by its name ("FFmpeg h264"). */
+    /** FFmpeg's decoder of the track, by its name ("FFmpeg h264", "FFmpeg h264 (D3D11VA)"). */
     public function videoDecoder(Track $video, bool $hardware): string
     {
-        return $this->decoderName($video);
+        return $this->decoderName($video) . ($this->hardwareDecodes($video, $hardware) ? ' (D3D11VA)' : '');
     }
 
     public function audioDecoder(Track $audio): string
@@ -155,24 +155,61 @@ final class Media implements Platform\Media, MediaHost
         return null;
     }
 
-    public function showNowPlaying(object $owner, array $handlers, string $path, float $duration, float $time, float $rate, bool $paused, int $index, int $count, int $chapter, int $chapters): void {}
+    /** MediaCommand's bits of the handlers' names (Native\NowPlaying's MEDIA, a position a seek), as Linux\Media's. */
+    private const COMMANDS = ['play' => 1, 'pause' => 2, 'toggle' => 4, 'stop' => 8, 'next' => 16, 'previous' => 32, 'position' => 64];
 
-    public function endNowPlaying(object $owner): void {}
+    /** What showed the player's state last, by its id. */
+    private int $nowPlayingOwner = 0;
 
+    /**
+     * The film in the system's media controls (Windows\NowPlaying): its
+     * name, duration, position, rate and state, its commands calling
+     * $handlers with $owner (held weakly), as Linux\Media's do.
+     */
+    public function showNowPlaying(object $owner, array $handlers, string $path, float $duration, float $time, float $rate, bool $paused, int $index, int $count, int $chapter, int $chapters): void
+    {
+        $bits = 0;
+        foreach (self::COMMANDS as $name => $bit) {
+            if (isset($handlers[$name])) { $bits |= $bit; }
+        }
+        $this->nowPlayingOwner = spl_object_id($owner);
+        $ref = \WeakReference::create($owner);
+        $this->b->nowPlaying()->show(['title' => pathinfo($path, PATHINFO_FILENAME), 'artist' => '', 'album' => '', 'artwork' => '', 'duration' => $duration, 'position' => $time,
+            'rate' => $rate, 'state' => $paused ? 'paused' : 'playing', 'commands' => $bits], static function (int $cmd, float $at) use ($ref, $handlers): void {
+            $o = $ref->get();
+            $name = array_search($cmd, self::COMMANDS, true);
+            if ($o === null || $name === false || !isset($handlers[$name])) {
+                return;
+            }
+            $name === 'position' ? $handlers[$name]($o, $at) : $handlers[$name]($o);
+        });
+    }
+
+    public function endNowPlaying(object $owner): void
+    {
+        if ($this->nowPlayingOwner !== spl_object_id($owner)) {
+            return;
+        }
+        $this->nowPlayingOwner = 0;
+        $this->b->nowPlaying()->show(null, null);
+    }
+
+    /** WIC's JPEG (Native\Wic), its alpha left out. */
     public function jpeg(string $rgba, int $w, int $h, float $quality): string
     {
-        throw new Unsupported('myphp: JPEG is not on Windows yet');
+        return Wic::jpeg($rgba, $w, $h, $quality);
     }
 
+    /** WIC's decoding, scaled down to $max on a side, made RGBA. */
     public function jpegPixels(string $bytes, int $max): string
     {
-        throw new Unsupported('myphp: JPEG is not on Windows yet');
+        return Wic::pixels($bytes, $max);
     }
 
-    /** FFmpeg's (libswscale's pictures the window's renderer draws), WASAPI's, no hardware decoding. */
+    /** FFmpeg's (libswscale's pictures the window's renderer draws), WASAPI's, D3D11VA's. */
     public function names(): array
     {
-        return ['video' => 'FFmpeg', 'audio' => 'WASAPI', 'hwdec' => ''];
+        return ['video' => 'FFmpeg', 'audio' => 'WASAPI', 'hwdec' => 'd3d11va'];
     }
 
     /** WASAPI's active render endpoints ("wasapi/<endpoint id>"). */

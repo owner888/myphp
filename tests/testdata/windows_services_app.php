@@ -4,7 +4,7 @@
 // balloon of a temporary icon of the app's, its click told, the icon gone with it; a secret kept in the
 // Credential Manager, read back, replaced, deleted; the network's status, its changes watched; HTML and
 // an image on the clipboard as other apps read them (CF_HTML, "PNG", CF_DIB) and read back, and a
-// bitmap another app put there read as a PNG.
+// bitmap another app put there read as a PNG; what plays in the system's media controls.
 declare(strict_types=1);
 
 use MyPHP\{App, GlobalShortcut, Notification, NotificationOptions};
@@ -85,6 +85,16 @@ App::whenReady(function () use (&$r, $log) {
     [$w, $hh, $px] = $read === '' ? [0, 0, []] : \MyPHP\Native\Build\Png::decode($read);
     $r['bitmap'] = [$w, $hh, array_map('intval', array_slice($px, 0, 8)), in_array('image/png', $c->formats(), true)];
     $c->clear();
+    $log('now playing');
+    // What plays, in the system's media controls (SystemMediaTransportControls), then nothing.
+    $np = App::backend()->nowPlaying();
+    try {
+        $np->set(['title' => 'Song', 'artist' => 'Band', 'album' => 'Album', 'artwork' => '', 'duration' => 200.0, 'position' => 12.5, 'rate' => 1.0, 'state' => 'playing', 'commands' => 1 | 2 | 64]);
+        $r['nowPlaying'] = \Closure::bind(fn() => $this->controls !== null, $np, $np::class)();
+        $np->set(null);
+    } catch (\Throwable $e) {
+        $r['nowPlaying'] = $e->getMessage();
+    }
     $log('the network');
     $n = App::backend()->network();
     $status = $n->status();

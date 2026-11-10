@@ -59,9 +59,17 @@ final class App implements Platform\AppController
 
     public function setDockMenu(?Menu $menu): void {}
 
+    /** The ephemeral stores made, which name their InPrivate profiles. */
+    private int $privateStores = 0;
+
+    /**
+     * The profile of a session (mygo's NewDataStore): "myphp-" and the
+     * session's UUID, or for an ephemeral session an InPrivate profile no
+     * other store of the run has.
+     */
     public function newDataStore(Platform\DataStoreOptions $opts): Platform\DataStore
     {
-        throw new Unsupported('myphp: sessions are not on Windows yet');
+        return $opts->ephemeral ? new DataStore('myphp-private-' . ++$this->privateStores, true) : new DataStore("myphp-{$opts->id}", false);
     }
 
     public function clearBrowsingData(?Platform\DataStore $store, int $types): void

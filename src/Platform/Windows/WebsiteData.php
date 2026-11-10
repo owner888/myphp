@@ -40,7 +40,8 @@ final class WebsiteData
 
     private static ?FFI $f = null;
     /** The hidden web view, while there is no page. */
-    private static ?CData $controller = null, $view = null;
+    /** @var array<int, array{0: CData, 1: CData}> the hidden web views of the profiles, their controllers and views, by the profile's key (0 the default one's) */
+    private static array $hidden = [];
 
     private static function f(): FFI
     {
@@ -85,19 +86,16 @@ final class WebsiteData
             C);
     }
 
-    /** Sessions of profiles of their own come later; null is the app's. */
-    private static function only(?Platform\DataStore $store): void
+    /** The profile of $store: a session's (DataStore), null for the default one. */
+    private static function store(?Platform\DataStore $store): ?DataStore
     {
-        if ($store !== null) {
-            throw new Unsupported('myphp: sessions are not on Windows yet');
-        }
+        return $store instanceof DataStore ? $store : null;
     }
 
     /** Every cookie of $store (mygo's ListCookies). @return list<Cookie> */
     public static function cookies(?Platform\DataStore $store): array
     {
-        self::only($store);
-        return self::withManager(function (CData $m): array {
+        return self::withManager($store, function (CData $m): array {
             $out = [];
             foreach (self::nativeCookies($m) as $c) {
                 try { $out[] = self::read($c); } finally { Com::release($c); }
@@ -109,8 +107,7 @@ final class WebsiteData
     /** Adds the cookie, normalized, or replaces the one of its name, domain and path, once GetCookies sees it (mygo's SetCookie). */
     public static function setCookie(?Platform\DataStore $store, Cookie $c): void
     {
-        self::only($store);
-        self::withManager(function (CData $m) use ($c): void {
+        self::withManager($store, function (CData $m) use ($c): void {
             $f = self::f();
             $out = $f->new('void *');
             Com::check(($m->v->CreateCookie)($m, Win32::wide($c->name), Win32::wide($c->value), Win32::wide($c->domain), Win32::wide($c->path === '' ? '/' : $c->path), FFI::addr($out)), 'cookies: CreateCookie');
@@ -132,8 +129,7 @@ final class WebsiteData
     /** Deletes the cookie of the name, domain and path, which none is no error (mygo's DeleteCookie). */
     public static function deleteCookie(?Platform\DataStore $store, string $name, string $domain, string $path): void
     {
-        self::only($store);
-        self::withManager(function (CData $m) use ($name, $domain, $path): void {
+        self::withManager($store, function (CData $m) use ($name, $domain, $path): void {
             $key = [$name, strtolower($domain), $path];
             $old = self::stored($m, fn(array $k) => array_slice($k, 0, 3) === $key); // those there now must go; a page may set it again meanwhile
             if ($old === []) {
@@ -147,8 +143,7 @@ final class WebsiteData
     /** Deletes every cookie, those there now; pages may set new ones meanwhile (mygo's ClearCookies). */
     public static function clearCookies(?Platform\DataStore $store): void
     {
-        self::only($store);
-        self::withManager(function (CData $m): void {
+        self::withManager($store, function (CData $m): void {
             $old = self::stored($m, fn() => true);
             Com::check(($m->v->DeleteAllCookies)($m), 'cookies: DeleteAllCookies');
             self::settle($m, false, fn(array $k) => in_array($k, $old, true), 'cookies are still there');
@@ -158,8 +153,7 @@ final class WebsiteData
     /** Clears the data of $types (SiteData bits) of the profile (mygo's ClearBrowsingData): ClearBrowsingDataAll for all of it. */
     public static function clear(?Platform\DataStore $store, int $types): void
     {
-        self::only($store);
-        self::withView(function (CData $view) use ($types): void {
+        self::withView($store, function (CData $view) use ($types): void {
             $f = self::f();
             $v13 = Com::query($view, self::IID_VIEW13) ?? throw new RuntimeException('clearing browsing data needs a newer WebView2 Runtime');
             $out = $f->new('void *');
@@ -247,38 +241,56 @@ final class WebsiteData
         });
     }
 
-    /** Runs $fn with a web view of the profile: a page's, else the hidden one, made now; the hidden one goes once a page shows. */
-    private static function withView(Closure $fn): mixed
+    /** @internal DataStore::close: its hidden web view goes once no call needs it */
+    public static function closeStore(DataStore $store): void
     {
-        $view = WebView::shownView();
-        if ($view !== null && self::$controller !== null) {
+        $key = spl_object_id($store);
+        if (isset(self::$hidden[$key])) {
+            [$c, $v] = self::$hidden[$key];
+            unset(self::$hidden[$key]);
+            self::closeLater($c, $v);
+        }
+    }
+
+    /**
+     * Runs $fn with a web view of the profile of $store (null: the default
+     * one): a page's, else the hidden one, made now; the hidden one goes
+     * once a page of the profile shows.
+     */
+    private static function withView(?Platform\DataStore $store, Closure $fn): mixed
+    {
+        $store = self::store($store);
+        $key = $store === null ? 0 : spl_object_id($store);
+        $view = WebView::shownView($store);
+        if ($view !== null && isset(self::$hidden[$key])) {
             // Closed from the message loop, not here (closeLater).
-            [$c, $v] = [self::$controller, self::$view];
-            self::$controller = self::$view = null;
+            [$c, $v] = self::$hidden[$key];
+            unset(self::$hidden[$key]);
             \MyPHP\Logger::debug('cookies: the hidden web view closes, a page shown', 'windows');
             self::closeLater($c, $v);
         }
-        if ($view === null && self::$view === null) {
+        if ($view === null && !isset(self::$hidden[$key])) {
             $hwnd = App::backend()->hwnd() ?? throw new RuntimeException('cookies need the running app');
-            $done = false; $why = null;
-            \MyPHP\Logger::debug('cookies: making a hidden web view', 'windows');
-            WebView::hiddenView($hwnd, function (?CData $c, ?CData $v, ?string $error = null) use (&$done, &$why): void {
-                [self::$controller, self::$view, $why, $done] = [$c, $v, $error, true];
+            $done = false; $why = null; $made = null;
+            \MyPHP\Logger::debug('cookies: making a hidden web view' . ($store === null ? '' : " of the profile {$store->profile}"), 'windows');
+            WebView::hiddenView($hwnd, $store, function (?CData $c, ?CData $v, ?string $error = null) use (&$done, &$why, &$made): void {
+                [$made, $why, $done] = [$c === null ? null : [$c, $v], $error, true];
             });
             $deadline = microtime(true) + self::ANSWER;
             App::wait(function () use (&$done, $deadline): bool { return $done || microtime(true) > $deadline; });
             $why = $done ? $why : 'WebView2 did not answer in ' . self::ANSWER . ' s';
             \MyPHP\Logger::debug('cookies: the hidden web view ' . ($why ?? 'made'), 'windows');
-            if (self::$view === null) {
+            if ($made === null) {
                 throw new RuntimeException("cookies: $why");
             }
+            self::$hidden[$key] = $made;
         }
-        return $fn($view ?? self::$view);
+        return $fn($view ?? self::$hidden[$key][1]);
     }
 
-    private static function withManager(Closure $fn): mixed
+    private static function withManager(?Platform\DataStore $store, Closure $fn): mixed
     {
-        return self::withView(function (CData $view) use ($fn): mixed {
+        return self::withView($store, function (CData $view) use ($fn): mixed {
             $f = self::f();
             $v2 = Com::query($view, self::IID_VIEW2) ?? throw new Unsupported('myphp: cookies need WebView2 ICoreWebView2_2 (a runtime of SDK 1.0.705.50 or newer)');
             $out = $f->new('void *');
