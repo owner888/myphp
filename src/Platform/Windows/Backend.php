@@ -211,14 +211,22 @@ final class Backend implements Platform\Backend
         }
     }
 
-    /** Waits 50 ms at most for a message, then handles those there are (mygo's Step); WM_QUIT is posted again for the loop outside. */
+    /**
+     * Waits 50 ms at most for a message, then handles those there are, for
+     * 50 ms at most (mygo's Step); WM_QUIT is posted again for the loop
+     * outside. Its turn is bounded where mygo's drains the queue: App::wait
+     * steps in a loop of its own, nested in a handler, and messages that
+     * post others as they are handled (a window's frames) would never let
+     * it look at what it waits for.
+     */
     public function step(): void
     {
         $this->start();
         $u = Win32::user32();
         $u->MsgWaitForMultipleObjectsEx(0, null, 50, 0x04FF /* QS_ALLINPUT */, 0x0004 /* MWMO_INPUTAVAILABLE */);
         $m = $u->new('MSG');
-        while ($u->PeekMessageW(\FFI::addr($m), null, 0, 0, 1 /* PM_REMOVE */) !== 0) {
+        $end = hrtime(true) + 50_000_000;
+        while (hrtime(true) < $end && $u->PeekMessageW(\FFI::addr($m), null, 0, 0, 1 /* PM_REMOVE */) !== 0) {
             if ($m->message === Win32::WM_QUIT) {
                 $u->PostQuitMessage((int)$m->wParam);
                 return;
