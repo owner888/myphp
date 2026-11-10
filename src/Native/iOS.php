@@ -39,6 +39,7 @@ final class iOS
             int myphp_ios_get_screen_width(void);
             int myphp_ios_get_screen_height(void);
             float myphp_ios_get_screen_scale(void);
+            int myphp_ios_get_device_idiom(void);
             void myphp_ios_get_safe_insets(float *top, float *bottom, float *left, float *right);
             void* myphp_ios_get_view(void);
             void myphp_ios_request_render(void);

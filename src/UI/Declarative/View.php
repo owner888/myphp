@@ -106,9 +106,13 @@ abstract class View
         return null;
     }
 
-    /** A color behind the view; or $content, a view as large as it, under it, as SwiftUI's background(alignment:content:). */
-    public function background(\Color|ColorValue|View $color, \Alignment $alignment = \Alignment::center): static
+    /** A color or gradient behind the view; or $content, a view as large as it, under it, as SwiftUI's background(alignment:content:). */
+    public function background(\Color|ColorValue|LinearGradientView|\MyPHP\UI\LinearGradient|View $color, \Alignment $alignment = \Alignment::center): static
     {
+        if ($color instanceof LinearGradientView || $color instanceof \MyPHP\UI\LinearGradient) {
+            $this->mods[] = ['gradient', [$color]];
+            return $this;
+        }
         $this->mods[] = $color instanceof View ? ['overlay', [$color, $alignment, true]] : ['background', [ColorValue::of($color)]];
         return $this;
     }
@@ -428,6 +432,13 @@ abstract class View
     /** The buttons at the trailing end of the navigation bar while this page shows, as SwiftUI's .toolbar { … }. */
     public function toolbar(View|array|null ...$items): static { $this->sets['toolbar'] = $items; $this->wraps[] = ['toolbar', $items]; return $this; }
 
+    /** Shows or hides a bar while this page shows, as SwiftUI's .toolbar(Visibility, for: ToolbarPlacement::tabBar) / .toolbarVisibility. */
+    public function toolbarVisibility(\Visibility $visibility, \ToolbarPlacement $for = \ToolbarPlacement::automatic): static
+    {
+        $this->wraps[] = ['toolbarVisibility', [$visibility, $for]];
+        return $this;
+    }
+
     /** @internal the heights the sheet this view is the content of comes to rest at (presentationDetents) @var list<\PresentationDetent> */
     public array $sheetDetents = [];
 
@@ -496,6 +507,15 @@ abstract class View
                 if ($env->stack !== null) { $env->stack->setToolbar($env, $a); }
                 elseif (!$env->toolbarTaken) { $bar = $a; }
             }
+            if ($kind === 'toolbarVisibility') {
+                [$vis, $for] = $a;
+                if (($for === \ToolbarPlacement::tabBar || $for === \ToolbarPlacement::automatic) && $env->backdrop !== null) {
+                    $env->backdrop->tabBarHidden = $vis === \Visibility::hidden;
+                }
+                if ($for === \ToolbarPlacement::navigationBar && $env->backdrop !== null) {
+                    $env->backdrop->navBarHidden = $vis === \Visibility::hidden;
+                }
+            }
         }
         if ($bar !== null) {
             $env = $env->with(['toolbarTaken' => true]); // the view inside is built once, under the bar
@@ -535,7 +555,7 @@ abstract class View
     private static function searchField(Context $c, Env $env, Node $box, array &$f): void
     {
         $make = fn() => (object)['query' => new \MyPHP\UI\TextState($f[0]), 'app' => $f[0]];
-        $kept = $c->runtime?->local($box->id, $make) ?? $make();
+        $kept = $c->runtime?->local($box->id, $make, \stdClass::class, 'query') ?? $make();
         if ($f[0] !== $kept->app) { $kept->query->text = $f[0]; $kept->query->setCursor(strlen($f[0])); } // set by the app
         $row = $c->row(8, 0)->alignSelf(Node::STRETCH);
         if ($c->runtime?->touch ?? false) { $row->padding(8, 16, 10, 16); } // a phone's: 16 in from the sides, as UISearchBar's
@@ -558,7 +578,7 @@ abstract class View
     private static function findBar(Context $c, Node $box, array &$f): void
     {
         $make = fn() => (object)['query' => new \MyPHP\UI\TextState($f[1]), 'app' => $f[1]];
-        $kept = $c->runtime?->local($box->id, $make) ?? $make();
+        $kept = $c->runtime?->local($box->id, $make, \stdClass::class, 'query') ?? $make();
         if ($f[1] !== $kept->app) { $kept->query->text = $f[1]; $kept->query->setCursor(strlen($f[1])); } // set by the app
         if ($c->shortcut('f', \MyPHP\UI\Key::COMMAND)) { $f[0] = true; }
         $c->findBar($f[0], $kept->query, $f[2], $f[3])?->alignSelf(Node::STRETCH);
@@ -576,7 +596,7 @@ abstract class View
         foreach ($this->mods as $m) {
             if (in_array($m[0], ['frame', 'overlay', 'search', 'find', 'direction'], true) || ($painted && $m[0] === 'padding')) { $layers[] = []; $painted = false; }
             $layers[count($layers) - 1][] = $m;
-            if (in_array($m[0], ['background', 'border', 'radius', 'clip', 'shadow', 'opacity', 'frame'], true)) { $painted = true; } // a padding after these goes around them: a frame's size is its own, the padding outside it
+            if (in_array($m[0], ['background', 'gradient', 'border', 'radius', 'clip', 'shadow', 'opacity', 'frame'], true)) { $painted = true; } // a padding after these goes around them: a frame's size is its own, the padding outside it
         }
         $outer = [];
         if ($this->identity !== null) { $c->key($this->identity); }
@@ -611,6 +631,10 @@ abstract class View
             };
             self::takeRoom($box, $at->axis, $flex); // a box around a view that takes the room takes it
             $this->apply($box, $mods, $at, $anim);
+            if ($this instanceof Button && count($box->kids) === 1 && ($box->grow > 0 || $box->self === Node::STRETCH || $box->sizedW)) {
+                $box->kids[0]->alignSelf(Node::STRETCH);
+                if ($box->sizedH) { $box->kids[0]->grow = max($box->kids[0]->grow, 1); }
+            }
             [$fixedW, $fixedH] = [$fixedW || $box->sizedW, $fixedH || $box->sizedH];
             if ($k === 0 && ($env->axis === Node::ROW ? $fixedW : $fixedH)) { $box->shrink(0); } // around a frame(width: 280), no smaller along the stack, as the frame
             if (count($box->kids) === 1 && $box->kids[0]->aspect > 0 && ($h = $box->fh > 0 ? $box->fh : $box->maxH) < INF) { // a picture scaled to fit in a box of a height: no higher, drawn within it (Node::CONTAIN), as SwiftUI's fits both
@@ -707,6 +731,7 @@ abstract class View
                     if ($align !== \Alignment::center || $maxW === INF || $maxH === INF || $w !== null || $h !== null) { $align->place($n); }
                     break;
                 case 'background': $n->background($a[0]->rgb($env), $a[0]->alpha); break;
+                case 'gradient': $n->linearGradient($a[0] instanceof LinearGradientView ? $a[0]->toGradient($env) : $a[0]); break;
                 case 'radius': $n->radius($a[0]); break;
                 case 'clip': $a[0]->clip($n); break;
                 case 'border': if ($a[0]->alpha > 0) { $n->border($a[1], $a[0]->rgb($env)); } break; // a clear one draws nothing: the engine's borders are opaque

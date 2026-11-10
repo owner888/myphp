@@ -193,6 +193,12 @@ final class Window implements Platform\Window
         if ($input === null || $text === '') {
             return;
         }
+        if ($text === "\n" && $input->focus !== null && !$input->focus->multiline) {
+            $input->focus->command('insertNewline:');
+            $input->push(['key', "\n", \MyPHP\UI\Key::RETURN, 0, false]);
+            $this->requestFrame();
+            return;
+        }
         if ($input->client !== null) {
             $input->client->replaceText(null, $text);
         } elseif ($input->focus !== null) {

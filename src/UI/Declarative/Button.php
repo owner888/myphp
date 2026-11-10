@@ -44,8 +44,17 @@ final class Button extends View
                 $n->padding($t->space(1.5), $t->space(2))->radius($t->radius);
                 if ($c->hovered($n)) { $n->color = $t->surfaceHover; }
             }
-            $this->label->render($c, $prominent ? $env->along(Node::ROW)->with(['color' => new ColorValue(null, $t->accentText)]) : $env->along(Node::ROW));
+            $labelEnv = $prominent ? $env->along(Node::ROW)->with(['color' => new ColorValue(null, $t->accentText)]) : $env->along(Node::ROW);
+            $kid = $this->label->render($c, $labelEnv);
             $c->end();
+            $flex = View::flexOfKids($n);
+            if (($flex & View::FLEX_X) && $kid !== null) {
+                $kid->grow = max($kid->grow, 1);
+                if (count($kid->kids) === 1 && $kid->dir === Node::COLUMN) {
+                    $kid->kids[0]->alignSelf(Node::STRETCH);
+                }
+            }
+            View::takeRoom($n, $env->axis, $flex); // a label with frame(maxWidth: INF) stretches the button too
         } else {
             $title = Localized::string($this->title, $env);
             $n = $style === \ButtonStyle::borderedProminent ? $c->primaryButton($title) : $c->button($title);

@@ -78,9 +78,18 @@ cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
 mkdir -p "assets/src"
 cp -r "${ROOT_DIR}/src/"* "assets/src/"
 if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
+    [ -f "${PROJECT_DIR}/myphp.json" ] && cp "${PROJECT_DIR}/myphp.json" "assets/myphp.json"
     # The project's PHP, its folders too (view files, pages/): main.php as app.php, the rest where it is, src over the framework's
-    (cd "${PROJECT_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './.*') | while read -r rel; do
+    (cd "${PROJECT_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './tests/*' -not -path './test/*' -not -name '*.local.php' -not -path './.*') | while read -r rel; do
         rel="${rel#./}"
+        if [ -n "${MYPHP_EXCLUDE:-}" ]; then
+            skip=0
+            IFS=':' read -ra PATS <<< "${MYPHP_EXCLUDE}"
+            for pat in "${PATS[@]}"; do
+                case "$rel" in $pat|*/$pat) skip=1; break ;; esac
+            done
+            [ "$skip" = "1" ] && continue
+        fi
         dest="assets/$rel"
         [ "$rel" = "main.php" ] && dest="assets/app.php"
         mkdir -p "$(dirname "$dest")"

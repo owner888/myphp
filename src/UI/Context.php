@@ -239,8 +239,11 @@ final class Context
         return $this->nextId($kind);
     }
 
+    /** @internal environment(locale:) override while building a subtree */
+    public ?string $localeOverride = null;
+
     /** The language the app shows (App::locale), a BCP 47 tag such as "en" or "zh-Hans", for what the view says in it. */
-    public function locale(): string { return App::locale(); }
+    public function locale(): string { return $this->localeOverride ?? App::locale(); }
 
     /** The user's regional formats (App::region): the locale of the formats, the first day of the week and the hour cycle, which dates and times follow. */
     public function region(): Region { return App::region(); }

@@ -169,6 +169,11 @@ final class TextState
         $this->markedCaret = $caretBytes;
     }
 
+    public function deleteBack(): void
+    {
+        $this->command('deleteBackward:');
+    }
+
     public function selectAll(): void
     {
         $this->anchor = 0;

@@ -49,7 +49,7 @@ trait ContextMobile
      * it back.
      * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items @param Closure(int, string): void $content
      */
-    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0): Node
+    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0, ?object $backdrop = null): Node
     {
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
@@ -58,14 +58,20 @@ trait ContextMobile
             $bottom = $this->safeArea[2];
             $inset = $this->tabBarInset();
             $n = $this->column(0, 0, 1)->fill();
-              $this->safeArea[2] = 0.0; // the tabBar takes the bottom safe area
+              $small = $this->runtime?->local($n->id, fn() => (object)['y' => null, 'small' => false, 'tab' => $index, 'hidden' => false], \stdClass::class, 'tab') ?? (object)['y' => null, 'small' => false, 'tab' => $index, 'hidden' => false];
+              $wasHidden = $small->hidden ?? false;
+              $this->safeArea[2] = $wasHidden ? $bottom : 0.0; // the tabBar takes the bottom safe area, unless the page hid it
               $was = $this->bottomInset;
-              $this->bottomInset = $inset; // the page's first scroll takes it as room after its content
+              $this->bottomInset = $wasHidden ? 0.0 : $inset; // the page's first scroll takes it as room after its content
               $this->insetScroll = null;
               $page = $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
                 $content($index, $where);
               $this->end();
-              $small = $this->runtime?->local($n->id, fn() => (object)['y' => null, 'small' => false, 'tab' => $index]) ?? (object)['y' => null, 'small' => false, 'tab' => $index];
+              $hiddenNow = (bool)($backdrop->tabBarHidden ?? false);
+              if ($hiddenNow !== $wasHidden) {
+                  $small->hidden = $hiddenNow;
+                  $this->runtime?->changed();
+              }
               if ($small->tab !== $index) { [$small->y, $small->small, $small->tab] = [null, false, $index]; } // another tab's page: its own scroll
               if ($minimize !== 0 && $this->insetScroll !== null) { // the page's scroll: down (or up) by more than a few points shrinks the bar, the other way or its top brings it back
                   $y = $this->insetScroll->extent()[0];
@@ -75,21 +81,25 @@ trait ContextMobile
               } else {
                   $small->small = false;
               }
-              if ($this->bottomInset > 0) { $page->padding(0, 0, $inset, 0); } // no scroll took it: the page above the bar
-              else { // iOS 26's scroll edge: what scrolls under the bar fades into the page's color there, not sharp through its glass
-                  $tabs = \WeakReference::create($n); // not $n itself: the page it holds keeping it would be a cycle each frame
-                  $page->drawOver(static function (Painter $p, array $r) use ($tabs, $inset): void {
-                      $top = $r[1] + $r[3] - $inset - 16;
-                      $p->displayList()->gradient($r[0], $top, $r[2], $inset + 16, $tabs->get()?->color ?? $p->theme()->background, 0.0, 0.9);
-                  });
+              if (!$hiddenNow) {
+                  if ($this->bottomInset > 0) { $page->padding(0, 0, $inset, 0); } // no scroll took it: the page above the bar
+                  else { // iOS 26's scroll edge: what scrolls under the bar fades into the page's color there, not sharp through its glass
+                      $tabs = \WeakReference::create($n); // not $n itself: the page it holds keeping it would be a cycle each frame
+                      $page->drawOver(static function (Painter $p, array $r) use ($tabs, $inset): void {
+                          $top = $r[1] + $r[3] - $inset - 16;
+                          $p->displayList()->gradient($r[0], $top, $r[2], $inset + 16, $tabs->get()?->color ?? $p->theme()->background, 0.0, 0.9);
+                      });
+                  }
               }
               $this->bottomInset = $was;
               $this->safeArea[2] = $bottom;
-              $bar = $this->tabBar($items, $index, $this->animate($n, 'tabsSmall', $small->small ? 1 : 0, 0.25), $expand);
-              if ($expand) { $small->small = false; $this->runtime?->changed(); } // a tap on the shrunk bar
-              $bar->absolute()->bottom(0)->start(0)->end(0);
-              $bar->floats = true; // a tap on it is its, not the page's under it
-              if ($bar->changed) { $n->changed = true; }
+              if (!$hiddenNow) {
+                  $bar = $this->tabBar($items, $index, $this->animate($n, 'tabsSmall', $small->small ? 1 : 0, 0.25), $expand);
+                  if ($expand) { $small->small = false; $this->runtime?->changed(); } // a tap on the shrunk bar
+                  $bar->absolute()->bottom(0)->start(0)->end(0);
+                  $bar->floats = true; // a tap on it is its, not the page's under it
+                  if ($bar->changed) { $n->changed = true; }
+              }
             $this->end();
             return $n;
         }
@@ -340,7 +350,7 @@ trait ContextMobile
                   sort($heights);
                   $top = $heights[count($heights) - 1];
                   $panel->minHeight($top)->maxHeight($top);
-                  $kept = $rt?->local($back->id, fn() => (object)['offset' => [0.0, $top - $heights[0]]]) ?? (object)['offset' => [0.0, $top - $heights[0]]];
+                  $kept = $rt?->local($back->id, fn() => (object)['offset' => [0.0, $top - $heights[0]]], \stdClass::class, 'offset') ?? (object)['offset' => [0.0, $top - $heights[0]]];
                   $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);
                   $stops[] = [0.0, $top]; // below the window: gone
                   $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
@@ -738,7 +748,7 @@ trait ContextMobile
         $this->swipedRow = $n;
         $width = max($rt?->rectOf($n->id)[2] ?? $this->width, $total + 48); // the row's, last laid out
         $full = max($total + 48, $width * 0.5); // let go past this, the first action is performed
-        $kept = $rt?->local($n->id, fn() => (object)['past' => false]) ?? (object)['past' => false]; // whether the finger last held it past $full
+        $kept = $rt?->local($n->id, fn() => (object)['past' => false], \stdClass::class, 'past') ?? (object)['past' => false]; // whether the finger last held it past $full
           $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->alignItems(Node::START)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its; its content at the start, as a row's
             $content();
           $this->end();

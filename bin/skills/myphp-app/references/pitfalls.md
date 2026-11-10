@@ -71,8 +71,7 @@ disagree, the docs of the checkout win: it may have grown since.
 
 ## Not in MyPHP (do not call these)
 
-- **Controls.** Badges cannot be recolored. Date and time pickers and the
-  calendar are en-US only. There is no `OutlineGroup`: nest
+- **Controls.** Badges cannot be recolored. There is no `OutlineGroup`: nest
   `DisclosureGroup`s.
 - **Themes and focus.** No per-window theme (`App::setTheme()` is
   global). Focus is `->focused($this->editing)` and `->defaultFocus()`;
@@ -87,18 +86,21 @@ disagree, the docs of the checkout win: it may have grown since.
   `autoHideMenuBar`, `titleBarHeight`, `setActiveAppearance`,
   `setWindowButtonsTheme`, or per-window menu (`Window::setMenu`); the
   menu bar is the app's (`App::setMenu`).
-- **Images.** `Image::fromFile`, `Image::fromBytes` and GIF decoding work
-  on macOS only. For icons use `Image(systemName: 'gearshape')`, which maps
-  SF Symbols to the GTK icon theme on Linux and Material Symbols on
-  Android (some have no match there), or an SVG `Image($svg)`.
+- **Images.** `Image::fromFile` and `Image::fromBytes` work on macOS, iOS
+  and Android; remote URLs load and cache with `AsyncImage($url)`. For icons
+  use `Image(systemName: 'gearshape')`, which draws SF Symbols on macOS and
+  iOS, the GTK icon theme on Linux and Material Symbols on Android (some
+  have no match there), or an SVG `Image($svg)`.
 - **Painting.** No `Painter::accelerated`, font thickening or
   antialiasing switches.
 - **Testing.** No public `Tester` with a clock, dark mode, scale or
   snapshots: use `tests/Headless.php` of the checkout, and
   `myphp screenshot` for the real window.
-- **Platforms and packaging.** macOS, Linux, Android and iOS (no Windows,
-  no browser/wasm build). No install scripts and no Linux auto-update; only
-  the framework's own plugins' native libraries are bundled.
+- **Platforms and packaging.** macOS, Linux, Windows, Android and iOS (no
+  browser/wasm build); `Device::type()` (`DeviceType::Desktop`, `Mobile`,
+  `Pad`, `Tv`) and `Device::isMobile()`, `isPad()`, `isDesktop()` tell the
+  form factor. No Linux auto-update; only the framework's own plugins'
+  native libraries are bundled.
 - **Plugins.** fetch and websocket take no client, cookie jar or
   timeout; sqlite queries cannot be canceled; the terminal plugin has no
   search, history or mirroring; game controllers work on macOS only.

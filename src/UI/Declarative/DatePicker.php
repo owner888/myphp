@@ -28,10 +28,16 @@ final class DatePicker extends View
         $time = in_array(\DatePickerComponents::hourAndMinute, $this->displayedComponents, true);
         $graphical = ($env->datePickerStyle ?? \DatePickerStyle::automatic) === \DatePickerStyle::graphical;
         return LabeledContent::control($c, $env, $graphical ? '' : $this->title, function () use ($c, $env, $date, $time, $graphical): Node {
-            $n = $graphical ? $c->column(0, 8) : $c->row(0, 8)->alignItems(Node::CENTER);
-              if ($date) { $graphical ? $c->calendar($this->selection) : $c->dateInput($this->selection); }
-              if ($time) { $c->timeInput($this->selection); }
-            $c->end();
+            $prevLocale = $c->localeOverride;
+            if ($env->locale !== null && $env->locale !== '') { $c->localeOverride = $env->locale; }
+            try {
+                $n = $graphical ? $c->column(0, 8) : $c->row(0, 8)->alignItems(Node::CENTER);
+                  if ($date) { $graphical ? $c->calendar($this->selection) : $c->dateInput($this->selection); }
+                  if ($time) { $c->timeInput($this->selection); }
+                $c->end();
+            } finally {
+                $c->localeOverride = $prevLocale;
+            }
             $n->label(Localized::string($this->title, $env));
             if ($env->disabled) { $n->disabled(); }
             return $n;

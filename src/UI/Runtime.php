@@ -1128,10 +1128,12 @@ final class Runtime
         return count($this->locals);
     }
 
-    public function local(int $id, Closure $make, ?string $class = null): mixed
+    public function local(int $id, Closure $make, ?string $class = null, ?string $prop = null): mixed
     {
         $v = $this->locals[$id] ??= $make();
-        if ($class !== null && !$v instanceof $class) { $v = $this->locals[$id] = $make(); } // another kind of node was built at this id before (an if's other branch): its state is not this one's
+        if (($class !== null && !$v instanceof $class) || ($prop !== null && (!is_object($v) || !property_exists($v, $prop)))) {
+            $v = $this->locals[$id] = $make(); // another kind of node was built at this id before (an if's other branch): its state is not this one's
+        }
         return $v;
     }
 

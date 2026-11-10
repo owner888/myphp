@@ -197,6 +197,13 @@ float myphp_ios_get_screen_scale(void) {
     return (float)[[UIScreen mainScreen] scale];
 }
 
+int myphp_ios_get_device_idiom(void) {
+    UIUserInterfaceIdiom idiom = [UIDevice currentDevice].userInterfaceIdiom;
+    if (idiom == UIUserInterfaceIdiomPad) return 1;
+    if (idiom == UIUserInterfaceIdiomTV) return 2;
+    return 0;
+}
+
 void myphp_ios_get_safe_insets(float *top, float *bottom, float *left, float *right) {
     if (top) *top = g_safe_top;
     if (bottom) *bottom = g_safe_bottom;
@@ -1055,6 +1062,7 @@ static void* php_worker_thread(void *arg) {
         os_log(OS_LOG_DEFAULT, "[myphp-ios] Initializing PHP Embed SAPI on iOS...");
         php_embed_module.ub_write = myphp_ub_write;
         php_embed_module.log_message = myphp_log_message;
+        php_embed_module.ini_entries = "ffi.enable=1\nmemory_limit=512M\n";
         php_embed_init(1, php_argv);
 
         NSString *appPhp = [bundlePath stringByAppendingPathComponent:@"app.php"];
@@ -1179,15 +1187,19 @@ static void* php_worker_thread(void *arg) {
 }
 
 - (void)setMarkedText:(NSString *)markedText selectedRange:(NSRange)selectedRange {
+    [_inputDelegate textWillChange:self];
     [[self markedBuffer] setString:markedText ?: @""];
     self.markedSelection = NSMakeRange(MIN(selectedRange.location, [self markedBuffer].length), MIN(selectedRange.length, [self markedBuffer].length - MIN(selectedRange.location, [self markedBuffer].length)));
+    [_inputDelegate textDidChange:self];
     [self composeChanged];
 }
 
 - (void)unmarkText {
     if ([self markedBuffer].length > 0) { // what was composed stays as typed
+        [_inputDelegate textWillChange:self];
         NSString *text = [[self markedBuffer] copy];
         [self clearMarked];
+        [_inputDelegate textDidChange:self];
         push_input_event(2, "");
         push_input_event(0, [text UTF8String]);
         g_needs_render = 1;
@@ -1200,7 +1212,11 @@ static void* php_worker_thread(void *arg) {
 
 - (void)setSelectedTextRange:(UITextRange *)range {
     MyphpTextRange *r = (MyphpTextRange *)range;
-    if (r) { self.markedSelection = NSMakeRange(r.from, r.to - r.from); }
+    if (r) {
+        [_inputDelegate selectionWillChange:self];
+        self.markedSelection = NSMakeRange(r.from, r.to - r.from);
+        [_inputDelegate selectionDidChange:self];
+    }
 }
 
 - (NSString *)textInRange:(UITextRange *)range {
@@ -1277,6 +1293,25 @@ static void* php_worker_thread(void *arg) {
 
 - (UITextAutocorrectionType)autocorrectionType { return UITextAutocorrectionTypeNo; }
 - (UITextSpellCheckingType)spellCheckingType { return UITextSpellCheckingTypeNo; }
+- (UITextSmartQuotesType)smartQuotesType { return UITextSmartQuotesTypeNo; }
+- (UITextSmartDashesType)smartDashesType { return UITextSmartDashesTypeNo; }
+- (UITextSmartInsertDeleteType)smartInsertDeleteType { return UITextSmartInsertDeleteTypeNo; }
+
+- (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    for (UIPress *p in presses) {
+        UIKey *k = p.key;
+        if (!k) continue;
+        if (k.keyCode == UIKeyboardHIDUsageKeyboardDeleteOrBackspace && k.modifierFlags == 0) {
+            [self deleteBackward];
+            return;
+        }
+        if ((k.keyCode == UIKeyboardHIDUsageKeyboardReturnOrEnter || k.keyCode == UIKeyboardHIDUsageKeypadEnter) && k.modifierFlags == 0) {
+            [self insertText:@"\n"];
+            return;
+        }
+    }
+    [super pressesBegan:presses withEvent:event];
+}
 
 - (void)safeAreaInsetsDidChange {
     [super safeAreaInsetsDidChange];

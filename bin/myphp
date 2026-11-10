@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.186.0';
+const VERSION = '1.186.1';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -409,6 +409,9 @@ function project(array $args): array
     }
     $c['linux'] = $l;
     $c['windows'] = Windows::config($c['windows'] ?? null, $c['name'], packageAuthor($dir), $bad);
+    $c['displayName'] = orElse((string)($c['displayName'] ?? ''), $c['name']);
+    $c['exclude'] ??= [];
+    is_array($c['exclude']) && array_is_list($c['exclude']) && array_filter($c['exclude'], fn($v) => !is_string($v) || $v === '') === [] || $bad('exclude is a list of files and patterns');
     $c['resources'] ??= [];
     is_array($c['resources']) && array_is_list($c['resources']) || $bad('resources is a list of files and directories');
     foreach ($c['urlSchemes'] ?? [] as $scheme) {
@@ -1256,15 +1259,17 @@ function buildIOS(string $dir, array $c, string $arch, array $opts): array
 {
     $out = path($dir, $c['out']);
     is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
-    $name = orElse($c['name'], 'app');
+    $exeName = preg_match('/^[A-Za-z0-9._-]+$/', (string)$c['name']) === 1 ? $c['name'] : Slug::ofConfig($c);
+    $displayName = orElse($c['displayName'] ?? '', $c['name']);
     $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
     $mainPhp = path($dir, $c['entry']);
-    logf("Making ios/$arch: $out/$name.ipa");
+    logf("Making ios/$arch: $out/$exeName.ipa");
     $script = dirname(__DIR__) . '/scripts/package-ios-app.sh';
     is_executable($script) || chmod($script, 0755);
-    $cmd = [$script, $mainPhp, $bundleId, $name, $out, $c['version']];
+    putenv('MYPHP_EXCLUDE=' . implode(':', $c['exclude'] ?? []));
+    $cmd = [$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName];
     sh($cmd, $dir) === 0 || fail("Failed to package iOS App");
-    return ["$out/$name.app", "$out/$name.ipa"];
+    return ["$out/$exeName.app", "$out/$exeName.ipa"];
 }
 
 /**
@@ -1300,7 +1305,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         logf("Making darwin/$arch");
         // The app's files and the framework's src, as the bundle's Resources/app; its resources, its build output and its hidden files (.git, .agents, .myphp) stay out.
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : []; // in Resources/frontend
-        copyTree($dir, "$contents/Resources/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree($dir, "$contents/Resources/app", [basename($out), 'vendor', 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$contents/Resources/app/myphp/src", []);
         copyTree("$framework/plugins", "$contents/Resources/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
         // The frontend, served at myphp://localhost/ (mygo's embedded frontendDist).
@@ -1375,7 +1380,7 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
         logf("Making linux/$arch");
         // The app's files and the framework's src, as app/; its resources, its build output and its hidden files stay out, as in the .app.
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
-        copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$stage/app/myphp/src", []);
         copyTree("$framework/plugins", "$stage/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
         if (($c['frontendDist'] ?? '') !== '') {
@@ -1477,7 +1482,7 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
         }
         logf("Making windows/$arch");
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
-        copyTree($dir, "$app/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree($dir, "$app/app", [basename($out), 'vendor', 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$app/app/myphp/src", []);
         copyTree("$framework/plugins", "$app/app/myphp/plugins", ['.DS_Store']);
         if (($c['frontendDist'] ?? '') !== '') {
@@ -1994,7 +1999,14 @@ function copyTree(string $from, string $to, array $skip, bool $hidden = true): v
 {
     @mkdir($to, 0755, true);
     foreach (scandir($from) ?: fail("cannot read $from") as $name) {
-        if ($name === '.' || $name === '..' || in_array($name, $skip, true) || !$hidden && $name[0] === '.') {
+        if ($name === '.' || $name === '..' || !$hidden && $name[0] === '.') {
+            continue;
+        }
+        $matched = false;
+        foreach ($skip as $pat) {
+            if ($pat === $name || fnmatch($pat, $name)) { $matched = true; break; }
+        }
+        if ($matched) {
             continue;
         }
         is_dir("$from/$name") ? copyTree("$from/$name", "$to/$name", $skip, $hidden) : copy("$from/$name", "$to/$name");
@@ -2957,11 +2969,15 @@ function doctor(array $args): void
     $iosPhp = FRAMEWORK . '/build/ios/libs/libphp.a';
     $iosSimPhp = FRAMEWORK . '/build/ios-simulator/libs/libphp.a';
     $stale = fn(string $lib, string $script): bool => is_file($lib) && filemtime(FRAMEWORK . "/scripts/$script") > filemtime($lib);
-    $section("Phone runtimes (libphp with ffi, curl, openssl and libxml)", array_slice([
+    $buildTools = ['autoconf', 'automake', 'pkg-config', 'bison', 're2c'];
+    if (PHP_OS_FAMILY === 'Darwin') { $buildTools[] = 'glibtoolize'; } else { $buildTools[] = 'libtoolize'; }
+    $missingTools = array_values(array_filter($buildTools, fn(string $t): bool => Cmd::look($t) === '' && !is_executable("/opt/homebrew/opt/bison/bin/$t") && !is_executable("/opt/homebrew/bin/$t")));
+    $toolsItem = [$missingTools === [], $missingTools === [] ? 'Phone runtime build tools (autoconf, automake, libtool, pkg-config, bison, re2c)' : 'Missing phone runtime build tools: ' . implode(', ', $missingTools), PHP_OS_FAMILY === 'Darwin' ? 'brew install autoconf automake libtool pkg-config bison re2c' : 'sudo apt install autoconf automake libtool pkg-config bison re2c'];
+    $section("Phone runtimes (libphp with ffi, curl, openssl and libxml)", [$toolsItem, ...array_slice([
         [is_file($androidPhp) && !$stale($androidPhp, 'build-android-php.sh'), is_file($androidPhp) ? ($stale($androidPhp, 'build-android-php.sh') ? 'Android: built before its script last changed' : 'Android: built') : 'Android: not built yet', 'myphp run -d android <dir> builds it (10-20 minutes the first time)'],
         [is_file($iosPhp) && !$stale($iosPhp, 'build-ios-php.sh'), is_file($iosPhp) ? ($stale($iosPhp, 'build-ios-php.sh') ? 'iOS device: built before its script last changed' : 'iOS device: built') : 'iOS device: not built yet', 'myphp run -d <an iPhone> <dir> builds it'],
         [is_file($iosSimPhp) && !$stale($iosSimPhp, 'build-ios-php.sh'), is_file($iosSimPhp) ? ($stale($iosSimPhp, 'build-ios-php.sh') ? 'iOS simulator: built before its script last changed' : 'iOS simulator: built') : 'iOS simulator: not built yet', 'myphp run -d ios <dir> builds it'],
-    ], 0, PHP_OS_FAMILY === 'Darwin' ? 3 : 1)); // iOS's are built on a Mac alone
+    ], 0, PHP_OS_FAMILY === 'Darwin' ? 3 : 1)]); // iOS's are built on a Mac alone
 
     // 5. Connected Devices
     $devices = DeviceManager::listDevices();
@@ -3076,7 +3092,7 @@ const ANDROID_PACKAGE = 'com.owner888.myphp';
  * iOS) and its src.
  * @return array<string, string>
  */
-function phoneFiles(string $dir, string $platform, string $mainPhp): array
+function phoneFiles(string $dir, string $platform, string $mainPhp, array $exclude = []): array
 {
     $out = [];
     $tree = function (string $from, string $to) use (&$out): void {
@@ -3087,11 +3103,16 @@ function phoneFiles(string $dir, string $platform, string $mainPhp): array
     };
     $tree(FRAMEWORK . '/src', 'src');
     $project = $platform === 'android' ? $dir : dirname($mainPhp);
-    $entry = $platform === 'android' ? "$dir/main.php" : $mainPhp;
+    $entry = $platform === 'android' ? (is_file("$dir/main.php") ? "$dir/main.php" : "$dir/app.php") : $mainPhp;
     if (realpath($project) !== realpath(FRAMEWORK)) { // its folders too (view files, pages/), as the packaging scripts copy them, src over the framework's
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($project, FilesystemIterator::SKIP_DOTS)) as $f) {
             $rel = substr($f->getPathname(), strlen($project) + 1);
-            if ($f->getExtension() !== 'php' || preg_match('~^(dist|build|vendor|node_modules|\.)~', $rel)) { continue; }
+            if ($f->getExtension() !== 'php' || preg_match('~^(dist|build|vendor|node_modules|tests|test|\.)~', $rel) || str_ends_with($rel, '.local.php')) { continue; }
+            $skip = false;
+            foreach ($exclude as $pat) {
+                if ($rel === $pat || basename($rel) === $pat || fnmatch($pat, $rel) || fnmatch($pat, basename($rel))) { $skip = true; break; }
+            }
+            if ($skip) { continue; }
             $out[$f->getPathname() === $entry ? 'app.php' : $rel] = $f->getPathname();
         }
     }
@@ -3262,21 +3283,24 @@ function runCommand(array $args): void
         }
         $out = path($dir, $c['out']);
         is_dir($out) || mkdir($out, 0755, true);
-        $name = orElse($c['name'], 'app');
-        logf("building $name for iOS");
+        $displayName = orElse($c['displayName'] ?? '', orElse($c['name'], 'app'));
+        $exeName = preg_match('/^[A-Za-z0-9._-]+$/', (string)$c['name']) === 1 ? $c['name'] : Slug::ofConfig($c);
+        logf("building $displayName for iOS");
         $bundleId = orElse($c['identifier'] ?? null, 'com.owner888.' . ($c['slug'] ?? 'myphp'));
         $mainPhp = path($dir, $c['entry']);
         $script = FRAMEWORK . '/scripts/package-ios-app.sh';
-        $seen = fileStamps(phoneFiles($dir, 'ios', $mainPhp)); // before the build: what changes during it is restarted with
+        $exclude = $c['exclude'] ?? [];
+        $seen = fileStamps(phoneFiles($dir, 'ios', $mainPhp, $exclude)); // before the build: what changes during it is restarted with
         putenv('MYPHP_IOS_SDK=' . ($targetDev->type === 'simulator' ? 'iphonesimulator' : 'iphoneos')); // the simulator's runtime and binary are another architecture slice
-        $step([$script, $mainPhp, $bundleId, $name, $out, $c['version']], $dir) === 0 || fail("Failed to build iOS application");
+        putenv('MYPHP_EXCLUDE=' . implode(':', $exclude));
+        $step([$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName], $dir) === 0 || fail("Failed to build iOS application");
 
-        $appBundle = "$out/$name.app";
+        $appBundle = "$out/$exeName.app";
         if ($targetDev->type === 'device') {
             $say("Installing app on device {$targetDev->id}...");
             $step(['xcrun', 'devicectl', 'device', 'install', 'app', '--device', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on {$targetDev->name} (physical devices require a signed .app with a provisioning profile)");
             $say("Launching application ($bundleId)...");
-            logf("$name is running on {$targetDev->name}; its log follows, Ctrl+C quits");
+            logf("$displayName is running on {$targetDev->name}; its log follows, Ctrl+C quits");
             sh(['xcrun', 'devicectl', 'device', 'process', 'launch', '--console', '--terminate-existing', '--device', $targetDev->id, $bundleId]);
         } else {
             $say("Installing app on simulator {$targetDev->id}...");
@@ -3285,10 +3309,10 @@ function runCommand(array $args): void
             $say("Launching application ($bundleId)...");
             $step(['xcrun', 'simctl', 'launch', $targetDev->id, $bundleId]) === 0 || fail("Failed to launch app on iOS simulator");
 
-            logf("$name is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
+            logf("$displayName is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
             // the app's own lines (os_log, PHP's output), and the system's about it: a crash says why
-            streamLog('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level debug --predicate ' . escapeshellarg("(process == \"$name\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$name\" AND messageType == error) OR (eventMessage CONTAINS \"$name\" AND eventMessage CONTAINS \"exited\")"), 'ios', $all,
-                phoneHot($targetDev, $bundleId, $name, fn() => phoneFiles($dir, 'ios', $mainPhp), $seen, $step));
+            streamLog('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level debug --predicate ' . escapeshellarg("(process == \"$exeName\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$exeName\" AND messageType == error) OR (eventMessage CONTAINS \"\[myphp\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (eventMessage CONTAINS \"$exeName\" AND eventMessage CONTAINS \"exited\")"), 'ios', $all,
+                phoneHot($targetDev, $bundleId, $displayName, fn() => phoneFiles($dir, 'ios', $mainPhp, $exclude), $seen, $step));
         }
     } else {
         // 3. Desktop Workflow
