@@ -83,6 +83,11 @@ same(HeadGestureDetector::NONE, $det->push(-10, -710), 'first yaw reversal');
 same(HeadGestureDetector::SHAKE_NO, $det->push(20, 680), 'second yaw reversal triggers SHAKE_NO');
 
 // 4. Headless UI test of examples/airpods: the sidebar's three pages, the settings sent as they change, the lid's sheet.
+// The example is not for Windows (the developer's call): its UI is not tested there.
+if (PHP_OS_FAMILY === 'Windows') {
+    echo "  skipped the UI: examples/airpods is not for Windows\n";
+    return;
+}
 [$view, $s] = Headless::load('airpods');
 $t = new Headless($view, 980, 640);
 $t->frame();
