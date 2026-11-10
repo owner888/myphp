@@ -207,7 +207,7 @@ final class WebsiteData
             }
             $done = true;
         });
-        \MyPHP\Logger::debug("$what…", 'windows');
+        \MyPHP\Logger::debug("{$what}…", 'windows');
         $hr = $start($handler);
         if ($hr < 0) {
             throw new RuntimeException(sprintf('%s failed (HRESULT 0x%08X)', $what, $hr & 0xFFFFFFFF));
