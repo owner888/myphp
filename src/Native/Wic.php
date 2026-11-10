@@ -8,19 +8,21 @@ use FFI\CData;
 use RuntimeException;
 
 /**
- * JPEGs through the Windows Imaging Component, as ImageIO makes them on
- * macOS and GdkPixbuf on Linux (Platform\Windows\Media::jpeg, jpegPixels):
- * RGBA pixels as a bitmap of memory, converted to the 24-bit BGR the JPEG
- * encoder takes, written at a quality (its ImageQuality option) into a
- * stream of memory; a JPEG decoded from a stream of its bytes, scaled down
- * (Fant's interpolation) and converted to RGBA.
+ * JPEGs and PNGs through the Windows Imaging Component, as ImageIO makes
+ * them on macOS and GdkPixbuf or cairo on Linux (Platform\Windows\Media::
+ * jpeg, jpegPixels; Window::capture; Shell::fileIcon): pixels as a bitmap of memory,
+ * converted to what the encoder takes (the JPEG one's 24-bit BGR, the PNG
+ * one's BGRA), written at a quality (the JPEG one's ImageQuality) into a
+ * stream of memory; an image decoded from a stream of its bytes, scaled
+ * down (Fant's interpolation) and converted to RGBA.
  *
- * @internal Platform\Windows\Media
+ * @internal Platform\Windows
  */
 final class Wic
 {
     private const CLSID_FACTORY = 'cacaf262-9370-4615-a13b-9f5539da4c0a', IID_FACTORY = 'ec5ec8a9-c395-4314-9c77-54d7a935ff70',
-        RGBA = 'f5c7ad2d-6a8d-43dd-a7a8-a29935261ae9', BGR = '6fddc324-4e03-4bfe-b185-3d77768dc90c', JPEG = '19e4a5aa-5662-4fc5-a0c0-1758028e1057';
+        RGBA = 'f5c7ad2d-6a8d-43dd-a7a8-a29935261ae9', BGR = '6fddc324-4e03-4bfe-b185-3d77768dc90c', JPEG = '19e4a5aa-5662-4fc5-a0c0-1758028e1057',
+        PBGRA = '6fddc324-4e03-4bfe-b185-3d77768dc910', BGRA = '6fddc324-4e03-4bfe-b185-3d77768dc90f', PNG = '1b7cfaf4-713f-473c-bbcd-6137425faeaf';
     /** WICBitmapEncoderNoCache, WICDecodeMetadataCacheOnDemand, WICBitmapInterpolationModeFant, STREAM_SEEK_SET, STREAM_SEEK_END, VT_R4. */
     private const NO_CACHE = 2, ON_DEMAND = 0, FANT = 3, SEEK_SET = 0, SEEK_END = 2, VT_R4 = 4;
 
@@ -30,22 +32,38 @@ final class Wic
     /** $rgba ($w by $h pixels, 4 bytes each) as a JPEG of $quality (0 to 1); the alpha left out. */
     public static function jpeg(string $rgba, int $w, int $h, float $quality): string
     {
-        if ($w <= 0 || $h <= 0 || strlen($rgba) !== $w * $h * 4) {
-            throw new RuntimeException("myphp: $w by $h pixels are not " . strlen($rgba) . ' bytes');
+        return self::encode($rgba, $w, $h, self::RGBA, self::JPEG, self::BGR, $quality);
+    }
+
+    /** $bgra ($w by $h pixels, rows top down) as a PNG, its alpha kept: premultiplied (a frame read back, D3d::readBack) or straight (the shell's icons, Shell::fileIcon). */
+    public static function png(string $bgra, int $w, int $h, bool $premultiplied = true): string
+    {
+        return self::encode($bgra, $w, $h, $premultiplied ? self::PBGRA : self::BGRA, self::PNG, self::BGRA, null);
+    }
+
+    /**
+     * $bytes ($w by $h, 4 bytes each, of the pixel format $from) as an
+     * image of container $container, converted to the pixel format $to its
+     * encoder takes, at $quality (the encoder's ImageQuality) unless null.
+     */
+    private static function encode(string $bytes, int $w, int $h, string $from, string $container, string $to, ?float $quality): string
+    {
+        if ($w <= 0 || $h <= 0 || strlen($bytes) !== $w * $h * 4) {
+            throw new RuntimeException("myphp: $w by $h pixels are not " . strlen($bytes) . ' bytes');
         }
         $f = self::f();
         $wic = self::factory();
         $held = [];
         try {
-            $rgbaFormat = Com::guid(self::RGBA);
-            $bgrFormat = Com::guid(self::BGR);
-            $pixels = $f->new('uint8_t[' . strlen($rgba) . ']');
-            FFI::memcpy($pixels, $rgba, strlen($rgba));
-            $bitmap = $held[] = self::out(fn($out) => ($wic->v->CreateBitmapFromMemory)($wic, $w, $h, FFI::addr($rgbaFormat), $w * 4, strlen($rgba), $pixels, $out), 'CreateBitmapFromMemory');
+            $fromFormat = Com::guid($from);
+            $toFormat = Com::guid($to);
+            $pixels = $f->new('uint8_t[' . strlen($bytes) . ']');
+            FFI::memcpy($pixels, $bytes, strlen($bytes));
+            $bitmap = $held[] = self::out(fn($out) => ($wic->v->CreateBitmapFromMemory)($wic, $w, $h, FFI::addr($fromFormat), $w * 4, strlen($bytes), $pixels, $out), 'CreateBitmapFromMemory');
             $conv = $held[] = Com::typed($f, self::out(fn($out) => ($wic->v->CreateFormatConverter)($wic, $out), 'CreateFormatConverter'), 'Converter *');
-            self::check(($conv->v->Initialize)($conv, $bitmap, FFI::addr($bgrFormat), 0, null, 0.0, 0), 'IWICFormatConverter::Initialize');
+            self::check(($conv->v->Initialize)($conv, $bitmap, FFI::addr($toFormat), 0, null, 0.0, 0), 'IWICFormatConverter::Initialize');
             $stream = $held[] = Com::typed($f, self::out(fn($out) => $f->CreateStreamOnHGlobal(null, 1, $out), 'CreateStreamOnHGlobal'), 'Stream *');
-            $container = Com::guid(self::JPEG);
+            $container = Com::guid($container);
             $enc = $held[] = Com::typed($f, self::out(fn($out) => ($wic->v->CreateEncoder)($wic, FFI::addr($container), null, $out), 'CreateEncoder'), 'Encoder *');
             self::check(($enc->v->Initialize)($enc, $stream, self::NO_CACHE), 'IWICBitmapEncoder::Initialize');
             $frameOut = $f->new('void *');
@@ -53,16 +71,18 @@ final class Wic
             self::check(($enc->v->CreateNewFrame)($enc, FFI::addr($frameOut), FFI::addr($propsOut)), 'CreateNewFrame');
             $frame = $held[] = Com::typed($f, $frameOut, 'FrameEncode *');
             $props = $held[] = Com::typed($f, $propsOut, 'PropertyBag *');
-            $name = \MyPHP\Platform\Windows\Win32::wide('ImageQuality');
-            $bag = $f->new('PROPBAG2');
-            $bag->pstrName = $f->cast('uint16_t *', FFI::addr($name[0]));
-            $value = $f->new('VARIANT');
-            $value->vt = self::VT_R4;
-            $value->fltVal = max(0.0, min(1.0, $quality));
-            self::check(($props->v->Write)($props, 1, FFI::addr($bag), FFI::addr($value)), 'IPropertyBag2::Write ImageQuality');
+            if ($quality !== null) {
+                $name = \MyPHP\Platform\Windows\Win32::wide('ImageQuality');
+                $bag = $f->new('PROPBAG2');
+                $bag->pstrName = $f->cast('uint16_t *', FFI::addr($name[0]));
+                $value = $f->new('VARIANT');
+                $value->vt = self::VT_R4;
+                $value->fltVal = max(0.0, min(1.0, $quality));
+                self::check(($props->v->Write)($props, 1, FFI::addr($bag), FFI::addr($value)), 'IPropertyBag2::Write ImageQuality');
+            }
             self::check(($frame->v->Initialize)($frame, $props), 'IWICBitmapFrameEncode::Initialize');
             self::check(($frame->v->SetSize)($frame, $w, $h), 'SetSize');
-            self::check(($frame->v->SetPixelFormat)($frame, FFI::addr($bgrFormat)), 'SetPixelFormat');
+            self::check(($frame->v->SetPixelFormat)($frame, FFI::addr($toFormat)), 'SetPixelFormat');
             self::check(($frame->v->WriteSource)($frame, $conv, null), 'WriteSource');
             self::check(($frame->v->Commit)($frame), 'IWICBitmapFrameEncode::Commit');
             self::check(($enc->v->Commit)($enc), 'IWICBitmapEncoder::Commit');

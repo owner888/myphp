@@ -71,3 +71,21 @@ instead.
     has the keyboard.
 12. [ ] **The clipboard with other apps**: text, HTML and an image copied
     from the app paste into Word or Paint, and theirs into the app.
+13. [ ] **A prompt and a login** (a page's prompt(), the player's open
+    URL and its login): the dialog sits over its window, sized to its
+    texts (a long Chinese prompt wraps, nothing clipped) at 100% and 150%
+    scaling; Tab, Enter and Escape work, IME types into the field; a
+    login's fields show their placeholders, the password hidden.
+14. [ ] **The taskbar**: a window's progress shows on its button (normal,
+    paused, error, indeterminate); Dock::setIcon changes the title bar's
+    and the button's icon (and Alt+Tab's), '' brings the executable's
+    back; a bounce flashes the button till the app comes forward; the
+    about panel shows the name, versions and copyright.
+15. [ ] **Icons and apps**: Shell::fileIcon of a file, a folder, an .exe
+    and a shell:AppsFolder item look as Explorer shows them, edges
+    smooth (straight alpha, not dark fringes); the Start menu's apps list
+    with their names in the user's language.
+16. [ ] **A page's capture, PDF and sound**: the PNG looks as the page
+    shows; the PDF opens, laid out for print, at the size asked; muting a
+    page playing sound silences it, isAudible true while it plays; picture
+    in picture floats the page's video and is told as on.

@@ -185,7 +185,7 @@ final class Win32
 
     public static function ole32(): FFI
     {
-        return self::$libs['ole32'] ??= FFI::cdef('int32_t CoInitializeEx(void *reserved, uint32_t model);', 'ole32.dll');
+        return self::$libs['ole32'] ??= FFI::cdef('int32_t CoInitializeEx(void *reserved, uint32_t model); void CoTaskMemFree(void *p);', 'ole32.dll');
     }
 
     public static function shell32(): FFI

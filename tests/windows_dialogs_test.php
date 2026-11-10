@@ -1,7 +1,8 @@
 <?php
 // The dialogs on Windows (Platform\Windows\Dialogs), in an app of its own
 // (testdata/windows_dialogs_app.php): an open and a save dialog of the Common Item Dialog shown and
-// canceled; a task dialog's button pressed and its check box checked; one closed as its cancel button.
+// canceled; a task dialog's button pressed and its check box checked; one closed as its cancel button;
+// a prompt checked, taken and canceled, and a login.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -30,9 +31,13 @@ namespace MyPHP\Tests;
     if (!is_array($r)) { check(false, "the app's report: {$oneLine($out)} | its log: {$oneLine($err)}"); return; }
     echo "  $line\n";
     check(!$hung, 'the app ends as it quits');
-    same(['Open test' => true, 'Save test' => true, 'Message test' => true, 'Cancel test' => true], $r['found'] ?? [], 'each dialog showed, titled as asked');
+    same(['Open test' => true, 'Save test' => true, 'Message test' => true, 'Cancel test' => true, 'DialogsTest' => true], $r['found'] ?? [], 'each dialog showed, titled as asked');
     same([], $r['open'], 'an open dialog canceled chooses nothing');
     same('', $r['save'], 'a save dialog canceled, no path');
     same([1, $r['taskDialog']], $r['message'], 'a ' . ($r['taskDialog'] ? 'task dialog' : 'plain message box (no task dialog)') . '\'s second button pressed, its check box checked');
     same([1, false], $r['canceled'], 'one closed as its cancel button');
+    same('Too short', $r['complaint'] ?? null, "a prompt's check complains under its field");
+    same('abc', $r['prompt'], 'a prompt: OK refused while its check complains, then its text');
+    same(null, $r['promptCanceled'], 'a prompt canceled, null');
+    same(['me', 'pw'], $r['login'], "a login's name and password");
 })();

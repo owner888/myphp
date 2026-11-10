@@ -8967,9 +8967,38 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   (TaskDialogIndirect, its packed TASKDIALOGCONFIG laid out by hand),
   which is version 6 of the common controls': an activation context of
   shell32.dll's manifest (its resource 124) brings it to an executable
-  without one, as PHP's; a plain MessageBox where there is none. Not yet:
-  the prompt and login dialogs (IINA's). `windows_dialogs_test` answers
-  each from a timer its modal loop runs.
+  without one, as PHP's; a plain MessageBox where there is none. A prompt
+  and a login (IINA's; upstream has neither on Windows) are dialogs of a
+  template made in memory (DialogBoxIndirectParamW): the dialog manager's
+  loop gives them Tab, Enter and Escape, and under that activation context
+  their edits are version 6's, a login's placeholders cue banners. A
+  template's sizes are dialog units, which scale with its font (Segoe UI
+  9) and the monitor's DPI; the texts' heights are estimated from their
+  widths, a wide character two average ones. A prompt's check runs on each
+  EN_CHANGE, its complaint under the field and OK disabled, and OK is
+  refused while it complains (Enter on a disabled default button still
+  sends IDOK). A page's file input is an open dialog (WebView2 shows its
+  own). `windows_dialogs_test` answers each from a timer its modal loop
+  runs.
+- The taskbar and the shell (`Windows\Taskbar`, `Windows\Shell`: mygo's
+  taskbar.go, icon.go, apps.go, jumplist.go): a window's progress is the
+  shell's ITaskbarList3's, put again when Explorer sends the window
+  TaskbarButtonCreated (it makes the button once the window shows, and
+  again when it restarts); the app's icon (Dock::setIcon) is an HICON of
+  the PNG on each window's title bar and button (WM_SETICON), a new
+  window's too, none the executable's again; a bounce flashes the buttons
+  (FlashWindowEx); the about panel is a message, Windows having none. A
+  file's icon is IShellItemImageFactory's (icons only, a SIZE passed by
+  value as one 64-bit integer, as both x64's and arm64's conventions pass
+  an 8-byte struct), its DIB section's straight-alpha BGRA a PNG through
+  WIC; the app's is its executable's. The installed apps are the shell's
+  Applications folder's, each a shell item shell:AppsFolder\<ID>. Hiding
+  the app hides its windows shown, unhiding shows them inactive;
+  activating brings its highest window forward. The window's capture is
+  its last frame, read back, as a PNG (`Native\Wic::png`). Not yet:
+  dragging out of a window and dropping into one (OLE's IDataObject and
+  IDropSource, implemented in PHP: mygo's surface_drag.go), the system's
+  symbols (no SF Symbols; a mapping to Segoe Fluent Icons to decide).
 - Secrets and the network (stage 5: mygo's secrets.go, network.go): a
   secret is a generic credential of the Credential Manager, as keytar keeps
   them (the target "service/account", the user name the account, persisting
@@ -9037,8 +9066,14 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   InPrivate one of its own for an ephemeral session) named in the options
   of its web views' controllers (ICoreWebView2Environment10, a runtime of
   1.0.1185 or newer); its cookie calls take a web view of the profile, a
-  hidden one of its own before its pages show. Not yet: the audio, capture
-  and session states, PDFs and a page's capture. `windows_webview_test` shows HTML,
+  hidden one of its own before its pages show. A page's capture is
+  CapturePreview's PNG into a stream of memory (CreateStreamOnHGlobal, its
+  HGLOBAL read); a PDF is DevTools' Page.printToPDF, its data base64 (the
+  page sizes in inches); muted and audible are ICoreWebView2_8's, one put
+  of IsMuted in flight at a time, as WebView2 may lose a second before
+  IsMutedChanged; picture in picture is the video's request through
+  Runtime.evaluate with userGesture. The capture and session states stay
+  none, as upstream's: WebView2 has no API of them. `windows_webview_test` shows HTML,
   reads its document, answers the bridge's call, serves a scheme's page
   and its fetch, sets and deletes cookies before a page shows and after,
   and applies content rules; `content_rule_list_test` matches rules on
