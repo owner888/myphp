@@ -7,7 +7,7 @@ use Closure;
 
 /**
  * The backend of a new watch: FSEvents on macOS, inotify on Linux, where
- * the tests run.
+ * the tests run, ReadDirectoryChangesW on Windows.
  *
  * @internal
  */
@@ -24,6 +24,7 @@ final class Backends
         return match (PHP_OS_FAMILY) {
             'Darwin' => new FsEvents,
             'Linux' => new Inotify,
+            'Windows' => new DirectoryChanges,
             default => throw new Unsupported('myphp: watch: file watches are not supported on ' . PHP_OS_FAMILY),
         };
     }

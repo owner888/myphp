@@ -9,10 +9,6 @@ namespace MyPHP\Tests;
 use MyPHP\{CallContext, ChannelWait, ErrWatchLimit, FileEvent, FileOp, FileWatchOptions};
 use MyPHP\Plugins\Watch\{Options, Request, Root, Service, Watch};
 
-if (PHP_OS_FAMILY === 'Windows') { // the watch plugin stands on watching files, ReadDirectoryChangesW's there, with its stage
-    echo "  skipped on Windows\n";
-    return;
-}
 
 /** A watcher whose batches the test gives (mygo's fakeWatcher). */
 final class FakeWatcher
@@ -39,7 +35,7 @@ function pluginDir(): string
 {
     $d = sys_get_temp_dir() . '/myphp-watch-plugin-' . getmypid() . '-' . bin2hex(random_bytes(4));
     mkdir($d);
-    register_shutdown_function(fn() => exec('rm -rf ' . escapeshellarg($d) . ' ' . escapeshellarg("$d-old")));
+    register_shutdown_function(function () use ($d): void { removeTree($d); removeTree("$d-old"); });
     return realpath($d);
 }
 

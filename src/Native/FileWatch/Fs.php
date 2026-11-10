@@ -8,13 +8,16 @@ use FFI;
 /**
  * What the watches ask of the file system: PHP's own lstat, scandir and
  * realpath, with PHP's stat cache cleared first, and libc's errno when one
- * fails, which PHP doesn't give. A stat is [dev, ino, mode, size, mtime],
- * and two with the same dev and ino are the same file (Go's os.SameFile).
+ * fails, which PHP doesn't give; on Windows the Win32 error of a look at
+ * the path, as errno. A stat is [dev, ino, mode, size, mtime], and two
+ * with the same dev and ino are the same file (Go's os.SameFile): on
+ * Windows PHP gives the volume's serial number and the file index.
  *
  * @internal
  */
 final class Fs
 {
+    private const ENOENT = 2, EIO = 5, EACCES = 13, ENOTDIR = 20;
     private const S_IFMT = 0o170000, S_IFDIR = 0o040000, S_IFREG = 0o100000;
     /** struct dirent's d_type. */
     private const DT_UNKNOWN = 0, DT_DIR = 4, DT_REG = 8;
@@ -29,6 +32,12 @@ final class Fs
             $st = @lstat($path);
             if ($st !== false) {
                 return [$st['dev'], $st['ino'], $st['mode'], $st['size'], $st['mtime']];
+            }
+            if (PHP_OS_FAMILY === 'Windows') {
+                if (($e = self::windowsLook($path, false)) !== null || $attempt === 2) {
+                    throw $e ?? new FsError("lstat $path: input/output error", self::EIO);
+                }
+                continue; // it appeared in between
             }
             $buf = self::c()->new('char[512]'); // larger than any struct stat
             if (self::c()->lstat($path, FFI::addr($buf)) !== 0 || $attempt === 2) {
@@ -46,6 +55,9 @@ final class Fs
             if ($names !== false) {
                 return array_values(array_filter($names, fn(string $n): bool => $n !== '.' && $n !== '..'));
             }
+            if (PHP_OS_FAMILY === 'Windows') {
+                throw self::windowsLook($path, true) ?? new FsError("open $path: permission denied", self::EACCES);
+            }
             $dir = self::c()->opendir($path);
             if ($dir === null || FFI::isNull($dir) || $attempt === 2) {
                 throw self::error('open', $path);
@@ -62,6 +74,17 @@ final class Fs
      */
     public static function subdirs(string $path): array
     {
+        if (PHP_OS_FAMILY === 'Windows') { // no d_type: each entry lstat'ed
+            $names = [];
+            foreach (self::readDir($path) as $name) {
+                try {
+                    if (self::isDir(self::lstat("$path/$name"))) { $names[] = $name; }
+                } catch (FsError) {
+                    // gone in between
+                }
+            }
+            return $names;
+        }
         $c = self::c();
         $dir = $c->opendir($path);
         if ($dir === null || FFI::isNull($dir)) {
@@ -112,6 +135,34 @@ final class Fs
         return new FsError("$op $path: " . self::strerror($errno), $errno);
     }
 
+    /**
+     * Why a look at $path on Windows fails (GetFileAttributesW), as Go's
+     * *os.PathError says it; null when it is there (and, for $dir, a
+     * directory).
+     */
+    private static function windowsLook(string $path, bool $dir): ?FsError
+    {
+        static $k = null;
+        $k ??= FFI::cdef('uint32_t GetFileAttributesW(const void *name); uint32_t GetLastError(void);', 'kernel32.dll');
+        $attrs = $k->GetFileAttributesW(\MyPHP\Platform\Windows\Win32::wide($path));
+        if ($attrs === 0xFFFFFFFF) {
+            return self::windowsError($dir ? 'open' : 'lstat', $path, $k->GetLastError());
+        }
+        return $dir && !($attrs & 0x10) ? new FsError("open $path: not a directory", self::ENOTDIR) : null;
+    }
+
+    /** The FsError of Win32 error $code on $path, its errno libc's of the same meaning. */
+    public static function windowsError(string $op, string $path, int $code): FsError
+    {
+        $errno = match ($code) {
+            2, 3, 123, 161 => self::ENOENT, // FILE_NOT_FOUND, PATH_NOT_FOUND, INVALID_NAME, BAD_PATHNAME
+            5, 32 => self::EACCES, // ACCESS_DENIED, SHARING_VIOLATION
+            267 => self::ENOTDIR, // DIRECTORY
+            default => self::EIO,
+        };
+        return new FsError("$op $path: " . self::strerror($errno), $errno);
+    }
+
     /** libc's errno. */
     public static function errno(): int
     {
@@ -121,6 +172,9 @@ final class Fs
     /** What $errno says, in lower case as Go's syscall.Errno does. */
     public static function strerror(int $errno): string
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            return [self::ENOENT => 'no such file or directory', self::EACCES => 'permission denied', self::ENOTDIR => 'not a directory'][$errno] ?? 'input/output error';
+        }
         return lcfirst(FFI::string(self::c()->strerror($errno)));
     }
 

@@ -1,18 +1,14 @@
 <?php
 // File watches (mygo's watch_test.go): the scan against a fake backend,
-// whose notices the tests send, then the system's (inotify here, FSEvents
-// on macOS) on a real directory.
+// whose notices the tests send, then the system's (inotify on Linux,
+// FSEvents on macOS, ReadDirectoryChangesW on Windows) on a real directory;
+// ReadDirectoryChangesW's records read on every system.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
 use MyPHP\{App, ErrWatchLimit, FileEvent, FileOp, FileWatcher, FileWatchOptions};
-use MyPHP\Native\FileWatch\{Backend, Backends, FsError, FsEvents, Hints, Notice, Overflow, Scan, Target, Unsupported};
-
-if (PHP_OS_FAMILY === 'Windows') { // watching files there is ReadDirectoryChangesW's, with its stage
-    echo "  skipped on Windows\n";
-    return;
-}
+use MyPHP\Native\FileWatch\{Backend, Backends, DirectoryChanges, FsError, FsEvents, Hints, Notice, Overflow, Scan, Target, Unsupported};
 
 /** A backend whose notices the test sends (mygo's fake.FileWatch). */
 final class FakeFileWatch implements Backend
@@ -59,7 +55,7 @@ function watchDir(): string
 {
     $d = sys_get_temp_dir() . '/myphp-watch-' . getmypid() . '-' . bin2hex(random_bytes(4));
     mkdir($d);
-    register_shutdown_function(fn() => exec('rm -rf ' . escapeshellarg($d)));
+    register_shutdown_function(fn() => removeTree($d));
     return realpath($d);
 }
 
@@ -188,7 +184,7 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
                 FakeFileWatch::$last->hook = function (Target $t) use (&$raced, $w, $path, $replace, $isDir, $create, $dir): void {
                     if ($t->path !== $w->root() . '/entry' || $raced) { return; }
                     $raced = true;
-                    if (!$replace) { exec('rm -rf ' . escapeshellarg($path)); return; }
+                    if (!$replace) { removeTree($path); return; }
                     $create("$dir/replacement");
                     if ($isDir) { rename($path, watchDir() . '/retired'); }
                     rename("$dir/replacement", $path);
@@ -363,7 +359,7 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
     watchNotice($w, '..', new Notice(kind: Notice::CREATE, name: 'config.json'));
     $next(ev(FileOp::FileCreate, '.'), 'created again');
     check(in_array($file, watchTargets(), true), 'the new file is enrolled');
-    exec('rm -rf ' . escapeshellarg($dir));
+    removeTree($dir);
     watchNotice($w, '..', new Notice(kind: Notice::LOST));
     $next(ev(FileOp::FileRemove, '.'), 'gone with its directory');
     same([null, null], [$w->next(), $w->err()], 'then the end');
@@ -504,7 +500,7 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
     same(['.', 'moved', 'moved/deep', 'new'], $t, 'hints: enrolled where it went, dropped where it was');
     FakeFileWatch::$last->queue[] = new Notice(err: new Overflow);
     same(watchJson([$hint('.')]), watchJson($w->next(2)), 'hints: "." after the system lost changes');
-    exec('rm -rf ' . escapeshellarg($dir));
+    removeTree($dir);
     watchNotice($w, '.', new Notice(kind: Notice::LOST));
     same(watchJson([ev(FileOp::FileRemove, '.', true)]), watchJson($w->next(2)), 'hints: the root gone');
     same(null, $w->next(), 'hints: then the end');
@@ -570,7 +566,29 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
     check($o !== null && $o->err instanceof Overflow, 'fsevents: changes dropped');
 })();
 
+(function () {
+    // ReadDirectoryChangesW's FILE_NOTIFY_INFORMATION records as notices (mygo's parseDirectoryChanges).
+    $record = function (int $action, string $name, bool $last) {
+        $n = iconv('UTF-8', 'UTF-16LE', $name);
+        $size = 12 + strlen($n);
+        $next = $last ? 0 : ($size + 3) & ~3;
+        return str_pad(pack('VVV', $next, $action, strlen($n)) . $n, $last ? $size : $next, "\0");
+    };
+    $ns = DirectoryChanges::parse($record(4, 'old', false) . $record(5, 'sub\\新', false) . $record(3, 'a', true), 9);
+    same([[9, Notice::MOVE_FROM, 'old'], [9, Notice::MOVE_TO, 'sub/新'], [9, Notice::WRITE, 'a']], array_map(fn(Notice $n) => [$n->target, $n->kind, $n->name], $ns), 'directory changes: records, a path beneath with slashes');
+    foreach (['truncated' => 'xx', 'no name' => pack('VVV', 0, 1, 0), 'an odd name' => pack('VVV', 0, 1, 3) . 'abc', 'an action' => $record(9, 'a', true),
+        'an offset' => substr_replace($record(1, 'a', false) . $record(1, 'b', true), pack('V', 2), 0, 4)] as $what => $data) {
+        $threw = false;
+        try { DirectoryChanges::parse($data, 1); } catch (\RuntimeException) { $threw = true; }
+        check($threw, "directory changes: refused, $what");
+    }
+})();
+
 Backends::$fake = null;
+if (PHP_OS_FAMILY === 'Windows') { // what the backend compares a directory's handle with
+    $st = lstat(sys_get_temp_dir());
+    check($st['ino'] !== 0, 'PHP gives a file index as the inode on Windows: ' . json_encode([$st['dev'], $st['ino']]));
+}
 
 (function () {
     // The system's watch, on a real directory.
@@ -589,7 +607,7 @@ Backends::$fake = null;
     unlink("$dir/b");
     same(watchJson([ev(FileOp::FileRemove, 'b')]), watchJson($w->next(2)), 'system: removed');
     same([], $w->next(0.05), 'system: quiet');
-    exec('rm -rf ' . escapeshellarg($dir));
+    removeTree($dir);
     same(watchJson([ev(FileOp::FileRemove, '.', true)]), watchJson($w->next(2)), 'system: the root gone');
     same([null, true], [$w->next(), $w->done()], 'system: then the end');
 
@@ -618,7 +636,7 @@ Backends::$fake = null;
     same(watchJson([ev(FileOp::FileHint, '.', true)]), watchJson($w->next(2)), 'system hints: a new directory');
     touch("$dir/new/x");
     same(watchJson([ev(FileOp::FileHint, 'new', true)]), watchJson($w->next(2)), 'system hints: watched once enrolled');
-    exec('rm -rf ' . escapeshellarg($dir));
+    removeTree($dir);
     $last = null;
     for ($i = 0; $i < 5 && ($b = $w->next(2)) !== null; $i++) { $last = $b; }
     same(watchJson([ev(FileOp::FileRemove, '.', true)]), watchJson($last), 'system hints: the root gone');

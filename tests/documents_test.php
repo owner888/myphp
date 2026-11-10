@@ -306,9 +306,9 @@ $d->checkDisk();
 check($d->state()->deleted, 'deleted');
 $d->save();
 same('x', file_get_contents($path), 'saving a deleted document writes it again');
-// Read-only: saving asks for another file.
-chmod($path, 0444);
+// Read-only: saving asks for another file (its time set first: Windows sets none of a read-only file's).
 touch($path, $future + 9000);
+chmod($path, 0444);
 $d->checkDisk();
 $d->set('y');
 if (!is_writable($path)) { // root writes anything
