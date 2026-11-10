@@ -78,9 +78,15 @@ use MyPHP\Native\Build\Windows;
     // The installer, silent, into a folder of the test's: the app's files, the uninstaller, the entry of Settings > Apps; the uninstaller, silent, removes them.
     $into = "$root\\installed";
     // A program waited for 120 s at most; one that does not end says, in $stuck, what it and its children were running then.
+    // Its command line as given, not a list proc_open quotes: NSIS takes /S and /D= unquoted, /D= last ("/S" made a
+    // window wait for a click).
     $stuck = '';
-    $run = function (array $cmd) use (&$stuck): int {
-        $p = proc_open($cmd, [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w']], $pipes);
+    $run = function (string $cmd) use (&$stuck): int {
+        $p = proc_open($cmd, [0 => ['file', DEVNULL, 'r'], 1 => ['file', DEVNULL, 'w'], 2 => ['file', DEVNULL, 'w']], $pipes, null, null, ['bypass_shell' => true]);
+        if ($p === false) {
+            $stuck = "cannot start $cmd";
+            return -2;
+        }
         $start = microtime(true);
         while (($st = proc_get_status($p))['running'] && microtime(true) - $start < 120) { usleep(100000); }
         if ($st['running']) {
@@ -93,13 +99,13 @@ use MyPHP\Native\Build\Windows;
         return $st['running'] ? -1 : $st['exitcode'];
     };
     $mark('the installer');
-    same(0, $run(["$build\\$setup", '/S', "/D=$into"]), "the installer, silent $stuck");
+    same(0, $run("\"$build\\$setup\" /S /D=$into"), "the installer, silent $stuck");
     check(is_file("$into\\Win Demo.exe") && is_file("$into\\php\\php.exe") && is_file("$into\\Uninstall.exe"), 'it installs the app and its uninstaller');
     $key = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' . (json_decode((string)file_get_contents("$dir\\info.json"), true)['CFBundleIdentifier'] ?? '');
     [, $reg] = \MyPHP\Native\Build\Cmd::output(['reg', 'query', $key, '/v', 'DisplayName']);
     check(str_contains($reg, 'Win Demo'), 'its entry in Settings > Apps: ' . $reg);
     $mark('the uninstaller');
-    $run(["$into\\Uninstall.exe", '/S', "_?=$into"]); // _?= runs it in place, waited for
+    $run("\"$into\\Uninstall.exe\" /S _?=$into"); // _?= runs it in place, waited for
     check(!is_file("$into\\Win Demo.exe"), 'the uninstaller removes it');
     [$code, $out] = $myphp('build', '-platform', 'windows/' . ($arch === 'amd64' ? 'arm64' : 'amd64'), "$root\\w");
     check($code !== 0 && str_contains($out, 'is built on Windows of that architecture'), 'another architecture refused: ' . $out);
