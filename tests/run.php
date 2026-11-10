@@ -58,9 +58,11 @@ if (($argv[1] ?? '') === '--each') {
     exit($byTest === [] ? 0 : 1);
 }
 
-$tmp = getenv('TMPDIR');
-if ($tmp !== false && $tmp !== '' && ($real = realpath($tmp)) !== false) {
-    putenv("TMPDIR=$real");
+foreach (PHP_OS_FAMILY === 'Windows' ? ['TMP', 'TEMP'] : ['TMPDIR'] as $var) { // Windows's in its short 8.3 names on GitHub's runners (RUNNER~1)
+    $tmp = getenv($var);
+    if ($tmp !== false && $tmp !== '' && ($real = realpath($tmp)) !== false) {
+        putenv("$var=$real");
+    }
 }
 const MYPHP_TEST_SUITE = true; // the suite reports its own counts, test by test
 require __DIR__ . '/Headless.php';

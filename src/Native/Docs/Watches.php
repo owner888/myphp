@@ -91,7 +91,7 @@ final class Watches
         // can be renamed before the watch ever saw it (mygo's 8f6864d).
         $docs = Registry::at($path);
         if (end($events)->op === FileOp::FileRemove) {
-            $moved = self::findRenamed(dirname($f['watcher']->root()), [$f['watcher']->gone(), ...array_map(fn($d) => $d->fileIdentity(), $docs)]);
+            $moved = self::findRenamed(dirname($path), [$f['watcher']->gone(), ...array_map(fn($d) => $d->fileIdentity(), $docs)]); // the documents' own spelling of the directory, not the watch's resolved one (Windows's long names of RUNNER~1)
         }
         foreach ($docs as $d) {
             $moved !== '' ? $d->moved($moved) : $d->checkDisk();

@@ -793,6 +793,24 @@ function copyDir(string $from, string $to): void
     }
 }
 
+/** Removes $path and what is beneath it, as rm -rf, which Windows has not: a read-only file made writable first, as Windows deletes none; a link removed, not followed. */
+function removeTree(string $path): void
+{
+    clearstatcache();
+    if (is_link($path) || is_file($path)) {
+        @chmod($path, 0666);
+        @unlink($path) || @rmdir($path); // a directory's symlink or junction on Windows is a directory's
+        return;
+    }
+    if (!is_dir($path)) {
+        return;
+    }
+    foreach (scandir($path) ?: [] as $f) {
+        if ($f !== '.' && $f !== '..') { removeTree("$path/$f"); }
+    }
+    @rmdir($path);
+}
+
 /** The null device, for a child process's streams. */
 const DEVNULL = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
 
