@@ -8,6 +8,7 @@ ENTRY="${1:-examples/counter-native/main.php}"
 BUNDLE_ID="${2:-com.owner888.myphp}"
 APP_NAME="${3:-MyphpApp}"
 OUT_DIR="${4:-dist/ios}"
+APP_VERSION="${5:-1.0.0}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # MYPHP_IOS_SDK=iphonesimulator packages for the simulator (its runtime under build/ios-simulator), a device by default
@@ -18,7 +19,7 @@ PHP_BUILD="${BUILD_DIR}/php-build"
 PHP_SRC="${ROOT_DIR}/build/android/php-8.3.16"
 
 SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
-IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator)"
+IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator || true)"
 
 echo "==> Packaging iOS App: ${APP_NAME} (${BUNDLE_ID})"
 echo "==> Entry file: ${ENTRY}"
@@ -70,9 +71,9 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>${APP_VERSION}</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIApplicationSceneManifest</key>
@@ -127,6 +128,17 @@ if [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
         d="$(dirname "${rel#./}")"
         cp "${ENTRY_DIR}/$d/"*.json "${APP_DIR}/$d/"
     done
+    # The project's resources directory, merged into the bundle's root (App::path('resources'))
+    if [ -d "${ENTRY_DIR}/resources" ]; then
+        (cd "${ENTRY_DIR}/resources" && find . -mindepth 1 -maxdepth 1 -not -name '.*' -not -name 'darwin*' -not -name 'linux*' -not -name 'windows*' -not -name 'android*') | while read -r r; do
+            cp -R "${ENTRY_DIR}/resources/${r#./}" "${APP_DIR}/"
+        done
+        for sub in ios ios-arm64; do
+            if [ -d "${ENTRY_DIR}/resources/$sub" ]; then
+                cp -R "${ENTRY_DIR}/resources/$sub/." "${APP_DIR}/"
+            fi
+        done
+    fi
 fi
 
 # 5. The CA certificates HTTPS trusts (curl's copy of Mozilla's): OpenSSL in the app has no way to the system's

@@ -119,6 +119,9 @@ final class CoreText implements \MyPHP\Platform\Fonts
     /** Whether the user leaves font smoothing on: AppKit turns it off when AppleFontSmoothing is 0 (mygo's fontSmoothing); unset, it is on. */
     private static function fontSmoothing(): bool
     {
+        if (\MyPHP\App::isIOS()) {
+            return false; // UIKit draws text without AppKit's font smoothing
+        }
         $defaults = ObjC::msg('p:', ObjC::cls('NSUserDefaults'), 'standardUserDefaults');
         $key = ObjC::str('AppleFontSmoothing');
         return ObjC::msg('p:p', $defaults, 'objectForKey:', $key) === null || ObjC::msg('l:p', $defaults, 'integerForKey:', $key) !== 0;

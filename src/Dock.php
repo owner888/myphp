@@ -18,6 +18,9 @@ final class Dock
     /** Sets the menu the Dock icon shows above the standard items, as to open a new window; null removes it (mygo's SetMenu). */
     public static function setMenu(?Menu $menu): void
     {
+        if (App::isIOS() || App::isAndroid()) {
+            throw new Platform\Unsupported('Dock is not supported on a phone');
+        }
         self::$menu = $menu;
         if (App::running()) {
             App::backend()->app()->setDockMenu($menu?->snapshot());
@@ -63,12 +66,18 @@ final class Dock
     /** Removes the Dock icon: the accessory activation policy (mygo's Hide). */
     public static function hide(): void
     {
+        if (App::isIOS() || App::isAndroid()) {
+            throw new Platform\Unsupported('Dock is not supported on a phone');
+        }
         App::setActivationPolicy(ActivationPolicy::Accessory);
     }
 
     /** Shows the Dock icon again: the regular activation policy (mygo's Show). */
     public static function show(): void
     {
+        if (App::isIOS() || App::isAndroid()) {
+            throw new Platform\Unsupported('Dock is not supported on a phone');
+        }
         App::setActivationPolicy(ActivationPolicy::Regular);
     }
 

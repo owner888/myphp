@@ -12,26 +12,36 @@ use MyPHP\Transfer\FormatUnavailable;
 
 final class Clipboard implements Platform\Clipboard
 {
-    public function readData(array $formats): Data // text alone, as Android's: Data's own API (it has no setText nor text())
+    public function readData(array $formats): Data
     {
-        $text = $this->readText();
-        if ($text === '') {
-            return new Data();
+        $reps = [];
+        $want = fn(string $f) => $formats === [] || in_array($f, $formats, true);
+        if ($want(Format::TEXT) && ($text = $this->readText()) !== '') {
+            $reps[] = \MyPHP\Transfer\Representation::bytes(Format::TEXT, $text);
         }
-        return Data::text($text);
+        if ($want(Format::PNG) && ($img = $this->readImage()) !== '') {
+            $reps[] = \MyPHP\Transfer\Representation::bytes(Format::PNG, $img);
+        }
+        return $reps === [] ? new Data() : new Data(new \MyPHP\Transfer\Item(...$reps));
     }
 
     public function writeData(Data $data, ?Closure $released): void
     {
         try {
             $this->writeText($data->read(Format::TEXT));
-        } catch (FormatUnavailable) {} // no text in it: nothing this clipboard holds
+        } catch (FormatUnavailable) {}
+        try {
+            $this->writeImage($data->read(Format::PNG));
+        } catch (FormatUnavailable) {}
         $released?->__invoke();
     }
 
     public function formats(): array
     {
-        return [Format::TEXT];
+        $out = [];
+        if ($this->readText() !== '') { $out[] = Format::TEXT; }
+        if ($this->readImage() !== '') { $out[] = Format::PNG; }
+        return $out ?: [Format::TEXT];
     }
 
     public function flush(): void
@@ -62,12 +72,20 @@ final class Clipboard implements Platform\Clipboard
 
     public function readImage(): string
     {
-        return '';
+        $f = iOS::ffi();
+        $len = $f->new('int');
+        $p = $f->myphp_ios_clipboard_get_image(\FFI::addr($len));
+        if ($p === null || \FFI::isNull($p) || (int)$len->cdata <= 0) {
+            return '';
+        }
+        $png = \FFI::string($p, (int)$len->cdata);
+        $f->myphp_ios_free_string($f->cast('char*', $p));
+        return $png;
     }
 
     public function isImage(string $bytes): bool
     {
-        return false;
+        return str_starts_with($bytes, "\x89PNG\r\n\x1a\n");
     }
 
     public function clear(): void
@@ -82,6 +100,14 @@ final class Clipboard implements Platform\Clipboard
 
     public function writeImage(string $png): void
     {
+        if ($png === '') {
+            return;
+        }
+        $f = iOS::ffi();
+        $n = strlen($png);
+        $buf = $f->new("uint8_t[$n]");
+        \FFI::memcpy($buf, $png, $n);
+        $f->myphp_ios_clipboard_set_image($buf, $n);
     }
 
     public function readFiles(): array

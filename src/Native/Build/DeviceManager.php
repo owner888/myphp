@@ -84,8 +84,25 @@ final class DeviceManager
             }
         }
 
-        // 3. iOS Simulators and Devices via xcrun simctl
+        // 3. Physical iOS Devices via xcrun devicectl, then Simulators via xcrun simctl
         if (PHP_OS_FAMILY === 'Darwin' && Cmd::look('xcrun') !== '') {
+            $devOut = (string)@shell_exec('xcrun devicectl list devices 2>/dev/null');
+            foreach (explode("\n", $devOut) as $line) {
+                if (preg_match('/^(.+?)\s{2,}.*?([A-F0-9]{8}-[A-F0-9-]{4,})\s+\(UDID\)\s+(connected|available \(paired\))\s+(.+?)\s+physical\b/i', trim($line), $m)) {
+                    $name = trim($m[1]);
+                    $udid = $m[2];
+                    $model = trim($m[4]);
+                    if (str_contains($model, 'iPhone') || str_contains($model, 'iPad') || str_contains($name, 'iPhone') || str_contains($name, 'iPad')) {
+                        $devices[] = new TargetDevice(
+                            id: $udid,
+                            name: $name,
+                            platform: 'ios',
+                            type: 'device',
+                            status: 'connected',
+                        );
+                    }
+                }
+            }
             $simOut = (string)@shell_exec('xcrun simctl list devices available 2>/dev/null');
             foreach (explode("\n", $simOut) as $line) {
                 $line = trim($line);

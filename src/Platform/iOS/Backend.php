@@ -35,9 +35,12 @@ final class Backend implements Platform\Backend
         return 'ios/metal';
     }
 
+    private bool $signaled = false;
+
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
         ObjC::boot(['UIKit']);
+        date_default_timezone_set(ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSTimeZone'), 'localTimeZone'), 'name')));
         $this->h->ready();
     }
 
@@ -47,15 +50,19 @@ final class Backend implements Platform\Backend
         while ($this->running) {
             $this->step();
         }
+        $this->h->terminating();
     }
 
     public function quit(): void
     {
-        $this->running = false;
+        if ($this->h->quitRequested()) {
+            $this->running = false;
+        }
     }
 
     public function signal(): void
     {
+        $this->signaled = true;
     }
 
     public function timer(float $seconds, Closure $fn): void
@@ -80,13 +87,17 @@ final class Backend implements Platform\Backend
         foreach ($due as $fn) {
             $fn();
         }
+        if ($this->signaled) {
+            $this->signaled = false;
+            $this->h->dispatch();
+        }
 
         \MyPHP\Native\CurlLoop::pollSockets(); // the transfers' sockets: no loop of the system's watches them for PHP here
 
         // Poll native touch events
         $this->mainWindow?->pollEvents();
 
-        // Poll external deep link URLs
+        // Poll external deep link URLs and notification clicks
         $f = \MyPHP\Native\iOS::ffi();
         $urlBuf = $f->new('char[512]');
         while ($f->myphp_ios_poll_open_url($f->cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
@@ -94,6 +105,18 @@ final class Backend implements Platform\Backend
             if ($urlStr !== '') {
                 $this->h->openURLs([$urlStr]);
             }
+        }
+        while ($f->myphp_ios_poll_notification_click($f->cast('char*', \FFI::addr($urlBuf)), 256) > 0) {
+            $id = \FFI::string($urlBuf);
+            if ($id !== '') {
+                $this->h->notificationClicked($id);
+            }
+        }
+        if ($f->myphp_ios_poll_locale_changed() > 0) {
+            $this->h->localeChanged();
+        }
+        if ($f->myphp_ios_poll_network_changed() > 0 && $this->network !== null && $this->network->watching) {
+            $this->h->networkChanged($this->network->status());
         }
 
         // Poll web view IPC messages
@@ -122,7 +145,10 @@ final class Backend implements Platform\Backend
     }
 
     public function setApplicationMenu(?Menu $m): void {}
-    public function popupMenu(Menu $m, ?\MyPHP\Window $w, ?array $at): void {}
+    public function popupMenu(Menu $m, ?\MyPHP\Window $w, ?array $at): void
+    {
+        throw new Platform\Unsupported('Context menus are not supported on iOS: use a node\'s contextMenu()');
+    }
     public function updateMenuItem(MenuItem $it): void {}
     public function replaceSubmenu(int $id, Menu $m): void {}
 
@@ -135,7 +161,7 @@ final class Backend implements Platform\Backend
 
     public function newPage(int $width, int $height, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
     {
-        return new Page($onMessage);
+        return new Page($onMessage, $scripts);
     }
 
     public function focusedWindow(): ?\MyPHP\Window
@@ -245,7 +271,10 @@ final class Backend implements Platform\Backend
         return [];
     }
 
-    public function registerHotkey(int $id, string $accelerator): void {}
+    public function registerHotkey(int $id, string $accelerator): void
+    {
+        throw new Platform\Unsupported('Global shortcuts are not supported on iOS');
+    }
     public function unregisterHotkey(int $id): void {}
 
     public function notificationsSupported(): bool

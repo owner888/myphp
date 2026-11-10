@@ -13,7 +13,7 @@ PHP_BUILD_DIR="${BUILD_DIR}/php-build"
 PHP_SRC_DIR="${ROOT_DIR}/build/android/php-8.3.16"
 
 SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
-IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator)"
+IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator || true)"
 OPENSSL_TARGET="$([ "$IOS_SDK" = iphonesimulator ] && echo iossimulator-arm64-xcrun || echo ios64-xcrun)"
 OPENSSL_VERSION="3.4.1"
 CURL_VERSION="8.12.1"

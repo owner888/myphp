@@ -68,8 +68,11 @@ static float g_safe_right = 0.0f;
 
 static int g_network_connected = 1;
 static int g_network_is_cellular = 0;
+static int g_network_is_expensive = 0;
+static volatile int g_network_changed = 0;
 static nw_path_monitor_t g_path_monitor = NULL;
 static volatile int g_theme_changed = 0;
+static volatile int g_locale_changed = 0;
 static volatile int g_app_paused = 0;
 static volatile int g_memory_warning = 0;
 
@@ -77,6 +80,25 @@ static UIWindow *g_window = NULL;
 static MTKView *g_view = NULL;
 static CADisplayLink *g_display_link = NULL;
 static volatile int g_needs_render = 0;
+
+#define NOTIF_CLICK_QUEUE_SIZE 16
+static char g_notif_click_queue[NOTIF_CLICK_QUEUE_SIZE][256];
+static int g_notif_click_head = 0;
+static int g_notif_click_tail = 0;
+static pthread_mutex_t g_notif_click_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void push_notif_click(const char *ident) {
+    if (!ident) return;
+    pthread_mutex_lock(&g_notif_click_mutex);
+    int next = (g_notif_click_head + 1) % NOTIF_CLICK_QUEUE_SIZE;
+    if (next != g_notif_click_tail) {
+        strncpy(g_notif_click_queue[g_notif_click_head], ident, 255);
+        g_notif_click_queue[g_notif_click_head][255] = '\0';
+        g_notif_click_head = next;
+    }
+    pthread_mutex_unlock(&g_notif_click_mutex);
+    g_needs_render = 1;
+}
 static pthread_t g_php_thread;
 
 static NSMutableDictionary<NSNumber *, WKWebView *> *g_webviews = nil;
@@ -596,6 +618,20 @@ void myphp_ios_remove_all_notifications(void) {
     [[UNUserNotificationCenter currentNotificationCenter] removeAllPendingNotificationRequests];
 }
 
+int myphp_ios_poll_notification_click(char *out, int max_len) {
+    if (!out || max_len <= 0) return 0;
+    int has = 0;
+    pthread_mutex_lock(&g_notif_click_mutex);
+    if (g_notif_click_head != g_notif_click_tail) {
+        strncpy(out, g_notif_click_queue[g_notif_click_tail], max_len - 1);
+        out[max_len - 1] = '\0';
+        g_notif_click_tail = (g_notif_click_tail + 1) % NOTIF_CLICK_QUEUE_SIZE;
+        has = 1;
+    }
+    pthread_mutex_unlock(&g_notif_click_mutex);
+    return has;
+}
+
 int myphp_ios_is_network_connected(void) {
     return g_network_connected;
 }
@@ -604,9 +640,29 @@ int myphp_ios_is_network_cellular(void) {
     return g_network_is_cellular;
 }
 
+int myphp_ios_is_network_expensive(void) {
+    return g_network_is_expensive;
+}
+
+int myphp_ios_poll_network_changed(void) {
+    if (g_network_changed) {
+        g_network_changed = 0;
+        return 1;
+    }
+    return 0;
+}
+
 int myphp_ios_poll_theme_changed(void) {
     if (g_theme_changed) {
         g_theme_changed = 0;
+        return 1;
+    }
+    return 0;
+}
+
+int myphp_ios_poll_locale_changed(void) {
+    if (g_locale_changed) {
+        g_locale_changed = 0;
         return 1;
     }
     return 0;
@@ -633,10 +689,6 @@ void myphp_ios_create_web_view(int page_id) {
         bridge.pageId = page_id;
         [config.userContentController addScriptMessageHandler:bridge name:@"myphp"];
 
-        NSString *initScript = @"window.__myphp_native = { postMessage: function(msg) { window.webkit.messageHandlers.myphp.postMessage(msg); } };";
-        WKUserScript *userScript = [[WKUserScript alloc] initWithSource:initScript injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
-        [config.userContentController addUserScript:userScript];
-
         WKWebView *wv = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
         wv.hidden = YES;
         wv.opaque = NO;
@@ -646,6 +698,23 @@ void myphp_ios_create_web_view(int page_id) {
         g_webviews[@(page_id)] = wv;
         if (g_window.rootViewController.view) {
             [g_window.rootViewController.view insertSubview:wv atIndex:0]; // under the materials and the view over them, as a page under a bar's glass
+        }
+    });
+}
+
+void myphp_ios_set_user_scripts(int page_id, const char **scripts, const int *all_frames, int count) {
+    NSMutableArray<WKUserScript *> *list = [NSMutableArray array];
+    for (int i = 0; i < count; i++) {
+        NSString *src = scripts[i] ? [NSString stringWithUTF8String:scripts[i]] : @"";
+        BOOL mainOnly = !(all_frames && all_frames[i]);
+        [list addObject:[[WKUserScript alloc] initWithSource:src injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:mainOnly]];
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (wv) {
+            WKUserContentController *ucc = wv.configuration.userContentController;
+            [ucc removeAllUserScripts];
+            for (WKUserScript *s in list) { [ucc addUserScript:s]; }
         }
     });
 }
@@ -696,6 +765,69 @@ void myphp_ios_eval_js(int page_id, const char *script) {
             [wv evaluateJavaScript:s completionHandler:nil];
         }
     });
+}
+
+typedef struct MyphpEvalResult {
+    int call_id;
+    char *val;
+    char *err;
+    struct MyphpEvalResult *next;
+} MyphpEvalResult;
+static MyphpEvalResult *g_eval_first = NULL, *g_eval_last = NULL;
+static pthread_mutex_t g_eval_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void push_eval_result(int call_id, const char *val, const char *err) {
+    MyphpEvalResult *r = malloc(sizeof(MyphpEvalResult));
+    r->call_id = call_id;
+    r->val = val ? strdup(val) : NULL;
+    r->err = err ? strdup(err) : NULL;
+    r->next = NULL;
+    pthread_mutex_lock(&g_eval_mutex);
+    if (g_eval_last) g_eval_last->next = r; else g_eval_first = r;
+    g_eval_last = r;
+    pthread_mutex_unlock(&g_eval_mutex);
+    g_needs_render = 1;
+}
+
+void myphp_ios_call_async(int page_id, const char *body, int call_id) {
+    NSString *b = body ? [NSString stringWithUTF8String:body] : @"";
+    dispatch_async(dispatch_get_main_queue(), ^{
+        WKWebView *wv = g_webviews[@(page_id)];
+        if (!wv) {
+            push_eval_result(call_id, NULL, "myphp: the page is gone");
+            return;
+        }
+        [wv callAsyncJavaScript:b arguments:nil inFrame:nil inContentWorld:[WKContentWorld pageWorld] completionHandler:^(id result, NSError *error) {
+            if (error) {
+                NSString *msg = error.userInfo[@"WKJavaScriptExceptionMessage"] ?: error.localizedDescription;
+                push_eval_result(call_id, NULL, [msg UTF8String]);
+            } else {
+                NSString *str = [result isKindOfClass:[NSString class]] ? (NSString *)result : (result ? [result description] : @"");
+                push_eval_result(call_id, [str UTF8String], NULL);
+            }
+        }];
+    });
+}
+
+int myphp_ios_poll_eval_result(int call_id, char **out_val, char **out_err) {
+    int found = 0;
+    pthread_mutex_lock(&g_eval_mutex);
+    MyphpEvalResult *prev = NULL, *cur = g_eval_first;
+    while (cur) {
+        if (cur->call_id == call_id) {
+            if (prev) prev->next = cur->next; else g_eval_first = cur->next;
+            if (g_eval_last == cur) g_eval_last = prev;
+            if (out_val) *out_val = cur->val; else free(cur->val);
+            if (out_err) *out_err = cur->err; else free(cur->err);
+            free(cur);
+            found = 1;
+            break;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+    pthread_mutex_unlock(&g_eval_mutex);
+    return found;
 }
 
 void myphp_ios_place_web_view(int page_id, float x, float y, float w, float h, int visible) {
@@ -770,6 +902,33 @@ void myphp_ios_clipboard_set_text(const char *text) {
     NSString *s = text ? [NSString stringWithUTF8String:text] : @"";
     dispatch_sync(dispatch_get_main_queue(), ^{
         [UIPasteboard generalPasteboard].string = s;
+    });
+}
+
+uint8_t *myphp_ios_clipboard_get_image(int *out_len) {
+    __block uint8_t *out = NULL;
+    __block int len = 0;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        UIImage *img = [UIPasteboard generalPasteboard].image;
+        if (img) {
+            NSData *png = UIImagePNGRepresentation(img);
+            if (png && png.length > 0) {
+                len = (int)png.length;
+                out = malloc((size_t)len);
+                if (out) memcpy(out, png.bytes, (size_t)len);
+            }
+        }
+    });
+    if (out_len) *out_len = len;
+    return out;
+}
+
+void myphp_ios_clipboard_set_image(const uint8_t *png, int len) {
+    if (!png || len <= 0) return;
+    NSData *data = [NSData dataWithBytes:png length:(NSUInteger)len];
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        UIImage *img = [UIImage imageWithData:data];
+        if (img) [UIPasteboard generalPasteboard].image = img;
     });
 }
 
@@ -1459,6 +1618,9 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
         nw_path_status_t status = nw_path_get_status(path);
         g_network_connected = (status == nw_path_status_satisfied);
         g_network_is_cellular = nw_path_uses_interface_type(path, nw_interface_type_cellular);
+        g_network_is_expensive = nw_path_is_expensive(path) || nw_path_is_constrained(path);
+        g_network_changed = 1;
+        g_needs_render = 1;
     });
     nw_path_monitor_start(g_path_monitor);
 
@@ -1471,6 +1633,10 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
             g_needs_render = 1;
         }];
     }
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSCurrentLocaleDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
+        g_locale_changed = 1;
+        g_needs_render = 1;
+    }];
 
     [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillChangeFrameNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
         CGRect end = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
@@ -1496,6 +1662,11 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
     completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionSound);
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler {
+    push_notif_click([response.notification.request.identifier UTF8String]);
+    completionHandler();
 }
 @end
 

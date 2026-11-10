@@ -592,6 +592,9 @@ final class App
     /** The menu bar; Menu::default() unless set (none off macOS, but for an app with documents). Can be set before or after run(). */
     public static function setMenu(Menu $menu): void
     {
+        if (self::isIOS() || self::isAndroid()) {
+            throw new Platform\Unsupported('the menu bar is not supported on a phone');
+        }
         self::$menu = $menu;
         if (self::$ready) {
             self::installMenu($menu);
@@ -692,7 +695,7 @@ final class App
             PathName::Cache => ["$lib/Caches/" . self::name(), true],
             PathName::Logs => ["$lib/Logs/" . self::name(), true],
             PathName::Temp => [rtrim(sys_get_temp_dir(), '/'), false],
-            PathName::Resources => [($app = Native\Bundle::path()) !== null ? "$app/Contents/Resources" : dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
+            PathName::Resources => [Native\Bundle::resources() ?? dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
             PathName::Exe => [Native\Bundle::command()[0], false],
             PathName::Desktop => ["$home/Desktop", false],
             PathName::Documents => ["$home/Documents", false],

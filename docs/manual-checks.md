@@ -127,3 +127,80 @@ instead.
     installs it once it quits, relaunches after App::relaunch(), the
     uninstaller still there; `irm <url>/install.ps1 | iex` installs the
     latest on another PC, and again over a running one.
+
+## iOS
+
+0. [ ] **Running, hot reload and building** (`myphp doctor`, `myphp devices`,
+   `myphp run -d ios <dir>`, `myphp build -platform ios/arm64 <dir>`):
+   `myphp doctor` shows the Apple & iOS Toolchain and both iOS runtimes
+   (device and simulator) built; `myphp devices` lists booted/available
+   iPhone and iPad simulators and any connected physical iPhone/iPad;
+   `myphp run -d ios examples/mobile` boots the simulator if needed,
+   installs and launches the app, streams its colored `os_log` lines, and
+   hot reloads (`r` or saving `view.php`) with the state kept and hot
+   restarts (`R`) in under a second; `myphp build -platform ios/arm64` produces
+   `<out>/<name>.app` and `<out>/<name>.ipa`.
+1. [ ] **The safe area, orientation and iPad adaptive layout**
+   (`examples/mobile`, `examples/airpods`): on an iPhone the navigation bar
+   reaches into the status bar / Dynamic Island, the tab bar floats over
+   the home indicator, and what scrolls goes under both to the screen's
+   edges; rotating the device or simulator updates the window bounds and
+   safe-area insets on the next frame; on an iPad simulator held upright
+   `TabView(.sidebarAdaptable)` shows the tabs as a top capsule, and on its
+   side as a sidebar, while `.sheet` centers as a page sheet over the
+   dimmed window.
+2. [ ] **Liquid Glass and system materials** (`examples/mobile`,
+   `examples/airpods`): on iOS 26+ the tab bar and navigation bar buttons
+   use `UIGlassEffect` (and `UIBlurEffect` on iOS 16–18) over the Metal
+   view, blurring the scrolling content beneath while their icons and
+   labels paint crisp in the overlay Metal view (`g_over_view`) and all
+   touches pass through to PHP's hit-testing.
+3. [ ] **Touch, gestures and scrolling physics** (`examples/mobile`,
+   `examples/airpods`): the 200 000-row list scrolls at 60–120 Hz with
+   inertial fling; dragging a row sideways locks horizontally (8 pt
+   directional lock) to reveal `swipeActions` (half swipe stays open, full
+   swipe slides out and runs the first action, a tap on an open row closes
+   it); pulling down at the top of the ”我的“ tab rubber-bands and triggers
+   `refreshable`; long-pressing a packet row in `examples/airpods` plays a
+   medium haptic, blurs the background, lifts the row, and tracks the held
+   finger across the `contextMenu` items to choose on lift; swiping from
+   the leading edge pops a pushed `NavigationStack` page interactively.
+4. [ ] **Text input and Chinese/Japanese IME** (`examples/mobile`,
+   `examples/text-input`): tapping a `TextField` raises the software
+   keyboard and `safeArea` keeps the field above it; switching to the
+   Chinese or Japanese keyboard inside iOS composes underlined marked text
+   in the field, backspace edits the composition, and choosing a candidate
+   commits it; with a hardware keyboard attached, the candidate bar sits
+   by the field's caret (`placeCaret`); tapping outside dismisses the
+   keyboard.
+5. [ ] **Pickers, alerts and sheets** (`examples/mobile`): ”选图片“ opens
+   `PHPickerViewController` (without asking for library permission),
+   ”选文件“ opens `UIDocumentPickerViewController`, and the chosen photo
+   or file is copied into `tmp/open/<id>/` under its own name and decoded
+   off the main thread (`CoreImage`) to show in the form; `sheet`,
+   `confirmationDialog` and `alert` open, animate and dismiss.
+6. [ ] **System settings, appearance and localization** (`examples/airpods`,
+   `examples/mobile`): toggling Dark Mode, changing Settings > Display >
+   Text Size (Dynamic Type) or toggling Reduce Motion updates the running
+   app; choosing Light/Dark, a text size (up to the accessibility sizes,
+   where the three battery cards stack vertically) or English / 简体中文 in
+   `examples/airpods`'s Settings tab updates the window and UIKit's glass
+   at once; `App::locale()` and `App::region()` follow iOS's language and
+   regional formats.
+7. [ ] **VoiceOver** (`examples/airpods`, Settings > Accessibility >
+   VoiceOver): swiping moves VoiceOver's cursor through the elements in
+   reading order and scrolls offscreen list rows into view; double-tapping
+   activates buttons, tabs and switches (announcing "1" / "0"); swiping up
+   or down on a slider adjusts it, and on a row with `swipeActions` or
+   `contextMenu` offers the actions and "Show Menu"; a two-finger scrub
+   dismisses an open sheet, menu or alert.
+8. [ ] **HTTPS, Keychain, Clipboard, Haptics, Notifications and WebView**
+   (`examples/mobile`, `examples/webview`): ”HTTPS GET example.com“ in
+   `examples/mobile` succeeds over bundled `libcurl` + OpenSSL with
+   `cacert.pem`; each button in ”触感 Haptics“ plays its feedback on a
+   physical iPhone's Taptic Engine; `Secrets` stores, reads and deletes in
+   the iOS Keychain; `Clipboard` copies and pastes text and PNG images
+   with other iOS apps; local notifications show a banner and report their
+   click to `App::onNotificationClick`; an embedded `WebView`
+   (`Context::webView`) loads HTML/URLs, exchanges IPC messages with PHP
+   via `window.myphp`, and answers `Page::eval()`.

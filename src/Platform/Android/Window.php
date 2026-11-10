@@ -775,22 +775,22 @@ final class Window implements Platform\Window
     public function focus(): void {}
     public function blur(): void {}
     public function isFocused(): bool { return true; }
-    public function minimize(): void {}
+    public function minimize(): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
     public function isMinimized(): bool { return false; }
-    public function maximize(): void {}
-    public function unmaximize(): void {}
+    public function maximize(): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
+    public function unmaximize(): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
     public function isMaximized(): bool { return true; }
-    public function restore(): void {}
-    public function setFullScreen(bool $on): void {}
+    public function restore(): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
+    public function setFullScreen(bool $on): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
     public function isFullScreen(): bool { return true; }
-    public function setLegacyFullScreen(bool $on): void {}
-    public function center(): void {}
-    public function setBounds(Rectangle $r): void {}
+    public function setLegacyFullScreen(bool $on): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
+    public function center(): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
+    public function setBounds(Rectangle $r): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
     public function bounds(): Rectangle
     {
         return new Rectangle(0.0, 0.0, (float)$this->surfaceWidth, (float)$this->surfaceHeight);
     }
-    public function setContentBounds(Rectangle $r): void {}
+    public function setContentBounds(Rectangle $r): void { throw new Platform\Unsupported('window placement is not supported on Android'); }
     public function contentBounds(): Rectangle
     {
         return $this->bounds();

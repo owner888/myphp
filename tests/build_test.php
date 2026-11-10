@@ -542,7 +542,7 @@ file_put_contents("$stub/cc", "#!/bin/sh\nwhile [ \$# -gt 0 ]; do if [ \"\$1\" =
 file_put_contents("$stub/codesign", "#!/bin/sh\nexit 0\n");
 chmod("$stub/cc", 0755); chmod("$stub/codesign", 0755);
 // The app: asks to be relaunched, then runs until the change replaces it, then quits.
-file_put_contents("$stub/app.sh", "echo \"\$MYPHP_DEV \$MYPHP_ENV \$(pwd)\" >> \"\$DEVLOG\"\nn=\$(wc -l < \"\$DEVLOG\")\n[ \$n -eq 1 ] && exit 75\ncase \$n in 2|3) sleep 5; exit 3;; esac\nexit 0\n");
+file_put_contents("$stub/app.sh", "echo \"\$MYPHP_DEV \$MYPHP_ENV \$(pwd)\" >> \"\$DEVLOG\"\nn=\$(wc -l < \"\$DEVLOG\")\n[ \$n -eq 1 ] && exit 75\n[ \$n -eq 2 ] || [ \$n -eq 3 ] && { sleep 5; exit 3; }\nexit 0\n");
 $root = bldDir();
 $myphp('init', '-name', 'Demo', "$root/d");
 unlink("$root/d/resources/icon.png");
