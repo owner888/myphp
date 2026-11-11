@@ -54,7 +54,8 @@ final class NavigationStack extends View
         $n = $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
         $backdrop = (object)['color' => null, 'tabBarHidden' => $env->backdrop->tabBarHidden ?? false, 'navBarHidden' => false];
           $toolbar = $entry->toolbar ?? null;
-          $c->navigationBar($this->router->title(), $this->router,
+          $hideBar = ($entry->navBarHidden ?? false) || ($this->router->title() === '' && !$this->router->canGoBack() && $toolbar === null && $large === null);
+          $navBarNode = $hideBar ? null : $c->navigationBar($this->router->title(), $this->router,
               $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); },
               $large);
           $c->safeArea(function () use ($c, $env, $backdrop): void {
@@ -65,9 +66,16 @@ final class NavigationStack extends View
                   foreach (['toolbar', 'largeTitle'] as $k) { // what the page no longer puts in the bar goes from it
                       if (!isset($r->entry->barSeen[$k]) && $r->entry->$k !== null) { $r->entry->$k = null; $this->router->titleChanged(); }
                   }
+                  if (($r->entry->navBarHidden ?? false) !== $backdrop->navBarHidden) {
+                      $r->entry->navBarHidden = $backdrop->navBarHidden;
+                      $this->router->titleChanged();
+                  }
               });
           });
         $c->end();
+        if ($backdrop->navBarHidden && $navBarNode !== null) {
+            $navBarNode->size(0, 0)->padding(0)->invisible();
+        }
         if ($env->backdrop !== null && $backdrop->tabBarHidden) {
             $env->backdrop->tabBarHidden = true;
         }
