@@ -855,11 +855,16 @@ final class Metal
     /** Draws a frame of an adopted view now, on the calling thread, from the ring's list $fill fills; presented as createView's frames are. */
     public function render($view, Closure $fill): void
     {
-        $list = $this->lists[$this->frame % self::RING];
-        $list->reset(); $list->zoom = 1.0;
-        $fill($list);
-        $this->present($view, $list);
-        $this->frame++;
+        $pool = ObjC::msg('p:', ObjC::alloc('NSAutoreleasePool'), 'init');
+        try {
+            $list = $this->lists[$this->frame % self::RING];
+            $list->reset(); $list->zoom = 1.0;
+            $fill($list);
+            $this->present($view, $list);
+            $this->frame++;
+        } finally {
+            ObjC::msg('v:', $pool, 'drain');
+        }
     }
 
     /** Sets what the view clears to before each frame. */

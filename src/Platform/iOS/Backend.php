@@ -21,6 +21,8 @@ final class Backend implements Platform\Backend
     private ?Shell $shell = null;
     private ?Power $power = null;
     private ?Network $network = null;
+    private mixed $urlBuf = null;
+    private mixed $pageIdBuf = null;
 
     /** @var list<array{at: float, fn: Closure}> pending timers */
     private array $timers = [];
@@ -104,7 +106,7 @@ final class Backend implements Platform\Backend
 
         // Poll external deep link URLs and notification clicks
         $f = \MyPHP\Native\iOS::ffi();
-        $urlBuf = $f->new('char[512]');
+        $urlBuf = $this->urlBuf ??= $f->new('char[512]');
         while ($f->myphp_ios_poll_open_url($f->cast('char*', \FFI::addr($urlBuf)), 512) > 0) {
             $urlStr = \FFI::string($urlBuf);
             if ($urlStr !== '') {
@@ -125,7 +127,7 @@ final class Backend implements Platform\Backend
         }
 
         // Poll web view IPC messages
-        $pageId = $f->new('int');
+        $pageId = $this->pageIdBuf ??= $f->new('int');
         while (($msg = $f->myphp_ios_poll_web_message(\FFI::addr($pageId))) !== null) { // whole, however long
             $msgStr = \FFI::string($msg);
             $f->myphp_ios_free_web_message($msg);

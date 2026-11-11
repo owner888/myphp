@@ -61,6 +61,8 @@ final class Window implements Platform\Window
         'titlebar' => 10,
     ];
     private int $wakeId = 0;
+    private mixed $touchEv = null, $inputEv = null, $accessAct = null;
+    private mixed $safeTop = null, $safeBottom = null, $safeLeft = null, $safeRight = null;
 
     public function __construct(
         private readonly Backend $b,
@@ -129,12 +131,12 @@ final class Window implements Platform\Window
     {
         try {
             $f = iOS::ffi();
-            $ev = $f->new('MyphpTouchEvent');
+            $ev = $this->touchEv ??= $f->new('MyphpTouchEvent');
             while ($f->myphp_ios_poll_touch_event(\FFI::addr($ev)) > 0) {
                 $this->onTouch((int)$ev->type, (float)$ev->x, (float)$ev->y);
             }
 
-            $iev = $f->new('MyphpInputEvent');
+            $iev = $this->inputEv ??= $f->new('MyphpInputEvent');
             while ($f->myphp_ios_poll_input_event(\FFI::addr($iev)) > 0) {
                 if ((int)$iev->type === 0) {
                     $str = \FFI::string($iev->text);
@@ -151,7 +153,7 @@ final class Window implements Platform\Window
                 $this->w->input?->push(['accessOn']);
                 $this->requestFrame();
             }
-            $act = $f->new('MyphpAccessAction');
+            $act = $this->accessAct ??= $f->new('MyphpAccessAction');
             while ($f->myphp_ios_poll_access_action(\FFI::addr($act)) > 0) {
                 $this->w->input?->push(['access', (int)$act->id, (int)$act->action, '', (int)$act->index, 0]);
                 $this->requestFrame();
@@ -478,10 +480,10 @@ final class Window implements Platform\Window
     public function safeAreaInsets(): array
     {
         $f = iOS::ffi();
-        $top = $f->new('float');
-        $bottom = $f->new('float');
-        $left = $f->new('float');
-        $right = $f->new('float');
+        $top = $this->safeTop ??= $f->new('float');
+        $bottom = $this->safeBottom ??= $f->new('float');
+        $left = $this->safeLeft ??= $f->new('float');
+        $right = $this->safeRight ??= $f->new('float');
         $f->myphp_ios_get_safe_insets(\FFI::addr($top), \FFI::addr($bottom), \FFI::addr($left), \FFI::addr($right));
         return [(float)$top->cdata, (float)$right->cdata, (float)$bottom->cdata, (float)$left->cdata];
     }
