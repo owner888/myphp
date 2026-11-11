@@ -1,3 +1,3 @@
 interface:
   display_name: "MyPHP App"
-  short_description: "Write native MyPHP desktop apps that work"
+  short_description: "Write SwiftUI-style native MyPHP desktop & mobile apps"
