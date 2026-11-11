@@ -140,40 +140,73 @@ final class Icns
             . $chunk('IEND', '');
     }
 
-    /** A 1024 by 1024 app icon as a PNG, which myphp init gives a project: a rounded square with a diagonal gradient and a ring (mygo's defaultIcon). */
-    public static function defaultIcon(): string
+    /** A 1024 by 1024 app icon as a PNG, which myphp init gives a project: MyPHP's rocket-riding ElePHPant mascot on a rounded square. */
+    public static function defaultIcon(int $size = 1024): string
     {
-        $size = 1024;
-        $from = [59, 130, 246]; // blue
-        $to = [168, 85, 247]; // violet
-        $inset = 100.0; $radius = 185.0;
-        $half = $size / 2; $edge = $half - $inset - $radius;
-        $px = '';
-        for ($y = 0; $y < $size; $y++) {
-            $row = '';
-            $fy = $y + 0.5;
-            $qy = abs($fy - $half) - $edge;
-            for ($x = 0; $x < $size; $x++) {
-                $fx = $x + 0.5;
-                // Signed distance to a rounded rectangle, for anti-aliasing.
-                $qx = abs($fx - $half) - $edge;
-                $d = hypot(max($qx, 0), max($qy, 0)) + min(max($qx, $qy), 0) - $radius;
-                $alpha = min(max(0.5 - $d, 0), 1);
-                if ($alpha == 0) {
-                    $row .= "\0\0\0\0";
-                    continue;
-                }
-                $t = ($fx + $fy) / (2 * $size);
-                // A white ring in the middle.
-                $ring = min(max(0.5 - abs(hypot($fx - $half, $fy - $half) - 230) + 48, 0), 1);
-                $c = [];
-                for ($i = 0; $i < 3; $i++) {
-                    $c[] = (int)(($from[$i] + ($to[$i] - $from[$i]) * $t) * (1 - $ring) + 255 * $ring);
-                }
-                $row .= chr($c[0]) . chr($c[1]) . chr($c[2]) . chr((int)($alpha * 255));
+        $svg = <<<'SVG'
+<svg viewBox="0 0 440 440" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#312E81"/>
+    </linearGradient>
+  </defs>
+  <rect x="28" y="28" width="384" height="384" rx="86" fill="url(#bg)"/>
+  <circle cx="220" cy="220" r="158" fill="#3730A3" fill-opacity="0.35"/>
+  <path d="M120 100 L122 108 L130 110 L122 112 L120 120 L118 112 L110 110 L118 108 Z" fill="#818CF8"/>
+  <path d="M340 140 L341 145 L346 146 L341 147 L340 152 L339 147 L334 146 L339 145 Z" fill="#F472B6"/>
+  <path d="M90 240 L91 245 L96 246 L91 247 L90 252 L89 247 L84 246 L89 245 Z" fill="#38BDF8"/>
+  <circle cx="330" cy="280" r="4" fill="#FDE047"/>
+  <circle cx="160" cy="75" r="3" fill="#FFFFFF"/>
+  <g>
+    <circle cx="125" cy="335" r="38" fill="#E2E8F0" opacity="0.92"/>
+    <circle cx="102" cy="316" r="28" fill="#CBD5E1" opacity="0.88"/>
+    <circle cx="152" cy="356" r="34" fill="#F1F5F9" opacity="0.92"/>
+  </g>
+  <path d="M145 285 L180 320 L135 345 Z" fill="#F97316"/>
+  <path d="M152 292 L172 312 L142 328 Z" fill="#FDE047"/>
+  <path d="M170 230 L135 300 L185 275 Z" fill="#EF4444" stroke="#991B1B" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M255 145 L325 180 L270 230 Z" fill="#EF4444" stroke="#991B1B" stroke-width="3" stroke-linejoin="round"/>
+  <g transform="rotate(-38 230 210)">
+    <rect x="180" y="140" width="100" height="150" rx="45" fill="#F8FAFC" stroke="#0F172A" stroke-width="4"/>
+    <path d="M180 160 C180 90 280 90 280 160 Z" fill="#EF4444" stroke="#0F172A" stroke-width="4"/>
+    <rect x="180" y="215" width="100" height="24" fill="#EF4444"/>
+    <circle cx="230" cy="180" r="22" fill="#38BDF8" stroke="#0F172A" stroke-width="4"/>
+    <circle cx="230" cy="180" r="16" fill="#0284C7"/>
+    <path d="M220 172 A 12 12 0 0 1 238 172" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(195, 100) scale(0.95)">
+    <ellipse cx="60" cy="65" rx="44" ry="38" fill="#818CF8" stroke="#1E1B4B" stroke-width="3.5"/>
+    <path d="M22 68 C12 68 8 52 14 44 C18 38 26 42 24 50 C22 56 26 62 34 65" fill="#818CF8" stroke="#1E1B4B" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M28 66 L20 72 L26 76 Z" fill="#FFFFFF" stroke="#1E1B4B" stroke-width="2"/>
+    <rect x="36" y="80" width="18" height="26" rx="9" fill="#6366F1" stroke="#1E1B4B" stroke-width="3"/>
+    <rect x="70" y="84" width="20" height="24" rx="10" fill="#6366F1" stroke="#1E1B4B" stroke-width="3"/>
+    <ellipse cx="78" cy="54" rx="22" ry="26" fill="#A5B4FC" stroke="#1E1B4B" stroke-width="3.5"/>
+    <ellipse cx="76" cy="54" rx="13" ry="16" fill="#C7D2FE"/>
+    <circle cx="44" cy="50" r="8.5" fill="#FFFFFF" stroke="#1E1B4B" stroke-width="2.5"/>
+    <circle cx="42" cy="50" r="4.5" fill="#0F172A"/>
+    <circle cx="44" cy="48" r="1.8" fill="#FFFFFF"/>
+    <ellipse cx="46" cy="62" rx="6" ry="4" fill="#F472B6" opacity="0.8"/>
+  </g>
+</svg>
+SVG;
+        $doc = new \MyPHP\UI\Svg\Doc($svg);
+        $bytes = $doc->pixelBytes($size, $size, [0, 0, 0, 1], true);
+        // Unpremultiply border pixels for straight RGBA PNG encoding
+        $f = \MyPHP\UI\Svg\Layer::ffi();
+        $n = strlen($bytes);
+        $buf = $f->cast('uint8_t*', $f->calloc($n, 1));
+        \FFI::memcpy($buf, $bytes, $n);
+        for ($i = 0; $i < $n; $i += 4) {
+            $a = $buf[$i + 3];
+            if ($a > 0 && $a < 255) {
+                $buf[$i]     = min(255, intdiv($buf[$i]     * 255 + ($a >> 1), $a));
+                $buf[$i + 1] = min(255, intdiv($buf[$i + 1] * 255 + ($a >> 1), $a));
+                $buf[$i + 2] = min(255, intdiv($buf[$i + 2] * 255 + ($a >> 1), $a));
             }
-            $px .= $row;
         }
-        return self::png($size, $px);
+        $straight = \FFI::string($buf, $n);
+        $f->free($buf);
+        return self::png($size, $straight);
     }
 }
