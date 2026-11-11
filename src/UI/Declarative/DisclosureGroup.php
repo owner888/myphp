@@ -24,6 +24,12 @@ final class DisclosureGroup extends View
         return $this;
     }
 
+    /** @internal @return list<mixed> */
+    public function children(): array
+    {
+        return $this->content;
+    }
+
     protected function build(Context $c, Env $env): ?Node
     {
         $own = $this->isExpanded === null ? ($c->runtime?->local($c->upcomingId(), fn() => (object)['open' => false]) ?? (object)['open' => false]) : null;

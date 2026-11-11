@@ -257,6 +257,22 @@ use MyPHP\UI\{Content, TextState};
     check($h->byText('Folder A') !== null, 'OutlineGroup renders branch');
     check($h->byText('Act1') !== null, 'ControlGroup renders grouped buttons');
 
+    $accSel = 'sec1';
+    $hAcc = new Headless(Content::view(function () use (&$accSel) {
+        return VStack()(
+            Accordion(selection: $accSel)(
+                DisclosureGroup('Sec 1')(Text('Body 1'))->tag('sec1'),
+                DisclosureGroup('Sec 2')(Text('Body 2'))->tag('sec2'),
+            ),
+            ZoomableView()(Text('ZoomableContent'))
+                ->gesture(MagnifyGesture()->onChanged(fn($v) => null))
+                ->gesture(RotateGesture()->onChanged(fn($v) => null)),
+        );
+    })->view, 390, 844);
+    $hAcc->frame();
+    check($hAcc->byText('Sec 1') !== null && $hAcc->byText('Body 1') !== null, 'Accordion renders open section');
+    check($hAcc->byText('ZoomableContent') !== null, 'ZoomableView renders content');
+
     // 8b. Build script, cold-start whenReady (#27), hardware keyboard (#10), log filter (#11) & DatePicker docs (#18).
     $buildIosSh = (string)file_get_contents(__DIR__ . '/../scripts/build-ios-php.sh');
     $mainM = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/launcher/main.m');

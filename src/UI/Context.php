@@ -1971,7 +1971,7 @@ final class Context
     {
         $t = $this->theme;
         $n = $this->column(0, 0, 0, $t->background)->radius($t->radius)->border();
-        $local = $this->runtime?->local($n->id, fn() => (object)['heads' => []]) ?? (object)['heads' => []]; // the headers of last frame, which the arrows move between
+        $local = $this->runtime?->local($n->id, fn() => (object)['heads' => [], 'open' => []], \stdClass::class, 'heads') ?? (object)['heads' => [], 'open' => []]; // the headers of last frame, which the arrows move between
         $this->accordions[] = (object)['heads' => [], 'last' => $local->heads];
           $fn();
         $local->heads = array_pop($this->accordions)->heads;

@@ -38,7 +38,8 @@ Quick lookup from product requirement -> MyPHP SwiftUI view (`src/UI/Declarative
 | Multi-column sortable table | `Table($rows, id: 'id', selection: $this->sel, sortOrder: $this->sort)(TableColumn('Name', value: 'name'), …)` |
 | Responsive grid / 2D grid | `LazyVGrid(columns: [GridItem::adaptive(minimum: 140), GridItem::flexible()])(Each($items, id: 'id')(…))`, `Grid()(GridRow()(…))` |
 | Wrapping tags / chips | `FlowLayout(spacing: 8)(Each($tags)(fn(string $t) => …))` |
-| Tree / collapsible | `OutlineGroup($tree, children: 'children', id: 'id')(fn($item) => …)`, `DisclosureGroup('Details', isExpanded: $this->open)(…)` |
+| Tree / collapsible / accordion | `OutlineGroup($tree, children: 'children', id: 'id')(fn($item) => …)`, `Accordion(selection: $this->openSection)(DisclosureGroup('FAQ 1')(…)->tag('q1'), …)`, `DisclosureGroup('Details', isExpanded: $this->open)(…)` |
+| Zoomable / pannable image viewer | `ZoomableView(minScale: 1.0, maxScale: 4.0)(Image(…))`, `->gesture(MagnifyGesture()->onChanged(…))` |
 | Top-level app tabs + sidebar | `TabView(selection: $this->tab)(Tab('Home', systemImage: 'house', value: 'home')(…))->tabViewStyle(TabViewStyle::sidebarAdaptable)->tint($accent)` |
 | Paged carousel / onboarding | `TabView(selection: $this->page)(Tab('1', value: 0)(…))->tabViewStyle(TabViewStyle::page(PageIndexDisplayMode::always))` |
 | Push navigation stack | `NavigationStack(path: $this->path)(…)->navigationDestination(for: '/item/{id}', destination: __DIR__ . '/pages/item.php')`, `NavigationLink('Open', value: '/item/1')` |
