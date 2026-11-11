@@ -201,8 +201,10 @@ final class Text implements TextPainter
         $key = "p{$svg->id}/{$w}x{$h}/" . ($svg->doc->usesCurrentColor ? $current : ''); // the color matters only where currentColor is drawn
         $pic = $this->pictures[$key] ?? null;
         if ($pic === null) {
-            $bytes = $svg->doc->pixelBytes($w, $h, [($current >> 16 & 255) / 255, ($current >> 8 & 255) / 255, ($current & 255) / 255, 1.0], true);
-            $pic = Image::fromPixels($w, $h, $bytes);
+            $doc = $svg->doc;
+            $rgba = [($current >> 16 & 255) / 255, ($current >> 8 & 255) / 255, ($current & 255) / 255, 1.0];
+            $pic = Image::decoded(static fn(): array => $doc->decodePixels($w, $h, $rgba, true));
+            $pic->releasePixels(); // freed from CPU RAM as soon as imageSlot() uploads it to the GPU atlas
             $this->pictures[$key] = $pic;
         }
         $this->pictureUsed[$key] = $this->gen;

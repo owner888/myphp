@@ -47,6 +47,22 @@ final class Doc
         return $this->drawLayer($w, $h, $current, Style::viewBoxTransform($this->view, $stretch ? [true, 0.5, 0.5, false] : $this->aspect, $w, $h))?->bytes() ?? '';
     }
 
+    /**
+     * Draws the document into a Mem-allocated buffer and returns ['w' => $w, 'h' => $h, 'pix' => CData, 'addr' => int],
+     * for Image::decoded() so the CPU buffer can be released once uploaded to the GPU atlas.
+     * @return array{w: int, h: int, pix: \FFI\CData, addr: int}
+     */
+    public function decodePixels(int $w, int $h, array $current = Style::BLACK, bool $stretch = false): array
+    {
+        $l = $this->drawLayer($w, $h, $current, Style::viewBoxTransform($this->view, $stretch ? [true, 0.5, 0.5, false] : $this->aspect, $w, $h));
+        $n = max(4, $w * $h * 4);
+        $pix = \MyPHP\Native\Mem::alloc($n);
+        if ($l !== null) {
+            \FFI::memcpy($pix, $l->pix, $w * $h * 4);
+        }
+        return ['w' => $w, 'h' => $h, 'pix' => $pix, 'addr' => \MyPHP\Native\Mem::addr($pix)];
+    }
+
     /** The document's alpha coverage drawn as 1-byte-per-pixel mask bytes (w * h bytes). */
     public function alphaBytes(int $w, int $h): string
     {
