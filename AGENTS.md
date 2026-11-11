@@ -183,23 +183,14 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 ## Working on it
 
 - PHP ≥ 8.3 with `ext-ffi`; `myphp run` and `myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
-- Before handing back: `php -l` on every changed file; run only relevant
-  checks: `php tests/run.php [name]` (e.g. text, layout) when changing src/UI;
-  full test suite only for final milestones; ask the developer to run GUI examples;
-  php tests/bench.php after a change that could cost per frame.
-- New ObjC calls: selector and types from Apple's headers, signature letters
-  in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
-  methods (`arrayWithObjects:`) avoided.
+- Before handing back: `php -l` on changed files; run relevant checks (`php tests/run.php [name]`); full suite only for final milestones; ask the developer to run GUI examples; `php tests/bench.php` after per-frame changes.
+- New ObjC calls: selector/types from Apple's headers, letters in `ObjC::MAP`, structs via `ObjC::$c->new`/`ObjC::rect`, no variadics (`arrayWithObjects:`).
 - Record each solved problem in `docs/architecture.md` (one paragraph).
-- Chinese or Japanese typed in the iOS Simulator from the Mac's keyboard:
-  switch the input method inside the simulator (iOS's keyboard), not the
-  Mac's input source. With the Mac's composing, every app, the system's
-  too, takes the first letter and no more: check a system app (Notes)
-  before suspecting the launcher's text input.
+- CJK in the iOS Simulator from the Mac's keyboard: switch the input method inside the simulator (iOS's keyboard), not the Mac's input source.
 
 ## Roadmap
 
-Done: everything mygo has on macOS (the README's table), Android and iOS (docs/mobile.md).
+Done: macOS (Metal/Cocoa/WKWebView), Windows (D3D11/Win32/DirectWrite/WebView2), Linux (GTK 3/OpenGL/WebKitGTK), Android (EGL/GLES 3) and iOS/iPadOS (Metal/UIKit). Not targeted: tvOS, Android TV, visionOS.
 The UI is declarative, as SwiftUI's (docs/swiftui.md, docs/ui/views.md): every example, doc page and the skill show views; the builder (`$c->column()…`) is the engine's own, `@internal`, which apps reach only inside a `Representable`.
-Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).
+Remaining: prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).
 With each new platform (Windows, Linux's bridges), update the app-writing skill `bin/skills/myphp-app/` with it: its description and opening (which GPU API draws where), "Verify before you say it is done" (how to run, screenshot and read the log there; `myphp devices`/`emulators`/`doctor` as they grow), and `references/` where its behavior differs.

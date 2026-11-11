@@ -24,12 +24,14 @@ final class Presentation
     {
         switch ($this->kind) {
             case 'sheet':
+            case 'fullScreen':
                 $views = ($this->content)(); // closed too: what goes down as it closes
                 $first = is_array($views) ? ($views[0] ?? null) : $views;
-                $detents = $first instanceof View ? ($first->sheetDetents ?? []) : []; // the content's presentationDetents, as SwiftUI's
-                $large = $c->height - $c->windowSafeArea[0] - 10;
+                $detents = $this->kind === 'fullScreen' ? [\PresentationDetent::height($c->height)] : ($first instanceof View ? ($first->sheetDetents ?? []) : []); // the content's presentationDetents, as SwiftUI's
+                $disabled = $this->kind === 'fullScreen' || ($first instanceof View && $first->dismissDisabled);
+                $large = $c->height - ($this->kind === 'fullScreen' ? 0.0 : $c->windowSafeArea[0] + 10);
                 $c->sheet($this->shown, function () use ($c, $env, $views): void { View::renderAll($c, $env->along(\MyPHP\UI\Node::COLUMN), $views); },
-                    array_map(fn(\PresentationDetent $d) => $d->points($large), $detents));
+                    array_map(fn(\PresentationDetent $d) => $d->points($large), $detents), $disabled);
                 break;
             case 'alert':
                 $chosen = $c->alertDialog($this->shown, Localized::string($this->title, $env), Localized::string($this->message, $env), ...array_map(fn(Button $b) => Localized::string($b->title, $env), $this->actions));

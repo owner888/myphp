@@ -248,6 +248,9 @@ enum DatePickerComponents { case date; case hourAndMinute; }
 class_alias(D\View::class, 'View');
 class_alias(\MyPHP\Device::class, 'Device');
 class_alias(\MyPHP\DeviceType::class, 'DeviceType');
+class_alias(\MyPHP\URLSession::class, 'URLSession');
+class_alias(\MyPHP\URLRequest::class, 'URLRequest');
+class_alias(\MyPHP\HTTPURLResponse::class, 'HTTPURLResponse');
 
 /** What a GeometryReader gives its content: fn(GeometryProxy $g) => …. */
 class_alias(D\GeometryProxy::class, 'GeometryProxy');
@@ -836,4 +839,64 @@ function DiffView(MyPHP\UI\Editor\DiffState $diff): D\Representable { return new
 function Markdown(string $text, ?MyPHP\UI\Markdown\Options $options = null, bool $streaming = false): D\Representable
 {
     return new D\Representable(static fn(MyPHP\UI\Context $c) => $streaming ? MyPHP\UI\Markdown\Markdown::stream($c, $text, $options) : MyPHP\UI\Markdown\Markdown::view($c, $text, $options));
+}
+
+/** An invisible view taking no room, as SwiftUI's EmptyView. */
+function EmptyView(): D\Group { return new D\Group(); }
+
+/** How a resizable image fits its room, as SwiftUI's ContentMode. */
+enum ContentMode { case fit; case fill; }
+
+/** A 2D grid of GridRows: Grid(alignment: Alignment::leading, horizontalSpacing: 12, verticalSpacing: 8)( GridRow()( … ), … ). */
+function Grid(Alignment $alignment = Alignment::center, float $horizontalSpacing = 8, float $verticalSpacing = 8): D\Grid
+{
+    return new D\Grid($alignment, $horizontalSpacing, $verticalSpacing);
+}
+
+/** A row of cells in a 2D Grid: GridRow()( Text('Label'), Text('Value') ). */
+function GridRow(?VerticalAlignment $alignment = null): D\GridRow
+{
+    return new D\GridRow($alignment);
+}
+
+/** Views laid out horizontally in a ScrollView(Axis::horizontal): LazyHStack(spacing: 12)( … ). */
+function LazyHStack(VerticalAlignment $alignment = VerticalAlignment::center, float $spacing = 8): D\LazyHStack
+{
+    return new D\LazyHStack($alignment, $spacing);
+}
+
+/** Views arranged in rows across columns: LazyHGrid(rows: [GridItem::fixed(60)], spacing: 12)( … ). @param list<D\GridItem> $rows */
+function LazyHGrid(array $rows, float $spacing = 8): D\LazyHGrid
+{
+    return new D\LazyHGrid($rows, $spacing);
+}
+
+/** A radial gradient view: RadialGradient(colors: [Color::blue, Color::black], center: UnitPoint::center, startRadius: 0, endRadius: 200). */
+function RadialGradient(array $colors = [], UnitPoint $center = UnitPoint::center, float $startRadius = 0, float $endRadius = 0, array $stops = []): D\RadialGradientView
+{
+    return new D\RadialGradientView($colors, $center, $startRadius, $endRadius, $stops);
+}
+
+/** A conic (angular) gradient view: AngularGradient(colors: [Color::red, Color::blue, Color::red], center: UnitPoint::center). */
+function AngularGradient(array $colors = [], UnitPoint $center = UnitPoint::center, float $angle = 90, array $stops = []): D\AngularGradientView
+{
+    return new D\AngularGradientView($colors, $center, $angle, $stops);
+}
+
+/** An empty-state placeholder view: ContentUnavailableView('No Mail', systemImage: 'tray', description: 'New messages you receive will appear here.'). */
+function ContentUnavailableView(string $title, ?string $systemImage = null, string $description = ''): D\ContentUnavailableView
+{
+    return new D\ContentUnavailableView($title, $systemImage, $description);
+}
+
+/** A button that shares an item/URL: ShareLink('https://myphp.ai', title: 'Share'). */
+function ShareLink(string $item, string $title = 'Share', ?string $systemImage = 'square.and.arrow.up', ?D\View $label = null): D\ShareLink
+{
+    return new D\ShareLink($item, $title, $systemImage, $label);
+}
+
+/** A button that opens the system photo picker and stores the chosen path(s) in $selection: PhotosPicker('Select Photo', selection: $this->photo). */
+function PhotosPicker(string $title, mixed &$selection, ?int $maxSelectionCount = null, array $matching = ['jpg', 'jpeg', 'png', 'heic', 'webp'], ?string $systemImage = 'photo.on.rectangle', ?D\View $label = null): D\PhotosPicker
+{
+    return new D\PhotosPicker($title, $selection, $maxSelectionCount, $matching, $systemImage, $label);
 }

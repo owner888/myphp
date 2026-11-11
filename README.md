@@ -11,8 +11,8 @@
 MyPHP is a port of the ideas in [mygo](https://github.com/egoist/mygo) to PHP 8:
 one process, one language, no C extension of its own. The operating system's
 libraries are reached through `ext-ffi`. The same `main.php` runs on macOS,
-Linux, Android and iOS; the CLI builds, installs and starts it as Flutter's
-does (`myphp run -d ios`).
+Windows, Linux, Android and iOS (iPhone and iPad); the CLI builds, installs
+and starts it as Flutter's does (`myphp run -d ios`).
 
 Each window shows one of two kinds of interface:
 
@@ -251,7 +251,7 @@ What works today, macOS first (the rows name the version that brought them):
 | The phone's widgets (v1.173): `tabBar`, `navigationBar`, `sheet`, `actionSheet`, `safeArea` (UIKit's sizes), the system's photo and document pickers, Android's Back in order (keyboard, overlay, page, exit), `UITextInput` for Chinese and Japanese, curl + OpenSSL cross-compiled for HTTPS | works (`examples/mobile`, `tests/mobile_test.php`) |
 | `tabView` adapting as SwiftUI's TabView (v1.174): a tab bar on a phone, tabs across the top on a tablet upright, a sidebar on its side and on the desktop; iOS rendering through Metal with the UIScene life cycle, a simulator runtime, libxml2 on phones | works |
 | Written for people and agents who know SwiftUI (v1.175): [docs/swiftui.md](docs/swiftui.md) maps every SwiftUI view, modifier and pattern to myphp; `preferredFont()` with UIKit's text styles at the HIG's sizes (iOS's on a phone, macOS's on the desktop); `Haptics` (impact, selection, success, warning, error); Dynamic Type and Reduce Motion followed on phones as the desktop's settings are; `section()` and `cell()` for inset grouped lists as Settings'; the bundled `myphp-app` skill chooses widgets by need | works (`tests/text_styles_test.php`, `tests/haptics_test.php`, `tests/mobile_preferences_test.php`; the phones need the developer's devices) |
-| Windows (Win32/WebView2) | planned |
+| Windows (Win32 + D3D11, DirectWrite, WebView2, WASAPI, NSIS installer): native UI on Direct3D 11 (HLSL shaders, Mica/Acrylic backdrops), DirectWrite text, WebView2 pages and embedded web views, OLE drag & drop, Credential Manager secrets, SystemMediaTransportControls, `myphp build -platform windows/amd64,windows/arm64` making the standalone folder, zip, signed NSIS installer and `install.ps1` | works (`bin\myphp.cmd run -d windows`) |
 
 Measured in `examples/inbox 1000` on an M-series Mac: 9 000 nodes rebuilt,
 laid out and painted per frame in about 6 ms with real text, 60 fps while
@@ -279,7 +279,7 @@ See [the CLI](docs/cli.md) for every command and flag.
 ### Requirements
 
 - PHP ≥ 8.3 with `ext-ffi` and `ext-intl` (Homebrew's `php` has both), OPcache JIT recommended
-- macOS on Apple Silicon: everything; Linux: the native UI, the system services, packaging and the player; Android and iOS: the native UI in one full-screen window, built by the CLI with the NDK or Xcode (`myphp doctor` lists what is missing); Windows: planned
+- macOS on Apple Silicon, Windows (10 1809+ / 11, amd64 and arm64) and Linux: native UI, web views, system services, packaging and the media player; Android and iOS (iPhone and iPad): native UI in one full-screen window with embedded web views, built by the CLI with the NDK or Xcode (`myphp doctor` lists what is missing). Not targeted: tvOS, Android TV, visionOS and watchOS.
 
 A window with a web page, whose frontend calls PHP:
 
@@ -396,7 +396,7 @@ MIT. Android draws the SF Symbol names as Google's Material Symbols, which are A
 
 MyPHP 把 [mygo](https://github.com/egoist/mygo) 的思路搬到 PHP 8 上：
 一个进程、一种语言、不写自己的 C 扩展，系统库全部通过 `ext-ffi` 调用。同一个 `main.php`
-跑在 macOS、Linux、Android 和 iOS 上；命令行像 Flutter 一样负责打包、安装、启动（`myphp run -d ios`）。
+跑在 macOS、Windows、Linux、Android 和 iOS（iPhone 与 iPad）上；命令行像 Flutter 一样负责打包、安装、启动（`myphp run -d ios`）。
 
 每个窗口显示两种界面之一：
 
@@ -628,7 +628,7 @@ App::run();
 | 手机控件（v1.173）：`tabBar`、`navigationBar`、`sheet`、`actionSheet`、`safeArea`（尺寸按 UIKit），系统的相册与文件选择器，Android 返回键的顺序（键盘、浮层、页面、退出），中日输入法的 `UITextInput`，交叉编译的 curl + OpenSSL 做 HTTPS | 可用（`examples/mobile`、`tests/mobile_test.php`） |
 | 像 SwiftUI TabView 一样自适应的 `tabView`（v1.174）：手机底部标签栏、iPad 竖放顶部标签、横放和桌面侧边栏；iOS 走 Metal 渲染与 UIScene 生命周期，模拟器运行时，手机上的 libxml2 | 可用 |
 | 面向会 SwiftUI 的人和 agent（v1.175）：[docs/swiftui.md](docs/swiftui.md) 把 SwiftUI 的每个视图、修饰符和模式对应到 myphp；`preferredFont()` 用 UIKit 的文字层级、HIG 的尺寸（手机取 iOS 的，桌面取 macOS 的）；`Haptics`（impact、selection、success、warning、error）；手机的动态字体和减弱动态效果像桌面设置一样被主题跟随；`section()` 与 `cell()` 做设置页那种 inset grouped 列表；内置的 `myphp-app` skill 按需求选控件 | 可用（`tests/text_styles_test.php`、`tests/haptics_test.php`、`tests/mobile_preferences_test.php`；真机要开发者的设备） |
-| Windows（Win32/WebView2） | 计划中 |
+| Windows（Win32 + D3D11、DirectWrite、WebView2、WASAPI、NSIS 安装包）：Direct3D 11 原生 UI（HLSL 着色器、Mica/Acrylic 材质）、DirectWrite 排版、WebView2 网页与内嵌 web view、OLE 拖放、凭据管理器密钥、系统媒体控制，`myphp build -platform windows/amd64,windows/arm64` 产出独立目录、zip、签名 NSIS 安装程序与 `install.ps1` | 可用（`bin\myphp.cmd run -d windows`） |
 
 在 M 系列 Mac 上用 `examples/inbox 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
 
@@ -654,7 +654,7 @@ myphp install-skills               # 把内置的 agent skill 装进项目的 .a
 ### 环境要求
 
 - PHP ≥ 8.3，带 `ext-ffi` 和 `ext-intl`（Homebrew 的 `php` 都自带），建议开 OPcache JIT
-- Apple Silicon 的 macOS：全部；Linux：原生 UI、系统服务、打包和播放器；Android 和 iOS：一个全屏窗口的原生 UI，由命令行用 NDK 或 Xcode 构建（`myphp doctor` 会列出缺什么）；Windows：计划中
+- Apple Silicon 的 macOS、Windows（10 1809+ / 11，amd64 与 arm64）和 Linux：原生 UI、网页视图、系统服务、打包与媒体播放器；Android 和 iOS（iPhone 与 iPad）：全屏原生 UI 与内嵌 WebView，由命令行用 NDK 或 Xcode 构建（`myphp doctor` 会列出缺什么）。暂不支持：tvOS、Android TV、visionOS、watchOS。
 
 一个网页窗口，前端直接调用 PHP：
 
