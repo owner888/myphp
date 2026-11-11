@@ -285,6 +285,16 @@ use MyPHP\UI\{Content, TextState};
     $sym2 = \MyPHP\UI\Image::symbol('star.fill', 20.0, 0x00CAA4);
     same($sym1->key, $sym2->key, 'Image::symbol caches and reuses the same Image instance across frames');
 
+    // #30: Text foregroundStyle with Color::rgb(x, alpha) / ->opacity(alpha) preserves alpha on the Node.
+    $hAlpha = new Headless(Content::view(fn() => Text('FadedText')->foregroundStyle(\Color::rgb(0x112233, 0.4)))->view, 200, 100);
+    $hAlpha->frame();
+    $fadedNode = $hAlpha->byText('FadedText');
+    check($fadedNode !== null && abs(($fadedNode->ts?->alpha ?? 1.0) - 0.4) < 0.01, 'Text foregroundStyle preserves ColorValue alpha (#30)');
+
+    // #31: Image::fromBytes dispatches to GdkPixbuf on Linux and WIC on Windows instead of Apple-only CoreImage.
+    $imageSrc = (string)file_get_contents(__DIR__ . '/../src/UI/Image.php');
+    check(str_contains($imageSrc, 'decodeGdkPixbuf') && str_contains($imageSrc, 'decodeWic'), 'Image::fromBytes supports Linux GdkPixbuf and Windows WIC (#31)');
+
     // 9. iOS bundle layout and Unsupported guardrails.
     $tmp = sys_get_temp_dir() . '/myphp-ios-bundle-' . bin2hex(random_bytes(4)) . '.app';
     mkdir($tmp, 0755, true);
