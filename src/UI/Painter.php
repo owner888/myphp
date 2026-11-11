@@ -1493,7 +1493,14 @@ final class Painter
         if ($dst[2] <= 0 || $dst[3] <= 0) { return; }
         $pixelated = false;
         if ($pic instanceof SVG) {
-            $s = $text->svgSlot($pic, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $rgb);
+            $sw = max(1, (int)round($fw * $scale));
+            $sh = max(1, (int)round($fh * $scale));
+            if ($sw > 2048 || $sh > 2048) {
+                $clamp = min(2048 / $sw, 2048 / $sh);
+                $sw = max(1, (int)floor($sw * $clamp));
+                $sh = max(1, (int)floor($sh * $clamp));
+            }
+            $s = $text->svgSlot($pic, $sw, $sh, $rgb);
         } else { // far smaller than its pixels, a level of it, as smooth (mygo's drawBitmap)
             $shrink = min($frac[2] * $pic->w / ($dst[2] * $scale), $frac[3] * $pic->h / ($dst[3] * $scale));
             $pixelated = $pic->pixelated && $shrink <= 1;

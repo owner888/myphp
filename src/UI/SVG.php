@@ -20,6 +20,8 @@ use RuntimeException;
 final class SVG
 {
     private static int $next = 0;
+    /** @var array<string, self> cached parsed SVGs by content hash */
+    private static array $cache = [];
     /** Tells the masks and pictures of one SVG from another's. */
     public readonly int $id;
     /** The size the SVG says it has, its width and height or those of its viewBox, in points. */
@@ -33,7 +35,14 @@ final class SVG
 
     public static function parse(string $data): self
     {
-        return new self(new Doc($data));
+        $hash = hash('xxh128', $data);
+        if (isset(self::$cache[$hash])) {
+            return self::$cache[$hash];
+        }
+        if (count(self::$cache) >= 256) {
+            array_shift(self::$cache);
+        }
+        return self::$cache[$hash] = new self(new Doc($data));
     }
 
     public static function fromFile(string $path): self
