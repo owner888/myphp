@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.186.2';
+const VERSION = '1.186.3';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -100,7 +100,7 @@ function printLogLine(string $line, string $platform, bool $all, bool $color): v
     }
     if (!$all && !$e['ours'] && !in_array($e['level'], ['W', 'E', 'F'], true)) { return; } // the system's chatter about the app
     if (!$all && !$e['ours'] && preg_match('/pointeruid|non-launching port|has not exited|getpwuid_r did not find a match/', $e['msg'])) { return; } // the system's errors that are none of the app's (the simulator's user database lacks the Mac's uid)
-    if (!$all && !$e['ours'] && preg_match('/\[com\.apple\.UIKit:UIKBRenderingLog\]|\[com\.apple\.app_launch_measurement:|CUICatalog initWithName:fromBundle:error:\] unable to find a bundle|cannot add handler to 0 from 0/', $e['msg'])) { return; } // the simulator's noise at every launch of any app: the keyboard's renderer, launch metrics it cannot send, an app without an asset catalog (no icon), Core Animation's
+    if (!$all && !$e['ours'] && preg_match('/\[com\.apple\.UIKit:UIKBRenderingLog\]|UIEmojiSearchOperations|\[com\.apple\.TextInput|RTIInputSystemClient|RemoteTextInput|\[com\.apple\.app_launch_measurement:|CUICatalog initWithName:fromBundle:error:\] unable to find a bundle|cannot add handler to 0 from 0/', $e['msg'])) { return; } // the simulator's noise at every launch of any app: the keyboard's renderer, emoji search, launch metrics it cannot send, an app without an asset catalog (no icon), Core Animation's
     $text = "{$e['time']} {$e['level']} {$e['msg']}";
     $code = ['E' => '31', 'F' => '1;31', 'W' => '33', 'I' => '32', 'D' => '90', 'V' => '2;90'][$e['level']];
     echo $color ? "\033[{$code}m$text\033[0m\n" : "$text\n";

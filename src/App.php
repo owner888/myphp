@@ -381,8 +381,8 @@ final class App
             \MyPHP\Theme::setSource(ThemeSource::tryFrom($forced) ?? throw new RuntimeException("myphp: MYPHP_THEME=\"$forced\" is not light, dark or system"));
         }
         $b = self::backend();
-        $b->init(self::$policy);
         self::$initialized = true;
+        $b->init(self::$policy);
         if (\MyPHP\Theme::source() !== ThemeSource::System) {
             \MyPHP\Theme::apply(); // the appearance setSource() asked for before
         }

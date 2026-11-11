@@ -1298,19 +1298,47 @@ static void* php_worker_thread(void *arg) {
 - (UITextSmartInsertDeleteType)smartInsertDeleteType { return UITextSmartInsertDeleteTypeNo; }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    NSMutableSet<UIPress *> *pass = nil;
     for (UIPress *p in presses) {
         UIKey *k = p.key;
-        if (!k) continue;
-        if (k.keyCode == UIKeyboardHIDUsageKeyboardDeleteOrBackspace && k.modifierFlags == 0) {
+        if (!k) {
+            if (!pass) pass = [NSMutableSet set];
+            [pass addObject:p];
+            continue;
+        }
+        // System/command shortcuts (Cmd+*) go to super; plain typing and Shift+typing while not composing are handled
+        // directly so the iOS Simulator does not misroute single keys (such as 's' or Space) to Simulator/UIKit actions.
+        UIKeyModifierFlags mods = k.modifierFlags & (UIKeyModifierCommand | UIKeyModifierControl | UIKeyModifierAlternate);
+        if (mods != 0) {
+            if (!pass) pass = [NSMutableSet set];
+            [pass addObject:p];
+            continue;
+        }
+        if (k.keyCode == UIKeyboardHIDUsageKeyboardDeleteOrBackspace) {
             [self deleteBackward];
-            return;
+            continue;
         }
-        if ((k.keyCode == UIKeyboardHIDUsageKeyboardReturnOrEnter || k.keyCode == UIKeyboardHIDUsageKeypadEnter) && k.modifierFlags == 0) {
+        if (k.keyCode == UIKeyboardHIDUsageKeyboardReturnOrEnter || k.keyCode == UIKeyboardHIDUsageKeypadEnter) {
             [self insertText:@"\n"];
-            return;
+            continue;
         }
+        if ([self markedBuffer].length == 0 && k.characters.length > 0) {
+            unichar c = [k.characters characterAtIndex:0];
+            if (c >= 0x20 && c != 0x7F && !(c >= 0xF700 && c <= 0xF8FF)) {
+                [self insertText:k.characters];
+                continue;
+            }
+        }
+        if (!pass) pass = [NSMutableSet set];
+        [pass addObject:p];
     }
-    [super pressesBegan:presses withEvent:event];
+    if (pass.count > 0) {
+        [super pressesBegan:pass withEvent:event];
+    }
+}
+
+- (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    // Consume key-up for plain keys handled in pressesBegan so UIResponder does not trigger fallback actions.
 }
 
 - (void)safeAreaInsetsDidChange {

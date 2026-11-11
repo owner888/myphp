@@ -37,16 +37,21 @@ final class Backend implements Platform\Backend
 
     private bool $signaled = false;
 
+    private bool $readyCalled = false;
+
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
         ObjC::boot(['UIKit']);
         date_default_timezone_set(ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSTimeZone'), 'localTimeZone'), 'name')));
-        $this->h->ready();
     }
 
     public function run(): void
     {
         $this->running = true;
+        if (!$this->readyCalled) {
+            $this->readyCalled = true;
+            $this->h->ready();
+        }
         while ($this->running) {
             $this->step();
         }

@@ -2,7 +2,7 @@
 
 A `DatePicker` of `displayedComponents: [DatePickerComponents::hourAndMinute]`
 edits the time of day of a `DateTimeImmutable` (bound by reference), in the
-12-hour cycle of en-US: 3:04 PM. Its hours, minutes and half of the day
+24-hour or 12-hour cycle of the user's region (`App::region()`). Its hours, minutes and half of the day
 each take the keyboard focus, as the segments of AppKit's date picker: Up
 and Down step the one with the focus round the clock, digits typed set it,
 going on to the minutes once the hours are typed, A or P chooses the half

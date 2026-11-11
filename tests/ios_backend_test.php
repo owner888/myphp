@@ -214,6 +214,22 @@ use MyPHP\UI\{Content, TextState};
     }
     check($notFound, 'deleted Android secret throws SecretNotFound');
 
+    // 8b. Build script, cold-start whenReady (#27), hardware keyboard (#10), log filter (#11) & DatePicker docs (#18).
+    $buildIosSh = (string)file_get_contents(__DIR__ . '/../scripts/build-ios-php.sh');
+    $mainM = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/launcher/main.m');
+    $iosBackendSrc = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/Backend.php');
+    $appSrc = (string)file_get_contents(__DIR__ . '/../src/App.php');
+    $curlLoopSrc = (string)file_get_contents(__DIR__ . '/../src/Native/CurlLoop.php');
+    $dateInputDoc = (string)file_get_contents(__DIR__ . '/../docs/ui/date-input.md');
+    $binMyphpSrc = (string)file_get_contents(__DIR__ . '/../bin/myphp');
+    check(str_contains($buildIosSh, '*darwin*'), 'build-ios-php.sh patches PHP configure for Darwin cross-compile MAP_ANON so OPcache builds from fresh tarball (#1)');
+    check(strpos($appSrc, 'self::$initialized = true;') < strpos($appSrc, '$b->init('), 'App::run sets $initialized = true before $b->init() (#27)');
+    check(str_contains($iosBackendSrc, 'if (!$this->readyCalled)') && !str_contains(explode('public function run()', $iosBackendSrc)[0], '$this->h->ready()'), 'iOS Backend calls ready() inside run() after event loop starts (#27)');
+    check(str_contains($curlLoopSrc, '!App::isIOS()'), 'CurlLoop::driven and pump do not spin worker thread NSRunLoop on iOS (#27)');
+    check(str_contains($mainM, 'k.characters') && str_contains($mainM, 'pressesEnded:'), 'main.m pressesBegan handles plain hardware keyboard characters directly without Simulator screenshot shortcut (#10)');
+    check(str_contains($binMyphpSrc, 'UIEmojiSearchOperations'), 'bin/myphp filters UIEmojiSearchOperations log noise (#11)');
+    check(str_contains($dateInputDoc, 'App::region()') && !str_contains($dateInputDoc, 'as en-US writes it'), 'docs/ui/date-input.md documents regional date formatting (#18)');
+
     // 9. iOS bundle layout and Unsupported guardrails.
     $tmp = sys_get_temp_dir() . '/myphp-ios-bundle-' . bin2hex(random_bytes(4)) . '.app';
     mkdir($tmp, 0755, true);
