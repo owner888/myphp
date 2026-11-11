@@ -210,9 +210,15 @@ TabRole::search)` with `->searchable()` on its page.
   `TimelineView()(fn(TimelineViewContext $context) => …)`; work that
   starts with a view is its `->task(fn() => …)`, a fiber.
 - One thread: never block the view with I/O. Do slow work in
-  `App::go(fn() => ...)`, a fiber, where `MyPHP\Http` waits without
-  stopping the window, then publish with `$window->update(fn() => ...)`.
-  SQLite is synchronous: small queries only. See `references/async.md`.
+  `App::go(fn() => ...)` (or `->task(fn() => ...)`), a fiber, where
+  `URLSession::shared()` (`data(from:|for:)`, `json()`, `decode()`,
+  `upload()`, `download()`, with `URLRequest`) waits without stopping the
+  window, then publish with `$window->update(fn() => ...)`. Remote images
+  use `AsyncImage($url)`. Always prefer SwiftUI/Foundation APIs
+  (`URLSession`, `URLRequest`, `AsyncImage`, `ContentUnavailableView`,
+  `FlowLayout`, `LazyVGrid`) over low-level helpers (`MyPHP\Http`,
+  `Image::fromBytes`). SQLite is synchronous: small queries only. See
+  `references/async.md`.
 - Prefer the framework's views over hand-built ones: they carry focus,
   keyboard, disabled, accessibility and theme behavior. Give icon-only
   buttons an `->accessibilityLabel('…')` for screen readers and tests.

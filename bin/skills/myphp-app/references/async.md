@@ -3,30 +3,50 @@
 PHP runs the app on one thread: the view, input and every callback share
 it. Anything that waits must wait in a fiber, so the window keeps drawing.
 
-## HTTP and URLSession
+## Networking with URLSession (SwiftUI / Foundation first)
 
-`MyPHP\URLSession` (`URLSession::shared()`, `URLRequest`, `HTTPURLResponse`,
-as Foundation's in SwiftUI) and `MyPHP\Http` (`get`, `post`, `postJson`,
-`put`, `patch`, `delete`, `request`) are the clients for PHP and native UI;
-the fetch plugin itself is for web pages.
+Always write networking in SwiftUI / Foundation style using `URLSession::shared()`,
+`URLRequest`, and `HTTPURLResponse` (globally aliased in declarative apps, or
+`use MyPHP\{URLSession, URLRequest, HTTPURLResponse};`). Reach for the low-level
+`MyPHP\Http` transport only when a low-level custom protocol option is needed.
+The fetch plugin itself is for web pages.
 
 ```php
-// SwiftUI / Foundation style (URLSession & URLRequest are global in view files):
-[$data, $resp] = URLSession::shared()->data(from: 'https://api.example.com/items');
+use MyPHP\{App, URLRequest, URLSession};
+
+// 1. Simple GET / JSON / typed model decoding:
+[$body, $resp] = URLSession::shared()->data(from: 'https://api.example.com/items');
 $items = URLSession::shared()->json(from: 'https://api.example.com/items');
-$user = URLSession::shared()->decode(User::class, for: (new URLRequest('https://api.example.com/me'))->setBearerToken($token));
-[$body, $resp] = URLSession::shared()->upload(for: 'https://api.example.com/upload', from: ['file' => $path]);
-```
+$user = URLSession::shared()->decode(
+    User::class,
+    for: (new URLRequest('https://api.example.com/me'))->setBearerToken($token),
+);
 
-```php
-use MyPHP\{App, Http};
+// 2. POST JSON with URLRequest:
+$req = (new URLRequest('https://api.example.com/login', 'POST'))
+    ->setBearerToken($apiKey)
+    ->setJSONBody(['account' => $account, 'password' => $password]);
+[$body, $resp] = URLSession::shared()->data(for: $req);
 
+// 3. Multipart file / photo upload (streams file from path, never base64-encode in JSON):
+$uploadReq = (new URLRequest('https://api.example.com/uploads', 'POST'))
+    ->setBearerToken($apiKey)
+    ->setValue($teacherToken, 'X-Teacher-Token');
+[$body, $resp] = URLSession::shared()->upload(
+    for: $uploadReq,
+    from: ['kind' => 'schedule', 'file' => $localFilePath],
+);
+
+// 4. Inside App::go() fiber with state update:
 App::go(function () use ($app, $win, $query, $seq) {
     try {
-        $r = Http::get('https://api.github.com/search/repositories?q=' . rawurlencode($query),
-            ['Accept' => 'application/vnd.github+json']);
-        $data = $r->ok() ? $r->json() : null;
-        $error = $r->ok() ? null : "HTTP {$r->status}";
+        $req = new URLRequest(
+            'https://api.github.com/search/repositories?q=' . rawurlencode($query),
+            headers: ['Accept' => 'application/vnd.github+json'],
+        );
+        [$body, $resp] = URLSession::shared()->data(for: $req);
+        $data = $resp->ok() ? json_decode($body, true) : null;
+        $error = $resp->ok() ? null : "HTTP {$resp->statusCode}";
     } catch (\RuntimeException $e) { // no connection, DNS, timeout
         [$data, $error] = [null, $e->getMessage()];
     }
@@ -37,13 +57,16 @@ App::go(function () use ($app, $win, $query, $seq) {
 });
 ```
 
-- Inside `App::go()` a request suspends only its fiber; the window draws
-  and takes input meanwhile. Outside a fiber it turns the run loop until
-  the answer comes; before `App::run()` it blocks.
-- Every status comes back as an `HttpResponse` (`status`, `body`,
-  `headers` with lower-case names, `ok()`, `json()`); failures to reach the
-  server throw `RuntimeException`. `Http::request($method, $url, $headers,
-  $body, $timeout)` sends anything else.
+- Inside `App::go()` (or a view's `->task()`) a request suspends only its
+  fiber; the window draws and takes input meanwhile. Outside a fiber it
+  turns the run loop until the answer comes; before `App::run()` it blocks.
+- `URLSession::shared()->data()` and `upload()` return `[$body, $resp]`
+  where `$resp` is an `HTTPURLResponse` (`statusCode`, `allHeaderFields`,
+  `value(forHTTPHeaderField:)`, `ok()`); failures to reach the server throw
+  `RuntimeException`.
+- For remote images (avatars, covers, photos), always use the declarative
+  `AsyncImage($url, content: fn($img) => $img->resizable()->scaledToFill(), placeholder: fn() => ...)`
+  view rather than manually downloading bytes into `Image::fromBytes()`.
 - Change state from a fiber only through `$window->update(fn() => ...)`,
   which also draws the next frame.
 

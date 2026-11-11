@@ -71,8 +71,7 @@ disagree, the docs of the checkout win: it may have grown since.
 
 ## Not in MyPHP (do not call these)
 
-- **Controls.** Badges cannot be recolored. There is no `OutlineGroup`: nest
-  `DisclosureGroup`s.
+- **Controls.** Badges cannot be recolored. For tree data use `OutlineGroup($data, children: 'children')` or nested `DisclosureGroup`s.
 - **Themes and focus.** No per-window theme (`App::setTheme()` is
   global). Focus is `->focused($this->editing)` and `->defaultFocus()`;
   there is no `@FocusState` enum binding.
@@ -86,11 +85,13 @@ disagree, the docs of the checkout win: it may have grown since.
   `autoHideMenuBar`, `titleBarHeight`, `setActiveAppearance`,
   `setWindowButtonsTheme`, or per-window menu (`Window::setMenu`); the
   menu bar is the app's (`App::setMenu`).
-- **Images.** `Image::fromFile` and `Image::fromBytes` work on macOS, iOS
-  and Android; remote URLs load and cache with `AsyncImage($url)`. For icons
-  use `Image(systemName: 'gearshape')`, which draws SF Symbols on macOS and
-  iOS, the GTK icon theme on Linux and Material Symbols on Android (some
-  have no match there), or an SVG `Image($svg)`.
+- **Networking and images (SwiftUI first).** Always use `URLSession::shared()`
+  + `URLRequest` (`data()`, `json()`, `decode()`, `upload()`, `download()`)
+  instead of low-level `MyPHP\Http` methods, and upload files via
+  `URLSession::shared()->upload(for: $req, from: ['file' => $path])` (native
+  `multipart/form-data`, never base64-encoded JSON). For remote images use
+  `AsyncImage($url)` rather than manual `Image::fromBytes()` downloads. For
+  icons use `Image(systemName: 'gearshape')` or an SVG `Image($svg)->resizable()->scaledToFit()`.
 - **Painting.** No `Painter::accelerated`, font thickening or
   antialiasing switches.
 - **Testing.** No public `Tester` with a clock, dark mode, scale or
