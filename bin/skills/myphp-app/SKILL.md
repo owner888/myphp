@@ -171,19 +171,29 @@ framework's `bin/myphp`): it makes this shape, `app.php` and `view.php`.
 
 ## Navigation for every screen
 
-An app of a few top-level pages is one `TabView(selection:)` with
+An app of a few top-level pages is one `TabView(selection: $this->tab)` with
 `->tabViewStyle(TabViewStyle::sidebarAdaptable)`, each page a
-`Tab(title, systemImage:, value:)`: the framework shows it as a sidebar
-(a `NavigationSplitView`) on the desktop and on a tablet on its side, a
-capsule of tabs at the top of a tablet held upright, and the tab bar
-across the bottom of a phone. Do not test for the platform or the
-window's size to switch between a sidebar and tabs yourself; do not use
-`NavigationSplitView` for an app's pages, which on a phone would keep a
-desktop's sidebar — it is for a sidebar of the app's data on the desktop.
-Give the window `titleBarStyle: 'hiddenInset', vibrancy: 'sidebar'` for
-the Mac's look, and each page its `navigationTitle`. `examples/airpods`
-is the model. A search tab is `Tab(value: 'search', role:
-TabRole::search)` with `->searchable()` on its page.
+`Tab(title, systemImage:, value:)` holding a `NavigationStack(path: $this->homePath)`
+(keep one `Router` per tab in the state class so each tab preserves its own
+navigation history): the framework shows it as a sidebar (a `NavigationSplitView`)
+on the desktop and on a tablet on its side, a capsule of tabs at the top of
+a tablet held upright, and the tab bar across the bottom of a phone.
+- In `app.php`, size the window for the device:
+  `[$w, $h] = Device::isDesktop() ? [1080, 760] : [402, 874];`
+- On detail/sub-pages pushed onto a `NavigationStack` that have a bottom
+  action button, hide the phone's floating tab bar with
+  `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar)`.
+- On a custom hero home page that draws its own header instead of a
+  navigation bar, hide the bar with
+  `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::navigationBar)`
+  (its background then reaches edge-to-edge under the iPhone status bar).
+- Apply `->tint($accentColor)` on the root `TabView` so both the phone's
+  bottom tab bar and the desktop/iPad sidebar icons use the design's accent.
+- Do not use `NavigationSplitView` for an app's top-level pages, which on a
+  phone would keep a desktop's sidebar — it is for a master-detail list of
+  the app's data on the desktop. `examples/airpods` is the model. A search
+  tab is `Tab(value: 'search', role: TabRole::search)` with `->searchable()`
+  on its page.
 
 ## Rules of the view
 
@@ -270,13 +280,17 @@ TabRole::search)` with `->searchable()` on its page.
    For a phone's look, set `$h->rt->touch = true` and
    `$h->theme = MyPHP\UI\Theme::phone(false)` before the first frame.
 3. Look at the real window: `myphp screenshot` runs the app once and
-   writes a PNG of its first window (`-out shot.png`), and with
-   `-tree tree.json` the elements it shows, with their roles, labels and
-   bounds, for when you cannot view images. Always pass `-data <tmp dir>`
+   writes a PNG of its first window (`-out shot.png`), and prints the
+   accessibility element tree (`Elements:`). Always pass `-data <tmp dir>`
    so the run cannot touch the user's real data, and take one with
-   `-theme dark` too; `-size WxH` checks a smaller window. Judge it as a
-   designer would: alignment, spacing, contrast, clipping, empty states,
-   not only that it runs. On Linux without a display it starts Xvfb.
+   `-theme dark` too. For a multi-page or network-backed app, add a small
+   `tests/preview.php` that wires `FakeApi` + `fixtures.json` and reads
+   `PREVIEW='tab:/path'` so you can screenshot any screen in ~1 second
+   (`PREVIEW='home:/' myphp screenshot tests/preview.php -out /tmp/home.png`;
+   avoid `-size` taller than ~800pt on a laptop screen where the Dock
+   caps window height, and set `width`/`height` in `WindowOptions` instead).
+   Judge it as a designer would: alignment, spacing, contrast, clipping,
+   empty states, not only that it runs. On Linux without a display it starts Xvfb.
 4. `myphp dev` runs it with live reload for the user; `myphp build`
    packages it (`docs/distribution.md`).
 5. On a phone (an Android or iOS app), run it on a device or an emulator,

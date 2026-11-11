@@ -100,11 +100,15 @@ App::go(function () use ($app, $win, $query, $seq) {
 program without blocking, its callback on the main thread; `kill()`
 stops it (`docs/native.md`, Processes).
 
-## SQLite and files
+## Secrets, SQLite and files
 
-`Sqlite::open($path)` (`docs/plugins/sqlite.md`) returns a `DB` whose
-`execute()` and `query()` run synchronously on the main thread: fine for
-the small queries of a local database, but not for scans of large
-tables in the middle of a frame. Keep data in
-`App::path(PathName::UserData)`, and call `App::setName()` before the
-first `App::path()`: the folder is named after the app.
+- **Secrets (tokens, API keys, passwords)**: `MyPHP\Secrets::set($service, $account, $secret)`,
+  `Secrets::get($service, $account)`, `Secrets::delete($service, $account)`
+  store credentials in the OS keychain (macOS/iOS Keychain, Windows Credential
+  Manager, Linux Secret Service, Android AES-256-GCM encrypted store).
+- **SQLite and files**: `Sqlite::open($path)` (`docs/plugins/sqlite.md`)
+  returns a `DB` whose `execute()` and `query()` run synchronously on the
+  main thread: fine for the small queries of a local database, but not for
+  scans of large tables in the middle of a frame. Keep data in
+  `App::path(PathName::UserData)`, and call `App::setName()` before the
+  first `App::path()`: the folder is named after the app.

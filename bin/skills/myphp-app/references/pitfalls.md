@@ -68,6 +68,22 @@ disagree, the docs of the checkout win: it may have grown since.
   `$c->button()`, `$c->clicked()` are the engine's own, `@internal`: an
   app reaches them only inside `Representable(fn(Context $c) => …)`, for
   a control no view gives.
+- **Custom SVG icons without `->resizable()` or with giant dimensions.**
+  `Image($svg)` without `->resizable()` draws as a monochrome template icon
+  tinted with the text color at font size (`1.2 * fontSize`). To draw a
+  multi-color SVG illustration or 3D icon in its own colors and gradients,
+  call `Image(SVG::parse($xml))->resizable()->scaledToFit()->frame(width: 44, height: 44)`.
+  For full-bleed hero backgrounds that stretch across wide desktop/iPad
+  screens, use a GPU `LinearGradient` for the sky/fill and place the
+  fixed-size SVG illustration at `Alignment::topTrailing`.
+- **Packaging exclusions (`myphp.json`).** Mobile builds (`myphp run`/`build`
+  for iOS and Android) automatically exclude `tests/`, `test/`, and
+  `*.local.php`. Keep local environment overrides that should be bundled on
+  a phone in `config.env.php` (gitignored) rather than `config.local.php`,
+  and use `"exclude": ["docs", ...]` in `myphp.json` for extra dev folders.
+  If `"name"` in `myphp.json` is non-ASCII, or if you want a localized home
+  screen title, set `"name"` to an ASCII slug (`"DrBearTeacher"`) and
+  `"displayName"` to the localized title (`"熊博士教师"`).
 
 ## Not in MyPHP (do not call these)
 
