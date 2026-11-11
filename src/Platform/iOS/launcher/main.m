@@ -312,6 +312,14 @@ void myphp_ios_request_render(void) {
     g_needs_render = 1;
 }
 
+int myphp_ios_poll_memory_warning(void) {
+    if (g_memory_warning) {
+        g_memory_warning = 0;
+        return 1;
+    }
+    return 0;
+}
+
 int myphp_ios_take_needs_render(void) {
     if (g_needs_render) {
         g_needs_render = 0;

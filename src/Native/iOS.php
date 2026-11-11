@@ -44,6 +44,7 @@ final class iOS
             void* myphp_ios_get_view(void);
             void myphp_ios_request_render(void);
             int myphp_ios_take_needs_render(void);
+int myphp_ios_poll_memory_warning(void);
             int myphp_ios_poll_touch_event(MyphpTouchEvent *ev);
             int myphp_ios_poll_input_event(MyphpInputEvent *ev);
             int myphp_ios_poll_open_url(char *out, int max_len);

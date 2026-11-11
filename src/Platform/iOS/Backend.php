@@ -122,6 +122,11 @@ final class Backend implements Platform\Backend
         if ($f->myphp_ios_poll_locale_changed() > 0) {
             $this->h->localeChanged();
         }
+        if ($f->myphp_ios_poll_memory_warning() > 0) {
+            \MyPHP\UI\Declarative\AsyncImage::clearCache();
+            gc_collect_cycles();
+            gc_mem_caches();
+        }
         if ($f->myphp_ios_poll_network_changed() > 0 && $this->network !== null && $this->network->watching) {
             $this->h->networkChanged($this->network->status());
         }
