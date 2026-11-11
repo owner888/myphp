@@ -79,6 +79,18 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <string>${APP_VERSION}</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>AppIcon60x60</string>
+            </array>
+            <key>UIPrerenderedIcon</key>
+            <true/>
+        </dict>
+    </dict>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>
@@ -153,6 +165,14 @@ if [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
             fi
         done
     fi
+fi
+
+# 4b. AppIcon: project's resources/icon.png if present, else MyPHP's default rocket-riding ElePHPant icon
+if [ -f "${ENTRY_DIR}/resources/icon.png" ]; then
+    cp "${ENTRY_DIR}/resources/icon.png" "${APP_DIR}/AppIcon60x60@2x.png"
+    cp "${ENTRY_DIR}/resources/icon.png" "${APP_DIR}/AppIcon60x60@3x.png"
+else
+    php -d ffi.enable=1 -r 'require "'"${ROOT_DIR}"'/src/autoload.php"; $png = \MyPHP\Native\Build\Icns::defaultIcon(180); file_put_contents("'"${APP_DIR}"'/AppIcon60x60@2x.png", $png); file_put_contents("'"${APP_DIR}"'/AppIcon60x60@3x.png", $png);'
 fi
 
 # 5. The CA certificates HTTPS trusts (curl's copy of Mozilla's): OpenSSL in the app has no way to the system's

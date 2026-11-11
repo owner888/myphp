@@ -37,9 +37,17 @@ WORK_DIR="${BUILD_DIR}/pkg_work"
 rm -rf "$WORK_DIR"
 mkdir -p "${WORK_DIR}/gen" "${WORK_DIR}/classes" "${WORK_DIR}/dex" "${WORK_DIR}/staging"
 
-# 1. Compile resources
+# 1. Prepare and compile resources (supports custom project resources/icon.png as Adaptive Icon foreground)
+mkdir -p "${WORK_DIR}/res"
+cp -R "${TEMPLATE_DIR}/res/"* "${WORK_DIR}/res/"
+if [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/resources/icon.png" ]; then
+    echo "==> Using custom app icon from ${PROJECT_DIR}/resources/icon.png..."
+    rm -f "${WORK_DIR}/res/drawable/ic_launcher_foreground.xml"
+    cp "${PROJECT_DIR}/resources/icon.png" "${WORK_DIR}/res/drawable/ic_launcher_foreground.png"
+    cp "${PROJECT_DIR}/resources/icon.png" "${WORK_DIR}/res/drawable/ic_launcher.png"
+fi
 echo "==> Compiling resources with aapt2..."
-"$AAPT2" compile --dir "${TEMPLATE_DIR}/res" -o "${WORK_DIR}/res.zip"
+"$AAPT2" compile --dir "${WORK_DIR}/res" -o "${WORK_DIR}/res.zip"
 
 # 2. Link resources and generate R.java; debuggable for myphp run (MYPHP_ANDROID_DEBUGGABLE=1), whose hot restart copies files in with run-as
 echo "==> Linking APK and generating R.java..."
