@@ -1073,7 +1073,7 @@ static void* php_worker_thread(void *arg) {
             zend_first_try {
                 // the framework the app carries: an app needs no autoloader of its own, as on the desktop with Composer's;
                 // and why PHP ended, in the log: a fatal error, an uncaught exception's trace (as the Android launcher's)
-                NSString *autoload = [NSString stringWithFormat:@"require '%@/src/autoload.php';"
+                NSString *autoload = [NSString stringWithFormat:@"ini_set('memory_limit', '512M'); require '%@/src/autoload.php';"
                     "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
                     "set_exception_handler(function (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); });", bundlePath]; // PHP ends after the handler, as with no handler
                 zend_eval_string((char *)[autoload UTF8String], NULL, "myphp_bootstrap");

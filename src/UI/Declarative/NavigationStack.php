@@ -55,6 +55,7 @@ final class NavigationStack extends View
         $backdrop = (object)['color' => null, 'tabBarHidden' => $env->backdrop->tabBarHidden ?? false, 'navBarHidden' => false];
           $toolbar = $entry->toolbar ?? null;
           $hideBar = ($entry->navBarHidden ?? false) || ($this->router->title() === '' && !$this->router->canGoBack() && $toolbar === null && $large === null);
+          if ($hideBar) { $c->safeArea[0] = 0.0; }
           $navBarNode = $hideBar ? null : $c->navigationBar($this->router->title(), $this->router,
               $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); },
               $large);
