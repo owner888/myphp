@@ -688,7 +688,7 @@ final class App
         }
         $home = (string)getenv('HOME');
         $lib = self::devDataHome() ?? "$home/Library";
-        [$dir, $make] = PHP_OS_FAMILY === 'Linux' ? self::xdgPath($name, $home) : (PHP_OS_FAMILY === 'Windows' ? self::windowsPath($name) : match ($name) {
+        [$dir, $make] = !self::isIOS() && PHP_OS_FAMILY === 'Linux' ? self::xdgPath($name, $home) : (!self::isIOS() && PHP_OS_FAMILY === 'Windows' ? self::windowsPath($name) : match ($name) {
             PathName::Home => [$home, false],
             PathName::AppData => ["$lib/Application Support", false],
             PathName::UserData => ["$lib/Application Support/" . self::name(), true],
