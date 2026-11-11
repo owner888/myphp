@@ -56,6 +56,38 @@ final class Http
         return self::request('POST', $url, $headers, $body, $timeout);
     }
 
+    /** PUT $url with $body and $headers. @param array<string, mixed>|string|null $body @param array<string, string> $headers */
+    public static function put(string $url, array|string|null $body = null, array $headers = [], float $timeout = 0.0): HttpResponse
+    {
+        if (is_array($body)) {
+            [$body, $headers] = self::encodeBody($body, $headers);
+        }
+        return self::request('PUT', $url, $headers, $body, $timeout);
+    }
+
+    /** PATCH $url with $body and $headers. @param array<string, mixed>|string|null $body @param array<string, string> $headers */
+    public static function patch(string $url, array|string|null $body = null, array $headers = [], float $timeout = 0.0): HttpResponse
+    {
+        if (is_array($body)) {
+            [$body, $headers] = self::encodeBody($body, $headers);
+        }
+        return self::request('PATCH', $url, $headers, $body, $timeout);
+    }
+
+    /** DELETE $url with $headers. @param array<string, string> $headers */
+    public static function delete(string $url, array $headers = [], ?string $body = null, float $timeout = 0.0): HttpResponse
+    {
+        return self::request('DELETE', $url, $headers, $body, $timeout);
+    }
+
+    /** POST $url with $data encoded as application/json. @param array<string, string> $headers */
+    public static function postJson(string $url, mixed $data, array $headers = [], float $timeout = 0.0): HttpResponse
+    {
+        $headers['Content-Type'] ??= 'application/json';
+        $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        return self::request('POST', $url, $headers, $json, $timeout);
+    }
+
     /** @param array<string, mixed> $fields @param array<string, string> $headers @return array{0: string, 1: array<string, string>} */
     private static function encodeBody(array $fields, array $headers): array
     {

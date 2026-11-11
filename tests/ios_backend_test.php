@@ -161,6 +161,46 @@ use MyPHP\UI\{Content, TextState};
     same(false, $nullableOn, 'Toggle initializes a null binding to false');
     check($h->root->kids[0]->kids[0]->gradient !== null || ($h->root->kids[0]->kids[0]->kids[0]->gradient ?? null) !== null, 'LinearGradient sets a linearGradient on its node');
 
+    // 7b. SwiftUI Grid/GridRow, RadialGradient, AngularGradient, ContentUnavailableView, ShareLink, PhotosPicker, EmptyView, interactiveDismissDisabled, URLSession/URLRequest.
+    $sheetOpen = false;
+    $photoChosen = null;
+    $h = new Headless(Content::view(function () use (&$sheetOpen, &$photoChosen) {
+        return VStack()(
+            Grid(horizontalSpacing: 10, verticalSpacing: 6)(
+                GridRow()(Text('K1'), Text('V1')),
+                GridRow()(Text('Span2')->gridCellColumns(2)),
+            ),
+            RadialGradient(colors: [\Color::red, \Color::blue])->frame(height: 20),
+            AngularGradient(colors: [\Color::green, \Color::yellow])->frame(height: 20),
+            ContentUnavailableView('No Items', systemImage: 'tray', description: 'Add an item to begin.')(
+                Button('Create', action: function () use (&$sheetOpen) { $sheetOpen = true; }),
+            ),
+            ShareLink('https://myphp.ai', title: 'Share Site'),
+            PhotosPicker('Pick Photo', selection: $photoChosen),
+            EmptyView(),
+        )->sheet(isPresented: $sheetOpen, content: fn() => Text('Locked Sheet')->interactiveDismissDisabled(true));
+    })->view, 390, 844);
+    $h->rt->touch = true;
+    $h->frame();
+    check($h->byText('K1') !== null && $h->byText('Span2') !== null, 'Grid and GridRow render cells');
+    check($h->byText('No Items') !== null && $h->byText('Add an item to begin.') !== null, 'ContentUnavailableView renders title and description');
+    $h->clickText('Create');
+    $h->frame(2);
+    check($sheetOpen && $h->byText('Locked Sheet') !== null, 'sheet opens');
+    $h->escape();
+    $h->frame();
+    check($sheetOpen, 'interactiveDismissDisabled(true) prevents Escape / background tap dismissal');
+
+    $req = (new \URLRequest('https://api.example.com/v1/items', 'POST', body: ['name' => 'demo']))->setBearerToken('tok123');
+    same(['POST', 'Bearer tok123', 'application/json', '{"name":"demo"}'], [
+        $req->httpMethod,
+        $req->value('authorization'),
+        $req->value('content-type'),
+        $req->httpBody,
+    ], 'URLRequest configures method, Bearer token and JSON body');
+    $hydrated = \URLSession::hydrate(new class { public int $id = 0; public string $title = ''; }::class, ['id' => 7, 'title' => 'Book']);
+    same([7, 'Book'], [$hydrated->id, $hydrated->title], 'URLSession::hydrate maps associative array to object properties');
+
     // 8. Android AES-256-GCM Secrets store.
     $sec = new AndroidSecrets();
     $sec->setSecret('myphp.test', 'token', 'secret-value-123');

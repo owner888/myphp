@@ -31,6 +31,10 @@ abstract class View
     public bool $hasTag = false;
     /** What badge() shows at the end of the view's row. @internal */
     public int|string|null $badgeValue = null;
+    /** @internal GridRow cell span */
+    public int $colSpan = 1;
+    /** @internal interactiveDismissDisabled on a sheet's content */
+    public bool $dismissDisabled = false;
 
     /** Builds the view's own node(s) into $c, its content inside; returns the outer node, or null for none. */
     abstract protected function build(Context $c, Env $env): ?Node;
@@ -107,9 +111,10 @@ abstract class View
     }
 
     /** A color or gradient behind the view; or $content, a view as large as it, under it, as SwiftUI's background(alignment:content:). */
-    public function background(\Color|ColorValue|LinearGradientView|\MyPHP\UI\LinearGradient|View $color, \Alignment $alignment = \Alignment::center): static
+    public function background(\Color|ColorValue|LinearGradientView|RadialGradientView|AngularGradientView|\MyPHP\UI\LinearGradient|\MyPHP\UI\RadialGradient|\MyPHP\UI\ConicGradient|View $color, \Alignment $alignment = \Alignment::center): static
     {
-        if ($color instanceof LinearGradientView || $color instanceof \MyPHP\UI\LinearGradient) {
+        if ($color instanceof LinearGradientView || $color instanceof RadialGradientView || $color instanceof AngularGradientView
+            || $color instanceof \MyPHP\UI\LinearGradient || $color instanceof \MyPHP\UI\RadialGradient || $color instanceof \MyPHP\UI\ConicGradient) {
             $this->mods[] = ['gradient', [$color]];
             return $this;
         }
@@ -451,6 +456,36 @@ abstract class View
      */
     public function presentationDetents(array $detents): static { $this->sheetDetents = $detents; return $this; }
 
+    /** Prevents a sheet from being dismissed by tapping outside, dragging down or pressing Escape, as SwiftUI's interactiveDismissDisabled. */
+    public function interactiveDismissDisabled(bool $isDisabled = true): static { $this->dismissDisabled = $isDisabled; return $this; }
+
+    /** Spans $count columns in a 2D GridRow, as SwiftUI's gridCellColumns. */
+    public function gridCellColumns(int $count): static { $this->colSpan = max(1, $count); return $this; }
+
+    /** A full-screen modal cover while $isPresented, as SwiftUI's fullScreenCover. */
+    public function fullScreenCover(bool &$isPresented, Closure $content): static
+    {
+        $p = new Presentation('fullScreen', $isPresented);
+        $p->content = $content;
+        $this->presentations[] = $p;
+        return $this;
+    }
+
+    /** Opens the system file picker while $isPresented and calls $onCompletion(array $paths), as SwiftUI's fileImporter. @param list<\MyPHP\FileFilter> $allowedContentTypes */
+    public function fileImporter(bool &$isPresented, array $allowedContentTypes = [], bool $allowsMultipleSelection = false, ?Closure $onCompletion = null): static
+    {
+        if ($isPresented) {
+            $isPresented = false;
+            \MyPHP\App::go(static function () use ($allowedContentTypes, $allowsMultipleSelection, $onCompletion): void {
+                $files = \MyPHP\Dialog::open(new \MyPHP\OpenDialogOptions(filters: $allowedContentTypes, multiple: $allowsMultipleSelection));
+                if ($onCompletion !== null) {
+                    ($onCompletion)($files);
+                }
+            });
+        }
+        return $this;
+    }
+
     /** A sheet rising from the bottom while $isPresented, of the view $content returns; a tap outside, Escape or Back closes it. */
     public function sheet(bool &$isPresented, Closure $content): static
     {
@@ -731,7 +766,10 @@ abstract class View
                     if ($align !== \Alignment::center || $maxW === INF || $maxH === INF || $w !== null || $h !== null) { $align->place($n); }
                     break;
                 case 'background': $n->background($a[0]->rgb($env), $a[0]->alpha); break;
-                case 'gradient': $n->linearGradient($a[0] instanceof LinearGradientView ? $a[0]->toGradient($env) : $a[0]); break;
+                case 'gradient':
+                    $g = $a[0] instanceof LinearGradientView || $a[0] instanceof RadialGradientView || $a[0] instanceof AngularGradientView ? $a[0]->toGradient($env) : $a[0];
+                    $n->gradient = $g;
+                    break;
                 case 'radius': $n->radius($a[0]); break;
                 case 'clip': $a[0]->clip($n); break;
                 case 'border': if ($a[0]->alpha > 0) { $n->border($a[1], $a[0]->rgb($env)); } break; // a clear one draws nothing: the engine's borders are opaque

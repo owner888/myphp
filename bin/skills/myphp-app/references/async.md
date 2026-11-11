@@ -3,10 +3,20 @@
 PHP runs the app on one thread: the view, input and every callback share
 it. Anything that waits must wait in a fiber, so the window keeps drawing.
 
-## HTTP
+## HTTP and URLSession
 
-`MyPHP\Http` (`docs/plugins/fetch.md`, "From PHP or native UI") is the
-client for PHP and native UI; the fetch plugin itself is for web pages.
+`MyPHP\URLSession` (`URLSession::shared()`, `URLRequest`, `HTTPURLResponse`,
+as Foundation's in SwiftUI) and `MyPHP\Http` (`get`, `post`, `postJson`,
+`put`, `patch`, `delete`, `request`) are the clients for PHP and native UI;
+the fetch plugin itself is for web pages.
+
+```php
+// SwiftUI / Foundation style (URLSession & URLRequest are global in view files):
+[$data, $resp] = URLSession::shared()->data(from: 'https://api.example.com/items');
+$items = URLSession::shared()->json(from: 'https://api.example.com/items');
+$user = URLSession::shared()->decode(User::class, for: (new URLRequest('https://api.example.com/me'))->setBearerToken($token));
+[$body, $resp] = URLSession::shared()->upload(for: 'https://api.example.com/upload', from: ['file' => $path]);
+```
 
 ```php
 use MyPHP\{App, Http};

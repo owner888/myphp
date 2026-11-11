@@ -22,7 +22,7 @@ final class AsyncImage extends View
     /** @var array<string, string> */
     private static array $failed = [];
 
-    private bool $resizable = false, $fit = false;
+    private bool $resizable = false, $fit = false, $fill = false;
 
     public function __construct(
         public readonly ?string $url,
@@ -33,7 +33,12 @@ final class AsyncImage extends View
     ) {}
 
     public function resizable(): static { $this->resizable = true; return $this; }
-    public function scaledToFit(): static { $this->fit = true; return $this; }
+    public function scaledToFit(): static { $this->fit = true; $this->fill = false; return $this; }
+    public function scaledToFill(): static { $this->fill = true; $this->fit = false; return $this; }
+    public function aspectRatio(\ContentMode $contentMode = \ContentMode::fit): static
+    {
+        return $contentMode === \ContentMode::fill ? $this->scaledToFill() : $this->scaledToFit();
+    }
 
     /** Clears the in-memory image cache. */
     public static function clearCache(): void
@@ -51,6 +56,7 @@ final class AsyncImage extends View
             if ($view instanceof ImageView) {
                 if ($this->resizable) { $view->resizable(); }
                 if ($this->fit) { $view->scaledToFit(); }
+                if ($this->fill) { $view->scaledToFill(); }
             }
             return $view instanceof View ? $view->render($c, $env) : null;
         }

@@ -1,6 +1,6 @@
 ---
 name: myphp-app
-description: Write new PHP desktop and mobile (Android, iOS) apps, windows and screens with MyPHP, native UI in SwiftUI-style declarative views or a web frontend, from a blank project to a tested, packaged app. Use when creating a MyPHP app, adding a window, page, view or service to one, or turning a design (SwiftUI or otherwise) into MyPHP code.
+description: Write new PHP desktop (macOS, Windows, Linux) and mobile (Android, iOS, iPadOS) apps, windows and screens with MyPHP, native UI in SwiftUI-style declarative views or a web frontend, from a blank project to a tested, packaged app. Use when creating a MyPHP app, adding a window, page, view or service to one, or turning a design (SwiftUI or otherwise) into MyPHP code.
 ---
 
 # Writing MyPHP apps
@@ -9,7 +9,7 @@ MyPHP is a PHP framework for desktop and mobile apps whose interface is
 written as SwiftUI's is: a view is a value built from the state, containers
 take their content as a list, actions are closures, controls bind to the
 state. MyPHP lays the views out and draws them on the GPU (Metal on macOS
-and iOS, OpenGL on Linux and Android). There is no HTML, CSS or JavaScript
+and iOS, Direct3D 11 on Windows, OpenGL on Linux and Android). There is no HTML, CSS or JavaScript
 in a native window. Write SwiftUI's names, argument labels and order in
 PHP syntax; the few places PHP differs are listed below. Never guess an API
 from React or CSS.

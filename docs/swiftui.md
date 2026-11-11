@@ -98,8 +98,10 @@ $view = fn() => Form()(
 | `.offset(x: 10)` | `->offset(x: 10)` |
 | `.overlay(alignment: .topTrailing) { Badge() }` | `->overlay(Text('3'), alignment: Alignment::topTrailing)` |
 | `GeometryReader { proxy in }` | `GeometryReader(fn(GeometryProxy $proxy) => …)` |
-| `LazyVGrid(columns:)` | `LazyVGrid(columns: [GridItem::adaptive(minimum: 120)])( … )` |
-| `ScrollView { }` | `ScrollView()( … )`; `ScrollViewReader` to scroll to an id |
+| `Grid { GridRow { } }`, `.gridCellColumns(2)` | `Grid()(GridRow()( … ))`, `->gridCellColumns(2)` |
+| `LazyVGrid(columns:)`, `LazyHGrid(rows:)` | `LazyVGrid(columns: [GridItem::adaptive(minimum: 120), GridItem::flexible(), GridItem::fixed(80)])( … )`, `LazyHGrid(rows: […])( … )` |
+| `LazyVStack`, `LazyHStack` | `LazyVStack()( … )`, `LazyHStack()( … )` |
+| `ScrollView { }`, `EmptyView()` | `ScrollView()( … )` (`ScrollViewReader` to scroll to an id), `EmptyView()` |
 
 ```php
 $view = fn() => HStack(spacing: 12)(
@@ -140,6 +142,7 @@ $view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
 | `.red`, `.orange`, `.green` | `Color::red`, `Color::orange`, `Color::green` |
 | A color of the app's own | `Color::rgb(0x336699)` |
 | `.background(.blue)`, `.background { … }` | `->background(Color::blue)`, `->background($view)` |
+| `LinearGradient`, `RadialGradient`, `AngularGradient` | `LinearGradient(colors: [Color::blue, Color::purple], startPoint: UnitPoint::topLeading, endPoint: UnitPoint::bottomTrailing)`, `RadialGradient(colors: [...])`, `AngularGradient(colors: [...])` |
 | `.glassEffect()`, `.background(.regularMaterial)` | `->glassEffect($material)`; a window's `vibrancy:` for the window's material |
 | `.cornerRadius(12)`, `.clipShape(RoundedRectangle(cornerRadius: 12))` | the same |
 | `.border(.gray)`, `.shadow(radius: 8, y: 4)`, `.opacity(0.5)` | `->border(Color::separator)`, `->shadow(radius: 8, y: 4)`, `->opacity(0.5)` |
@@ -176,7 +179,10 @@ or a user's tag.
 | `Link("Site", destination:)` | `WebLink('Site', destination: 'https://…')` |
 | `Menu("Sort") { Button("Name") { } }` | `Menu('Sort')(Button('Name', action: …), …)` |
 | `.contextMenu { }` | `->contextMenu(Button(…), Divider(), …)`: a right click on a Mac, a long press on a phone |
-| `Image(systemName:)`, `Image("asset")` | `Image(systemName: 'gearshape')`, `Image(file: $path)`, `Image($svg)` |
+| `Image(systemName:)`, `Image("asset")` | `Image(systemName: 'gearshape')`, `Image(file: $path)`, `Image($svg)` (`->resizable()`, `->scaledToFit()`, `->scaledToFill()`, `->aspectRatio(ContentMode::fit)`) |
+| `AsyncImage(url:)` | `AsyncImage($url, content: fn(ImageView $img) => $img->resizable(), placeholder: fn() => ProgressView())` |
+| `PhotosPicker`, `ShareLink`, `.fileImporter` | `PhotosPicker('Select Photo', selection: $app->photo)`, `ShareLink($url, title: 'Share')`, `->fileImporter(isPresented: $app->importing, onCompletion: fn(array $files) => …)` |
+| `ContentUnavailableView` | `ContentUnavailableView('No Mail', systemImage: 'tray', description: '…')`, `ContentUnavailableView::search($query)` |
 | `.help("tip")`, `.accessibilityLabel("Close")` | the same names |
 | `Form { Section("Account") { LabeledContent("Version", value: "1.0") } }` | `Form()(Section('Account')(LabeledContent('Version', '1.0')))` |
 
@@ -306,7 +312,7 @@ $view = fn() => VStack(spacing: 12)(
 | `.task { await load() }` | `->task(fn() => $app->load())`: a fiber, started as the view appears; inside it `Http::get()` waits without stopping the window |
 | `Timer.publish`, `TimelineView(.periodic)` | `TimelineView()(fn(TimelineViewContext $context) => …)` |
 | `@MainActor` | Everything already is: PHP runs the app on one thread. What waits goes in a fiber (`App::go()`), heavy CPU work in a child process (see [app.md](app.md)) |
-| `URLSession` | `Http::get()`, `Http::post()`, whose response has `->status`, `->body`, `->json()` |
+| `URLSession.shared.data(from:)`, `URLRequest`, `JSONDecoder` | `[$data, $resp] = URLSession::shared()->data(from: $url)` (or `for: new URLRequest($url, 'POST', body: [...])`), `URLSession::shared()->json(from: $url)`, `URLSession::shared()->decode(User::class, from: $url)`, `upload()`, `download()`; or `Http::get()`, `Http::post()`, `Http::postJson()`, `Http::put()`, `Http::patch()`, `Http::delete()` |
 | `scenePhase` | `App::onActivate()`, the window's events (see [The application](app.md)) |
 
 <!-- no-test -->
@@ -342,14 +348,12 @@ your own, made with the engine's builder inside one view, as
 - **On phones**: touch, the safe area, the keyboard, Back, the pickers,
   long press and swipes (see [Android and iOS](mobile.md)).
 
-## Not in myphp yet
+## Not in myphp
 
-| SwiftUI | Instead |
+| SwiftUI | Status |
 |---|---|
-| `.interactiveDismissDisabled` | A sheet dismisses on a tap outside or a drag down |
-| `PhotosPicker`, `fileImporter` | `Dialog::open()` with filters: pictures open the photo picker on phones |
-| `ShareLink` | Not yet |
-| `WidgetKit`, `App Intents`, `Live Activities` | Out of scope |
+| `WidgetKit`, `App Intents`, `Live Activities` | Out of scope (OS extensions) |
+| `tvOS`, `Android TV`, `visionOS`, `watchOS` | Not targeted (`macOS`, `Windows`, `Linux`, `Android` and `iOS`/`iPadOS` are supported; `Device::type()` reports `Desktop`, `Mobile`, `Pad`, `Tv`) |
 
 ## Checklist for an agent writing a myphp view
 
@@ -367,4 +371,4 @@ your own, made with the engine's builder inside one view, as
    `Color::secondarySystemBackground`); a literal only for data.
 6. Before a view you have not seen, `grep -n "function Name("
    src/UI/Declarative/functions.php`; what is not there does not exist.
-7. Run on a device with the CLI only: `myphp run -d macos|ios|android <app>`.
+7. Run on a device with the CLI only: `myphp run -d macos|windows|linux|ios|android <app>`.

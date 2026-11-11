@@ -318,7 +318,7 @@ trait ContextMobile
      * a phone's, as UIKit's in a regular width. Not mygo's.
      * @param list<float> $detents
      */
-    public function sheet(bool &$open, Closure $fn, array $detents = []): ?Node
+    public function sheet(bool &$open, Closure $fn, array $detents = [], bool $dismissDisabled = false): ?Node
     {
         $t = $this->theme;
         $rt = $this->runtime;
@@ -328,7 +328,7 @@ trait ContextMobile
         $key = 'sheet' . $this->sheets++; // each sheet of the frame its own, open or closed: two (one going, one coming) do not share a state
         $tablet = ($rt?->touch ?? false) && $this->tabsPlacement() !== self::TABS_BOTTOM;
         if ($tablet) { $detents = []; } // a page sheet has no detents
-        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet): void {
+        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet, $dismissDisabled): void {
             $this->key($key);
             $rise = $rt?->motions[$this->upcomingId()]['rise'] ?? null;
             if (!$shown && ($rise === null || ($rise->value <= 0.001 && !$rise->moving))) { // closed, and gone below the window
@@ -352,7 +352,7 @@ trait ContextMobile
                   $panel->minHeight($top)->maxHeight($top);
                   $kept = $rt?->local($back->id, fn() => (object)['offset' => [0.0, $top - $heights[0]]], \stdClass::class, 'offset') ?? (object)['offset' => [0.0, $top - $heights[0]]];
                   $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);
-                  $stops[] = [0.0, $top]; // below the window: gone
+                  if (!$dismissDisabled) { $stops[] = [0.0, $top]; } // below the window: gone
                   $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
                   $down = $this->dragOffset($panel)[1];
                   $panel->minHeight(max($top - $down, 0.0))->maxHeight(max($top - $down, 0.0)); // as high as it shows, its content laid out in it (a scroll reaches its end at every height), the drag's move taken back below
@@ -382,7 +382,7 @@ trait ContextMobile
         if ($back === null || !$open) { // closed: nothing, or what goes down
             return $back;
         }
-        if ($gone || $this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // dragged away, Escape, or a tap outside
+        if (!$dismissDisabled && ($gone || $this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel)))) { // dragged away, Escape, or a tap outside
             $open = false;
             $back->dismissed = true;
         }

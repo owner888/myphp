@@ -12,7 +12,7 @@ use MyPHP\UI\{Context, Image, Node, SVG};
  */
 final class ImageView extends View
 {
-    private bool $resizable = false, $fit = false;
+    private bool $resizable = false, $fit = false, $fill = false;
 
     public function __construct(public readonly Image|SVG|null $image, public readonly ?string $systemName = null) {}
 
@@ -20,7 +20,16 @@ final class ImageView extends View
     public function resizable(): static { $this->resizable = true; return $this; }
 
     /** A resizable picture keeps its aspect ratio: as wide as its room, as high as that makes it, as SwiftUI's scaledToFit. */
-    public function scaledToFit(): static { $this->fit = true; return $this; }
+    public function scaledToFit(): static { $this->fit = true; $this->fill = false; return $this; }
+
+    /** A resizable picture fills its room while keeping its aspect ratio, cropped where needed, as SwiftUI's scaledToFill. */
+    public function scaledToFill(): static { $this->fill = true; $this->fit = false; return $this; }
+
+    /** Sets the aspect ratio and content mode (.fit or .fill), as SwiftUI's aspectRatio(contentMode:). */
+    public function aspectRatio(\ContentMode $contentMode = \ContentMode::fit): static
+    {
+        return $contentMode === \ContentMode::fill ? $this->scaledToFill() : $this->scaledToFit();
+    }
 
     protected function build(Context $c, Env $env): ?Node
     {
@@ -39,6 +48,9 @@ final class ImageView extends View
             if ($this->fit && $w > 0 && $h > 0) {
                 $n->aspectRatio($w / $h)->fit(Node::CONTAIN);
                 View::takeRoom($n, $env->axis, View::FLEX_X);
+            } elseif ($this->fill) {
+                $n->fit(Node::COVER);
+                View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
             } else {
                 $n->fit(Node::FILL_BOX);
                 View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
