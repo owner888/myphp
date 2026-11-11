@@ -62,7 +62,7 @@ final class Env
     /** What a pull of the ScrollView or ListView inside runs (refreshable). */
     public ?\Closure $refresh = null;
 
-    public function __construct(public readonly Theme $theme) {}
+    public function __construct(public Theme $theme) {}
 
     /** The environment of a window's root view. */
     public static function root(Context $c): self
