@@ -300,18 +300,25 @@ final class Image
     private function halved(): self
     {
         $w = max(1, intdiv($this->w + 1, 2)); $h = max(1, intdiv($this->h + 1, 2));
-        $src = $this->pixels(); $stride = 4 * $this->w;
-        $out = '';
+        $this->restore();
+        $f = Svg\Layer::ffi();
+        $src = $f->cast('uint8_t*', $this->pix);
+        $raw = Mem::alloc($w * $h * 4);
+        $dst = $f->cast('uint8_t*', $raw);
+        $stride = 4 * $this->w;
+        $di = 0;
         for ($y = 0; $y < $h; $y++) {
             $r0 = 2 * $y * $stride; $r1 = min(2 * $y + 1, $this->h - 1) * $stride;
-            for ($x = 0; $x < $w; $x++) {
+            for ($x = 0; $x < $w; $x++, $di += 4) {
                 $x0 = 8 * $x; $x1 = 4 * min(2 * $x + 1, $this->w - 1);
-                for ($c = 0; $c < 4; $c++) {
-                    $out .= chr(intdiv(ord($src[$r0 + $x0 + $c]) + ord($src[$r0 + $x1 + $c]) + ord($src[$r1 + $x0 + $c]) + ord($src[$r1 + $x1 + $c]) + 2, 4));
-                }
+                $dst[$di]     = ($src[$r0 + $x0]     + $src[$r0 + $x1]     + $src[$r1 + $x0]     + $src[$r1 + $x1]     + 2) >> 2;
+                $dst[$di + 1] = ($src[$r0 + $x0 + 1] + $src[$r0 + $x1 + 1] + $src[$r1 + $x0 + 1] + $src[$r1 + $x1 + 1] + 2) >> 2;
+                $dst[$di + 2] = ($src[$r0 + $x0 + 2] + $src[$r0 + $x1 + 2] + $src[$r1 + $x0 + 2] + $src[$r1 + $x1 + 2] + 2) >> 2;
+                $dst[$di + 3] = ($src[$r0 + $x0 + 3] + $src[$r0 + $x1 + 3] + $src[$r1 + $x0 + 3] + $src[$r1 + $x1 + 3] + 2) >> 2;
             }
         }
-        return self::fromPixels($w, $h, $out);
+        if ($this->released) { $this->drop(); }
+        return new self(['w' => $w, 'h' => $h, 'pix' => $raw, 'addr' => Mem::addr($raw)]);
     }
 
     public function __destruct()
