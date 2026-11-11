@@ -14,7 +14,10 @@ two fit, take the first: it is the simpler one.
 | A line or paragraph of text | `Text('…')` + `->font(Font::headline)`, `->foregroundStyle(Color::secondary)`, `->lineLimit(2)`, `->bold()` | text.md |
 | Text with links, bold runs | `Text([...runs])`, `Markdown($md)` for Markdown, `streaming: true` while it arrives | text.md, markdown.md |
 | An icon | `Image(systemName: 'gearshape')` (an SF Symbol, mapped on Linux and Android), `Label('Settings', systemImage: 'gearshape')` with a title | icon.md |
-| A photo, screenshot, SVG | `Image(file: $path)`, `Image($image)`, `->resizable()`… | image.md |
+| A photo, screenshot, SVG | `Image(file: $path)`, `Image($image)`, `->resizable()`, `->scaledToFit()`, `->scaledToFill()` | image.md |
+| A remote image over HTTP(S) | `AsyncImage($url, content: fn($img) => $img->resizable()->scaledToFill(), placeholder: fn() => ProgressView())` | image.md, ../swiftui.md |
+| An empty state or no search results | `ContentUnavailableView('No Items', systemImage: 'tray', description: '…')(
+Button(…))`, `ContentUnavailableView::search($query)` | ../swiftui.md |
 | A person | `Avatar($name, $image)` | avatar.md |
 | A count on a tab or row | `->badge(3)` | badge.md |
 | Progress, waiting, a level | `ProgressView(value: $f)`, `ProgressView()` (spinning), `Gauge(value: $v, in: [$lo, $hi])` | progress.md, spinner.md, meter.md |
@@ -60,8 +63,9 @@ two fit, take the first: it is the simpler one.
 | Rows, any number, selectable | `ListView($items, id: 'id', selection: $this->chosen)(fn(array $item) => …)` — the default for collections | list.md |
 | A few rows that never scroll | `VStack()(Each($items, id: 'id')(fn($item) => …))` | views.md |
 | Columns the user sorts and resizes | `Table($rows, id: 'id')(TableColumn('Name', value: 'name'), …)` | table.md |
-| Thumbnails in a grid | `LazyVGrid(columns: [GridItem::adaptive(minimum: 120)])(Each(…))` | grid-view.md |
-| Items that open and close | `DisclosureGroup('Advanced', isExpanded: $this->open)(…)` | collapsible.md, outline.md |
+| Thumbnails or cards in a grid | `LazyVGrid(columns: [GridItem::adaptive(minimum: 120), GridItem::flexible(), GridItem::fixed(80)])(Each(…))`, `LazyHGrid(rows: […])`, or 2D `Grid()(GridRow()(…))` | grid-view.md, grid.md |
+| Wrapping tags or chips | `FlowLayout(spacing: 8)(Each($tags)(…))` | ../swiftui.md |
+| Tree data or items that open and close | `OutlineGroup($tree, children: 'children', id: 'id')(fn($item) => …)` or `DisclosureGroup('Advanced', isExpanded: $this->open)(…)` | collapsible.md, outline.md |
 | Rows that animate in, out and when sorted | `->animation(Animation::smooth(), value: $this->items)`, `->transition(…)` | transitions.md |
 | Pull down to refresh | `->refreshable(fn() => $this->reload())` | ../mobile.md |
 | Rows swiped to flag or delete (Mail's) | `->swipeActions(Button('Delete', role: ButtonRole::destructive, action: …))` on a row | ../mobile.md |
@@ -103,7 +107,7 @@ two fit, take the first: it is the simpler one.
 |---|---|---|
 | A few settings, a small document | JSON under `App::path(PathName::UserData)`, loaded once, saved on change (`examples/notes`) | ../app.md |
 | Many records, queries | the SQLite plugin | ../plugins/sqlite.md |
-| HTTP | `Http::get()`, `->json()`, inside `App::go()` | ../native.md, references/async.md |
+| HTTP, JSON & file uploads | `URLSession::shared()->data(from:|for:)`, `->json()`, `->decode()`, `->upload()`, with `URLRequest`, inside `App::go()` | ../swiftui.md, references/async.md |
 | Files that change on disk | the watch plugin | ../plugins/watch.md |
 | Live updates | the websocket plugin | ../plugins/websocket.md |
 
