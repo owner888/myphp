@@ -113,6 +113,7 @@ App::setName('Todos');
 App::whenReady(function () use ($app) {
     [$w, $h] = Device::isDesktop() ? [1080, 760] : [402, 874];
     $app->window = new Window(new WindowOptions(title: 'Todos', width: $w, height: $h,
+        stateKey: 'main', // remembers window size, position, maximized/fullScreen across runs
         content: Content::file(__DIR__ . '/view.php', $app)));
 });
 App::run();
