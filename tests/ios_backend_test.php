@@ -281,6 +281,9 @@ use MyPHP\UI\{Content, TextState};
     $memDelta = memory_get_usage(false) - $mem0;
     unset($rgbaBytes, $largeDoc);
     check($memDelta < 8 * 1024 * 1024, '1206x810 SVG pixelBytes allocates < 8 MB on PHP heap (#28): ' . round($memDelta / 1048576, 2) . ' MB');
+    $sym1 = \MyPHP\UI\Image::symbol('star.fill', 20.0, 0x00CAA4);
+    $sym2 = \MyPHP\UI\Image::symbol('star.fill', 20.0, 0x00CAA4);
+    same($sym1->key, $sym2->key, 'Image::symbol caches and reuses the same Image instance across frames');
 
     // 9. iOS bundle layout and Unsupported guardrails.
     $tmp = sys_get_temp_dir() . '/myphp-ios-bundle-' . bin2hex(random_bytes(4)) . '.app';

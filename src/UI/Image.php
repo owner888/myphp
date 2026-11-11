@@ -112,20 +112,44 @@ final class Image
      * transparent square of the size, told once in the log, for a name
      * with none.
      */
+    /** @var array<string, self> cached system symbols by name/size/rgb/weight/scale */
+    private static array $symbolCache = [];
+    /** @var array<string, self> cached file images by path/mtime/max */
+    private static array $fileCache = [];
+
     public static function symbol(string $name, float $size, int $rgb = 0xffffff, float $weight = 0.0, float $scale = 2.0): self
     {
+        $key = sprintf('%s/%.2f/%d/%.2f/%.2f', $name, $size, $rgb, $weight, $scale);
+        if (isset(self::$symbolCache[$key])) {
+            return self::$symbolCache[$key];
+        }
+        if (count(self::$symbolCache) >= 256) {
+            array_shift(self::$symbolCache);
+        }
         [$w, $h, $rgba] = \MyPHP\App::backend()->symbols()->draw($name, $size, $weight, $rgb, $scale);
-        return self::fromPixels($w, $h, $rgba);
+        return self::$symbolCache[$key] = self::fromPixels($w, $h, $rgba);
     }
 
-    /** The image of file $path, as fromBytes decodes it. */
+    /** The image of file $path, as fromBytes decodes it, cached by path and mtime. */
     public static function fromFile(string $path, int $max = 1024): self
     {
+        $mtime = @filemtime($path);
+        $key = "$path:$mtime:$max";
+        if ($mtime !== false && isset(self::$fileCache[$key])) {
+            return self::$fileCache[$key];
+        }
         $bytes = @file_get_contents($path);
         if ($bytes === false) {
             throw new RuntimeException("cannot read image $path");
         }
-        return self::fromBytes($bytes, $max);
+        $img = self::fromBytes($bytes, $max);
+        if ($mtime !== false) {
+            if (count(self::$fileCache) >= 64) {
+                array_shift(self::$fileCache);
+            }
+            self::$fileCache[$key] = $img;
+        }
+        return $img;
     }
 
     /**
