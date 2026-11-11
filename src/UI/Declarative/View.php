@@ -103,6 +103,62 @@ abstract class View
         return null;
     }
 
+    /** The height a frame() asks for it, ideal or fixed, which a VSplitView gives its pane at first. @internal */
+    public function idealHeight(): ?float
+    {
+        foreach ($this->mods as [$name, $a]) { if ($name === 'frame' && ($a[8] ?? $a[1]) !== null) { return $a[8] ?? $a[1]; } }
+        return null;
+    }
+
+    /** Fixes the view to its ideal size along the given axes, preventing truncation/compression, as SwiftUI's fixedSize. */
+    public function fixedSize(bool $horizontal = true, bool $vertical = true): static
+    {
+        $this->mods[] = ['fixedSize', [$horizontal, $vertical]];
+        return $this;
+    }
+
+    /** Places the view's layout priority in a stack, as SwiftUI's layoutPriority. */
+    public function layoutPriority(float $value): static
+    {
+        $this->mods[] = ['priority', [$value]];
+        return $this;
+    }
+
+    /** Marks the views inside as redacted (e.g. skeleton loading placeholders), as SwiftUI's redacted(reason:). */
+    public function redacted(?\RedactionReasons $reason): static
+    {
+        $this->sets['redacted'] = $reason;
+        return $this;
+    }
+
+    /** Unredacts the views inside a redacted hierarchy, as SwiftUI's unredacted(). */
+    public function unredacted(): static
+    {
+        $this->sets['redacted'] = null;
+        return $this;
+    }
+
+    /** Sets the subtitle in the navigation bar while this page shows, as SwiftUI's navigationSubtitle. */
+    public function navigationSubtitle(string $subtitle): static
+    {
+        $this->sets['subtitle'] = $subtitle;
+        return $this;
+    }
+
+    /** Hides or shows the navigation bar's back button on this page, as SwiftUI's navigationBarBackButtonHidden. */
+    public function navigationBarBackButtonHidden(bool $hidesBackButton = true): static
+    {
+        $this->wraps[] = ['backHidden', $hidesBackButton];
+        return $this;
+    }
+
+    /** Runs $action when a long press is recognized on the view, as SwiftUI's onLongPressGesture. */
+    public function onLongPressGesture(Closure $perform, float $minimumDuration = 0.5): static
+    {
+        $this->events[] = ['longPress', [$perform, $minimumDuration]];
+        return $this;
+    }
+
     /** The least width a frame() gives it. @internal */
     public function minWidth(): ?float
     {
@@ -790,6 +846,13 @@ abstract class View
                     $n->material($m);
                     break;
                 case 'hidden': $n->invisible(); break;
+                case 'fixedSize':
+                    if ($a[0] && $env->axis === Node::ROW) { $n->shrink(0); }
+                    if ($a[1] && $env->axis === Node::COLUMN) { $n->shrink(0); }
+                    break;
+                case 'priority':
+                    if ($a[0] > 0) { $n->shrink(0); }
+                    break;
             }
         }
         if ($pose !== null) {
@@ -959,6 +1022,12 @@ abstract class View
                         break;
                     }
                     $c->popover($whole, $a[0], static function () use ($c, $env, $content): void { View::renderAll($c, $env->along(Node::COLUMN), $content()); }); // $a[0] the binding: an array's reference stays one in its copies
+                    break;
+                case 'longPress':
+                    [$perform] = $a;
+                    $whole->contextMenu(static function (\MyPHP\UI\Menu $m) use ($perform): void {
+                        $perform();
+                    });
                     break;
                 case 'tap':
                     $whole->focusable(false);

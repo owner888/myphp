@@ -105,5 +105,9 @@ final class Text extends View
         if ($env->color !== null) { $n->textColor($env->color->rgb($env)); }
         if ($env->textAlign !== null) { $n->textAlign($env->textAlign->align()); }
         if ($env->lineLimit !== null) { $env->lineLimit === 1 ? $n->singleLine() : $n->maxLines($env->lineLimit); }
+        if ($env->redacted === \RedactionReasons::placeholder) {
+            $bg = $env->theme->border;
+            $n->textColor($bg)->background($bg)->radius(4);
+        }
     }
 }

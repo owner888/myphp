@@ -24,6 +24,26 @@ echo "==> Target Architecture: ${IOS_TARGET}"
 
 mkdir -p "${BUILD_DIR}" "${SYSROOT}/lib" "${SYSROOT}/include"
 
+# Fast-path: download prebuilt iOS runtime archive when libphp.a is not yet built locally
+RUNTIME_NAME="$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator-arm64 || echo ios-arm64)"
+PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-8.3.16}/myphp-runtime-${RUNTIME_NAME}-php-8.3.16.tar.gz"
+if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
+    echo "==> Trying prebuilt iOS PHP runtime (${RUNTIME_NAME})..."
+    TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
+    if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
+        echo "==> Extracting prebuilt iOS runtime..."
+        tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
+        if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ -f "${SYSROOT}/lib/libcurl.a" ]; then
+            touch "${BUILD_DIR}/libs/libphp.a"
+            echo "==> Prebuilt iOS PHP embed runtime ready:"
+            ls -lh "${BUILD_DIR}/libs/libphp.a"
+            exit 0
+        fi
+    fi
+    rm -f "${TMP_TAR}"
+    echo "==> Prebuilt runtime not available; building from source..."
+fi
+
 export PATH="/opt/homebrew/opt/bison/bin:/opt/homebrew/bin:${PATH}"
 export CC="$(xcrun --sdk "$IOS_SDK" -f clang)"
 export CXX="$(xcrun --sdk "$IOS_SDK" -f clang++)"

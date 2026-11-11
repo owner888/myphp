@@ -17,6 +17,14 @@ use MyPHP\UI\{Context, Node};
 final class Each extends View
 {
     private ?Closure $content = null;
+    public ?Closure $deleteAction = null;
+    public ?Closure $moveAction = null;
+
+    /** Runs $action(array $offsets) when a row of this Each is deleted in a ListView, as SwiftUI's onDelete. */
+    public function onDelete(Closure $action): static { $this->deleteAction = $action; return $this; }
+
+    /** Runs $action(array $offsets, int $to) when rows of this Each are reordered in a ListView, as SwiftUI's onMove. */
+    public function onMove(Closure $action): static { $this->moveAction = $action; return $this; }
 
     /** @param iterable<mixed> $items */
     public function __construct(public readonly iterable $items, public readonly string|Closure|null $id = null) {}
@@ -38,8 +46,17 @@ final class Each extends View
     public function views(): array
     {
         $out = [];
+        $idx = 0;
         foreach ($this->items as $key => $item) {
-            if (($v = $this->viewOf($item, $key)) !== null) { $out[] = $v; }
+            if (($v = $this->viewOf($item, $key)) !== null) {
+                if ($this->deleteAction !== null) {
+                    $del = $this->deleteAction;
+                    $rowIdx = $idx;
+                    $v->swipeActions(new Button('Delete', action: static function () use ($del, $rowIdx): void { $del([$rowIdx]); }, role: \ButtonRole::destructive));
+                }
+                $out[] = $v;
+            }
+            $idx++;
         }
         return $out;
     }

@@ -47,6 +47,9 @@ final class TabView extends View
     {
         $index = 0;
         foreach ($this->tabs as $i => $t) { if ($t->value === $this->selection) { $index = $i; } }
+        if ($this->style === \TabViewStyle::page || $this->style === \TabViewStyle::pageAlways || $this->style === \TabViewStyle::pageNever) {
+            return $this->paged($c, $env, $index);
+        }
         if ($this->style === \TabViewStyle::automatic && !($c->runtime?->touch ?? false)) { return $this->desktop($c, $env, $index); }
         if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
         $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env), $t->role === \TabRole::prominent], $this->tabs); // a prominent tab apart, at the bar's end (iOS 27's)
@@ -101,6 +104,54 @@ final class TabView extends View
         $n = $split->render($c, $env);
         if ($kept !== null) { $kept->sidebar = $visibility; }
         return $n;
+    }
+
+    /** A paged carousel of the tabs (TabViewStyle::page), with swipe left/right and page indicator dots at the bottom. */
+    private function paged(Context $c, Env $env, int &$index): Node
+    {
+        $count = max(1, count($this->tabs));
+        $index = max(0, min($count - 1, $index));
+        $showDots = $this->style !== \TabViewStyle::pageNever && $count > 1;
+        $accent = $env->tint?->rgb($env) ?? $env->theme->accent;
+        $muted = $env->theme->border;
+
+        $n = $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->alignItems(Node::STRETCH);
+          $c->key('page' . $index);
+          $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
+            View::renderAll($c, $env->along(Node::COLUMN), $this->tabs[$index]->content ?? []);
+          $c->end();
+          if ($showDots) {
+              $dots = $c->row(8, 8)->alignSelf(Node::CENTER)->alignItems(Node::CENTER)->justify(Node::CENTER);
+              for ($i = 0; $i < $count; $i++) {
+                  $active = $i === $index;
+                  $dot = $c->box($active ? 8 : 7, $active ? 8 : 7, $active ? $accent : $muted)->radius(4)->cursor(\MyPHP\UI\Cursor::Pointer);
+                  if ($c->clicked($dot)) {
+                      $index = $i;
+                  }
+              }
+              $c->end();
+          }
+        $c->end();
+        $drag = new DragGesture(minimumDistance: 24);
+        $drag->onEnded(function (DragGestureValue $v) use (&$index, $count): void {
+            if ($v->translation->width < -30 && $index + 1 < $count) {
+                $index++;
+            } elseif ($v->translation->width > 30 && $index > 0) {
+                $index--;
+            }
+        });
+        self::attachPageDrag($c, $n, $drag);
+        $this->selection = $this->tabs[$index]->value ?? $index;
+        View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
+        return $n;
+    }
+
+    private static function attachPageDrag(Context $c, Node $n, DragGesture $g): void
+    {
+        $v = new Group();
+        $v->gesture($g);
+        $ref = new \ReflectionMethod(View::class, 'dragGesture');
+        $ref->invoke(null, $c, $n, $g);
     }
 
     /** The tabs across the top, as a Mac's TabView: the chosen one's content under them. */
