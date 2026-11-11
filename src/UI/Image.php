@@ -63,9 +63,13 @@ final class Image
      */
     public static function fromBytes(string $bytes, int $max = 1024): self
     {
-        return self::decoded(\MyPHP\App::isAndroid()
+        $img = self::decoded(\MyPHP\App::isAndroid()
             ? static fn(): array => ImageDecoder::decode($bytes, $max)
             : static fn(): array => CoreImage::decode($bytes, $max));
+        if (\MyPHP\App::isIOS() || \MyPHP\App::isAndroid()) {
+            $img->releasePixels(); // free the 4MB CPU RGBA buffer once uploaded to the GPU texture atlas
+        }
+        return $img;
     }
 
     /**
