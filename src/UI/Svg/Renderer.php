@@ -14,8 +14,8 @@ final class Renderer
     /** The color currentColor is drawn with. */
     public array $current = Style::BLACK;
     private Rasterizer $z;
-    /** @var list<int> the coverage of what is being drawn, a rectangle of the canvas */
-    private array $cov = [];
+    /** @var \FFI\CData|null the coverage of what is being drawn, a rectangle of the canvas */
+    private ?\FFI\CData $cov = null;
     private Polys $flat, $dashed;
     private Stroker $stroker;
     /** @var list<Layer> */
@@ -102,7 +102,7 @@ final class Renderer
             for ($k = $from + 2; $k < $to; $k += 2) { $z->lineTo($pts[$k] - $rx0, $pts[$k + 1] - $ry0); }
             $z->closePath();
         }
-        $this->cov = $z->mask($evenOdd);
+        $this->cov = $z->maskBuffer($evenOdd);
         return [$rx0, $ry0, $rx1, $ry1];
     }
 
@@ -121,7 +121,7 @@ final class Renderer
     private function paint(Layer $dst, array $rect, array $p, float $alpha, array $m, ?array $bbox): void
     {
         [$x0, $y0, $x1, $y1] = $rect; $w = $x1 - $x0; $lw = $this->w;
-        $pix = &$dst->pix; $cov = $this->cov;
+        $pix = $dst->pix; $cov = $this->cov;
         if ($p[0] === Shape::COLOR || $p[0] === Shape::CURRENT) {
             [$cr, $cg, $cb, $ca] = self::premul($p[0] === Shape::CURRENT ? $this->current : $p[1], $alpha);
             if ($ca === 0) { return; }
@@ -180,7 +180,7 @@ final class Renderer
         if ($d === null) { return; }
         $k = (int)(max(0.0, min(1.0, $alpha)) * 255 + 0.5);
         [$x0, $y0, $x1, $y1] = $d; $lw = $this->w;
-        $s = $src->pix; $t = &$dst->pix;
+        $s = $src->pix; $t = $dst->pix;
         for ($y = $y0; $y < $y1; $y++) {
             for ($i = ($y * $lw + $x0) * 4, $e = ($y * $lw + $x1) * 4; $i < $e; $i += 4) {
                 $sa = $s[$i + 3];
@@ -201,7 +201,7 @@ final class Renderer
     private function scale(Layer $l, array $mask): void
     {
         [$x0, $y0, $x1, $y1] = $l->dirty; $w = $x1 - $x0; $lw = $this->w;
-        $pix = &$l->pix;
+        $pix = $l->pix;
         for ($y = $y0; $y < $y1; $y++) {
             $mi = ($y - $y0) * $w; $pi = ($y * $lw + $x0) * 4;
             for ($x = 0; $x < $w; $x++, $pi += 4) {

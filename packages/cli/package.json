@@ -1,6 +1,6 @@
 {
   "name": "myphp-cli",
-  "version": "1.186.5",
+  "version": "1.186.6",
   "description": "The myphp command line tool: create, develop and package MyPHP desktop apps",
   "keywords": ["myphp", "desktop", "webview", "php", "cli"],
   "repository": {

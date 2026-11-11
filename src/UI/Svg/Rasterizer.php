@@ -3,24 +3,52 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Svg;
 
+use FFI;
+use FFI\CData;
+use MyPHP\Native\Mem;
+
 /**
  * Rasterizes polygons into anti-aliased coverage, as mygo's internal/vec
  * does with the signed area accumulation of font-rs: every edge adds the
  * area it covers to the cells it crosses, and a running sum along each
- * row gives the coverage. Reuse one with reset().
+ * row gives the coverage. Uses compact C float/uint8_t buffers via FFI so a
+ * full-screen 3x Retina shape takes ~4 MB instead of >100 MB of PHP arrays.
  */
 final class Rasterizer
 {
+    private static ?FFI $c = null;
     public int $w = 0, $h = 0;
-    /** @var list<float> w*h accumulated areas */
-    private array $acc = [];
+    private ?CData $acc = null;
+    private int $accCap = 0;
+    private ?CData $cov = null;
+    private int $covCap = 0;
     private float $penX = 0, $penY = 0, $firstX = 0, $firstY = 0;
     private bool $open = false;
+
+    private static function ffi(): FFI
+    {
+        return self::$c ??= Layer::ffi();
+    }
+
+    public function __destruct()
+    {
+        $f = self::ffi();
+        if ($this->acc !== null) { $f->free($this->acc); $this->acc = null; }
+        if ($this->cov !== null) { $f->free($this->cov); $this->cov = null; }
+    }
 
     public function reset(int $w, int $h): void
     {
         $this->w = $w; $this->h = $h;
-        $this->acc = array_fill(0, $w * $h, 0.0);
+        $n = max(1, $w * $h);
+        if ($n > $this->accCap || $this->acc === null) {
+            $f = self::ffi();
+            if ($this->acc !== null) { $f->free($this->acc); }
+            $this->acc = $f->cast('float*', $f->calloc($n, 4));
+            $this->accCap = $n;
+        } else {
+            FFI::memset($this->acc, 0, $n * 4);
+        }
         $this->open = false;
     }
 
@@ -51,7 +79,7 @@ final class Rasterizer
         $y0 = (int)floor($ay); $y1 = (int)ceil($by);
         if ($y0 < 0) { $x += $dxdy * (0 - $ay); $ay = 0.0; $y0 = 0; } // skip the rows above the mask
         $y1 = min($y1, $this->h);
-        $w = $this->w; $acc = &$this->acc;
+        $w = $this->w; $acc = $this->acc;
         for ($y = $y0; $y < $y1; $y++) {
             $dy = min($y + 1, $by) - max($y, $ay);
             $xNext = $x + $dy * $dxdy;
@@ -87,26 +115,54 @@ final class Rasterizer
     }
 
     /**
-     * The coverage of the accumulated contours as a list of w*h ints from
-     * 0 to 255, by the non-zero winding rule, or with $evenOdd by the
-     * even-odd rule: what the contours cover an odd number of times is
-     * inside.
-     * @return list<int>
+     * Computes coverage into the reusable C uint8_t buffer $this->cov and returns it.
      */
-    public function mask(bool $evenOdd): array
+    public function maskBuffer(bool $evenOdd): CData
     {
         $this->closePath();
-        $w = $this->w; $out = []; $acc = $this->acc;
-        for ($y = 0, $n = $w * $this->h; $y < $n; $y += $w) {
+        $w = $this->w;
+        $n = max(1, $w * $this->h);
+        if ($n > $this->covCap || $this->cov === null) {
+            $f = self::ffi();
+            if ($this->cov !== null) { $f->free($this->cov); }
+            $this->cov = $f->cast('uint8_t*', $f->calloc($n, 1));
+            $this->covCap = $n;
+        }
+        $out = $this->cov;
+        $acc = $this->acc;
+        $total = $w * $this->h;
+        for ($y = 0; $y < $total; $y += $w) {
             $sum = 0.0;
             for ($x = $y, $e = $y + $w; $x < $e; $x++) {
                 $sum += $acc[$x];
                 $a = $sum < 0 ? -$sum : $sum;
-                if ($evenOdd) { $a -= 2 * (int)($a / 2); if ($a > 1) { $a = 2 - $a; } } // the winding number folded: 0, 2, 4… outside, 1, 3, 5… inside
+                if ($evenOdd) { $a -= 2 * (int)($a / 2); if ($a > 1) { $a = 2 - $a; } }
                 elseif ($a > 1) { $a = 1.0; }
-                $out[] = (int)($a * 255 + 0.5);
+                $out[$x] = (int)($a * 255 + 0.5);
             }
         }
         return $out;
+    }
+
+    /**
+     * The coverage of the accumulated contours as a raw byte string (w*h bytes).
+     */
+    public function maskBytes(bool $evenOdd): string
+    {
+        $total = $this->w * $this->h;
+        if ($total <= 0) { return ''; }
+        return FFI::string($this->maskBuffer($evenOdd), $total);
+    }
+
+    /**
+     * The coverage of the accumulated contours as a list of w*h ints from
+     * 0 to 255, by the non-zero winding rule, or with $evenOdd by the
+     * even-odd rule.
+     * @return list<int>
+     */
+    public function mask(bool $evenOdd): array
+    {
+        $bytes = $this->maskBytes($evenOdd);
+        return $bytes === '' ? [] : array_values(unpack('C*', $bytes));
     }
 }
