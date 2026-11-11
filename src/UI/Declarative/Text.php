@@ -41,15 +41,18 @@ final class Text extends View
             if (!$p instanceof self) { throw new \InvalidArgumentException('Text([…]) joins Texts, not ' . get_debug_type($p)); }
             $e = $env->with($p->sets);
             $bg = null;
+            $bgAlpha = null;
             foreach ($p->mods as [$name, $a]) {
-                if ($name === 'background') { $bg = $a[0]->rgb($e); } else { throw new \LogicException("a Text joined in Text([…]) takes styles and background(), not $name()"); }
+                if ($name === 'background') { $bg = $a[0]->rgb($e); $bgAlpha = $a[0]->alpha < 1.0 ? $a[0]->alpha : null; } else { throw new \LogicException("a Text joined in Text([…]) takes styles and background(), not $name()"); }
             }
             $weight = $e->weight?->value ?? $e->font?->weight?->value;
             $style = ($weight !== null && $weight >= 700 ? Font::BOLD : 0) | ($e->italic ? Font::ITALIC : 0) | ($e->mono || $e->font?->mono ? Font::MONO : 0);
             foreach ($p->parts !== [] ? $p->spans($e) : [new Span($p->verbatim ? $p->text : Localized::string($p->text, $e, $p->args))] as $s) {
                 $s->style |= $style;
                 $s->color ??= $e->color?->rgb($e);
+                if ($e->color !== null && $e->color->alpha < 1.0) { $s->alpha ??= $e->color->alpha; }
                 $s->background ??= $bg;
+                if ($bgAlpha !== null) { $s->backgroundAlpha ??= $bgAlpha; }
                 $s->underline = $s->underline || $e->underline;
                 $s->strikethrough = $s->strikethrough || $e->strikethrough;
                 $s->size ??= $e->font?->size;
@@ -102,7 +105,7 @@ final class Text extends View
         if ($env->underline) { $n->underline(); }
         if ($env->strikethrough) { $n->strikethrough(); }
         if ($env->mono) { $n->font('monospace'); }
-        if ($env->color !== null) { $n->textColor($env->color->rgb($env)); }
+        if ($env->color !== null) { $n->textColor($env->color->rgb($env), $env->color->alpha); }
         if ($env->textAlign !== null) { $n->textAlign($env->textAlign->align()); }
         if ($env->lineLimit !== null) { $env->lineLimit === 1 ? $n->singleLine() : $n->maxLines($env->lineLimit); }
         if ($env->redacted === \RedactionReasons::placeholder) {

@@ -63,6 +63,7 @@ final class NavigationStack extends View
               $this->router->view($c, function (Route $r) use ($c, $env, $backdrop): void {
                   $e = $env->with(['route' => $r, 'stack' => $this, 'title' => null, 'titleMode' => null, 'toolbar' => null, 'backdrop' => $backdrop]);
                   $r->entry->barSeen = [];
+                  $backdrop->navBarHidden = false;
                   View::renderAll($c, $e->along(Node::COLUMN), [$this->page($c, $r)]);
                   foreach (['toolbar', 'largeTitle'] as $k) { // what the page no longer puts in the bar goes from it
                       if (!isset($r->entry->barSeen[$k]) && $r->entry->$k !== null) { $r->entry->$k = null; $this->router->titleChanged(); }
@@ -84,7 +85,7 @@ final class NavigationStack extends View
             $n->background($backdrop->color);
             if ($env->backdrop !== null) { $env->backdrop->color ??= $backdrop->color; }
         }
-        if ($c->runtime?->touch ?? false) { $n->drawOver(self::scrollEdge(...)); }
+        if (($c->runtime?->touch ?? false) && !$hideBar && !$backdrop->navBarHidden) { $n->drawOver(self::scrollEdge(...)); }
         $n->grow = max($n->grow, 1); // it takes the room it is given, along the stack it is in and across it
         return $n;
     }

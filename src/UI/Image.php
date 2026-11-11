@@ -63,13 +63,114 @@ final class Image
      */
     public static function fromBytes(string $bytes, int $max = 1024): self
     {
-        $img = self::decoded(\MyPHP\App::isAndroid()
-            ? static fn(): array => ImageDecoder::decode($bytes, $max)
-            : static fn(): array => CoreImage::decode($bytes, $max));
+        $img = self::decoded(match (true) {
+            \MyPHP\App::isAndroid() => static fn(): array => ImageDecoder::decode($bytes, $max),
+            PHP_OS_FAMILY === 'Linux' => static fn(): array => self::decodeGdkPixbuf($bytes, $max),
+            PHP_OS_FAMILY === 'Windows' => static fn(): array => self::decodeWic($bytes, $max),
+            default => static fn(): array => CoreImage::decode($bytes, $max),
+        });
         if (\MyPHP\App::isIOS() || \MyPHP\App::isAndroid()) {
             $img->releasePixels(); // free the 4MB CPU RGBA buffer once uploaded to the GPU texture atlas
         }
         return $img;
+    }
+
+    /** Decodes PNG/JPEG/WebP on Linux via GdkPixbuf, premultiplying alpha into a Mem-allocated RGBA buffer. @return array{w: int, h: int, pix: CData, addr: int} */
+    private static function decodeGdkPixbuf(string $bytes, int $max): array
+    {
+        static $g = null;
+        $g ??= \FFI::cdef('
+            void* gdk_pixbuf_loader_new(void);
+            int gdk_pixbuf_loader_write(void*, const char*, size_t, void**);
+            int gdk_pixbuf_loader_close(void*, void**);
+            void* gdk_pixbuf_loader_get_pixbuf(void*);
+            void* gdk_pixbuf_apply_embedded_orientation(void*);
+            void* gdk_pixbuf_scale_simple(void*, int, int, int);
+            void* gdk_pixbuf_add_alpha(void*, int, unsigned char, unsigned char, unsigned char);
+            int gdk_pixbuf_get_width(void*);
+            int gdk_pixbuf_get_height(void*);
+            int gdk_pixbuf_get_rowstride(void*);
+            int gdk_pixbuf_get_n_channels(void*);
+            unsigned char* gdk_pixbuf_get_pixels(void*);
+            void g_object_unref(void*);
+        ', 'libgdk_pixbuf-2.0.so.0');
+        $loader = $g->gdk_pixbuf_loader_new();
+        $ok = $bytes !== '' && $g->gdk_pixbuf_loader_write($loader, $bytes, strlen($bytes), null);
+        $ok = $g->gdk_pixbuf_loader_close($loader, null) && $ok;
+        $pb = $ok ? $g->gdk_pixbuf_loader_get_pixbuf($loader) : null;
+        if ($pb === null) {
+            $g->g_object_unref($loader);
+            throw new RuntimeException('not an image GdkPixbuf can read');
+        }
+        $owned = [];
+        $oriented = $g->gdk_pixbuf_apply_embedded_orientation($pb);
+        if ($oriented !== null) {
+            $pb = $owned[] = $oriented;
+        }
+        [$w, $h] = [$g->gdk_pixbuf_get_width($pb), $g->gdk_pixbuf_get_height($pb)];
+        if (max($w, $h) > $max) {
+            $k = $max / max($w, $h);
+            [$w, $h] = [max(1, (int)round($w * $k)), max(1, (int)round($h * $k))];
+            $pb = $owned[] = $g->gdk_pixbuf_scale_simple($pb, $w, $h, 2); // GDK_INTERP_BILINEAR
+        }
+        if ($g->gdk_pixbuf_get_n_channels($pb) !== 4) {
+            $pb = $owned[] = $g->gdk_pixbuf_add_alpha($pb, 0, 0, 0, 0);
+        }
+        $stride = $g->gdk_pixbuf_get_rowstride($pb);
+        $src = $g->gdk_pixbuf_get_pixels($pb);
+        $n = $w * $h * 4;
+        $raw = Mem::alloc($n);
+        $dst = Svg\Layer::ffi()->cast('uint8_t*', $raw);
+        $di = 0;
+        for ($y = 0; $y < $h; $y++) {
+            $si = $y * $stride;
+            for ($x = 0; $x < $w; $x++, $si += 4, $di += 4) {
+                $a = $src[$si + 3];
+                if ($a === 255) {
+                    $dst[$di] = $src[$si]; $dst[$di + 1] = $src[$si + 1]; $dst[$di + 2] = $src[$si + 2]; $dst[$di + 3] = 255;
+                } elseif ($a === 0) {
+                    $dst[$di] = $dst[$di + 1] = $dst[$di + 2] = $dst[$di + 3] = 0;
+                } else {
+                    $dst[$di]     = ($src[$si]     * $a + 127) >> 8;
+                    $dst[$di + 1] = ($src[$si + 1] * $a + 127) >> 8;
+                    $dst[$di + 2] = ($src[$si + 2] * $a + 127) >> 8;
+                    $dst[$di + 3] = $a;
+                }
+            }
+        }
+        foreach ($owned as $o) { $g->g_object_unref($o); }
+        $g->g_object_unref($loader);
+        return ['w' => $w, 'h' => $h, 'pix' => $raw, 'addr' => Mem::addr($raw)];
+    }
+
+    /** Decodes PNG/JPEG on Windows via WIC, premultiplying alpha into a Mem-allocated RGBA buffer. @return array{w: int, h: int, pix: CData, addr: int} */
+    private static function decodeWic(string $bytes, int $max): array
+    {
+        $rgba = \MyPHP\Native\Wic::pixels($bytes, $max);
+        // Wic::pixels returns straight RGBA; determine dimensions from image header or Wic
+        $info = @getimagesizefromstring($bytes);
+        [$ow, $oh] = $info !== false ? [$info[0], $info[1]] : [1, 1];
+        if (max($ow, $oh) > $max) {
+            $k = $max / max($ow, $oh);
+            [$w, $h] = [max(1, (int)round($ow * $k)), max(1, (int)round($oh * $k))];
+        } else {
+            [$w, $h] = [$ow, $oh];
+        }
+        $n = strlen($rgba);
+        $raw = Mem::alloc(max(4, $n));
+        \FFI::memcpy($raw, $rgba, $n);
+        $dst = Svg\Layer::ffi()->cast('uint8_t*', $raw);
+        for ($i = 0; $i < $n; $i += 4) {
+            $a = $dst[$i + 3];
+            if ($a < 255 && $a > 0) {
+                $dst[$i]     = ($dst[$i]     * $a + 127) >> 8;
+                $dst[$i + 1] = ($dst[$i + 1] * $a + 127) >> 8;
+                $dst[$i + 2] = ($dst[$i + 2] * $a + 127) >> 8;
+            } elseif ($a === 0) {
+                $dst[$i] = $dst[$i + 1] = $dst[$i + 2] = 0;
+            }
+        }
+        return ['w' => $w, 'h' => $h, 'pix' => $raw, 'addr' => Mem::addr($raw)];
     }
 
     /**
