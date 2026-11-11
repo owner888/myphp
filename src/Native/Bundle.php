@@ -54,7 +54,7 @@ final class Bundle
     /** Whether the bundle is a directory of the launcher, app/ and info.json (Build\Linux::INFO), as Linux's and Windows's are, rather than a .app. */
     private static function flat(): bool
     {
-        return PHP_OS_FAMILY === 'Linux' || PHP_OS_FAMILY === 'Windows';
+        return !\MyPHP\App::isIOS() && (PHP_OS_FAMILY === 'Linux' || PHP_OS_FAMILY === 'Windows');
     }
 
     /** The string $key of the bundle's Info.plist, as `myphp build` writes it, or null. */
