@@ -35,4 +35,6 @@ final class RouteEntry
     public ?ScrollState $largeScroll = null;
     /** @var array<string, true> what the page's last build put in the bar @internal */
     public array $barSeen = [];
+    /** Whether the page hid its navigation bar (toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::navigationBar)). @internal */
+    public bool $navBarHidden = false;
 }
