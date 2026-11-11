@@ -38,26 +38,44 @@ final class Doc
      */
     public function pixels(int $w, int $h, array $current = Style::BLACK, bool $stretch = false): array
     {
-        return $this->draw($w, $h, $current, Style::viewBoxTransform($this->view, $stretch ? [true, 0.5, 0.5, false] : $this->aspect, $w, $h));
+        return $this->drawLayer($w, $h, $current, Style::viewBoxTransform($this->view, $stretch ? [true, 0.5, 0.5, false] : $this->aspect, $w, $h))?->toArray() ?? [];
+    }
+
+    /** The document drawn as premultiplied RGBA bytes (w * h * 4 bytes), without allocating a PHP int array. */
+    public function pixelBytes(int $w, int $h, array $current = Style::BLACK, bool $stretch = false): string
+    {
+        return $this->drawLayer($w, $h, $current, Style::viewBoxTransform($this->view, $stretch ? [true, 0.5, 0.5, false] : $this->aspect, $w, $h))?->bytes() ?? '';
+    }
+
+    /** The document's alpha coverage drawn as 1-byte-per-pixel mask bytes (w * h bytes). */
+    public function alphaBytes(int $w, int $h): string
+    {
+        return $this->drawLayer($w, $h, Style::BLACK, Style::viewBoxTransform($this->view, $this->aspect, $w, $h))?->alphaBytes() ?? '';
     }
 
     /** The document drawn as pixels() does in a box $w × $h at the center of $cw × $ch pixels, turned by $degrees clockwise around it. @return list<int> */
     public function rotated(int $w, int $h, int $cw, int $ch, float $degrees, array $current = Style::BLACK): array
     {
         $m = Matrix::mul(Matrix::mul(Matrix::translate($cw / 2, $ch / 2), Matrix::rotation($degrees)), Matrix::translate(-$w / 2, -$h / 2));
-        return $this->draw($cw, $ch, $current, Matrix::mul($m, Style::viewBoxTransform($this->view, $this->aspect, $w, $h)));
+        return $this->drawLayer($cw, $ch, $current, Matrix::mul($m, Style::viewBoxTransform($this->view, $this->aspect, $w, $h)))?->toArray() ?? [];
     }
 
-    /** @return list<int> */
-    private function draw(int $w, int $h, array $current, array $m): array
+    /** The document's rotated alpha coverage as 1-byte-per-pixel mask bytes (cw * ch bytes). */
+    public function rotatedAlphaBytes(int $w, int $h, int $cw, int $ch, float $degrees): string
     {
-        if ($w <= 0 || $h <= 0) { return []; }
+        $m = Matrix::mul(Matrix::mul(Matrix::translate($cw / 2, $ch / 2), Matrix::rotation($degrees)), Matrix::translate(-$w / 2, -$h / 2));
+        return $this->drawLayer($cw, $ch, Style::BLACK, Matrix::mul($m, Style::viewBoxTransform($this->view, $this->aspect, $w, $h)))?->alphaBytes() ?? '';
+    }
+
+    private function drawLayer(int $w, int $h, array $current, array $m): ?Layer
+    {
+        if ($w <= 0 || $h <= 0) { return null; }
         $r = new Renderer($w, $h);
         $l = $r->layer();
         if ($this->root !== null) {
             $r->current = $current;
             $r->node($this->root, $m, $l, 1);
         }
-        return $l->pix;
+        return $l;
     }
 }

@@ -46,7 +46,7 @@ final class Symbols implements Platform\Symbols
             [$box, $d] = MaterialSymbols::ICONS[$icon];
             $this->docs[$icon] = new Doc("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"$box\"><path d=\"$d\" fill=\"currentColor\"/></svg>");
         }
-        $pix = $this->docs[$icon]->pixels($px, $px, [(($rgb >> 16) & 255) / 255, (($rgb >> 8) & 255) / 255, ($rgb & 255) / 255, 1.0]);
-        return [$px, $px, pack('C*', ...$pix)];
+        $bytes = $this->docs[$icon]->pixelBytes($px, $px, [(($rgb >> 16) & 255) / 255, (($rgb >> 8) & 255) / 255, ($rgb & 255) / 255, 1.0]);
+        return [$px, $px, $bytes];
     }
 }

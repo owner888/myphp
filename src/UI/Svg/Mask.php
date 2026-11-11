@@ -52,6 +52,6 @@ final class Mask
             for ($k = $from + 2; $k < $to; $k += 2) { $z->lineTo($pts[$k], $pts[$k + 1]); }
             $z->closePath();
         }
-        return pack('C*', ...$z->mask(false));
+        return $z->maskBytes(false);
     }
 }

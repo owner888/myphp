@@ -273,6 +273,15 @@ use MyPHP\UI\{Content, TextState};
     check(str_contains($binMyphpSrc, 'UIEmojiSearchOperations'), 'bin/myphp filters UIEmojiSearchOperations log noise (#11)');
     check(str_contains($dateInputDoc, 'App::region()') && !str_contains($dateInputDoc, 'as en-US writes it'), 'docs/ui/date-input.md documents regional date formatting (#18)');
 
+    // #28: SVG rasterizer & layer use compact C buffers (FFI) instead of PHP int arrays: a 1206x810 3x Retina SVG uses < 8 MB peak PHP memory.
+    $peak0 = memory_get_peak_usage(false);
+    $mem0 = memory_get_usage(false);
+    $largeDoc = new \MyPHP\UI\Svg\Doc('<svg viewBox="0 0 402 270" xmlns="http://www.w3.org/2000/svg"><rect width="402" height="270" fill="#DDF7F5"/><circle cx="200" cy="135" r="90" fill="#00CAA4"/></svg>');
+    $rgbaBytes = $largeDoc->pixelBytes(1206, 810, [0, 0, 0, 1], true);
+    $memDelta = memory_get_usage(false) - $mem0;
+    unset($rgbaBytes, $largeDoc);
+    check($memDelta < 8 * 1024 * 1024, '1206x810 SVG pixelBytes allocates < 8 MB on PHP heap (#28): ' . round($memDelta / 1048576, 2) . ' MB');
+
     // 9. iOS bundle layout and Unsupported guardrails.
     $tmp = sys_get_temp_dir() . '/myphp-ios-bundle-' . bin2hex(random_bytes(4)) . '.app';
     mkdir($tmp, 0755, true);

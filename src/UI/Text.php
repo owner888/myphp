@@ -186,9 +186,7 @@ final class Text implements TextPainter
         $key = "s{$svg->id}/{$pw}x{$ph}/$rotate";
         $slot = $this->atlas->get($key);
         if ($slot === null) {
-            $pix = $rotate != 0 ? $svg->doc->rotated($pw, $ph, $cw, $ch, $rotate) : $svg->doc->pixels($pw, $ph);
-            $mask = ''; // the coverage of the SVG, whatever its colors: its alpha
-            for ($i = 3, $n = count($pix); $i < $n; $i += 4) { $mask .= chr($pix[$i]); }
+            $mask = $rotate != 0 ? $svg->doc->rotatedAlphaBytes($pw, $ph, $cw, $ch, $rotate) : $svg->doc->alphaBytes($pw, $ph);
             $rows = Mem::alloc($cw * $ch);
             \FFI::memcpy($rows, $mask, $cw * $ch);
             $slot = $this->place($key, $cw, $ch, Mem::addr($rows));
@@ -203,8 +201,8 @@ final class Text implements TextPainter
         $key = "p{$svg->id}/{$w}x{$h}/" . ($svg->doc->usesCurrentColor ? $current : ''); // the color matters only where currentColor is drawn
         $pic = $this->pictures[$key] ?? null;
         if ($pic === null) {
-            $pix = $svg->doc->pixels($w, $h, [($current >> 16 & 255) / 255, ($current >> 8 & 255) / 255, ($current & 255) / 255, 1.0], true);
-            $pic = Image::fromPixels($w, $h, pack('C*', ...$pix));
+            $bytes = $svg->doc->pixelBytes($w, $h, [($current >> 16 & 255) / 255, ($current >> 8 & 255) / 255, ($current & 255) / 255, 1.0], true);
+            $pic = Image::fromPixels($w, $h, $bytes);
             $this->pictures[$key] = $pic;
         }
         $this->pictureUsed[$key] = $this->gen;
