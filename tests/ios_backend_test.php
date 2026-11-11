@@ -214,6 +214,49 @@ use MyPHP\UI\{Content, TextState};
     }
     check($notFound, 'deleted Android secret throws SecretNotFound');
 
+    // 7c. TabViewStyle::page, VSplitView, FlowLayout, ViewThatFits, OutlineGroup, ControlGroup, redacted, TextField mobile modifiers.
+    $pageIdx = 0;
+    $tfVal = '';
+    $treeData = [
+        ['id' => 'root1', 'name' => 'Folder A', 'children' => [
+            ['id' => 'leaf1', 'name' => 'File 1.txt', 'children' => []],
+        ]],
+    ];
+    $h = new Headless(Content::view(function () use (&$pageIdx, &$tfVal, $treeData) {
+        return VStack()(
+            TabView($pageIdx)(
+                Tab('First', value: 0)(Text('Page One')),
+                Tab('Second', value: 1)(Text('Page Two')),
+            )->tabViewStyle(\TabViewStyle::page(\PageIndexDisplayMode::always))->frame(height: 120),
+            VSplitView()(
+                Text('TopPane')->frame(idealHeight: 60),
+                Text('BottomPane'),
+            )->frame(height: 120),
+            FlowLayout(spacing: 6)(Text('TagA'), Text('TagB')),
+            ViewThatFits()(
+                Text('WideCandidate')->frame(width: 900),
+                Text('CompactFallback')->frame(width: 100),
+            ),
+            OutlineGroup($treeData, children: 'children', id: 'id')(fn(array $it) => Text($it['name'])),
+            ControlGroup('Actions')(Button('Act1', action: fn() => null), Button('Act2', action: fn() => null)),
+            Text('SecretPlaceholder')->redacted(\RedactionReasons::placeholder)->fixedSize(),
+            TextField('Email', text: $tfVal)
+                ->keyboardType(\KeyboardType::emailAddress)
+                ->textContentType(\TextContentType::emailAddress)
+                ->submitLabel(\SubmitLabel::done)
+                ->textInputAutocapitalization(\TextInputAutocapitalization::never)
+                ->autocorrectionDisabled(),
+        );
+    })->view, 390, 844);
+    $h->rt->touch = true;
+    $h->frame(2);
+    check($h->byText('Page One') !== null, 'TabViewStyle::page renders active page');
+    check($h->byText('TopPane') !== null && $h->byText('BottomPane') !== null, 'VSplitView renders top and bottom panes');
+    check($h->byText('TagA') !== null && $h->byText('TagB') !== null, 'FlowLayout renders wrapping tags');
+    check($h->byText('CompactFallback') !== null, 'ViewThatFits selects candidate that fits container width');
+    check($h->byText('Folder A') !== null, 'OutlineGroup renders branch');
+    check($h->byText('Act1') !== null, 'ControlGroup renders grouped buttons');
+
     // 8b. Build script, cold-start whenReady (#27), hardware keyboard (#10), log filter (#11) & DatePicker docs (#18).
     $buildIosSh = (string)file_get_contents(__DIR__ . '/../scripts/build-ios-php.sh');
     $mainM = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/launcher/main.m');

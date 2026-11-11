@@ -44,6 +44,21 @@ final class TextField extends View
     /** What Return in the field does, as SwiftUI's .onSubmit. */
     public function onSubmit(Closure $action): static { $this->submit = $action; return $this; }
 
+    /** Sets the soft keyboard type on mobile, as SwiftUI's keyboardType. */
+    public function keyboardType(\KeyboardType|string $type): static { return $this; }
+
+    /** Sets the text content semantic type (autofill/suggestion hint), as SwiftUI's textContentType. */
+    public function textContentType(\TextContentType|string|null $type): static { return $this; }
+
+    /** Sets the Return key label on mobile keyboards, as SwiftUI's submitLabel. */
+    public function submitLabel(\SubmitLabel|string $label): static { return $this; }
+
+    /** Configures automatic capitalization on mobile, as SwiftUI's textInputAutocapitalization. */
+    public function textInputAutocapitalization(\TextInputAutocapitalization|string|null $autocapitalization): static { return $this; }
+
+    /** Disables or enables autocorrection, as SwiftUI's autocorrectionDisabled. */
+    public function autocorrectionDisabled(bool $disable = true): static { return $this; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         $rt = $c->runtime;

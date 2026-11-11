@@ -31,6 +31,7 @@ final class Env
     /** The language the views inside say their text in (environment(locale:)), null for the app's. */
     public ?string $locale = null;
     public ?\DatePickerStyle $datePickerStyle = null;
+    public ?\RedactionReasons $redacted = null;
     public ?\TextAlignment $textAlign = null;
     public ?int $lineLimit = null;
     /** A vertical TextField as high as its lineLimit's lines however few it holds (lineLimit(n, reservesSpace: true)). */

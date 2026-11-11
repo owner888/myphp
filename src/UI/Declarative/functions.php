@@ -229,6 +229,33 @@ enum ListStyle { case automatic; case plain; }
 
 enum TextFieldStyle { case automatic; case roundedBorder; case plain; }
 
+/** SwiftUI's UIKeyboardType values for TextField::keyboardType(). */
+enum KeyboardType
+{
+    case default; case asciiCapable; case numbersAndPunctuation; case URL; case numberPad;
+    case phonePad; case namePhonePad; case emailAddress; case decimalPad; case twitter; case webSearch;
+}
+
+/** SwiftUI's UITextContentType values for TextField::textContentType(). */
+enum TextContentType
+{
+    case username; case password; case newPassword; case oneTimeCode; case emailAddress;
+    case telephoneNumber; case name; case givenName; case familyName; case URL;
+    case streetAddressLine1; case streetAddressLine2; case addressCity; case addressState; case postalCode;
+}
+
+/** SwiftUI's SubmitLabel values for TextField::submitLabel(). */
+enum SubmitLabel
+{
+    case done; case go; case send; case join; case route; case search; case return; case next; case continue;
+}
+
+/** SwiftUI's TextInputAutocapitalization values for TextField::textInputAutocapitalization(). */
+enum TextInputAutocapitalization
+{
+    case never; case words; case sentences; case characters;
+}
+
 /** How a Toggle draws: a switch, a checkbox, a button that stays pressed; automatic is a switch on a phone and a checkbox on a Mac, as SwiftUI's. */
 enum ToggleStyle { case automatic; case switch; case checkbox; case button; }
 
@@ -477,8 +504,30 @@ function TabView(mixed &$selection): D\TabView { return new D\TabView($selection
 /** A tab of a TabView: Tab('Inbox', systemImage: 'tray', value: 'inbox')( …its views… ), or with an SVG, image: $svg. */
 function Tab(string $title = '', ?SVG $image = null, mixed $value = null, ?string $systemImage = null, ?TabRole $role = null): D\Tab { return new D\Tab($title, $image, $value, $systemImage, $role); }
 
+/** Whether a paged TabView shows its page indicator dots, as SwiftUI's PageTabViewStyle.IndexDisplayMode. */
+enum PageIndexDisplayMode { case automatic; case always; case never; }
+
 /** How a TabView shows its tabs, as SwiftUI's TabViewStyle. */
-enum TabViewStyle { case automatic; case sidebarAdaptable; }
+enum TabViewStyle
+{
+    case automatic;
+    case sidebarAdaptable;
+    case page;
+    case pageAlways;
+    case pageNever;
+
+    public static function page(PageIndexDisplayMode $indexDisplayMode = PageIndexDisplayMode::automatic): self
+    {
+        return match ($indexDisplayMode) {
+            PageIndexDisplayMode::always => self::pageAlways,
+            PageIndexDisplayMode::never => self::pageNever,
+            default => self::page,
+        };
+    }
+}
+
+/** Why a view is redacted, as SwiftUI's RedactionReasons. */
+enum RedactionReasons { case placeholder; case privacy; }
 /** A height a sheet comes to rest at, as SwiftUI's PresentationDetent: medium, half the window; large, all of it but its top; a fraction of it; a height. */
 final class PresentationDetent
 {
@@ -796,6 +845,55 @@ function GeometryReader(Closure $content): D\GeometryReader { return new D\Geome
 
 /** HSplitView, as SwiftUI's on macOS: its views side by side, dividers the user drags between them; a pane starts frame(idealWidth:) wide. */
 function HSplitView(): D\HSplitView { return new D\HSplitView(); }
+
+/** VSplitView, as SwiftUI's on macOS: its views one above the other, dividers the user drags between them; a pane starts frame(idealHeight:) high. */
+function VSplitView(): D\VSplitView { return new D\VSplitView(); }
+
+/** FlowLayout: lays out views horizontally and wraps onto new lines when full. */
+function FlowLayout(float $spacing = 8, ?float $lineSpacing = null, HorizontalAlignment $alignment = HorizontalAlignment::leading): D\FlowLayout
+{
+    return new D\FlowLayout($spacing, $lineSpacing, $alignment);
+}
+
+/** ViewThatFits, as SwiftUI's: renders the first candidate view that fits the available space. */
+function ViewThatFits(?Axis $in = null): D\ViewThatFits
+{
+    return new D\ViewThatFits($in);
+}
+
+/** OutlineGroup, as SwiftUI's: recursively renders tree data with DisclosureGroups. @param iterable<mixed> $data */
+function OutlineGroup(iterable $data, string|Closure $children = 'children', string|Closure|null $id = null): D\OutlineGroup
+{
+    return new D\OutlineGroup($data, $children, $id);
+}
+
+/** ControlGroup, as SwiftUI's: groups related controls in a compact bar. */
+function ControlGroup(string $title = ''): D\ControlGroup
+{
+    return new D\ControlGroup($title);
+}
+
+/** ToolbarItem, as SwiftUI's: wraps toolbar items inside ->toolbar(...). */
+function ToolbarItem(string $placement = 'automatic', ?Closure $content = null): D\Group
+{
+    $g = new D\Group();
+    if ($content !== null) {
+        $res = $content();
+        $g(...(is_array($res) ? $res : [$res]));
+    }
+    return $g;
+}
+
+/** GlassEffectContainer, as SwiftUI's on iOS 26: groups liquid glass views. */
+function GlassEffectContainer(?float $spacing = null): D\Stack
+{
+    return VStack(spacing: $spacing);
+}
+
+/** SwiftUI's Link alias (alongside WebLink): opens $destination in the system browser. */
+if (!function_exists('Link')) {
+    function Link(string $title, string $destination): D\WebLink { return new D\WebLink($title, $destination); }
+}
 
 /** ScrollViewReader, as SwiftUI's: the view $content makes, whose ScrollViewProxy scrolls the ListView inside: $proxy->scrollTo($id). */
 function ScrollViewReader(Closure $content): D\ScrollViewReader { return new D\ScrollViewReader($content); }
