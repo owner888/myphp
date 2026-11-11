@@ -310,6 +310,10 @@ class_alias(D\AnyTransition::class, 'AnyTransition');
 /** A drag of the pointer on a view: ->gesture(DragGesture()->onChanged(fn(DragGestureValue $v) => …)->onEnded(…)). */
 class_alias(D\DragGesture::class, 'DragGesture');
 class_alias(D\DragGestureValue::class, 'DragGestureValue');
+class_alias(D\MagnifyGesture::class, 'MagnifyGesture');
+class_alias(D\MagnifyGestureValue::class, 'MagnifyGestureValue');
+class_alias(D\RotateGesture::class, 'RotateGesture');
+class_alias(D\RotateGestureValue::class, 'RotateGestureValue');
 class_alias(D\CGSize::class, 'CGSize');
 class_alias(D\CGPoint::class, 'CGPoint');
 /** Keyframes sampled at any time: (new KeyframeTimeline(initialValue: [...], tracks: [...]))->value(time: $t). */
@@ -810,6 +814,24 @@ function withAnimation(Closure|MyPHP\UI\Animation|null $animation, ?Closure $bod
 
 /** A drag of the pointer on the view, of $minimumDistance points at least, as SwiftUI's DragGesture. */
 function DragGesture(float $minimumDistance = 10): D\DragGesture { return new D\DragGesture($minimumDistance); }
+
+/** A pinch-to-zoom magnification gesture, as SwiftUI's MagnifyGesture. */
+function MagnifyGesture(float $minimumScaleDelta = 0.01): D\MagnifyGesture { return new D\MagnifyGesture($minimumScaleDelta); }
+
+/** A two-finger rotation gesture, as SwiftUI's RotateGesture. */
+function RotateGesture(float $minimumAngleDelta = 1.0): D\RotateGesture { return new D\RotateGesture($minimumAngleDelta); }
+
+/** An accordion of DisclosureGroups in a bordered box, optionally keeping only one open at a time ($exclusive). */
+function Accordion(mixed &$selection = D\Accordion::UNBOUND, bool $exclusive = true): D\Accordion
+{
+    return new D\Accordion($selection, $selection !== D\Accordion::UNBOUND, $exclusive);
+}
+
+/** A zoomable, pannable container (double-tap to zoom in/out, drag to pan), as Flutter's InteractiveViewer. */
+function ZoomableView(float $minScale = 1.0, float $maxScale = 4.0): D\ZoomableView
+{
+    return new D\ZoomableView($minScale, $maxScale);
+}
 
 /**
  * The view $content makes of the value $keyframes give it over time, as SwiftUI's KeyframeAnimator: played as $trigger

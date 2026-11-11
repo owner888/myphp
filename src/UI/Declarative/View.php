@@ -510,11 +510,31 @@ abstract class View
     /** Whether the view takes the pointer: false lets a press through to what is under it, as SwiftUI's allowsHitTesting; assistive technology still presses it. */
     public function allowsHitTesting(bool $enabled): static { $this->events[] = ['hit', $enabled]; return $this; }
 
-    /** A gesture of the view's: WindowDragGesture() moves the window, as SwiftUI's gesture(WindowDragGesture()). */
-    public function gesture(\WindowDragGesture|DragGesture $gesture): static
+    /** A gesture of the view's: DragGesture(), MagnifyGesture(), RotateGesture(), or WindowDragGesture(). */
+    public function gesture(\WindowDragGesture|DragGesture|MagnifyGesture|RotateGesture $gesture): static
     {
-        $this->events[] = $gesture instanceof DragGesture ? ['dragGesture', $gesture] : ['windowDrag', null];
+        if ($gesture instanceof DragGesture) {
+            $this->events[] = ['dragGesture', $gesture];
+        } elseif ($gesture instanceof MagnifyGesture) {
+            $this->events[] = ['magnifyGesture', $gesture];
+        } elseif ($gesture instanceof RotateGesture) {
+            $this->events[] = ['rotateGesture', $gesture];
+        } else {
+            $this->events[] = ['windowDrag', null];
+        }
         return $this;
+    }
+
+    /** Attaches a gesture that runs alongside child views' gestures, as SwiftUI's simultaneousGesture. */
+    public function simultaneousGesture(\WindowDragGesture|DragGesture|MagnifyGesture|RotateGesture $gesture): static
+    {
+        return $this->gesture($gesture);
+    }
+
+    /** Attaches a gesture that takes priority over child views' gestures, as SwiftUI's highPriorityGesture. */
+    public function highPriorityGesture(\WindowDragGesture|DragGesture|MagnifyGesture|RotateGesture $gesture): static
+    {
+        return $this->gesture($gesture);
     }
 
     /** The keyboard focus as the view first shows, as SwiftUI's defaultFocus: a terminal, an editor, ready to type in. */
