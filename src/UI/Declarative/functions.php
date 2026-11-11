@@ -528,6 +528,28 @@ enum TabViewStyle
 
 /** Why a view is redacted, as SwiftUI's RedactionReasons. */
 enum RedactionReasons { case placeholder; case privacy; }
+
+/** Regions for ignoresSafeArea(), as SwiftUI's SafeAreaRegions. */
+enum SafeAreaRegions { case all; case container; case keyboard; }
+
+/** Visibility of scroll bars for scrollIndicators(), as SwiftUI's ScrollIndicatorVisibility. */
+enum ScrollIndicatorVisibility { case automatic; case visible; case hidden; case never; }
+
+/** How scrolling dismisses the keyboard, as SwiftUI's ScrollDismissesKeyboardMode. */
+enum ScrollDismissesKeyboardMode { case automatic; case immediately; case interactively; case never; }
+
+/** Edge insets for padding/listRowInsets, as SwiftUI's EdgeInsets. */
+final class EdgeInsets
+{
+    public function __construct(
+        public float $top = 0.0,
+        public float $leading = 0.0,
+        public float $bottom = 0.0,
+        public float $trailing = 0.0,
+    ) {}
+}
+
+
 /** A height a sheet comes to rest at, as SwiftUI's PresentationDetent: medium, half the window; large, all of it but its top; a fraction of it; a height. */
 final class PresentationDetent
 {

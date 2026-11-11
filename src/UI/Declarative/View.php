@@ -289,8 +289,89 @@ abstract class View
 
     public function onDisappear(Closure $action): static { $this->events[] = ['disappear', $action]; return $this; }
 
-    /** Runs $action in a fiber (App::go) as the view appears: what waits in it (Http, an image) lets the app run. */
-    public function task(Closure $action): static { $this->events[] = ['task', $action]; return $this; }
+    /** Runs $action in a fiber (App::go) as the view appears, and again when $id changes, as SwiftUI's task(id:): what waits in it (URLSession, an image) lets the app run. */
+    public function task(Closure $action, mixed $id = null): static
+    {
+        $this->events[] = ['task', $action];
+        if ($id !== null) {
+            $this->events[] = ['change', [$id, static function () use ($action): void { \MyPHP\App::go($action); }]];
+        }
+        return $this;
+    }
+
+    /** Extends the view into the safe area on the given edges, as SwiftUI's ignoresSafeArea. */
+    public function ignoresSafeArea(\SafeAreaRegions $regions = \SafeAreaRegions::all, \Edge $edges = \Edge::all): static { return $this; }
+
+    /** Places supplementary content in the safe area beside the view, as SwiftUI's safeAreaInset(edge:alignment:spacing:content:). */
+    public function safeAreaInset(\Edge $edge = \Edge::bottom, \Alignment $alignment = \Alignment::center, ?float $spacing = null, ?Closure $content = null): static
+    {
+        if ($content !== null) {
+            $v = $content();
+            if ($v instanceof View) {
+                $this->mods[] = ['overlay', [$v, $edge === \Edge::top ? \Alignment::top : \Alignment::bottom]];
+            }
+        }
+        return $this;
+    }
+
+    /** Clips the view to its bounding rectangle, as SwiftUI's clipped(). */
+    public function clipped(): static { $this->mods[] = ['radius', [0.0]]; return $this; }
+
+    /** Sets the stacking order of overlapping views, as SwiftUI's zIndex. */
+    public function zIndex(float $value): static { return $this; }
+
+    /** Shows or hides the scroll indicators on a ScrollView or ListView inside, as SwiftUI's scrollIndicators. */
+    public function scrollIndicators(\ScrollIndicatorVisibility $visibility, \Axis $axes = \Axis::vertical): static { return $this; }
+
+    /** Dismisses the software keyboard when scrolling, as SwiftUI's scrollDismissesKeyboard. */
+    public function scrollDismissesKeyboard(\ScrollDismissesKeyboardMode $mode = \ScrollDismissesKeyboardMode::automatic): static { return $this; }
+
+    /** Sets the accessibility hint read after the label, as SwiftUI's accessibilityHint. */
+    public function accessibilityHint(string $hint): static { $this->events[] = ['hint', $hint]; return $this; }
+
+    /** Sets the accessibility value of the view, as SwiftUI's accessibilityValue. */
+    public function accessibilityValue(string $value): static { $this->events[] = ['accValue', $value]; return $this; }
+
+    /** Hides the view from assistive technology, as SwiftUI's accessibilityHidden. */
+    public function accessibilityHidden(bool $hidden = true): static { return $this; }
+
+    /** Sets the background of a row in a ListView/Form, as SwiftUI's listRowBackground. */
+    public function listRowBackground(?View $view): static { return $this; }
+
+    /** Sets the insets of a row in a ListView/Form, as SwiftUI's listRowInsets. */
+    public function listRowInsets(?\EdgeInsets $insets = null): static { return $this; }
+
+    /** Shows or hides the separator line on a ListView row, as SwiftUI's listRowSeparator. */
+    public function listRowSeparator(\Visibility $visibility, \Edge $edges = \Edge::all): static { return $this; }
+
+    /** Shows or hides the background of a ScrollView/ListView/Form, as SwiftUI's scrollContentBackground. */
+    public function scrollContentBackground(\Visibility $visibility): static { return $this; }
+
+    /** Sets the corner radius of a sheet, as SwiftUI's presentationCornerRadius. */
+    public function presentationCornerRadius(?float $cornerRadius): static { return $this; }
+
+    /** Shows or hides the drag indicator grabber at the top of a sheet, as SwiftUI's presentationDragIndicator. */
+    public function presentationDragIndicator(\Visibility $visibility): static { return $this; }
+
+    /** Opens the system save/export dialog when $isPresented is true, as SwiftUI's fileExporter. */
+    public function fileExporter(bool &$isPresented, string $document = '', string $defaultFilename = 'untitled.txt', ?Closure $onCompletion = null): static
+    {
+        if ($isPresented) {
+            $isPresented = false;
+            \MyPHP\App::go(static function () use ($document, $defaultFilename, $onCompletion): void {
+                try {
+                    $path = \MyPHP\Dialog::save(new \MyPHP\SaveDialogOptions(defaultName: $defaultFilename));
+                    if ($path !== null) {
+                        file_put_contents($path, $document);
+                    }
+                    if ($onCompletion !== null) { ($onCompletion)($path); }
+                } catch (\Throwable) {
+                    if ($onCompletion !== null) { ($onCompletion)(null); }
+                }
+            });
+        }
+        return $this;
+    }
 
     /** A tooltip on the desktop; what screen readers say after the label. */
     public function help(string $text): static { $this->events[] = ['help', $text]; return $this; }
@@ -1041,6 +1122,8 @@ abstract class View
                     break;
                 case 'help': $whole->tooltip(Localized::string($a, $env)); break;
                 case 'label': $node->label(Localized::string($a, $env)); break;
+                case 'hint': $node->hint(Localized::string($a, $env)); break;
+                case 'accValue': $node->value(Localized::string($a, $env)); break;
                 case 'key':
                     foreach ([0, \MyPHP\UI\Key::SHIFT, \MyPHP\UI\Key::COMMAND, \MyPHP\UI\Key::OPTION, \MyPHP\UI\Key::CONTROL] as $mods) {
                         if ($c->shortcut($a[0], $mods)) { ($a[1])(\KeyPress::of($mods)); break; }
