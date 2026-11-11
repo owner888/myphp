@@ -197,8 +197,8 @@ final class Renderer
         $dst->touch($d);
     }
 
-    /** Multiplies the pixels of $l within its dirty rectangle by the values of $mask, one int a pixel of that rectangle. @param list<int> $mask */
-    private function scale(Layer $l, array $mask): void
+    /** Multiplies the pixels of $l within its dirty rectangle by the values of $mask, one uint8_t a pixel of that rectangle. */
+    private function scale(Layer $l, \FFI\CData $mask): void
     {
         [$x0, $y0, $x1, $y1] = $l->dirty; $w = $x1 - $x0; $lw = $this->w;
         $pix = $l->pix;
@@ -218,14 +218,21 @@ final class Renderer
     private function clip(Layer $l, ClipDef $cd, array $m, ?array $bbox): void
     {
         if ($l->dirty === null) { return; }
-        $this->scale($l, $this->clipMask($cd, $m, $bbox, $l->dirty));
+        $mask = $this->clipMask($cd, $m, $bbox, $l->dirty);
+        try {
+            $this->scale($l, $mask);
+        } finally {
+            Layer::ffi()->free($mask);
+        }
     }
 
-    /** The coverage of a clip path over a rectangle. @return list<int> */
-    private function clipMask(ClipDef $cd, array $m, ?array $bbox, array $rect): array
+    /** The coverage of a clip path over a rectangle as a C uint8_t* buffer (caller frees). */
+    private function clipMask(ClipDef $cd, array $m, ?array $bbox, array $rect): \FFI\CData
     {
         [$x0, $y0, $x1, $y1] = $rect; $w = $x1 - $x0;
-        $mask = array_fill(0, $w * ($y1 - $y0), 0);
+        $n = max(1, $w * ($y1 - $y0));
+        $f = Layer::ffi();
+        $mask = $f->cast('uint8_t*', $f->calloc($n, 1));
         $cm = Matrix::mul($m, $cd->m);
         if ($cd->bbox) {
             if ($bbox === null || $bbox[2] == 0 || $bbox[3] == 0) { return $mask; } // nothing to clip to
@@ -234,13 +241,14 @@ final class Renderer
         foreach ($cd->kids as $k) { $this->clipNode($k, $cm, $rect, $mask); }
         if ($cd->clip !== null) {
             $inner = $this->clipMask($cd->clip, $m, $bbox, $rect);
-            foreach ($inner as $i => $v) { $mask[$i] = self::div255($mask[$i] * $v); }
+            for ($i = 0; $i < $n; $i++) { $mask[$i] = self::div255($mask[$i] * $inner[$i]); }
+            $f->free($inner);
         }
         return $mask;
     }
 
-    /** Adds the coverage of a clip path's node to $mask, a rectangle. @param list<int> $mask */
-    private function clipNode(Node $n, array $m, array $rect, array &$mask): void
+    /** Adds the coverage of a clip path's node to $mask, a rectangle. */
+    private function clipNode(Node $n, array $m, array $rect, \FFI\CData $mask): void
     {
         $m = Matrix::mul($m, $n->m);
         if ($n->shape === null) {
@@ -268,34 +276,42 @@ final class Renderer
         $d = $l->dirty;
         if ($d === null) { return; }
         [$x0, $y0, $x1, $y1] = $d; $w = $x1 - $x0;
-        $region = $md->region; $cm = $m;
-        if ($md->units || $md->content) {
-            if ($bbox === null || $bbox[2] == 0 || $bbox[3] == 0) { $this->scale($l, array_fill(0, $w * ($y1 - $y0), 0)); return; }
-            if ($md->units) { $region = [$bbox[0] + $region[0] * $bbox[2], $bbox[1] + $region[1] * $bbox[3], $region[2] * $bbox[2], $region[3] * $bbox[3]]; }
-            if ($md->content) { $cm = Matrix::mul($m, Matrix::box($bbox)); }
-        }
-        $ml = $this->layer();
-        foreach ($md->kids as $k) { $this->node($k, $cm, $ml, 1); }
-        $values = []; $lw = $this->w; $mp = $ml->pix;
-        for ($y = $y0; $y < $y1; $y++) {
-            $pi = ($y * $lw + $x0) * 4;
-            for ($x = 0; $x < $w; $x++, $pi += 4) {
-                $values[] = $md->alpha ? $mp[$pi + 3] : min((54 * $mp[$pi] + 183 * $mp[$pi + 1] + 19 * $mp[$pi + 2] + 128) >> 8, 255); // luminance, of premultiplied colors
+        $n = max(1, $w * ($y1 - $y0));
+        $f = Layer::ffi();
+        $values = $f->cast('uint8_t*', $f->calloc($n, 1));
+        try {
+            $region = $md->region; $cm = $m;
+            if ($md->units || $md->content) {
+                if ($bbox === null || $bbox[2] == 0 || $bbox[3] == 0) { $this->scale($l, $values); return; }
+                if ($md->units) { $region = [$bbox[0] + $region[0] * $bbox[2], $bbox[1] + $region[1] * $bbox[3], $region[2] * $bbox[2], $region[3] * $bbox[3]]; }
+                if ($md->content) { $cm = Matrix::mul($m, Matrix::box($bbox)); }
             }
-        }
-        $this->release($ml);
-        // The mask's content shows within its region only.
-        $rp = new Path; $rp->rect($region[0], $region[1], $region[2], $region[3]);
-        $this->flat->reset();
-        $rp->flatten($m, true, $this->flat);
-        $cr = $this->cover($this->flat, false); $cov = $this->cov;
-        for ($y = $y0; $y < $y1; $y++) {
-            for ($x = $x0; $x < $x1; $x++) {
-                $i = ($y - $y0) * $w + $x - $x0;
-                if ($cr === null || $x < $cr[0] || $x >= $cr[2] || $y < $cr[1] || $y >= $cr[3]) { $values[$i] = 0; continue; }
-                $values[$i] = self::div255($values[$i] * $cov[($y - $cr[1]) * ($cr[2] - $cr[0]) + $x - $cr[0]]);
+            $ml = $this->layer();
+            foreach ($md->kids as $k) { $this->node($k, $cm, $ml, 1); }
+            $lw = $this->w; $mp = $ml->pix;
+            $vi = 0;
+            for ($y = $y0; $y < $y1; $y++) {
+                $pi = ($y * $lw + $x0) * 4;
+                for ($x = 0; $x < $w; $x++, $pi += 4, $vi++) {
+                    $values[$vi] = $md->alpha ? $mp[$pi + 3] : min((54 * $mp[$pi] + 183 * $mp[$pi + 1] + 19 * $mp[$pi + 2] + 128) >> 8, 255); // luminance, of premultiplied colors
+                }
             }
+            $this->release($ml);
+            // The mask's content shows within its region only.
+            $rp = new Path; $rp->rect($region[0], $region[1], $region[2], $region[3]);
+            $this->flat->reset();
+            $rp->flatten($m, true, $this->flat);
+            $cr = $this->cover($this->flat, false); $cov = $this->cov;
+            for ($y = $y0; $y < $y1; $y++) {
+                for ($x = $x0; $x < $x1; $x++) {
+                    $i = ($y - $y0) * $w + $x - $x0;
+                    if ($cr === null || $x < $cr[0] || $x >= $cr[2] || $y < $cr[1] || $y >= $cr[3]) { $values[$i] = 0; continue; }
+                    $values[$i] = self::div255($values[$i] * $cov[($y - $cr[1]) * ($cr[2] - $cr[0]) + $x - $cr[0]]);
+                }
+            }
+            $this->scale($l, $values);
+        } finally {
+            $f->free($values);
         }
-        $this->scale($l, $values);
     }
 }
