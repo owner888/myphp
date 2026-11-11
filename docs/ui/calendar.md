@@ -17,9 +17,10 @@ $view = fn() => DatePicker('Day', selection: $app->day, displayedComponents: [Da
     ->datePickerStyle(DatePickerStyle::graphical)->padding();
 ```
 
-It shows six weeks from Sunday, the days of the months around in gray, and
-marks today. Its title ("January 2026"), the names of the weekdays and the
-first day of the week are en-US's; the buttons' names are
+It shows six weeks, the days of the months around in gray, and marks today.
+Its title (e.g. "2026年1月" in `zh-CN`, "January 2026" in `en-US`), the names
+of the weekdays and the first day of the week follow `App::locale()` and
+`App::region()`; the buttons' names are
 [MyPHP's own strings](../i18n.md#myphps-own-strings).
 
 ## Accessibility

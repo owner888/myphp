@@ -131,6 +131,11 @@ if [ ! -f "${PHP_SRC_DIR}/configure" ]; then
     fi
     tar -xzf "php-8.3.16.tar.gz"
 fi
+# PHP 8.3's configure only enables MAP_ANON shared memory when cross-compiling for *linux*, so --enable-opcache fails on
+# freshly extracted sources when targeting arm64-apple-darwin / arm64-apple-ios unless *darwin* is added to that case.
+if grep -q '\*linux\*)' "${PHP_SRC_DIR}/configure" 2>/dev/null; then
+    sed -i '' 's/\*linux\*)/\*linux\* | \*darwin\* | \*apple\*)/' "${PHP_SRC_DIR}/configure"
+fi
 
 # Built again when this script changed since (an extension added, as curl was): configured anew, the one stamp of what libphp has.
 if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ "$0" -nt "${BUILD_DIR}/libs/libphp.a" ]; then

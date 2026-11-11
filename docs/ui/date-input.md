@@ -1,8 +1,9 @@
 # Date picker
 
-A `DatePicker` edits a `DateTimeImmutable` (bound by reference): its date as
-a field of numbers, as en-US writes it, 1/5/2026, which a
-[calendar](calendar.md) below it changes, and its time of day. A click,
+A `DatePicker` edits a `DateTimeImmutable` (bound by reference): its date in
+the user's regional format (`App::region()`, e.g. `2026/1/5` in `zh-CN` or
+`1/5/2026` in `en-US`), which a [calendar](calendar.md) below it changes, and
+its time of day. A click,
 Enter or Space opens the calendar, where a click chooses a day, as do the
 arrows and Enter; Page Up and Page Down, or its buttons, move by months,
 and Escape closes it. A change keeps the time zone of the value.

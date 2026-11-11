@@ -36,15 +36,20 @@ final class Backend implements Platform\Backend
         return 'android/egl';
     }
 
+    private bool $readyCalled = false;
+
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
-        $this->h->ready();
     }
 
     public function run(): void
     {
         \MyPHP\Logger::verbose('Android Backend::run starting loop', 'android');
         $this->running = true;
+        if (!$this->readyCalled) {
+            $this->readyCalled = true;
+            $this->h->ready();
+        }
         while ($this->running) {
             $this->step();
         }

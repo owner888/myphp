@@ -59,10 +59,10 @@ final class CurlLoop
     /** @var list<array{0: Closure(): bool, 1: Fiber}> the fibers waiting, each for what it waits for */
     private static array $waiters = [];
 
-    /** Whether the run loop drives the transfers (macOS; Linux's main loop in a running app), else pump(). */
+    /** Whether the run loop drives the transfers (macOS; on iOS, Android, Linux and Windows once the app is running), else pump(). */
     private static function driven(): bool
     {
-        return PHP_OS_FAMILY === 'Darwin' || App::running();
+        return (PHP_OS_FAMILY === 'Darwin' && !App::isIOS()) || App::running();
     }
 
     /** The multi handle of transfers started now: the loop's, or pump()'s. */
@@ -346,10 +346,10 @@ final class CurlLoop
         self::$later[] = [microtime(true) + $seconds, $fn];
     }
 
-    /** Drives the transfers for up to $seconds where no run loop does (Linux without the app running): waits for their sockets, then reads and writes; else turns the loop that drives them. */
+    /** Drives the transfers for up to $seconds where no run loop does (Linux or iOS without the app running): waits for their sockets, then reads and writes; else turns the loop that drives them. */
     public static function pump(float $seconds): void
     {
-        if (PHP_OS_FAMILY !== 'Darwin' && App::running()) {
+        if ((PHP_OS_FAMILY !== 'Darwin' || App::isIOS()) && App::running()) {
             $at = microtime(true) + $seconds;
             App::wait(fn(): bool => microtime(true) >= $at);
             return;
