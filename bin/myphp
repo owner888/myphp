@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.186.6';
+const VERSION = '1.186.7';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -19,7 +19,7 @@ Usage:
 Commands:
 
 	init <dir>           create a new project (native UI, or a web frontend)
-	install-skills [dir] install or update the bundled MyPHP agent skills
+	install-skills [dir] install or update the bundled MyPHP agent skills (alias: update-skills)
 	generate             write the typed TypeScript client for bound PHP services,
 	                     and the accessors of the app's catalogs of messages
 	i18n check [dir]     check the app's catalogs of messages
@@ -882,6 +882,7 @@ function dev(array $args): void
     $sign = option($args, 'sign', '-');
     $skipDevCommand = flag($args, 'skip-dev-command');
     ['dir' => $dir, 'config' => $c] = project($args);
+    syncSkillsIfNeeded($dir);
     $env = ['MYPHP_ENV' => 'development', 'MYPHP_HOME' => frameworkOf($c)];
     if ($lang !== '') { // the app reads it as it starts, over the language it keeps
         ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("-lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
@@ -3235,6 +3236,7 @@ function runCommand(array $args): void
     $say = function (string $msg) use ($all): void { if ($all) { logf($msg); } };
 
     ['dir' => $dir, 'config' => $c] = project($args);
+    syncSkillsIfNeeded($dir);
     $targetDev = DeviceManager::findDevice($deviceId);
     if ($targetDev === null) {
         fail($deviceId !== '' ? "No device found matching \"$deviceId\". Run `myphp devices` to list available devices." : "No available devices or simulators found.");
@@ -3339,7 +3341,39 @@ function installSkills(array $args): void
 /** The skill for writing an app; myphp-maintenance, for working on MyPHP itself, stays in the checkout. */
 function writeSkills(string $dir): void
 {
-    copyTree(SKILLS . '/myphp-app', "$dir/.agents/skills/myphp-app", []);
+    $dst = "$dir/.agents/skills/myphp-app";
+    copyTree(SKILLS . '/myphp-app', $dst, []);
+    @file_put_contents("$dst/.version", VERSION . ':' . skillsStamp());
+}
+
+/** Content hash of the local bundled myphp-app skill files (7 files, ~40 KB, < 0.2 ms, zero network). */
+function skillsStamp(): string
+{
+    $ctx = hash_init('xxh128');
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(SKILLS . '/myphp-app', FilesystemIterator::SKIP_DOTS));
+    $files = [];
+    foreach ($it as $f) {
+        if ($f->isFile()) { $files[] = (string)$f; }
+    }
+    sort($files, SORT_STRING);
+    foreach ($files as $f) {
+        hash_update($ctx, substr($f, strlen(SKILLS)) . "\0" . (string)@file_get_contents($f) . "\0");
+    }
+    return hash_final($ctx);
+}
+
+/** Silently updates <dir>/.agents/skills/myphp-app from local bin/skills/myphp-app only when version/content changed. */
+function syncSkillsIfNeeded(string $dir): void
+{
+    $dst = "$dir/.agents/skills/myphp-app";
+    if (!is_dir("$dir/.agents") && !is_file("$dir/" . CONFIG)) {
+        return;
+    }
+    $want = VERSION . ':' . skillsStamp();
+    if (@file_get_contents("$dst/.version") === $want) {
+        return;
+    }
+    writeSkills($dir);
 }
 
 // ---- main ---------------------------------------------------------------
@@ -3361,7 +3395,7 @@ function run(string $cmd, array $args): void
     $GLOBALS['running'] = $cmd === 'gen' ? 'generate' : $cmd;
     match ($cmd) {
         'init' => init($args),
-        'install-skills' => installSkills($args),
+        'install-skills', 'update-skills' => installSkills($args),
         'dev' => dev($args),
         'generate', 'gen' => generate($args),
         'i18n' => i18nCheck($args),
