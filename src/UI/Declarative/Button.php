@@ -36,12 +36,15 @@ final class Button extends View
             $t = $env->theme;
             $prominent = $style === \ButtonStyle::borderedProminent;
             $n = $c->buttonBase()->alignItems(Node::CENTER);
+            $touch = $c->runtime?->touch ?? false;
             if ($style !== \ButtonStyle::borderless && $style !== \ButtonStyle::plain) { // the face of a button() around the label: padded, its surface and border, or the accent
-                $n->padding($t->space(1.5), $t->space(3.5))->radius($t->radius);
+                $n->padding($t->space(1.5), $touch ? 20.0 : $t->space(3.5))->radius($touch && $t->controlHeight > 0 ? $t->controlHeight / 2 : $t->radius);
+                if ($touch && $t->controlHeight > 0) { $n->minHeight($t->controlHeight); }
                 $n->color = $prominent ? $t->accent : ($c->hovered($n) ? $t->surfaceHover : $t->surface);
                 $n->bordered = !$prominent;
             } elseif ($env->labelStyle === \LabelStyle::iconOnly) { // an icon of a toolbar: room around it to click, a face while hovered, as AppKit's toolbar items
                 $n->padding($t->space(1.5), $t->space(2))->radius($t->radius);
+                if ($touch) { $n->minWidth(36)->minHeight(36)->justify(Node::CENTER); }
                 if ($c->hovered($n)) { $n->color = $t->surfaceHover; }
             }
             $labelEnv = $prominent ? $env->along(Node::ROW)->with(['color' => new ColorValue(null, $t->accentText)]) : $env->along(Node::ROW);
