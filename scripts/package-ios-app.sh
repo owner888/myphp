@@ -35,7 +35,7 @@ mkdir -p "${APP_DIR}"
 
 # 2. Compile launcher binary
 echo "==> Compiling native iOS launcher..."
-xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -fobjc-arc \
+xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -Wl,-dead_strip -fobjc-arc \
     -I"${PHP_BUILD}" \
     -I"${PHP_BUILD}/main" \
     -I"${PHP_BUILD}/Zend" \
@@ -53,6 +53,7 @@ xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -O2 -
     -lz -lm -lresolv \
     -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore -framework UserNotifications -framework Network -framework Security -framework WebKit -framework AudioToolbox -framework PhotosUI -framework UniformTypeIdentifiers \
     -o "${APP_DIR}/${APP_NAME}"
+xcrun --sdk "$IOS_SDK" strip -x "${APP_DIR}/${APP_NAME}"
 
 # 3. Create Info.plist
 cat <<PLIST > "${APP_DIR}/Info.plist"
