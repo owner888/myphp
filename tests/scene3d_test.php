@@ -5,7 +5,7 @@ namespace MyPHP\Tests;
 
 use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, Scene};
 use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
-use MyPHP\UI\{Canvas, Headless};
+use MyPHP\UI\Canvas;
 
 // 1. Vec3 tests
 $v1 = new Vec3(1.0, 2.0, 3.0);
@@ -58,8 +58,28 @@ if (PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') {
     check($bytes[1] > 0 || $bytes[2] > 0 || $bytes[3] > 0, 'Center pixel has non-zero color');
 }
 
-// 6. Canvas integration
-$canvas = new Canvas(200, 200);
-$canvas->renderScene($scene);
-check($canvas->scene === $scene, 'Canvas holds scene reference');
-check($canvas->drawn > 0, 'Canvas marked as drawn');
+// 7. Full headless UI build & paint pass with examples/scene3d
+$app = new class {
+    public Scene $scene;
+    public Canvas $canvas;
+    public function __construct() {
+        $this->canvas = new Canvas(200, 150);
+        $this->scene = new Scene();
+        $this->scene->add(new Entity(Mesh::cube(1.5)));
+    }
+};
+$h = new Headless(function (\MyPHP\UI\Context $c) use ($app): void {
+    $e = $c->column();
+    $c->end();
+    $e->grow = 1;
+    $e->draw(function (\MyPHP\UI\Painter $p, array $r) use ($app): void {
+        $p->animationFrame();
+        $app->canvas->renderScene($app->scene);
+        $p->image($app->canvas->bitmap(), $r, \MyPHP\UI\Node::FILL_BOX);
+        $p->fill([$r[0] + 10, $r[1] + 10, 100, 40], 0x000000, 8.0, 0.5);
+        $p->text($r[0] + 15, $r[1] + 15, 'MyPHP 3D', 14, 0xffffff);
+    });
+}, 400, 300);
+$h->paint();
+check($app->canvas->drawn > 0, 'Headless frame rendered 3D scene canvas and painted UI overlay');
+

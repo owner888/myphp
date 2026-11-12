@@ -8,7 +8,7 @@ declare(strict_types=1);
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, Scene};
 use MyPHP\Plugins\Scene\Math\Vec3;
-use MyPHP\UI\{Canvas, Content, Context, Event, Key, Node, Painter};
+use MyPHP\UI\{Canvas, Content, Context, InputEvent, Key, Node, Painter};
 
 class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
@@ -61,7 +61,7 @@ final class SceneApp
         $this->lastTime = $now;
 
         $this->frames++;
-        if ($this->frames % 30 === 0) {
+        if ($this->frames % 20 === 0) {
             $this->fps = 1.0 / $dt;
         }
 
@@ -87,22 +87,44 @@ App::whenReady(function () {
     $app = new SceneApp();
 
     $content = Content::view(function (Context $c) use ($app) {
-        $app->update();
+        $e = $c->column();
+        $c->end();
+        $e->grow = 1;
 
-        $c->column(function (Context $c) use ($app) {
-            $e = $c->box(800, 600);
-            $e->grow = 1;
+        $e->focusable()->autoFocus()->handleInput(function (InputEvent $ev) use ($app): bool {
+            if ($ev->kind === InputEvent::POINTER_DOWN) {
+                $app->dragging = true;
+                [$app->lastMouseX, $app->lastMouseY] = [$ev->x, $ev->y];
+                return true;
+            } elseif ($ev->kind === InputEvent::POINTER_UP) {
+                $app->dragging = false;
+                return true;
+            } elseif ($ev->kind === InputEvent::POINTER_MOVE && $app->dragging) {
+                $dx = $ev->x - $app->lastMouseX;
+                $dy = $ev->y - $app->lastMouseY;
+                $app->yaw += $dx * 0.01;
+                $app->pitch = max(-1.4, min(1.4, $app->pitch + $dy * 0.01));
+                [$app->lastMouseX, $app->lastMouseY] = [$ev->x, $ev->y];
+                return true;
+            } elseif ($ev->kind === InputEvent::SCROLL) {
+                $app->dist = max(2.5, min(15.0, $app->dist - $ev->dy * 0.05));
+                return true;
+            }
+            return false;
+        });
 
-            $e->draw(function (Painter $p, array $r) use ($app) {
-                // 1. Draw 3D scene canvas
-                $p->image($app->canvas->bitmap(), $r);
+        $e->draw(function (Painter $p, array $r) use ($app) {
+            $p->animationFrame();
+            $app->update();
 
-                // 2. Draw 2D overlay on top
-                $p->fill([$r[0] + 16, $r[1] + 16, 260, 80], 0x000000, 8.0, 0.65);
-                $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D RenderPass', 15, 0xffffff, weight: 0.4);
-                $p->text($r[0] + 28, $r[1] + 50, sprintf('FPS: %.1f | Depth: 32F | Metal GPU', $app->fps), 12, 0x00e676);
-                $p->text($r[0] + 28, $r[1] + 68, 'Drag mouse to rotate | Wheel to zoom', 11, 0xaaaaaa);
-            });
+            // 1. Draw 3D scene canvas
+            $p->image($app->canvas->bitmap(), $r, Node::FILL_BOX);
+
+            // 2. Draw 2D overlay on top
+            $p->fill([$r[0] + 16, $r[1] + 16, 260, 80], 0x000000, 8.0, 0.65);
+            $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D RenderPass', 15, 0xffffff);
+            $p->text($r[0] + 28, $r[1] + 50, sprintf('FPS: %.1f | Depth: 32F | Metal GPU', $app->fps), 12, 0x00e676);
+            $p->text($r[0] + 28, $r[1] + 68, 'Drag mouse to rotate | Wheel to zoom', 11, 0xaaaaaa);
         });
     });
 
