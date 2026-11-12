@@ -5,6 +5,7 @@
 // the commands, `myphp <command> -h` the flags of one.
 declare(strict_types=1);
 
+@ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
 const VERSION = '1.187.1';
 const CONFIG = 'myphp.json';
@@ -1493,10 +1494,19 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
         // The PHP building the app, as php/: its executable, its DLLs and its extensions; the launcher loads those it has loaded.
         $phpDir = dirname((string)realpath(PHP_BINARY));
         $extDir = Windows::extensionDir();
-        copyTree($phpDir, "$app/php", ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib', 'ext', basename($extDir)], false);
+        $usesIntl = str_contains(appSources($dir, $c), 'Collator') || str_contains(appSources($dir, $c), 'Transliterator');
+        $winExclude = ['php.ini', 'php.ini-development', 'php.ini-production', 'dev', 'extras', 'lib', 'ext', basename($extDir), 'phpdbg.exe', 'php-cgi.exe'];
+        if (!$usesIntl) {
+            array_push($winExclude, 'icudt*.dll', 'icuin*.dll', 'icuio*.dll', 'icuuc*.dll');
+        }
+        copyTree($phpDir, "$app/php", $winExclude, false);
         @mkdir("$app/php/ext", 0755, true); // of the extensions, those loaded alone (Windows::extensionFlags loads them)
         foreach (glob("$extDir/php_*.dll") ?: [] as $dll) {
-            if (in_array(strtolower(substr(basename($dll, '.dll'), 4)), array_map(fn(string $e) => strtolower($e === 'Zend OPcache' ? 'opcache' : $e), get_loaded_extensions()), true)) {
+            $extName = strtolower(substr(basename($dll, '.dll'), 4));
+            if (!$usesIntl && $extName === 'intl') {
+                continue;
+            }
+            if (in_array($extName, array_map(fn(string $e) => strtolower($e === 'Zend OPcache' ? 'opcache' : $e), get_loaded_extensions()), true)) {
                 copy($dll, "$app/php/ext/" . basename($dll));
             }
         }
@@ -2117,8 +2127,8 @@ function appPhar(string $appDir, string $entry): string
 // phar:// timestamps (SIGBUS in zend_get_file_handle_timestamp) and its JIT
 // segfaults on arm64 macOS, so the micro build runs the plain interpreter.
 const MICRO_INI = ['ffi.enable=1', 'memory_limit=512M'];
-// What the framework calls: intl from the start (I18n), xmlreader for SVG icons, curl for fetch and updates, sockets for one instance, filter.
-const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json,intl,xmlreader,curl,sockets,filter';
+// What the framework calls: xmlreader/dom/simplexml for SVG icons, curl+openssl for URLSession/fetch/updates, sockets for single-instance, filter; LocalePolyfill covers I18n without the 34 MB ICU table.
+const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json,xml,xmlreader,xmlwriter,dom,simplexml,curl,openssl,sockets,filter,zlib';
 const MICRO_PHP = '8.4';
 /**
  * The patch spc applies to phpmicro (`spc build -P`) as `myphp micro`
@@ -2208,7 +2218,7 @@ function ensureMicro(?string $phpVersion = null): array
     if (PHP_OS_FAMILY === 'Linux') {
         // Against glibc, not musl: a fully static PHP cannot dlopen GTK through FFI. The patch is for macOS's signature alone.
         putenv('SPC_LIBC=glibc');
-        sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro'], $build) === 0 || fail('spc build failed');
+        sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro', '--with-upx-pack'], $build) === 0 || sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro'], $build) === 0 || fail('spc build failed');
     } else {
         file_put_contents("$build/myphp-micro-patch.php", MICRO_PATCH) !== false || fail("cannot write $build/myphp-micro-patch.php");
         sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro', '-P', "$build/myphp-micro-patch.php"], $build) === 0 || fail('spc build failed');

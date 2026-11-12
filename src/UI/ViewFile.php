@@ -39,7 +39,7 @@ final class ViewFile
     /** The file at $path bound to $state, loaded the first time it is asked for, the same after. */
     public static function of(string $path, ?object $state = null): self
     {
-        $real = realpath($path);
+        $real = str_starts_with($path, 'phar://') ? (is_file($path) ? $path : false) : realpath($path);
         if ($real === false) {
             throw new \InvalidArgumentException("myphp: no view file $path");
         }
