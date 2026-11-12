@@ -188,6 +188,23 @@ final class AndroidTextEngine implements Engine
             return self::copied($this->shapeCache[$cacheKey] = [['start' => 0, 'end' => count($runes), 'runs' => [$run]]]);
         }
 
+        $ascent = (float)$buf[1];
+        $descent = (float)$buf[2];
+        if ($ascent > 0 && $descent >= 0) {
+            $font = new Font(
+                size: $size,
+                ascent: $ascent,
+                descent: $descent,
+                lineGap: 0.0,
+                id: $font->id,
+                underlineCenter: $size * 0.1,
+                underlineThick: max(1.0, $size * 0.05),
+                strikeCenter: -$ascent * 0.35,
+                strikeThick: max(1.0, $size * 0.05),
+            );
+            $this->fonts["{$size}:{$fontStyle}"] = $font;
+        }
+
         $count = min((int)$buf[3], intdiv($n - 4, 3));
         $glyphs = [];
 

@@ -461,13 +461,14 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
 
         int count = glyphs.glyphCount();
         float advance = glyphs.getAdvance();
-        float ascent = glyphs.getAscent();
-        float descent = glyphs.getDescent();
+        android.graphics.Paint.FontMetrics fm = sTextPaint.getFontMetrics();
+        float ascent = -fm.ascent;
+        float descent = fm.descent;
 
         // format: [advance, ascent, descent, count, glyph0, x0, y0, glyph1, x1, y1, ...]
         float[] result = new float[4 + count * 3];
         result[0] = advance;
-        result[1] = -ascent; // positive ascent in points
+        result[1] = ascent; // positive ascent in points
         result[2] = descent;
         result[3] = (float) count;
 

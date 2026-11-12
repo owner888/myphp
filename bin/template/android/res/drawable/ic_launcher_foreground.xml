@@ -3,51 +3,27 @@
     android:height="108dp"
     android:viewportWidth="440"
     android:viewportHeight="440">
+    <!-- Centered on the rocket + ElePHPant (238, 196), scaled to 1.38x so it fills the icon circle like system Camera -->
     <group
-        android:pivotX="220"
-        android:pivotY="220"
-        android:scaleX="0.62"
-        android:scaleY="0.62">
-        <!-- Cosmic Sparkles -->
-        <path
-            android:fillColor="#818CF8"
-            android:pathData="M120,100 L122,108 L130,110 L122,112 L120,120 L118,112 L110,110 L118,108 Z" />
-        <path
-            android:fillColor="#F472B6"
-            android:pathData="M340,140 L341,145 L346,146 L341,147 L340,152 L339,147 L334,146 L339,145 Z" />
-        <path
-            android:fillColor="#38BDF8"
-            android:pathData="M90,240 L91,245 L96,246 L91,247 L90,252 L89,247 L84,246 L89,245 Z" />
-        <!-- Smoke Clouds -->
-        <path
-            android:fillColor="#E2E8F0"
-            android:pathData="M120,340 m-42,0 a42,42 0 1,0 84,0 a42,42 0 1,0 -84,0" />
-        <path
-            android:fillColor="#CBD5E1"
-            android:pathData="M95,320 m-32,0 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0" />
-        <path
-            android:fillColor="#F1F5F9"
-            android:pathData="M150,362 m-36,0 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0" />
-        <!-- Exhaust Flame -->
-        <path
-            android:fillColor="#F97316"
-            android:pathData="M145,285 L180,320 L135,345 Z" />
-        <path
-            android:fillColor="#FDE047"
-            android:pathData="M152,292 L172,312 L142,328 Z" />
+        android:translateX="-18"
+        android:translateY="24"
+        android:pivotX="238"
+        android:pivotY="196"
+        android:scaleX="1.38"
+        android:scaleY="1.38">
         <!-- Rocket Wings -->
         <path
             android:fillColor="#EF4444"
             android:strokeColor="#991B1B"
-            android:strokeWidth="3"
+            android:strokeWidth="3.5"
             android:strokeLineJoin="round"
-            android:pathData="M170,230 L135,300 L185,275 Z" />
+            android:pathData="M178,225 L155,275 L195,260 Z" />
         <path
             android:fillColor="#EF4444"
             android:strokeColor="#991B1B"
-            android:strokeWidth="3"
+            android:strokeWidth="3.5"
             android:strokeLineJoin="round"
-            android:pathData="M255,145 L325,180 L270,230 Z" />
+            android:pathData="M255,145 L312,175 L268,222 Z" />
         <!-- Rocket Body (Rotated -38 deg around 230,210) -->
         <group
             android:pivotX="230"
@@ -56,12 +32,12 @@
             <path
                 android:fillColor="#F8FAFC"
                 android:strokeColor="#0F172A"
-                android:strokeWidth="4"
+                android:strokeWidth="4.5"
                 android:pathData="M225,140 L235,140 A45,45 0 0,1 280,185 L280,245 A45,45 0 0,1 235,290 L225,290 A45,45 0 0,1 180,245 L180,185 A45,45 0 0,1 225,140 Z" />
             <path
                 android:fillColor="#EF4444"
                 android:strokeColor="#0F172A"
-                android:strokeWidth="4"
+                android:strokeWidth="4.5"
                 android:pathData="M180,160 C180,90 280,90 280,160 Z" />
             <path
                 android:fillColor="#EF4444"
@@ -69,7 +45,7 @@
             <path
                 android:fillColor="#38BDF8"
                 android:strokeColor="#0F172A"
-                android:strokeWidth="4"
+                android:strokeWidth="4.5"
                 android:pathData="M230,180 m-22,0 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0" />
             <path
                 android:fillColor="#0284C7"
@@ -79,43 +55,43 @@
         <group
             android:translateX="195"
             android:translateY="100"
-            android:scaleX="0.95"
-            android:scaleY="0.95">
+            android:scaleX="1.0"
+            android:scaleY="1.0">
             <!-- Body -->
             <path
                 android:fillColor="#818CF8"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="3.5"
+                android:strokeWidth="4"
                 android:pathData="M16,65 a44,38 0 1,0 88,0 a44,38 0 1,0 -88,0" />
             <!-- Trunk -->
             <path
                 android:fillColor="#818CF8"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="3.5"
+                android:strokeWidth="4"
                 android:strokeLineCap="round"
                 android:pathData="M22,68 C12,68 8,52 14,44 C18,38 26,42 24,50 C22,56 26,62 34,65" />
             <!-- Tusk -->
             <path
                 android:fillColor="#FFFFFF"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="2"
+                android:strokeWidth="2.5"
                 android:pathData="M28,66 L20,72 L26,76 Z" />
             <!-- Legs -->
             <path
                 android:fillColor="#6366F1"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="3"
+                android:strokeWidth="3.5"
                 android:pathData="M45,80 L45,80 A9,9 0 0,1 54,89 L54,97 A9,9 0 0,1 45,106 L45,106 A9,9 0 0,1 36,97 L36,89 A9,9 0 0,1 45,80 Z" />
             <path
                 android:fillColor="#6366F1"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="3"
+                android:strokeWidth="3.5"
                 android:pathData="M80,84 L80,84 A10,10 0 0,1 90,94 L90,98 A10,10 0 0,1 80,108 L80,108 A10,10 0 0,1 70,98 L70,94 A10,10 0 0,1 80,84 Z" />
             <!-- Ear -->
             <path
                 android:fillColor="#A5B4FC"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="3.5"
+                android:strokeWidth="4"
                 android:pathData="M56,54 a22,26 0 1,0 44,0 a22,26 0 1,0 -44,0" />
             <path
                 android:fillColor="#C7D2FE"
@@ -124,7 +100,7 @@
             <path
                 android:fillColor="#FFFFFF"
                 android:strokeColor="#1E1B4B"
-                android:strokeWidth="2.5"
+                android:strokeWidth="3"
                 android:pathData="M35.5,50 a8.5,8.5 0 1,0 17,0 a8.5,8.5 0 1,0 -17,0" />
             <path
                 android:fillColor="#0F172A"
@@ -134,7 +110,7 @@
                 android:pathData="M42.2,48 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0" />
             <path
                 android:fillColor="#F472B6"
-                android:fillAlpha="0.8"
+                android:fillAlpha="0.85"
                 android:pathData="M40,62 a6,4 0 1,0 12,0 a6,4 0 1,0 -12,0" />
         </group>
     </group>
