@@ -215,7 +215,11 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
             ac_cv_func_setpgrp=yes \
             ac_cv_func_getpgrp_void=yes \
             ac_cv_func_setpgrp_void=yes \
+            ac_cv_func_posix_spawn_file_actions_addchdir=no \
             ac_cv_func_posix_spawn_file_actions_addchdir_np=no \
+            php_cv_shm_mmap_anon=yes \
+            php_cv_shm_mmap_posix=no \
+            php_cv_shm_ipc=no \
             ac_cv_shm_mmap_anon=yes \
             ac_cv_shm_mmap_posix=no \
             ac_cv_shm_ipc=no
@@ -223,6 +227,7 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
         # Patch Darwin/Apple headers
         sed -i '' 's/#define uid_t int/\/* #undef uid_t *\//' main/php_config.h || true
         sed -i '' 's/#define gid_t int/\/* #undef gid_t *\//' main/php_config.h || true
+        sed -i '' 's/#define HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR 1/\/* #undef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR *\//' main/php_config.h || true
         sed -i '' 's/#define HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP 1/\/* #undef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP *\//' main/php_config.h || true
         echo "#define HAVE_LONG_DOUBLE 1" >> main/php_config.h
     fi
