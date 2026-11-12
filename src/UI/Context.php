@@ -1930,8 +1930,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $minH = ($this->runtime?->touch ?? false) && $t->controlHeight > 0 ? $t->controlHeight : $t->space(4);
-        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $label === '' ? max($t->space(4), $minH) : $w + $t->space(6), $label === '' ? $minH : max($h, $minH), 0, $label, null, $size, $t->text)); // without a label, its box alone
+        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $label === '' ? $t->space(4) : $w + $t->space(6), $label === '' ? $t->space(4) : max($h, $t->space(4)), 0, $label, null, $size, $t->text)); // without a label, its box alone
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $checked = !$checked;
@@ -1950,8 +1949,7 @@ final class Context
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
         [$tw, $th] = $t->switchWidth > 0 ? [$t->switchWidth, $t->switchHeight] : [$t->space(9), $t->space(5)]; // the track: UISwitch's 63 × 28 on a phone, mygo's Space(9) × Space(5) on the desktop
-        $hitH = $t->controlHeight > $th ? $t->controlHeight : $th;
-        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $tw : $w + $tw + $t->space(2), max($h, $hitH), 0, $label, null, $size, $t->text)); // the gap Space(2) before a label; without one the track alone, as mygo's
+        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $tw : $w + $tw + $t->space(2), max($h, $th), 0, $label, null, $size, $t->text)); // the gap Space(2) before a label; without one the track alone, as mygo's
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $on = !$on;
@@ -4582,8 +4580,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $minH = ($this->runtime?->touch ?? false) && $t->controlHeight > 0 ? $t->controlHeight : $t->space(4);
-        $n = $this->add(new Node(Node::RADIO, 0, 0, 0, $w + $t->space(6), max($h, $minH), 0, $label, null, $size, $t->text));
+        $n = $this->add(new Node(Node::RADIO, 0, 0, 0, $w + $t->space(6), max($h, $t->space(4)), 0, $label, null, $size, $t->text));
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id) && $value !== $option) {
             $value = $option;
@@ -4616,8 +4613,7 @@ final class Context
     {
         $t = $this->theme;
         $ticks = self::tickCount($min, $max, $step);
-        $sh = max($t->space($ticks > 0 ? 7 : 5), ($this->runtime?->touch ?? false) ? $t->controlHeight : 0.0);
-        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $sh, 0, null, null, $t->fontSize, $t->text));
+        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $t->space($ticks > 0 ? 7 : 5), 0, null, null, $t->fontSize, $t->text));
         $n->focusable = true;
         $n->ticks = $ticks;
         $n->paddingX($t->space(5) / 2); // the knob's half width each side: its center spans the values
