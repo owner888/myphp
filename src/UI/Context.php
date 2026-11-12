@@ -1949,7 +1949,8 @@ final class Context
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
         [$tw, $th] = $t->switchWidth > 0 ? [$t->switchWidth, $t->switchHeight] : [$t->space(9), $t->space(5)]; // the track: UISwitch's 63 × 28 on a phone, mygo's Space(9) × Space(5) on the desktop
-        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $tw : $w + $tw + $t->space(2), max($h, $th), 0, $label, null, $size, $t->text)); // the gap Space(2) before a label; without one the track alone, as mygo's
+        $hitH = $t->controlHeight > $th ? $t->controlHeight : $th;
+        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $tw : $w + $tw + $t->space(2), max($h, $hitH), 0, $label, null, $size, $t->text)); // the gap Space(2) before a label; without one the track alone, as mygo's
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $on = !$on;

@@ -536,7 +536,7 @@ final class Window implements Platform\Window
                 }
 
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
-                if (!$this->touchIsScrolling && $dist > 4.0) {
+                if (!$this->touchIsScrolling && $dist > 8.0) {
                     $this->touchIsScrolling = true;
                     $rt?->cancelTouchPress();
                     $this->touchLastX = $ptX;

@@ -218,8 +218,11 @@ final class ListView extends View
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true]), is_array($v) ? $v : [$v]);
               if ($v instanceof View && $v->badgeValue !== null) { $c->spacer(); $c->text((string)$v->badgeValue, color: $env->theme->textMuted); }
             $c->end();
-            foreach ($n->kids as $k) { // a switch (31 high) or segments (32) centered in a row 44 high, as UIKit's cells, not padded 11 as a line of text
-                if ($k->kind === Node::SWITCH || $k->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(6, 16); break; }
+            foreach ($n->kids as $k) { // a switch (28 high) or segments (32) centered in a row 44 high, as UIKit's cells, not padded 11 as a line of text
+                if ($k->kind === Node::SWITCH || $k->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(0, 16); break; }
+                foreach ($k->kids as $kk) {
+                    if ($kk->kind === Node::SWITCH || $kk->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(0, 16); break 2; }
+                }
             }
             self::fillWithControl($n);
         }
