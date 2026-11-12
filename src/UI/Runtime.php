@@ -3288,7 +3288,7 @@ final class Runtime
         if ($this->building) { $this->animating = true; } else { $this->needsFrame = true; }
     }
 
-    /** Which half of stepper $id the mouse is held down on: 1 the upper, -1 the lower, 0 neither. */
+    /** Which half of stepper $id the mouse is held down on: 1 increment, -1 decrement, 0 neither. */
     public function holding(int $id): int
     {
         $r = $this->rects[$id] ?? null;
@@ -3298,6 +3298,10 @@ final class Runtime
         [$x, $y] = $this->hold;
         if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
             return 0;
+        }
+        if ($this->touch && $r[2] > $r[3] * 1.5) { // UIStepper horizontal [ − | + ] on a phone
+            $right = $x >= $r[0] + $r[2] / 2;
+            return ($this->steppers[$id] ?? false) ? ($right ? -1 : 1) : ($right ? 1 : -1);
         }
         return $y < $r[1] + $r[3] / 2 ? 1 : -1;
     }

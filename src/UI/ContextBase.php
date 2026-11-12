@@ -250,7 +250,8 @@ trait ContextBase
     {
         $t = $this->theme;
         [, $h] = $this->metrics->measure('X', $t->fontSize);
-        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 0, '', null, $t->fontSize, $t->text));
+        $touchH = ($this->runtime?->touch ?? false) && $t->controlHeight > 0 ? max($h, 36.0) : $h;
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $touchH, 0, '', null, $t->fontSize, $t->text));
         $n->edit = $state; $n->bare = true; $n->changed = $state->editedSinceBuilt();
         $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout
         $n->padding(0)->minWidth($t->space(20))->minHeight(0); // no padding of its own, not a field's text inset taken back (an inset of -FIELD_INSET drew the text left of a padding the app gives it)

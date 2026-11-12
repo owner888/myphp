@@ -1930,7 +1930,8 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $label === '' ? $t->space(4) : $w + $t->space(6), $label === '' ? $t->space(4) : max($h, $t->space(4)), 0, $label, null, $size, $t->text)); // without a label, its box alone
+        $minH = ($this->runtime?->touch ?? false) && $t->controlHeight > 0 ? $t->controlHeight : $t->space(4);
+        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $label === '' ? max($t->space(4), $minH) : $w + $t->space(6), $label === '' ? $minH : max($h, $minH), 0, $label, null, $size, $t->text)); // without a label, its box alone
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $checked = !$checked;
@@ -4507,6 +4508,34 @@ final class Context
     public function stepper(int|float &$value, float $min, float $max, float $step = 1): Node
     {
         $t = $this->theme;
+        $touch = $this->runtime?->touch ?? false;
+        if ($touch) { // UIStepper on a phone: 94 × 32 side-by-side [ − | + ] capsule
+            $n = $this->row(0, 0, 0, $t->surface)->size(94, 32)->radius(8)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER);
+            $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
+            $jump = $this->runtime?->jumped($n->id) ?? 0;
+            $holding = $this->runtime?->holding($n->id) ?? 0;
+            $v = $jump !== 0 ? ($jump > 0 ? $max : $min) : max($min, min($max, $value + $ticks * $step));
+            foreach ([-1, 1] as $idx => $dir) {
+                if ($idx === 1) { $this->box(1, 20, $t->border)->alignSelf(Node::CENTER)->role(Role::NONE); }
+                $can = $dir > 0 ? $v < $max : $v > $min;
+                $a = $this->box(46, 32, 0)->grow(1)->role(Role::NONE);
+                $a->color = $holding === $dir ? $t->surfacePressed : null;
+                $a->draw(static function (Painter $p, array $r) use ($dir, $can) {
+                    $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = 6.0; $c = $can ? $t->text : $t->textMuted;
+                    $list = $p->displayList(); $a = $can ? 1.0 : 0.4;
+                    $list->line($cx - $d, $cy, $cx + $d, $cy, $c, $a, 1.8);
+                    if ($dir > 0) { $list->line($cx, $cy - $d, $cx, $cy + $d, $c, $a, 1.8); }
+                });
+            }
+            $this->end();
+            if ($v != $value) {
+                $value = is_int($value) ? (int)round($v) : $v;
+                $n->changed = true;
+                $this->runtime?->haptic('light');
+            }
+            $n->range($min, $max, $value, $step);
+            return $n;
+        }
         $n = $this->column(0, 0, 0, $t->surface)->size($t->space(5), 0)->radius($t->radius)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER); // mygo's: a column of the two arrows, bordered
         $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
         $jump = $this->runtime?->jumped($n->id) ?? 0;
@@ -4553,7 +4582,8 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $n = $this->add(new Node(Node::RADIO, 0, 0, 0, $w + $t->space(6), max($h, $t->space(4)), 0, $label, null, $size, $t->text));
+        $minH = ($this->runtime?->touch ?? false) && $t->controlHeight > 0 ? $t->controlHeight : $t->space(4);
+        $n = $this->add(new Node(Node::RADIO, 0, 0, 0, $w + $t->space(6), max($h, $minH), 0, $label, null, $size, $t->text));
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id) && $value !== $option) {
             $value = $option;
@@ -4586,7 +4616,8 @@ final class Context
     {
         $t = $this->theme;
         $ticks = self::tickCount($min, $max, $step);
-        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $t->space($ticks > 0 ? 7 : 5), 0, null, null, $t->fontSize, $t->text));
+        $sh = max($t->space($ticks > 0 ? 7 : 5), ($this->runtime?->touch ?? false) ? $t->controlHeight : 0.0);
+        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $sh, 0, null, null, $t->fontSize, $t->text));
         $n->focusable = true;
         $n->ticks = $ticks;
         $n->paddingX($t->space(5) / 2); // the knob's half width each side: its center spans the values
