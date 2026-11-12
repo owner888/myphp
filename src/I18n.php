@@ -217,7 +217,7 @@ final class I18n
     /** How a locale writes times: 12 for times with AM and PM, 24 for times without, by CLDR's time data for its region (or "hc" of its extension). */
     public static function hourCycle(string $locale): int
     {
-        return self::hourCycleOf((new IntlDatePatternGenerator($locale === '' ? 'en' : $locale))->getBestPattern('j')) === 12 ? 12 : 24;
+        return self::hourCycleOf(new IntlDatePatternGenerator($locale === '' ? 'en' : $locale)->getBestPattern('j')) === 12 ? 12 : 24;
     }
 
     /** @internal The hour cycle of a date format pattern: 12 for h and K, 24 for H and k, 0 for none. Quoted text is not a field. */

@@ -192,7 +192,7 @@ final class HtmlBuilder
                 return;
             case 'li':
                 $this->flush();
-                $kind = $this->lists === [] ? ListKind::Bullets : $this->lists[count($this->lists) - 1];
+                $kind = $this->lists === [] ? ListKind::Bullets : array_last($this->lists);
                 $this->style = new ParagraphStyle(list: $kind, indent: max(count($this->lists) - 1, 0), align: $saved->align, quote: $saved->quote);
                 $block = true;
                 break;

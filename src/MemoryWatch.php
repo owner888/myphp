@@ -64,7 +64,7 @@ final class MemoryWatch
      */
     public function sample(int $live, int $freed): array
     {
-        $before = $this->live === [] ? null : $this->live[count($this->live) - 1];
+        $before = $this->live === [] ? null : array_last($this->live);
         $this->live[] = $live;
         if (count($this->live) > self::GROWING + 1) {
             array_shift($this->live);

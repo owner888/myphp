@@ -818,7 +818,7 @@ abstract class View
             $c->end();
             $flex = match ($mods[0][0]) { // an overlay takes the view's size, a search field or find bar over it the view's room
                 'overlay' => $view === null ? 0 : self::flexOf($view, Node::COLUMN),
-                'search', 'find' => $box->kids === [] ? 0 : self::flexOf($box->kids[count($box->kids) - 1], Node::COLUMN),
+                'search', 'find' => $box->kids === [] ? 0 : self::flexOf(array_last($box->kids), Node::COLUMN),
                 default => self::flexOfKids($box),
             };
             self::takeRoom($box, $at->axis, $flex); // a box around a view that takes the room takes it
@@ -1133,7 +1133,7 @@ abstract class View
                 case 'tap':
                     $whole->focusable(false);
                     if ($a[1] === 2 ? $c->doubleClicked($whole) : $c->clicked($whole)) {
-                        if ((new \ReflectionFunction($a[0]))->getNumberOfParameters() === 0) { ($a[0])(); break; }
+                        if (new \ReflectionFunction($a[0])->getNumberOfParameters() === 0) { ($a[0])(); break; }
                         $rt = $c->runtime;
                         [$mx, $my] = [$rt?->input->mouseX ?? 0.0, $rt?->input->mouseY ?? 0.0];
                         $at = $a[2] === \CoordinateSpace::global ? [$mx, $my] : ($rt?->toLocal($whole->id, $mx, $my) ?? [0.0, 0.0]);

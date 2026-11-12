@@ -49,12 +49,7 @@ final class URLRequest
 
     public function value(string $forHTTPHeaderField): ?string
     {
-        foreach ($this->allHTTPHeaderFields as $k => $v) {
-            if (strcasecmp($k, $forHTTPHeaderField) === 0) {
-                return $v;
-            }
-        }
-        return null;
+        return array_find($this->allHTTPHeaderFields, fn(string $v, string $k) => strcasecmp($k, $forHTTPHeaderField) === 0);
     }
 
     public function setBearerToken(string $token): static

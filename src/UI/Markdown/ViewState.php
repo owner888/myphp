@@ -468,7 +468,7 @@ final class ViewState
             if ($checked) {
                 $cb->background($th->checkbox[0], $th->checkbox[1])->draw(static function (Painter $p, array $r) {
                     [$x, $y, $w, $h] = $r;
-                    $path = (new Path())->moveTo($x + $w * 0.25, $y + $h * 0.52)->lineTo($x + $w * 0.43, $y + $h * 0.7)->lineTo($x + $w * 0.76, $y + $h * 0.32);
+                    $path = new Path()->moveTo($x + $w * 0.25, $y + $h * 0.52)->lineTo($x + $w * 0.43, $y + $h * 0.7)->lineTo($x + $w * 0.76, $y + $h * 0.32);
                     $p->strokePath($path, max(1.5, $w / 9), 0xffffff);
                 });
             } else {
@@ -914,7 +914,7 @@ final class ViewState
         if ($parts === []) {
             return $src;
         }
-        $first = $parts[0]; $last = $parts[count($parts) - 1];
+        $first = $parts[0]; $last = array_last($parts);
         $fi = $this->elem($first->id); $li = $this->elem($last->id);
         if ($fi === null || $li === null) {
             return $this->copyText($parts);

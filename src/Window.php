@@ -130,7 +130,7 @@ final class Window
                     }
                 };
                 $wire($items);
-                App::later(fn() => (new Menu($items))->popupAt($this, $x, $y, $rtl)); // after the frame, as mygo's host shows it after the event
+                App::later(fn() => new Menu($items)->popupAt($this, $x, $y, $rtl)); // after the frame, as mygo's host shows it after the event
             };
             $this->runtime->readClipboard = fn() => App::backend()->clipboard()->readText();
             $this->runtime->escape = $this->escape(...);

@@ -872,7 +872,7 @@ final class Compiler
         if ($stmts === []) {
             return false;
         }
-        $last = $stmts[count($stmts) - 1];
+        $last = array_last($stmts);
         return match ($last->type) {
             StmtType::RETURN, StmtType::DISCARD => true,
             StmtType::BLOCK_STMT => self::isTerminating($last->blocks[0]->stmts),

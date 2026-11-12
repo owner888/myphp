@@ -14,7 +14,7 @@ final class ProgressView extends View
     {
         if ($this->value === null && $this->title === '') { return $c->spinner(); }
         $n = $c->column(0, 6)->alignSelf($this->value === null ? Node::AUTO : Node::STRETCH);
-          if ($this->title !== '') { (new Text($this->title))->render($c, $env->along(Node::COLUMN)); }
+          if ($this->title !== '') { new Text($this->title)->render($c, $env->along(Node::COLUMN)); }
           if ($this->value === null) { $c->spinner(); }
           else { $c->progress($this->total > 0 ? max(0.0, min(1.0, $this->value / $this->total)) : 0.0, 0)->alignSelf(Node::STRETCH); }
         $c->end();

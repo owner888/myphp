@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build/android"
 SYSROOT="${BUILD_DIR}/sysroot"
-PHP_VERSION="8.3.16"
+PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
 PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"
 OUT_DIR="${BUILD_DIR}/libs/arm64-v8a"
 ANDROID_API=31

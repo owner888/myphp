@@ -287,7 +287,7 @@ final class Document
     {
         $now = hrtime(true);
         if ($join && $this->coalesce && $now - $this->lastEdit < 1_000_000_000 && $this->undo !== []) {
-            $step = $this->undo[count($this->undo) - 1];
+            $step = array_last($this->undo);
         } else {
             $step = new UndoStep($this->text, $this->text, [$this->anchor, $this->caret]);
             $this->undo[] = $step;

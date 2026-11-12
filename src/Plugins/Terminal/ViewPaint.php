@@ -432,7 +432,7 @@ trait ViewPaint
             if ($first[0] === 0 && !$first[3] && $ox > $left) {
                 $list->rect($left, $ry, $ox - $left, $ch, $first[2][0], $first[2][1]);
             }
-            $last = $line->bgs[count($line->bgs) - 1];
+            $last = array_last($line->bgs);
             if ($last[1] >= $cols && !$last[3] && $right > $gx1) {
                 $list->rect($gx1, $ry, $right - $gx1, $ch, $last[2][0], $last[2][1]);
             }
@@ -450,7 +450,7 @@ trait ViewPaint
             }
         };
         $vertical($lines[0], $r[1], $oy);
-        $vertical($lines[count($lines) - 1], $oy + count($lines) * $ch, $r[1] + $r[3]);
+        $vertical(array_last($lines), $oy + count($lines) * $ch, $r[1] + $r[3]);
     }
 
     /** The color of the hovered link's underline: its text's, or the foreground's (mygo's linkColor). @param array{0: int, 1: int, 2: int} $h @return array{0: int, 1: float} */

@@ -27,6 +27,12 @@ jobs:
       id-token: write # npm trusted publishing and provenance
     steps:
       - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: ffi, mbstring, curl, openssl, dom, xml, zip
+          ini-values: ffi.enable=1
+          coverage: none
       - name: Check the version
         run: php scripts/version.php --check "$GITHUB_REF_NAME"
       - name: PHP tests

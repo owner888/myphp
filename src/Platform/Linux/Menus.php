@@ -66,7 +66,7 @@ final class Menus
         $this->onOpen->fn = fn($menu, $data) => $this->h->menuWillOpen(Mem::addr($data));
         $this->onDeactivate = $f->new('HWidget', false);
         $this->onDeactivate->fn = function ($menu, $data): void {
-            if ($this->loops !== []) { Gtk::ffi()->g_main_loop_quit($this->loops[count($this->loops) - 1]); }
+            if ($this->loops !== []) { Gtk::ffi()->g_main_loop_quit(array_last($this->loops)); }
         };
     }
 

@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 // The options are the last argument: after the script's path, or after --myphp-pty-spawn in a static app's stub.
-$o = json_decode(base64_decode($argv[count($argv) - 1] ?? ''), true);
+$o = json_decode(base64_decode(array_last($argv) ?? ''), true);
 if (!is_array($o)) {
     fwrite(STDERR, "pty: no program to run\n");
     exit(127);

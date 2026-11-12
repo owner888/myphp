@@ -372,7 +372,7 @@ final class Router
         $params = self::$params[$fn] ??= array_map(static function (\ReflectionParameter $p): array {
             $type = $p->getType();
             return [$p->getName(), $type instanceof \ReflectionNamedType ? $type->getName() : 'string', $p->isDefaultValueAvailable() ? $p->getDefaultValue() : null, $p->isDefaultValueAvailable()];
-        }, array_slice((new \ReflectionFunction($fn))->getParameters(), 1));
+        }, array_slice(new \ReflectionFunction($fn)->getParameters(), 1));
         $named = $r->params();
         $args = [$c];
         foreach ($params as [$name, $type, $default, $hasDefault]) {

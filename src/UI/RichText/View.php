@@ -330,7 +330,7 @@ final class View implements TextInputClient
     }
 
     /** The text of paragraph $p, without its newline. */
-    public function lineOf(int $p): string { return (new RopeText($this->shown->text))->line($p); }
+    public function lineOf(int $p): string { return new RopeText($this->shown->text)->line($p); }
 
     /** Paragraph $p laid out, with the composition at the caret: it keeps the layout until the paragraph or its style change. */
     public function paraLayout(int $p): ParaView

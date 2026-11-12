@@ -388,7 +388,7 @@ final class Window implements Platform\Window
                     $input->push(['scrollEnd', $ptX, $ptY]); // what the finger pulled past a top is let go (Context::refreshable)
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
-                        $last = $this->touchHistory[count($this->touchHistory) - 1];
+                        $last = array_last($this->touchHistory);
                         $dt = ($last[0] - $first[0]) / 1e9;
                         if ($dt > 0.01 && $dt < 0.2) {
                             $vx = ($last[1] - $first[1]) / $dt;

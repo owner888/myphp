@@ -48,7 +48,7 @@ final class Toggle extends View
         $was = $this->isOn;
         if ($env->formRow && $style === \ToggleStyle::switch) { // a form's row, as SwiftUI's: the title leading, wrapping as long text does, the switch at the row's end
             $row = $c->row(0, 8)->alignItems(Node::CENTER);
-              (new Text($this->title))->render($c, $env->along(Node::ROW)->with(['formRow' => false]))?->shrink(1)->grow(1);
+              new Text($this->title)->render($c, $env->along(Node::ROW)->with(['formRow' => false]))?->shrink(1)->grow(1);
               $n = $c->switch('', $this->isOn)->shrink(0);
               $n->label($title);
             $c->end();

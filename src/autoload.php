@@ -11,5 +11,13 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+// PHP 8.5 array_first / array_last polyfills when running on PHP 8.4:
+if (!function_exists('array_first')) {
+    function array_first(array $array): mixed { return $array === [] ? null : $array[array_key_first($array)]; }
+}
+if (!function_exists('array_last')) {
+    function array_last(array $array): mixed { return $array === [] ? null : $array[array_key_last($array)]; }
+}
+
 // The declarative views, global as SwiftUI's: VStack, Text, Button, Color, Font, NavigationPath… (docs/swiftui.md)
 require_once __DIR__ . '/UI/Declarative/functions.php';

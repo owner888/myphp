@@ -88,7 +88,7 @@ final class Path
     {
         [$rx, $ry] = [$w / 2, $h / 2]; [$cx, $cy] = [$x + $rx, $y + $ry];
         [$kx, $ky] = [0.5522847498 * $rx, 0.5522847498 * $ry];
-        return (new self())->moveTo($cx + $rx, $cy)
+        return new self()->moveTo($cx + $rx, $cy)
             ->cubeTo($cx + $rx, $cy + $ky, $cx + $kx, $cy + $ry, $cx, $cy + $ry)
             ->cubeTo($cx - $kx, $cy + $ry, $cx - $rx, $cy + $ky, $cx - $rx, $cy)
             ->cubeTo($cx - $rx, $cy - $ky, $cx - $kx, $cy - $ry, $cx, $cy - $ry)

@@ -14,8 +14,8 @@ use MyPHP\UI\{Context, Key, Node, Path, Track};
  * slices for draw functions, stacking, and a selection that the pointer
  * and the keyboard move.
  *
- *     $x = (new Band(...$months))->padding(0.3, 0.15);
- *     $y = (new Linear(0, 120))->nice(4);
+ *     $x = new Band(...$months)->padding(0.3, 0.15);
+ *     $y = new Linear(0, 120)->nice(4);
  *     Chart::plot($c, new Axes(left: $y->ticks(4), bottom: $x->ticks()), function (Node $area) use ($c, $x, $y, $sales, $t) {
  *         foreach ($sales as $i => $v) {
  *             Chart::rect($c, $x->band($i), $y->span(0, $v))->background($t->accent)->radius(4);
@@ -410,7 +410,7 @@ final class Chart
             self::addSegments($path, self::curve($top, $k));
             // Back along the bottom line, the same curve the other way.
             $segs = self::curve($bottom, $k);
-            $last = $bottom[count($bottom) - 1];
+            $last = array_last($bottom);
             $path->lineTo($last[0], $last[1]);
             for ($i = count($segs) - 1; $i >= 0; $i--) {
                 $at = $i > 0 ? $segs[$i - 1]['to'] : $bottom[0];

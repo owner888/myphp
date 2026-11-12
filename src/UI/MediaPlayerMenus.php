@@ -499,7 +499,7 @@ final class MediaPlayerMenus
     private static function chapters(MediaPlayerState $s): array
     {
         $chapters = $s->player->chapters();
-        $longest = $chapters === [] ? '' : MediaPlayerState::clock($chapters[count($chapters) - 1]->start);
+        $longest = $chapters === [] ? '' : MediaPlayerState::clock(array_last($chapters)->start);
         $at = $s->player->chapter();
         $items = [];
         foreach ($chapters as $i => $ch) {
@@ -630,7 +630,7 @@ final class MediaPlayerMenus
     private static function defaultValue(string $name): ?float
     {
         [, $action, $num] = self::BOUND[$name] ?? [false, [], false];
-        return $num ? (float)$action[count($action) - 1] : null;
+        return $num ? (float)array_last($action) : null;
     }
 
     /**
@@ -649,7 +649,7 @@ final class MediaPlayerMenus
             if (count($lhs) === 4) { // mpv's old form, its flags a third and a fourth word
                 $lhs = [$lhs[0], $lhs[1], "{$lhs[2]}+{$lhs[3]}"];
             }
-            $flags = array_values(array_diff(explode('+', $lhs[count($lhs) - 1]), ['relative']));
+            $flags = array_values(array_diff(explode('+', array_last($lhs)), ['relative']));
             if (in_array('exact', $flags, true)) {
                 $flags = array_values(array_diff($flags, ['exact']));
                 $exact = true;
@@ -661,7 +661,7 @@ final class MediaPlayerMenus
             return $lhs === $rhs ? [null, false] : null;
         }
         if (array_slice($lhs, 0, -1) !== array_slice($rhs, 0, -1)) { return null; }
-        [$l, $r] = [$lhs[count($lhs) - 1], $rhs[count($rhs) - 1]];
+        [$l, $r] = [array_last($lhs), array_last($rhs)];
         if (!is_numeric($l) || !is_numeric($r)) { return null; }
         $ok = $range !== null ? (float)$l >= $range[0] && (float)$l <= $range[1] : (float)$l === (float)$r;
         return $ok ? [(float)$l, $exact] : null;

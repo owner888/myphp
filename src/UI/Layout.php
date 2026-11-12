@@ -145,7 +145,7 @@ final class Layout
         while (count($chain) > 1 && $chain[count($chain) - 1]->inline) {
             array_pop($chain);
         }
-        $e = $chain[count($chain) - 1];
+        $e = array_last($chain);
         [$rx, $ry, $rw, $rh] = self::clientCaret($e) ?? [0.0, 0.0, $e->w, $e->h]; // what shows, from the node's corner
         for ($i = count($chain) - 2; $i >= 0; $i--) {
             $p = $chain[$i]; $ch = $chain[$i + 1];

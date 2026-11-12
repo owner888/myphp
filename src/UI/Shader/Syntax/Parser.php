@@ -38,7 +38,7 @@ final class Parser
     /** The tree of $src. @throws SyntaxError at the first thing wrong */
     public static function parse(string $src): File
     {
-        return (new self($src))->file();
+        return new self($src)->file();
     }
 
     /** The line and column of byte $off of $src, from 1, the column in bytes, as Go's token.Position. @return array{0: int, 1: int} */
@@ -286,7 +286,7 @@ final class Parser
             $names = []; $start = -1;
         }
         if ($names !== []) {
-            throw new SyntaxError($names[count($names) - 1]->pos, 'mixed named and unnamed parameters');
+            throw new SyntaxError(array_last($names)->pos, 'mixed named and unnamed parameters');
         }
         return $fields;
     }

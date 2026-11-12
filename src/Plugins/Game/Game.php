@@ -19,7 +19,7 @@ use MyPHP\UI\{Context, InputEvent, Node, Painter};
  *         public function update(Input $in): void { if ($in->down(Key::D)) { $this->x += 2; } }
  *         public function draw(Painter $p, array $r, float $alpha): void
  *         {
- *             (new Camera($this->x, $this->y, zoom: 3))->draw($p, $r, fn() => drawWorld($p));
+ *             new Camera($this->x, $this->y, zoom: 3)->draw($p, $r, fn() => drawWorld($p));
  *         }
  *     }
  *

@@ -644,7 +644,7 @@ final class Player
     {
         $end = $this->fedTo;
         foreach ($this->queued as $q) {
-            if ($q !== []) { $p = $q[count($q) - 1]; $end = max($end, $p->time + $p->duration); }
+            if ($q !== []) { $p = array_last($q); $end = max($end, $p->time + $p->duration); }
         }
         return $end;
     }
@@ -1716,7 +1716,7 @@ final class Player
     private function feed(?float $at = null): void
     {
         $until = ($at ?? $this->out->time()) + self::AHEAD * max(1.0, $this->rate) + max(0.0, -$this->out->audioDelay); // two seconds of the clock's (faster than the film's at a rate over 1), and the sound an earlier delay plays now
-        $last = fn(string $k): float => ($q = $this->queued[$k]) === [] ? -INF : $q[count($q) - 1]->time;
+        $last = fn(string $k): float => ($q = $this->queued[$k]) === [] ? -INF : array_last($q)->time;
         while (!$this->drained && max($last('video'), $last('audio')) <= $until) {
             try {
                 $p = $this->ahead !== [] ? array_shift($this->ahead) : $this->source->next();

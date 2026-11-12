@@ -65,7 +65,7 @@ final class Service
             if ($body === false) { throw new RuntimeException('fetch: the body is not base64'); }
         }
         if ($this->opts->allow !== null && !($this->opts->allow)(new Request($method, $url, $headers))) {
-            throw new RuntimeException('the app does not allow requests to ' . (new Request($method, $url, $headers))->redacted());
+            throw new RuntimeException('the app does not allow requests to ' . new Request($method, $url, $headers)->redacted());
         }
         $redirect = (string)($req['redirect'] ?? 'follow');
 

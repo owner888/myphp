@@ -19,7 +19,7 @@ final class NavigationLink extends View
         $router = $env->stack === null ? null : $env->route?->router;
         $go = function () use ($router): void { ($router ?? throw new \LogicException("NavigationLink to {$this->value} outside a NavigationStack"))->push($this->value); };
         if (!$env->inList) {
-            return (new Button($this->title, $go, null, $this->label))->render($c, $env->with(['buttonStyle' => $env->buttonStyle ?? \ButtonStyle::borderless]));
+            return new Button($this->title, $go, null, $this->label)->render($c, $env->with(['buttonStyle' => $env->buttonStyle ?? \ButtonStyle::borderless]));
         }
         $n = $this->label === null ? $c->cell(Localized::string($this->title, $env), '', true) : self::row($c, $env, $this->label, true);
         if ($c->clicked($n)) { $go(); }

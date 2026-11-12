@@ -257,7 +257,7 @@ final class System
             $l->lines[$i]->end = max($l->lines[$i]->end, $l->lines[$i + 1]->start);
         }
         if (!$truncated) {
-            $l->lines[count($l->lines) - 1]->end = $end;
+            array_last($l->lines)->end = $end;
         }
         return $truncated;
     }
