@@ -45,10 +45,10 @@ $CC -shared -fPIC -Os -ffunction-sections -fdata-sections \
     -Wl,-z,max-page-size=16384 \
     -o "${OUT_DIR}/libmyphp.so"
 
-echo "==> Copying and stripping libphp.so, libcurl.so and libmyphp.so..."
+echo "==> Copying and stripping libphp.so and libmyphp.so..."
+rm -f "${OUT_DIR}/libcurl.so"
 cp "${PHP_DIR}/libs/libphp.so" "${OUT_DIR}/libphp.so"
-cp "${BUILD_DIR}/sysroot/lib/libcurl.so" "${OUT_DIR}/libcurl.so"
-"$STRIP" --strip-unneeded "${OUT_DIR}/libmyphp.so" "${OUT_DIR}/libphp.so" "${OUT_DIR}/libcurl.so"
+"$STRIP" --strip-unneeded "${OUT_DIR}/libmyphp.so" "${OUT_DIR}/libphp.so"
 
 echo "==> Built launcher:"
 ls -lh "${OUT_DIR}"

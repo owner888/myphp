@@ -93,8 +93,7 @@ final class Curl
     {
         if (self::$ffi === null) {
             $lib = match (true) {
-                App::isIOS() => null,
-                App::isAndroid() => 'libcurl.so',
+                App::isIOS(), App::isAndroid() => null,
                 PHP_OS_FAMILY === 'Darwin' => '/usr/lib/libcurl.4.dylib',
                 default => 'libcurl.so.4',
             };

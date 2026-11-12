@@ -93,10 +93,11 @@ if [ ! -f "${SYSROOT}/lib/libssl.a" ]; then
     echo "==> OpenSSL installed to $SYSROOT"
 fi
 
-# 3. Build curl as libcurl.so (OpenSSL inside): Native\Curl loads it by name, as PHP's curl extension does.
+# 3. Build curl as static libcurl.a (linked once into libphp.so alongside OpenSSL, saving ~5.3 MB of duplicate OpenSSL code):
+# Native\Curl resolves libcurl's symbols directly from the process (FFI::cdef(CDEF)), just as on iOS.
 # No CA bundle nor path is built in: the launcher sets SSL_CERT_FILE (the system's certificates, MyphpActivity
 # writes them as PEM), which OpenSSL's default paths honor (--with-ca-fallback).
-if [ ! -f "${SYSROOT}/lib/libcurl.so" ]; then
+if [ ! -f "${SYSROOT}/lib/libcurl.a" ]; then
     echo "==> Preparing curl ${CURL_VERSION}..."
     cd "$BUILD_DIR"
     if [ ! -f "curl-${CURL_VERSION}.tar.gz" ]; then
@@ -106,19 +107,20 @@ if [ ! -f "${SYSROOT}/lib/libcurl.so" ]; then
     tar -xzf "curl-${CURL_VERSION}.tar.gz"
     cd "curl-${CURL_VERSION}"
     export CFLAGS="-fPIC -Os -ffunction-sections -fdata-sections -I${SYSROOT}/include"
-    export LDFLAGS="-L${SYSROOT}/lib -Wl,--gc-sections"
+    export LDFLAGS="-L${SYSROOT}/lib"
     ./configure \
         --host=aarch64-linux-android \
         --prefix="$SYSROOT" \
-        --enable-shared --disable-static \
+        --enable-static --disable-shared \
         --with-openssl="$SYSROOT" --with-zlib \
         --with-ca-fallback --without-ca-bundle --without-ca-path \
         --disable-ldap --disable-ldaps --disable-rtsp --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smtp --disable-gopher --disable-mqtt --disable-smb \
         --without-libpsl --without-libidn2 --without-brotli --without-zstd --without-nghttp2 --without-librtmp \
+        --disable-symbol-hiding \
         --disable-manual --disable-docs
     make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
-    make install # libtool names an Android library libcurl.so, unversioned, as the APK's lib/arm64-v8a takes it
-    "$STRIP" --strip-unneeded "${SYSROOT}/lib/libcurl.so"
+    make install
+    rm -f "${SYSROOT}/lib/libcurl.so" "${SYSROOT}/lib/libcurl.la"
     echo "==> curl installed to $SYSROOT"
 fi
 
@@ -153,10 +155,10 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != 
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
         echo "==> Extracting prebuilt Android runtime..."
         tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
-        if [ -f "${PHP_DIR}/libs/libphp.so" ] && [ -f "${SYSROOT}/lib/libcurl.so" ]; then
+        if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
             touch "${PHP_DIR}/libs/libphp.so"
             echo "==> Prebuilt Android PHP runtime ready:"
-            ls -lh "${PHP_DIR}/libs/libphp.so" "${SYSROOT}/lib/libcurl.so"
+            ls -lh "${PHP_DIR}/libs/libphp.so"
             exit 0
         fi
     fi
@@ -250,9 +252,9 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     '
 
     echo "==> Compiling PHP..."
-    make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+    make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" EXTRA_LDFLAGS="-avoid-version -module -L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -XCClinker -Wl,--gc-sections -XCClinker -Wl,--exclude-libs=libssl.a:libcrypto.a:libxml2.a:libffi.a"
     "$STRIP" --strip-unneeded "${PHP_DIR}/libs/libphp.so"
 fi
 
 echo "==> PHP built successfully!"
-ls -lh "${PHP_DIR}/libs/libphp.so" "${SYSROOT}/lib/libcurl.so"
+ls -lh "${PHP_DIR}/libs/libphp.so"

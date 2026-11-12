@@ -48,7 +48,6 @@ pack_android() {
     echo "==> Packing ${archive}..."
     tar -czf "${archive}" \
         "build/android/php-${PHP_VERSION}/libs/libphp.so" \
-        "build/android/sysroot/lib/libcurl.so" \
         "build/android/sysroot/include" \
         "build/android/php-${PHP_VERSION}/main" \
         "build/android/php-${PHP_VERSION}/Zend" \
