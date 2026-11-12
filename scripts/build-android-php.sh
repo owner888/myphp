@@ -105,8 +105,8 @@ if [ ! -f "${SYSROOT}/lib/libcurl.so" ]; then
     rm -rf "curl-${CURL_VERSION}"
     tar -xzf "curl-${CURL_VERSION}.tar.gz"
     cd "curl-${CURL_VERSION}"
-    export CFLAGS="-fPIC -O2 -I${SYSROOT}/include"
-    export LDFLAGS="-L${SYSROOT}/lib"
+    export CFLAGS="-fPIC -Os -ffunction-sections -fdata-sections -I${SYSROOT}/include"
+    export LDFLAGS="-L${SYSROOT}/lib -Wl,--gc-sections"
     ./configure \
         --host=aarch64-linux-android \
         --prefix="$SYSROOT" \
@@ -118,6 +118,7 @@ if [ ! -f "${SYSROOT}/lib/libcurl.so" ]; then
         --disable-manual --disable-docs
     make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
     make install # libtool names an Android library libcurl.so, unversioned, as the APK's lib/arm64-v8a takes it
+    "$STRIP" --strip-unneeded "${SYSROOT}/lib/libcurl.so"
     echo "==> curl installed to $SYSROOT"
 fi
 
@@ -177,8 +178,8 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     cd "$PHP_DIR"
     export YACC="/opt/homebrew/opt/bison/bin/bison -y"
     export RE2C="/opt/homebrew/bin/re2c"
-    export CFLAGS="-fPIC -O2 -I${SYSROOT}/include"
-    export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN'"
+    export CFLAGS="-fPIC -Os -ffunction-sections -fdata-sections -I${SYSROOT}/include"
+    export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -Wl,--gc-sections"
     export LIBS=""
     export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
     export LIBXML_CFLAGS="-I${SYSROOT}/include/libxml2" LIBXML_LIBS="-L${SYSROOT}/lib -lxml2 -lm"
@@ -190,29 +191,30 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
         --build=aarch64-apple-darwin \
         --prefix="$SYSROOT" \
         --enable-embed=shared \
+        --disable-all \
         --disable-cli \
         --disable-cgi \
         --disable-phpdbg \
         --disable-fpm \
+        --without-pear \
         --with-ffi \
         --enable-opcache \
+        --disable-opcache-jit \
         --enable-mbstring \
+        --disable-mbregex \
+        --enable-ctype \
+        --enable-filter \
+        --enable-tokenizer \
         --with-zlib \
         --with-curl \
         --with-openssl \
-        --without-sqlite3 \
-        --without-pdo-sqlite \
-        --without-pear \
-        --disable-mbregex \
-        --without-iconv \
         --with-libxml \
         --enable-dom \
         --enable-simplexml \
         --enable-xml \
         --enable-xmlreader \
         --enable-xmlwriter \
-        --disable-phar \
-        --disable-fileinfo \
+        --without-pcre-jit \
         ac_cv_func_strlcpy=yes \
         ac_cv_func_strlcat=yes \
         ac_cv_func_fnmatch=yes \
@@ -249,6 +251,7 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
 
     echo "==> Compiling PHP..."
     make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+    "$STRIP" --strip-unneeded "${PHP_DIR}/libs/libphp.so"
 fi
 
 echo "==> PHP built successfully!"

@@ -3438,7 +3438,7 @@ function writeSkills(string $dir): void
 {
     $dst = "$dir/.agents/skills/myphp-app";
     copyTree(SKILLS . '/myphp-app', $dst, []);
-    @file_put_contents("$dst/.version", VERSION . ':' . skillsStamp());
+    @file_put_contents("$dst/.version", skillsStamp() . "\n");
 }
 
 /** Content hash of the local bundled myphp-app skill files (7 files, ~40 KB, < 0.2 ms, zero network). */
@@ -3464,7 +3464,7 @@ function syncSkillsIfNeeded(string $dir): void
     if (!is_dir("$dir/.agents") && !is_file("$dir/" . CONFIG)) {
         return;
     }
-    $want = VERSION . ':' . skillsStamp();
+    $want = skillsStamp() . "\n";
     if (@file_get_contents("$dst/.version") === $want) {
         return;
     }
