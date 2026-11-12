@@ -25,8 +25,10 @@ CC="${TOOLCHAIN}/bin/aarch64-linux-android${ANDROID_API}-clang"
 
 mkdir -p "$OUT_DIR"
 
+STRIP="${TOOLCHAIN}/bin/llvm-strip"
+
 echo "==> Compiling libmyphp.so..."
-$CC -shared -fPIC -O2 \
+$CC -shared -fPIC -Os -ffunction-sections -fdata-sections \
     -I"${ROOT_DIR}/src/Platform/Android/launcher" \
     -I"${PHP_DIR}" \
     -I"${PHP_DIR}/main" \
@@ -39,12 +41,14 @@ $CC -shared -fPIC -O2 \
     -L"${PHP_DIR}/libs" -lphp \
     -llog -landroid -lEGL -lGLESv3 -ljnigraphics -lm \
     -Wl,-rpath,'$ORIGIN' \
+    -Wl,--gc-sections \
     -Wl,-z,max-page-size=16384 \
     -o "${OUT_DIR}/libmyphp.so"
 
-echo "==> Copying libphp.so and libcurl.so..."
+echo "==> Copying and stripping libphp.so, libcurl.so and libmyphp.so..."
 cp "${PHP_DIR}/libs/libphp.so" "${OUT_DIR}/libphp.so"
 cp "${BUILD_DIR}/sysroot/lib/libcurl.so" "${OUT_DIR}/libcurl.so"
+"$STRIP" --strip-unneeded "${OUT_DIR}/libmyphp.so" "${OUT_DIR}/libphp.so" "${OUT_DIR}/libcurl.so"
 
 echo "==> Built launcher:"
 ls -lh "${OUT_DIR}"

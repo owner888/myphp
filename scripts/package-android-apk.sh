@@ -51,11 +51,15 @@ echo "==> Compiling resources with aapt2..."
 
 # 2. Link resources and generate R.java; debuggable for myphp run (MYPHP_ANDROID_DEBUGGABLE=1), whose hot restart copies files in with run-as
 echo "==> Linking APK and generating R.java..."
+cp "${TEMPLATE_DIR}/AndroidManifest.xml" "${WORK_DIR}/AndroidManifest.xml"
+if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" != "1" ]; then
+    sed -i '' 's/<application /<application android:extractNativeLibs="true" /' "${WORK_DIR}/AndroidManifest.xml"
+fi
 DEBUG_MODE=""
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
 "$AAPT2" link $DEBUG_MODE \
     -I "$PLATFORM_JAR" \
-    --manifest "${TEMPLATE_DIR}/AndroidManifest.xml" \
+    --manifest "${WORK_DIR}/AndroidManifest.xml" \
     --java "${WORK_DIR}/gen" \
     -o "${WORK_DIR}/base.apk" \
     "${WORK_DIR}/res.zip" \
@@ -126,15 +130,19 @@ fi
 
 # 6. Zip into unaligned APK:
 # Android 30+ requires resources.arsc to be stored uncompressed (-0).
-# Shared libraries (.so) should also be uncompressed for page-aligned mmap.
+# For release builds (myphp build), compress lib/ (-9) with extractNativeLibs=true to shrink APK size by ~60% (~12 MB vs ~32 MB).
 rm -f "${WORK_DIR}/unaligned.apk"
 if [ -f "resources.arsc" ]; then
     zip -q -0 "${WORK_DIR}/unaligned.apk" "resources.arsc"
 fi
 if [ -d "lib" ]; then
-    zip -q -0 -r "${WORK_DIR}/unaligned.apk" "lib"
+    if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then
+        zip -q -0 -r "${WORK_DIR}/unaligned.apk" "lib"
+    else
+        zip -q -9 -r "${WORK_DIR}/unaligned.apk" "lib"
+    fi
 fi
-zip -q -r "${WORK_DIR}/unaligned.apk" AndroidManifest.xml classes.dex
+zip -q -9 -r "${WORK_DIR}/unaligned.apk" AndroidManifest.xml classes.dex
 if [ -d "assets" ]; then
     zip -q -r "${WORK_DIR}/unaligned.apk" "assets"
 fi
