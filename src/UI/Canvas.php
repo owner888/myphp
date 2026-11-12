@@ -33,6 +33,8 @@ final class Canvas
     public int $drawn = 0;
     /** @internal the standard deviation, in its pixels, of the Gaussian blur it renders through, transparent beyond its pixels (Node::blur); 0 for none */
     public float $blur = 0.0;
+    /** @internal 3D Scene associated with this canvas for native 3D render pass */
+    public mixed $scene = null;
     private static int $draws = 0;
 
     /** A canvas of $w × $h pixels, transparent until drawn (mygo's NewCanvas). */
@@ -73,6 +75,15 @@ final class Canvas
         $this->list->reset();
         $this->list->pushClip(0, 0, $this->w, $this->h);
         $fn($p->forCanvas($this->list));
+        $this->rendered();
+    }
+
+    /**
+     * Renders a 3D scene directly into this canvas via the native 3D RenderPass.
+     */
+    public function renderScene(mixed $scene): void
+    {
+        $this->scene = $scene;
         $this->rendered();
     }
 

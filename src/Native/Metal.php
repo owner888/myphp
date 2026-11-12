@@ -1525,15 +1525,18 @@ final class Metal
             $this->canvasTargets[$key] = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc) ?? throw new RuntimeException('canvas texture');
         }
         $target ??= $this->canvasTargets[$key];
-        $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
-        $ca = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
-        ObjC::msg('v:p', $ca, 'setTexture:', $target);
-        ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
-        ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
-        ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::$c->new('MTLClearColor')); // transparent
-        $this->shaderTextures($cb, $list); // copied before the pass, which may not copy
-        $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
-        if ($list->n > 0) {
+        if ($c->scene !== null) {
+            \MyPHP\Plugins\Scene\Native\MetalRenderPass::instance($this->device)->render($c->scene, $c->w, $c->h, $target, $cb);
+        }
+        if ($list !== null && $list->n > 0) {
+            $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
+            $ca = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+            ObjC::msg('v:p', $ca, 'setTexture:', $target);
+            ObjC::msg('v:L', $ca, 'setLoadAction:', $c->scene !== null ? self::LOAD_LOAD : self::LOAD_CLEAR);
+            ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
+            ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::$c->new('MTLClearColor')); // transparent
+            $this->shaderTextures($cb, $list); // copied before the pass, which may not copy
+            $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
             $quads = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($list->buf)), $list->n * DisplayList::FLOATS_PER_RECT * 4, 0);
             $xforms = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($list->xforms)), $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4, 0);
             $uni = $this->canvasUniforms;
@@ -1556,8 +1559,17 @@ final class Metal
             }, $this->canvasPipeline);
             ObjC::msg('v:', $quads, 'release');
             ObjC::msg('v:', $xforms, 'release');
+            ObjC::msg('v:', $enc, 'endEncoding');
+        } elseif ($c->scene === null) {
+            $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
+            $ca = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+            ObjC::msg('v:p', $ca, 'setTexture:', $target);
+            ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
+            ObjC::msg('v:L', $ca, 'setStoreAction:', 1);
+            ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::$c->new('MTLClearColor'));
+            $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
+            ObjC::msg('v:', $enc, 'endEncoding');
         }
-        ObjC::msg('v:', $enc, 'endEncoding');
         if ($c->blur > 0) { // blurred along rows into a texture of its size, then along columns back
             $tmp = $this->canvasBlurTemps[$key] ??= $this->texture($c->w, $c->h, self::PIXEL_FORMAT_RGBA8);
             if (count($this->canvasBlurTemps) > 16) {
