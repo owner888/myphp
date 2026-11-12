@@ -8,7 +8,7 @@ namespace MyPHP\UI\Chart;
  * chart.Band), as d3's scaleBand and Swift Charts' scales of categories:
  * the bars of a bar chart, one for each month.
  *
- *     $x = (new Band(...$months))->padding(0.2, 0.1);
+ *     $x = new Band(...$months)->padding(0.2, 0.1);
  *     $bar = $x->band(3); // April's
  */
 final class Band

@@ -169,7 +169,7 @@ final class Chart extends View
         foreach ($marks as $m) { if ($m->x !== null && $m->x->label !== '') { $xLabel = $m->x->label; break; } }
         if ($kind === 'band') {
             $cats = array_values(array_unique(array_map('strval', $xs)));
-            $band = (new Band(...$cats))->padding(0.3, 0.15);
+            $band = new Band(...$cats)->padding(0.3, 0.15);
             $xAt = fn(mixed $v): float => $band->at((int)array_search((string)$v, $cats, true));
             $xTicks = $band->ticks();
             if (count($xTicks) > 8) { $k = (int)ceil(count($xTicks) / 7); $xTicks = array_values(array_filter($xTicks, fn(Tick $tk) => (int)$tk->value % $k === 0)); } // every k-th, so the labels keep apart
@@ -181,7 +181,7 @@ final class Chart extends View
             $xTicks = $time->ticks($this->xAxis?->desiredCount ?? 4);
         } else {
             [$lo, $hi] = $this->xDomain ?? ($xs === [] ? [0.0, 1.0] : Plot::extent(...array_map('floatval', $xs)));
-            $lin = $this->xDomain !== null ? new Linear($lo, $hi) : (new Linear($lo, $hi))->nice($this->xAxis?->desiredCount ?? 5);
+            $lin = $this->xDomain !== null ? new Linear($lo, $hi) : new Linear($lo, $hi)->nice($this->xAxis?->desiredCount ?? 5);
             if ($this->xAxis?->format !== null) { $lin->format = $this->xAxis->format; }
             $xAt = fn(mixed $v): float => $lin->at((float)$v);
             $xTicks = $lin->ticks($this->xAxis?->desiredCount ?? 5);
@@ -228,7 +228,7 @@ final class Chart extends View
         if ($fromZero) { $ys[] = 0.0; }
         $count = $this->yAxis?->desiredCount ?? 4;
         [$lo, $hi] = $this->yDomain ?? ($ys === [] ? [0.0, 1.0] : Plot::extent(...$ys));
-        $y = $this->yDomain !== null ? new Linear($lo, $hi) : (new Linear($lo, $hi == $lo ? $lo + 1 : $hi))->nice($count);
+        $y = $this->yDomain !== null ? new Linear($lo, $hi) : new Linear($lo, $hi == $lo ? $lo + 1 : $hi)->nice($count);
         if ($this->yAxis?->format !== null) { $y->format = $this->yAxis->format; }
         elseif ($how === Stacking::Normalized && $stackAreas !== []) { $y->format = fn(float $v) => sprintf('%.0f%%', 100 * $v); }
         $yTicks = $this->yAxis?->values !== null ? array_map(fn($v) => new Tick($y->at((float)$v), (float)$v, self::label($v, $this->yAxis)), $this->yAxis->values) : $y->ticks($count);

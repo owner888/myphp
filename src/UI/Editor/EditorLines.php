@@ -408,7 +408,7 @@ trait EditorLines
                 if ($cur !== []) { $words[] = implode('', $cur); $cur = []; }
                 continue;
             }
-            if (Chars::isUpper($c) && $cur !== [] && (Chars::isLower($cur[count($cur) - 1]) || $i + 1 < count($rs) && Chars::isLower($rs[$i + 1]) && Chars::isUpper($cur[count($cur) - 1]))) {
+            if (Chars::isUpper($c) && $cur !== [] && (Chars::isLower(array_last($cur)) || $i + 1 < count($rs) && Chars::isLower($rs[$i + 1]) && Chars::isUpper(array_last($cur)))) {
                 $words[] = implode('', $cur); $cur = [];
             }
             $cur[] = $c;

@@ -10,7 +10,7 @@ use Closure;
  * chart.Linear), as d3's scaleLinear and Swift Charts' automatic scales of
  * numbers. Values outside the domain go outside the plot unless $clamp.
  *
- *     $y = (new Linear(0, 87))->nice(10); // 0 to 90, ticks every 10
+ *     $y = new Linear(0, 87)->nice(10); // 0 to 90, ticks every 10
  *     $bar = $y->span(0, 42);
  */
 final class Linear

@@ -76,6 +76,6 @@ final class Content
     private static function takesContext(Closure $fn): bool
     {
         self::$takes ??= new \WeakMap();
-        return self::$takes[$fn] ??= (($p = (new \ReflectionFunction($fn))->getParameters()[0] ?? null) !== null && ($t = $p->getType()) instanceof \ReflectionNamedType && $t->getName() === Context::class);
+        return self::$takes[$fn] ??= (($p = new \ReflectionFunction($fn)->getParameters()[0] ?? null) !== null && ($t = $p->getType()) instanceof \ReflectionNamedType && $t->getName() === Context::class);
     }
 }

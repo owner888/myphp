@@ -77,7 +77,7 @@ final class MediaPlayerHistory
         $day = new DateFormatter(\MyPHP\App::locale(), new DateOptions(date: Style::Medium));
         $out = [];
         foreach ($entries as $e) {
-            $key = $byFolder ? (preg_match('~^https?://~i', $e['path']) === 1 ? (string)(parse_url($e['path'], PHP_URL_HOST) ?: '-') : dirname($e['path'])) : $day->format((new \DateTimeImmutable("@{$e['added']}"))->setTimezone(new \DateTimeZone(date_default_timezone_get())));
+            $key = $byFolder ? (preg_match('~^https?://~i', $e['path']) === 1 ? (string)(parse_url($e['path'], PHP_URL_HOST) ?: '-') : dirname($e['path'])) : $day->format(new \DateTimeImmutable("@{$e['added']}")->setTimezone(new \DateTimeZone(date_default_timezone_get())));
             $out[$key][] = $e;
         }
         if ($byFolder) { uksort($out, 'strnatcasecmp'); }
@@ -215,7 +215,7 @@ final class MediaPlayerHistory
     private static function when(int $at, bool $withDate): string
     {
         $f = new DateFormatter(\MyPHP\App::locale(), new DateOptions(skeleton: $withDate ? 'yyMMddjjmm' : 'jjmm'));
-        return $f->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get())));
+        return $f->format(new \DateTimeImmutable("@$at")->setTimezone(new \DateTimeZone(date_default_timezone_get())));
     }
 
     /** IINA's question before deleting ($what: delete_history, delete_all_history, delete_file): OK, or Cancel. */

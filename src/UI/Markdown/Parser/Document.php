@@ -690,6 +690,6 @@ final class Document
     /** The document as HTML, as cmark-gfm renders it, raw HTML included as written. */
     public function html(): string
     {
-        return (new Html($this))->render();
+        return new Html($this)->render();
     }
 }

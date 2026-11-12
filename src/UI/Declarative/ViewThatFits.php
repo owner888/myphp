@@ -35,7 +35,7 @@ final class ViewThatFits extends View
           $rect = $c->runtime?->rectOf($n->id);
           $availW = $rect !== null && $rect[2] > 0 ? $rect[2] : INF;
           $availH = $rect !== null && $rect[3] > 0 ? $rect[3] : INF;
-          $chosen = $candidates[count($candidates) - 1];
+          $chosen = array_last($candidates);
           foreach ($candidates as $cand) {
               $iw = $cand->idealWidth() ?? $cand->minWidth();
               $ih = $cand->idealHeight();

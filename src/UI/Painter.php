@@ -1147,7 +1147,7 @@ final class Painter
             }
         }
         if ($n->systemMaterial !== null && $rt !== null && $rt->overLayer && !$rt->paintingOver && !$rt->reachable($n->id)) { // under a modal: myphp's glass in place of the system's, which would show over the modal
-            (new \MyPHP\Plugins\Glass\Glass())->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
+            new \MyPHP\Plugins\Glass\Glass()->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
         } elseif (($n->webView !== null || $n->movie !== null || $n->systemMaterial !== null) && $rt !== null) {
             self::nativeHole($n, $list, $text, $radii, $rt);
         }
@@ -1996,7 +1996,7 @@ final class Painter
         $length = $thick * 6;
         $y += $amp;
         $n = max((int)ceil(($x1 - $x0) / ($length / 8)), 1); // eight points a wave, the last at x1
-        $path = (new Path())->moveTo($x0, $y);
+        $path = new Path()->moveTo($x0, $y);
         for ($i = 1; $i <= $n; $i++) {
             $px = $x0 + ($x1 - $x0) * $i / $n;
             $path->lineTo($px, $y - $amp * sin(($px - $x0) / $length * 2 * M_PI));

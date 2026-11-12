@@ -184,7 +184,7 @@ final class Inotify implements Backend
             return;
         }
         // A directory added twice is heard of once, through its latest target.
-        $notices[] = new Notice($users[count($users) - 1], $kind, $name);
+        $notices[] = new Notice(array_last($users), $kind, $name);
         if ($mask & self::IN_DELETE_SELF) {
             $this->retired[$wd] = true;
         }

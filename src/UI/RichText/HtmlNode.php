@@ -52,9 +52,9 @@ final class HtmlNode
         $stack = [$doc];
         $text = function (string $t) use (&$stack): void {
             if ($t === '') { return; }
-            $parent = $stack[count($stack) - 1];
+            $parent = array_last($stack);
             $t = html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $last = $parent->children[count($parent->children) - 1] ?? null;
+            $last = array_last($parent->children) ?? null;
             if ($last !== null && $last->type === self::TEXT) {
                 $last->data .= $t;
             } else {
@@ -111,9 +111,9 @@ final class HtmlNode
                 if (($k = $has($tag, $stop)) > 0) {
                     array_splice($stack, $k);
                 } elseif ($tag === 'p') {
-                    $stack[count($stack) - 1]->children[] = new HtmlNode(self::ELEMENT, 'p'); // </p> alone is an empty paragraph
+                    array_last($stack)->children[] = new HtmlNode(self::ELEMENT, 'p'); // </p> alone is an empty paragraph
                 } elseif ($tag === 'br') {
-                    $stack[count($stack) - 1]->children[] = new HtmlNode(self::ELEMENT, 'br');
+                    array_last($stack)->children[] = new HtmlNode(self::ELEMENT, 'br');
                 }
                 continue;
             }
@@ -123,7 +123,7 @@ final class HtmlNode
             if (($tag === 'td' || $tag === 'th') && ($k = max($has('td', ['tr', 'table']), $has('th', ['tr', 'table']))) > 0) { array_splice($stack, $k); }
             if ($tag === 'tr' && ($k = $has('tr', ['table'])) > 0) { array_splice($stack, $k); }
             $el = new HtmlNode(self::ELEMENT, $tag, $attrs);
-            $stack[count($stack) - 1]->children[] = $el;
+            array_last($stack)->children[] = $el;
             if (in_array($tag, self::VOID, true)) { continue; }
             if (in_array($tag, self::RAW, true)) {
                 $end = stripos($s, "</$tag", $i);

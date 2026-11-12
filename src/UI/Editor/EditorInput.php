@@ -505,7 +505,7 @@ trait EditorInput
         $line = $v->heights->lineAt($y);
         if (!$this->isFolded($line)) { return null; }
         $l = $v->line($line);
-        $last = $l->rows[count($l->rows) - 1];
+        $last = array_last($l->rows);
         $end = $last['indent'] + $last['width'];
         $rowTop = $v->heights->geometry($line)->rows + (count($l->rows) - 1) * $v->lineHeight;
         if ($y >= $rowTop && $x >= $end + 4 && $x <= $end + 4 + $v->charWidth * 3 + 8) { return $line; }

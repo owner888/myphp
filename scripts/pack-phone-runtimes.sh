@@ -11,7 +11,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${1:-${ROOT_DIR}/dist/runtimes}"
-PHP_VERSION="8.3.16"
+PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
 
 mkdir -p "${OUT_DIR}"
 cd "${ROOT_DIR}"

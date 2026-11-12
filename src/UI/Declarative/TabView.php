@@ -45,8 +45,7 @@ final class TabView extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $index = 0;
-        foreach ($this->tabs as $i => $t) { if ($t->value === $this->selection) { $index = $i; } }
+        $index = array_find_key($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? 0;
         if ($this->style === \TabViewStyle::page || $this->style === \TabViewStyle::pageAlways || $this->style === \TabViewStyle::pageNever) {
             return $this->paged($c, $env, $index);
         }
@@ -96,10 +95,8 @@ final class TabView extends View
     {
         $chosen = new Binding(get: fn() => $this->selection, set: function ($v) { $this->selection = $v; });
         $sidebar = new ListView(null, null, $chosen, true);
-        $sidebar(...array_map(fn(Tab $t) => (new Label($t->title, $t->systemImage, $t->image))->badge($t->badgeValue)->tag($t->value), $this->tabs));
-        $shown = null;
-        foreach ($this->tabs as $t) { if ($t->value === $this->selection) { $shown = $t; } }
-        $shown ??= $this->tabs[0] ?? null;
+        $sidebar(...array_map(fn(Tab $t) => new Label($t->title, $t->systemImage, $t->image)->badge($t->badgeValue)->tag($t->value), $this->tabs));
+        $shown = array_find($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? $this->tabs[0] ?? null;
         $kept = $c->runtime?->local($c->upcomingId(), fn() => new class { public \NavigationSplitViewVisibility $sidebar = \NavigationSplitViewVisibility::all; }); // whether the sidebar shows, its button's
         $visibility = $kept === null ? \NavigationSplitViewVisibility::all : $kept->sidebar;
         $split = new NavigationSplitView($sidebar, $shown === null ? [] : (count($shown->content) === 1 && $shown->content[0] instanceof View ? $shown->content[0] : $shown->content), $visibility, true);

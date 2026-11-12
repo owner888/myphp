@@ -133,7 +133,7 @@ final class AndroidTextEngine implements Engine
     /** $runes without the spaces ending them, which hang past a line's end. */
     private static function trimmed(array $runes): array
     {
-        while ($runes !== [] && ($runes[count($runes) - 1] === 0x20 || $runes[count($runes) - 1] === 0x3000)) { array_pop($runes); }
+        while ($runes !== [] && (array_last($runes) === 0x20 || array_last($runes) === 0x3000)) { array_pop($runes); }
         return $runes;
     }
 

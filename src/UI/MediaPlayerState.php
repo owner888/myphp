@@ -538,7 +538,7 @@ final class MediaPlayerState
         $step = function () use ($p, $cache, $width, &$made, &$jpegs, &$i, &$next): void {
             if ($this->player !== $p) { $next = null; return; } // another film took its place
             $t = $p->thumbnail($p->duration() * $i / self::THUMBNAILS, $width);
-            if ($t !== null && ($made === [] || $made[count($made) - 1]->time !== $t->time)) { $made[] = $t; $jpegs[] = ThumbnailCache::jpeg($t); }
+            if ($t !== null && ($made === [] || array_last($made)->time !== $t->time)) { $made[] = $t; $jpegs[] = ThumbnailCache::jpeg($t); }
             if (++$i <= self::THUMBNAILS) { $next(); return; }
             $next = null; // the closures let themselves go
             $this->thumbnails = $made;
@@ -569,7 +569,7 @@ final class MediaPlayerState
         foreach ($all as $i => $t) {
             if ($t->time >= $seconds) { return $all[max(0, $i - 1)]; }
         }
-        return $all[count($all) - 1];
+        return array_last($all);
     }
 
     /**

@@ -193,7 +193,7 @@ final class TextLayout
     /** The rune of UTF-16 offset $index, on a whole grapheme: the one at or before it, or after it when $forward (mygo's runeAt). */
     private function runeAt(int $index, bool $forward): int
     {
-        $index = max(0, min($index, $this->units[count($this->units) - 1]));
+        $index = max(0, min($index, array_last($this->units)));
         $i = self::lowerBound($this->units, $index);
         if ($this->units[$i] !== $index && !$forward) { $i--; }
         $b = self::lowerBound($this->bounds, $i);

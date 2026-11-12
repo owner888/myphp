@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build/android"
 SYSROOT="${BUILD_DIR}/sysroot"
 
-PHP_VERSION="8.3.16"
+PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
 LIBFFI_TAG="v3.4.6"
 OPENSSL_VERSION="3.4.1"
 CURL_VERSION="8.12.1"

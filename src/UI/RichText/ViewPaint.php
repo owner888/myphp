@@ -122,7 +122,7 @@ trait ViewPaint
             $by = $y + $ly + ($lh - $box) / 2;
             if ($st->checked) {
                 $list->rect($bx, $by, $box, $box, $th->checkbox[0], $th->checkbox[1], $box * 0.25);
-                $path = (new Path())->moveTo($bx + $box * 0.25, $by + $box * 0.52)->lineTo($bx + $box * 0.43, $by + $box * 0.7)->lineTo($bx + $box * 0.76, $by + $box * 0.32);
+                $path = new Path()->moveTo($bx + $box * 0.25, $by + $box * 0.52)->lineTo($bx + $box * 0.43, $by + $box * 0.7)->lineTo($bx + $box * 0.76, $by + $box * 0.32);
                 $list->path($path, $th->checkmark[0], $th->checkmark[1], max(1.5, $box * 0.12));
             } else {
                 $list->ring($bx, $by, $box, $box, $th->muted[0], $th->muted[1], $box * 0.25, 1.25);

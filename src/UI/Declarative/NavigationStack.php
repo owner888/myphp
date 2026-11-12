@@ -129,7 +129,7 @@ final class NavigationStack extends View
     {
         $named = $r->params();
         $args = [];
-        foreach ((new \ReflectionFunction($fn))->getParameters() as $p) {
+        foreach (new \ReflectionFunction($fn)->getParameters() as $p) {
             $type = $p->getType() instanceof \ReflectionNamedType ? $p->getType()->getName() : 'string';
             if ($type === Route::class) { $args[] = $r; continue; }
             $name = $p->getName();

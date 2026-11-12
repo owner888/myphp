@@ -126,7 +126,7 @@ final class Drawing
     {
         [$px, $py] = $m->apply($cx, $cy);
         $this->p->transform(Transform::scaling(0.5, 0.5)->then(Transform::rotation(rad2deg($angle))), $px, $py, function () use ($fn, $m, $px, $py): void {
-            $fn((new Matrix())->scale(2, 2, $px, $py)->then($m));
+            $fn(new Matrix()->scale(2, 2, $px, $py)->then($m));
         });
     }
 

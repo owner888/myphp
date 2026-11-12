@@ -85,7 +85,7 @@ final class ViewFile
         $path = $this->path;
         $require = static fn(): mixed => require $path;
         if ($this->state !== null) {
-            $scope = (new \ReflectionClass($this->state))->isInternal() ? null : $this->state::class; // a stdClass (object) [...]: $this alone, as PHP binds no closure to an internal class's scope
+            $scope = new \ReflectionClass($this->state)->isInternal() ? null : $this->state::class; // a stdClass (object) [...]: $this alone, as PHP binds no closure to an internal class's scope
             $require = Closure::bind(function () use ($path): mixed { return require $path; }, $this->state, $scope);
         }
         $view = $require();

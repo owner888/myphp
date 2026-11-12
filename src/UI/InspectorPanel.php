@@ -194,7 +194,7 @@ final class InspectorPanel
         $open = []; // the nodes open around the node, innermost last
         $hide = -1;
         foreach ($in->nodes as $i => $n) {
-            while ($open !== [] && $in->nodes[$open[count($open) - 1]]['depth'] >= $n['depth']) {
+            while ($open !== [] && $in->nodes[array_last($open)]['depth'] >= $n['depth']) {
                 $in->rows[] = [array_pop($open), true];
             }
             if ($hide >= 0 && $n['depth'] > $hide) { continue; }

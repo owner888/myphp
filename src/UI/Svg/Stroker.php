@@ -26,9 +26,9 @@ final class Stroker
             $pts = [];
             for ($k = $from; $k < $to; $k += 2) {
                 $x = $in->pts[$k]; $y = $in->pts[$k + 1];
-                if ($pts === [] || $x !== $pts[count($pts) - 2] || $y !== $pts[count($pts) - 1]) { $pts[] = $x; $pts[] = $y; }
+                if ($pts === [] || $x !== $pts[count($pts) - 2] || $y !== array_last($pts)) { $pts[] = $x; $pts[] = $y; }
             }
-            if ($closed && count($pts) > 2 && $pts[0] === $pts[count($pts) - 2] && $pts[1] === $pts[count($pts) - 1]) { array_splice($pts, -2); }
+            if ($closed && count($pts) > 2 && $pts[0] === $pts[count($pts) - 2] && $pts[1] === array_last($pts)) { array_splice($pts, -2); }
             $cnt = intdiv(count($pts), 2);
             if ($cnt === 1) { $this->dot($pts[0], $pts[1]); continue; }
             $segs = $closed ? $cnt : $cnt - 1;

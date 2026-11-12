@@ -63,7 +63,7 @@ trait ViewEdit
         $d = $this->doc;
         $before = $d->version;
         if ($this->mode === self::SAME_STEP && $d->undo !== []) {
-            $s = $d->undo[count($d->undo) - 1];
+            $s = array_last($d->undo);
             $fn(new Edit($d, $s));
             $s->selAfter = [$d->anchor, $d->caret];
             $d->redo = [];

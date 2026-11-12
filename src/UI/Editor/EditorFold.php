@@ -230,7 +230,7 @@ trait EditorFold
     public function foldRecursive(int $off): bool
     {
         if (!$this->foldAt($off)) { return false; }
-        $outer = $this->folds[count($this->folds) - 1];
+        $outer = array_last($this->folds);
         [$folds] = $this->foldRanges();
         foreach ($folds as $f) {
             if ($f[0] > $outer[0] && $f[1] <= $outer[1] && !$this->isFolded($f[0])) { $this->folds[] = $f; }

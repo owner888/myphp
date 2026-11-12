@@ -65,7 +65,7 @@ final class MediaPlayerSettings
         if ($vibrant) { $c->root->color = null; } // the sidebar's material shows through
         $root = $c->row(0, 0, 1)->alignItems(Node::STRETCH);
         $v = self::local($c, $root);
-        $pages = (new MediaPlayerSettingsPages($c, $s, $v))->all();
+        $pages = new MediaPlayerSettingsPages($c, $s, $v)->all();
         if (self::$showPage !== null && isset($pages[self::$showPage])) { $v->page = self::$showPage; } // asked from outside (the Plugin menu's Manage Plugins…, IINA's navigateTo)
         self::$showPage = null;
         self::openFor($v, $pages);
@@ -292,7 +292,7 @@ final class MediaPlayerSettings
         if ($sc->y <= 40) {
             $v->section = $names[0] ?? '';
         } elseif ($sc->y >= $sc->maxY - 40) {
-            $v->section = $names[count($names) - 1] ?? '';
+            $v->section = array_last($names) ?? '';
         } else {
             $mid = $boxY + $h * 0.33;
             foreach ($titles as $name => [$sec]) { // the last section begun by the band a third of the way down, 40 high: where a click in the index scrolls its title

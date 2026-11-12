@@ -137,12 +137,12 @@ final class Context
      */
     public function direction(): Direction
     {
-        return $this->stack[count($this->stack) - 1]->rtl ? Direction::RightToLeft : Direction::LeftToRight;
+        return array_last($this->stack)->rtl ? Direction::RightToLeft : Direction::LeftToRight;
     }
 
     private function add(Node $n): Node
     {
-        $top = $this->stack[count($this->stack) - 1];
+        $top = array_last($this->stack);
         $placed = $this->place($top); // before it is one of the kids
         $top->kids[] = $n;
         $n->context = $this;
@@ -228,7 +228,7 @@ final class Context
     /** The id add() will give the next node, for what is computed from its last-frame rect before it is built (a grid's columns). */
     private function nextId(int $kind = Node::CONTAINER): int
     {
-        $top = $this->stack[count($this->stack) - 1];
+        $top = array_last($this->stack);
         [$base, $index] = $this->place($top);
         return self::mix($base, $this->nextKey !== null ? self::keyHash($this->nextKey) : $index | $kind << 40);
     }
@@ -289,7 +289,7 @@ final class Context
     /** The id key($key) gives the next node built here, for the state of a node not built (a router keeps its pages'). */
     public function keyedId(string|int $key): int
     {
-        return self::mix($this->place($this->stack[count($this->stack) - 1])[0], self::keyHash($key));
+        return self::mix($this->place(array_last($this->stack))[0], self::keyHash($key));
     }
 
     /** The router whose page is being built, which links to paths go through, or null outside one (mygo's Router). */
@@ -424,7 +424,7 @@ final class Context
     /** Runs $fn when $key with exactly $mods is pressed in the scope built now: the container open, else the window wherever the focus is (mygo's Context.OnShortcut). */
     public function onShortcut(int|string $key, int $mods, Closure $fn): void
     {
-        $top = $this->stack[count($this->stack) - 1];
+        $top = array_last($this->stack);
         if ($top !== $this->root) {
             $top->onShortcut($key, $mods, $fn);
         } elseif ($this->insideModal()) { // the window's, which wait behind a dialog
@@ -442,7 +442,7 @@ final class Context
     public function shapeRichText(array $spans, float $width = 0, ?TextStyle $font = null, int $align = Node::START, bool $justify = false, float $indent = 0, bool $noBreakWords = false): TextLayout
     {
         $style = ($font ?? new TextStyle())->over($this->inheritedText());
-        return TextLayout::shape($this->metrics->textSystem(), $spans, $style, $this->theme->fontSize, $width, $align, $this->stack[count($this->stack) - 1]->rtl, $justify, $indent, $noBreakWords);
+        return TextLayout::shape($this->metrics->textSystem(), $spans, $style, $this->theme->fontSize, $width, $align, array_last($this->stack)->rtl, $justify, $indent, $noBreakWords);
     }
 
     /**
@@ -857,7 +857,7 @@ final class Context
      */
     public function memo(int|string $key, array $deps, Closure $build): Node
     {
-        $top = $this->stack[count($this->stack) - 1];
+        $top = array_last($this->stack);
         [$base] = $this->place($top);
         $id = self::mix($base, self::keyHash($key));
         $rt = $this->runtime;
@@ -1385,7 +1385,7 @@ final class Context
         if ($color !== null) { $n->textColor($color); }
         if ($wrap && $width === null) { // the room its container had last frame, inside the padding
             $n->wrapLast = true;
-            $parent = $this->stack[count($this->stack) - 1];
+            $parent = array_last($this->stack);
             $pw = $this->runtime?->widthOf($parent->id);
             $width = $pw === null ? $this->width : max(1.0, $pw - 2 * $parent->padX());
         }
@@ -1988,7 +1988,7 @@ final class Context
     public function accordionItem(string $title, bool &$open, Closure $fn): Node
     {
         $t = $this->theme;
-        $acc = $this->accordions[count($this->accordions) - 1];
+        $acc = array_last($this->accordions);
         $n = $this->column(0, 0);
           if ($acc->heads !== []) { $this->divider(); } // a line above all but the first
           $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->alignItems(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
@@ -2259,7 +2259,7 @@ final class Context
             }
             $cell($s->item($i), $col);
         });
-        $list = $n->kids[count($n->kids) - 1];
+        $list = array_last($n->kids);
         $list->rowRole = Role::TREE_ITEM;
         $this->outlineKeys($s, $list, $children);
         return $n;
@@ -2374,7 +2374,7 @@ final class Context
     public function sidebarSection(string $title, ?bool &$open, Closure $fn): Node
     {
         $t = $this->theme;
-        $parent = $this->stack[count($this->stack) - 1];
+        $parent = array_last($this->stack);
         $alone = ['depth' => 0]; // a section out of a sidebar
         if ($this->sidebars === []) { $sb = &$alone; } else { $sb = &$this->sidebars[count($this->sidebars) - 1]; }
         $n = $this->column(0, $t->space(0.5));
@@ -3588,7 +3588,7 @@ final class Context
         $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2) + 1; $gap = $t->space(1.5); // its padding inside its border, which takes a point
         $phone = $this->runtime?->touch ?? false;
         if ($phone) { $glass = 17.0; $clear = 17.0; $pad = 13.0; $gap = 9.0; } // iOS 26's: a capsule 44 high, the glass 17 at 13 in, the text 39 in
-        $parent = $this->stack[count($this->stack) - 1];
+        $parent = array_last($this->stack);
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, $this->texts()->get('search'), $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
           $n->search = true;
@@ -3800,7 +3800,7 @@ final class Context
     public function fieldset(string $legend, Closure $fn): Node
     {
         $t = $this->theme;
-        $parent = $this->stack[count($this->stack) - 1];
+        $parent = array_last($this->stack);
         $above = $parent->kids !== [];
         $g = $this->column(0, $t->space(3))->shrink(0)->role(Role::GROUP)->label($legend);
         if ($above) { $g->margin($t->space(3), 0, 0, 0); } // apart from what is above, as a section
@@ -4065,7 +4065,7 @@ final class Context
                 }
                 $this->text($place[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted)->role(Role::NONE)->marginStart($t->space(1));
             }
-            if (!$col->fixed && !($layout->width($col) === null && $j === $order[count($order) - 1])) { // the last column sharing the room left ends at the table's end: an edge there would resize nothing, as AppKit's has none (mygo's 976f17c)
+            if (!$col->fixed && !($layout->width($col) === null && $j === array_last($order))) { // the last column sharing the room left ends at the table's end: an edge there would resize nothing, as AppKit's has none (mygo's 976f17c)
                 $edges[$j] = $this->key('g' . $col->id())->column()->absolute()->top(0)->bottom(0)->end(0)->size($t->space(2), 0)->cursor(Cursor::ResizeEW)->role(Role::NONE);
                 $this->end();
             }
@@ -4808,7 +4808,7 @@ final class Context
     /** The grow of a control of size $w × $h, 0 for a side the room decides: 1 where that side is along its container, which it then fills; across one, it stretches as its container's align does (a column's width). */
     private function growsAlong(float $w, float $h): int
     {
-        $parent = $this->stack[count($this->stack) - 1];
+        $parent = array_last($this->stack);
         return ($parent->dir === Node::ROW ? $w : $h) <= 0 ? 1 : 0;
     }
 

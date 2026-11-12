@@ -56,7 +56,7 @@ trait TerminalGhostty
         usort($names, fn(string $a, string $b) => strcmp(strtolower($a), strtolower($b)) ?: strcmp($a, $b));
         $out = [];
         foreach ($names as $n) {
-            if ($out === [] || $out[count($out) - 1] !== $n) { $out[] = $n; }
+            if ($out === [] || array_last($out) !== $n) { $out[] = $n; }
         }
         return $out;
     }

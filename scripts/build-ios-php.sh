@@ -10,7 +10,8 @@ IOS_SDK="${MYPHP_IOS_SDK:-iphoneos}"
 BUILD_DIR="${ROOT_DIR}/build/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
 SYSROOT="${BUILD_DIR}/sysroot"
 PHP_BUILD_DIR="${BUILD_DIR}/php-build"
-PHP_SRC_DIR="${ROOT_DIR}/build/android/php-8.3.16"
+PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
+PHP_SRC_DIR="${ROOT_DIR}/build/android/php-${PHP_VERSION}"
 
 SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
 IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator || true)"
@@ -26,7 +27,7 @@ mkdir -p "${BUILD_DIR}" "${SYSROOT}/lib" "${SYSROOT}/include"
 
 # Fast-path: download prebuilt iOS runtime archive when libphp.a is not yet built locally
 RUNTIME_NAME="$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator-arm64 || echo ios-arm64)"
-PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-8.3.16}/myphp-runtime-${RUNTIME_NAME}-php-8.3.16.tar.gz"
+PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-${RUNTIME_NAME}-php-${PHP_VERSION}.tar.gz"
 if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
     echo "==> Trying prebuilt iOS PHP runtime (${RUNTIME_NAME})..."
     TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
@@ -146,10 +147,10 @@ fi
 if [ ! -f "${PHP_SRC_DIR}/configure" ]; then
     mkdir -p "${ROOT_DIR}/build/android"
     cd "${ROOT_DIR}/build/android"
-    if [ ! -f "php-8.3.16.tar.gz" ]; then
-        curl -L -o "php-8.3.16.tar.gz" "https://www.php.net/distributions/php-8.3.16.tar.gz"
+    if [ ! -f "php-${PHP_VERSION}.tar.gz" ]; then
+        curl -L -o "php-${PHP_VERSION}.tar.gz" "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz"
     fi
-    tar -xzf "php-8.3.16.tar.gz"
+    tar -xzf "php-${PHP_VERSION}.tar.gz"
 fi
 # PHP 8.3's configure only enables MAP_ANON shared memory when cross-compiling for *linux*, so --enable-opcache fails on
 # freshly extracted sources when targeting arm64-apple-darwin / arm64-apple-ios unless *darwin* is added to that case.

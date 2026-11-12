@@ -159,7 +159,7 @@ final class Service
         } catch (Throwable $e) {
             if (!$ctx->done()) {
                 $code = self::codeFor($e);
-                return (object)['code' => $code, 'message' => (new Failure($code))->getMessage()];
+                return (object)['code' => $code, 'message' => new Failure($code)->getMessage()];
             }
         }
         return (object)[];

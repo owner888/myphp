@@ -76,7 +76,7 @@ trait Exprs
         if ($node instanceof Syntax\Ident) {
             return $node->name;
         }
-        $kind = $node instanceof Syntax\Unsupported || $node instanceof Syntax\UnsupportedStmt ? $node->what : (new \ReflectionClass($node))->getShortName();
+        $kind = $node instanceof Syntax\Unsupported || $node instanceof Syntax\UnsupportedStmt ? $node->what : new \ReflectionClass($node)->getShortName();
         return "&ast.$kind{...}";
     }
 

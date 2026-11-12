@@ -348,7 +348,7 @@ trait ContextMobile
               if ($detents !== []) { // as high as the largest, moved down to show the others: the offset of each its height short of the largest
                   $heights = array_values(array_unique(array_map(fn(float $h) => min(max($h, 0.0), $large), $detents)));
                   sort($heights);
-                  $top = $heights[count($heights) - 1];
+                  $top = array_last($heights);
                   $panel->minHeight($top)->maxHeight($top);
                   $kept = $rt?->local($back->id, fn() => (object)['offset' => [0.0, $top - $heights[0]]], \stdClass::class, 'offset') ?? (object)['offset' => [0.0, $top - $heights[0]]];
                   $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);

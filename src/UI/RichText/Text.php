@@ -290,7 +290,7 @@ final class Text
             for ($k = 1, $m = count($frag) - 1; $k < $m; $k++) {
                 $out[] = new RichPara(RichPara::nextID(), $frag[$k]->style->withID(''), $frag[$k]->n, $frag[$k]->runs);
             }
-            $f = $frag[count($frag) - 1];
+            $f = array_last($frag);
             $style = ($f->n > 0 ? $f->style : $last->style)->withID($pz !== $pa ? $last->style->id : ($moved ? $first->style->id : ''));
             $id = RichPara::nextID();
             if ($pz !== $pa) { $id = $last->id; }

@@ -35,7 +35,7 @@ final class Sel
         $out = [$sels[0]];
         for ($i = 1; $i < count($sels); $i++) {
             $s = $sels[$i];
-            $last = $out[count($out) - 1];
+            $last = array_last($out);
             $touch = $s->start() === $last->end() && ($s->empty() || $last->empty());
             if ($s->start() < $last->end() || $touch || $s->start() === $last->start()) {
                 // Keep the newer's identity and direction.

@@ -316,7 +316,7 @@ class_alias(D\RotateGesture::class, 'RotateGesture');
 class_alias(D\RotateGestureValue::class, 'RotateGestureValue');
 class_alias(D\CGSize::class, 'CGSize');
 class_alias(D\CGPoint::class, 'CGPoint');
-/** Keyframes sampled at any time: (new KeyframeTimeline(initialValue: [...], tracks: [...]))->value(time: $t). */
+/** Keyframes sampled at any time: new KeyframeTimeline(initialValue: [...], tracks: [...])->value(time: $t). */
 class_alias(D\KeyframeTimeline::class, 'KeyframeTimeline');
 /** What a Canvas draws in: fill(), stroke(), withPainter(). */
 class_alias(D\GraphicsContext::class, 'GraphicsContext');

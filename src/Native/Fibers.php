@@ -25,7 +25,7 @@ final class Fibers
     /** Runs $fn in a fiber of its own, at once, until its first wait. */
     public static function go(Closure $fn): void
     {
-        (new Fiber($fn))->start();
+        new Fiber($fn)->start();
     }
 
     /** Waits $seconds, letting the rest of the app run meanwhile. */

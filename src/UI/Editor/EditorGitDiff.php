@@ -45,7 +45,7 @@ trait EditorGitDiff
             for ($i = count($d->hunks) - 1; $i >= 0; $i--) {
                 if (($s = $start($d->hunks[$i])) < $line) { $target = $s; break; }
             }
-            if ($target < 0) { $target = $start($d->hunks[count($d->hunks) - 1]); }
+            if ($target < 0) { $target = $start(array_last($d->hunks)); }
         }
         $target = min($target, $r->lineCount() - 1);
         $off = $r->lineStart($target);

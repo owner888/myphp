@@ -866,7 +866,7 @@ final class MediaPlayer
                       $c->text($about, 11, self::$ink)->opacity(0.6)->grow(1)->noWrap()->ellipsis('…');
                       $at = strtotime($f['uploaded']);
                       if (($f['right'] ?? '') !== '') { $c->text($f['right'], 11, self::$ink)->opacity(0.6); } // a plugin's item's desc.right
-                      elseif ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, self::$ink)->opacity(0.6); }
+                      elseif ($at !== false) { $c->text($day->format(new \DateTimeImmutable("@$at")->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, self::$ink)->opacity(0.6); }
                     $c->end();
                   $c->end();
                   if ($c->doubleClicked($row)) { $s->onlineChosen = [$i]; $s->downloadOnlineSubtitles([$i]); }

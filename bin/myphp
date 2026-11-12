@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.186.8';
+const VERSION = '1.187.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -483,6 +483,7 @@ function init(array $args): void
     $name = option($args, 'name', '');
     count($args) === 1 || fail("missing project directory\n\nUsage: myphp " . INIT_USAGE);
     in_array($template, ['native', 'web'], true) || fail("unknown template \"$template\": native or web");
+    ensurePhpEnvironment(false);
     $dir = $args[0];
     !is_dir($dir) || count(scandir($dir)) === 2 || fail("$dir is not empty");
     is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
@@ -2186,7 +2187,7 @@ function ensureMicro(?string $phpVersion = null): array
     if ($own === false && getenv('MYPHP_BUILD_FROM_SOURCE') !== '1') {
         $osName = PHP_OS_FAMILY === 'Linux' ? 'linux' : 'darwin';
         $archName = hostArch();
-        $prebuiltUrl = (getenv('MYPHP_PREBUILT_URL') ?: 'https://github.com/owner888/myphp/releases/download/runtime-php-8.3.16')
+        $prebuiltUrl = (getenv('MYPHP_PREBUILT_URL') ?: 'https://github.com/owner888/myphp/releases/download/runtime-php-8.5.12')
             . "/myphp-micro-{$osName}-{$archName}-php-{$php}.sfx";
         @mkdir(dirname($micro), 0755, true);
         if (quiet(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '120', '-o', $micro, $prebuiltUrl]) === 0 && is_file($micro)) {
@@ -2872,12 +2873,90 @@ final class ScreenshotSession
     }
 }
 
+// ---- environment auto-installer & progress bar -------------------------
+/** Prints a live terminal progress bar `[████████████░░░░░░░░]  60%  step`. */
+function progressBar(int $step, int $total, string $label): void
+{
+    $pct = $total > 0 ? max(0, min(100, (int)round($step * 100 / $total))) : 100;
+    $filled = (int)round($pct / 5);
+    $bar = str_repeat('█', $filled) . str_repeat('░', max(0, 20 - $filled));
+    if (stream_isatty(STDOUT) && getenv('NO_COLOR') === false) {
+        fprintf(STDOUT, "\r\033[K  \033[36m[%s]\033[0m \033[1m%3d%%\033[0m  %s", $bar, $pct, $label);
+        if ($step >= $total) { fprintf(STDOUT, "\n"); }
+    } else {
+        fprintf(STDOUT, "  [%s] %3d%%  %s\n", $bar, $pct, $label);
+    }
+}
+
+/**
+ * Checks whether PHP >= 8.4 and required extensions (ffi, mbstring, zlib) are active;
+ * when missing and $autoFix is true (or in an interactive terminal during `myphp init` / `myphp doctor --fix`),
+ * automatically installs or enables them with a visual progress bar.
+ */
+function ensurePhpEnvironment(bool $forceFix = false): void
+{
+    $phpOk = PHP_VERSION_ID >= 80400;
+    $ffiOk = extension_loaded('ffi');
+    $mbOk = extension_loaded('mbstring');
+    $zlibOk = extension_loaded('zlib');
+    if ($phpOk && $ffiOk && $mbOk && $zlibOk) {
+        return;
+    }
+    if (!$forceFix && !stream_isatty(STDOUT)) {
+        return;
+    }
+    echo "myphp: checking & configuring PHP 8.4+ environment...\n";
+    progressBar(1, 4, 'Detecting platform package manager...');
+
+    // 1. Auto-enable ffi.enable=1 in php.ini if FFI extension is present on disk or loaded but disabled
+    $iniFile = php_ini_loaded_file();
+    if ($iniFile !== false && is_writable($iniFile)) {
+        $ini = (string)@file_get_contents($iniFile);
+        $changed = false;
+        if (preg_match('/^\s*;?\s*extension\s*=\s*ffi/m', $ini)) {
+            $ini = (string)preg_replace('/^\s*;\s*(extension\s*=\s*ffi)/m', '$1', $ini);
+            $changed = true;
+        }
+        if (!preg_match('/^\s*ffi\.enable\s*=\s*(1|true|on)/im', $ini)) {
+            $ini .= "\n[ffi]\nffi.enable=1\n";
+            $changed = true;
+        }
+        if ($changed) {
+            progressBar(2, 4, "Enabling ext-ffi in $iniFile...");
+            @file_put_contents($iniFile, $ini);
+        }
+    }
+
+    // 2. Install PHP 8.4+ / missing extensions via OS package manager when needed
+    if ((!$phpOk || !$ffiOk || !$mbOk) && $forceFix) {
+        progressBar(3, 4, 'Installing PHP 8.4+ and required extensions...');
+        if (PHP_OS_FAMILY === 'Darwin' && Cmd::look('brew') !== '') {
+            quiet(['brew', 'install', 'php']);
+        } elseif (PHP_OS_FAMILY === 'Linux') {
+            if (Cmd::look('apt-get') !== '') {
+                quiet(['sudo', 'apt-get', 'update', '-y']);
+                quiet(['sudo', 'apt-get', 'install', '-y', 'php-cli', 'php-ffi', 'php-mbstring', 'php-xml', 'php-curl', 'libgtk-3-0', 'libepoxy0']);
+            } elseif (Cmd::look('dnf') !== '') {
+                quiet(['sudo', 'dnf', 'install', '-y', 'php-cli', 'php-ffi', 'php-mbstring', 'php-xml', 'php- process', 'gtk3', 'libepoxy']);
+            } elseif (Cmd::look('pacman') !== '') {
+                quiet(['sudo', 'pacman', '-Sy', '--noconfirm', 'php', 'gtk3', 'libepoxy']);
+            }
+        } elseif (PHP_OS_FAMILY === 'Windows' && Cmd::look('winget') !== '') {
+            quiet(['winget', 'install', '--id', 'PHP.PHP.8.4', '-e', '--accept-source-agreements', '--accept-package-agreements']);
+        }
+    }
+    progressBar(4, 4, 'PHP environment check complete.');
+}
+
 // ---- doctor, devices, run ----------------------------------------------
 /** Checks the tools MyPHP needs: PHP runtime, macOS/iOS toolchain, Android toolchain. */
 function doctor(array $args): void
 {
-    help($args, "doctor\n\nChecks the tools, toolchains and system libraries MyPHP needs.");
-    echo "Doctor summary (to see all details, run `myphp doctor -v`):\n\n";
+    help($args, "doctor [--fix]\n\nChecks the tools, toolchains and system libraries MyPHP needs; --fix automatically installs missing PHP extensions and configurations.");
+    if (flag($args, 'fix') || flag($args, '-fix')) {
+        ensurePhpEnvironment(true);
+    }
+    echo "Doctor summary (to see all details, run `myphp doctor -v`; to auto-fix PHP environment, run `myphp doctor --fix`):\n\n";
 
     $tty = stream_isatty(STDOUT); // colors only on a terminal, not into a pipe or a file
     $c = fn(string $code, string $text): string => $tty ? "\033[{$code}m$text\033[0m" : $text;
@@ -2904,16 +2983,16 @@ function doctor(array $args): void
 
     // 1. PHP Runtime
     $phpVersion = PHP_VERSION;
-    $phpOk = PHP_VERSION_ID >= 80300;
+    $phpOk = PHP_VERSION_ID >= 80400;
     $ffiOk = extension_loaded('ffi');
     $opcacheOk = extension_loaded('Zend OPcache');
     $mbstringOk = extension_loaded('mbstring');
     $zlibOk = extension_loaded('zlib');
     $section("PHP Runtime", [
-        [$phpOk, "PHP version $phpVersion (8.3.0 or later required)", "Install PHP 8.3+ via Homebrew or system package manager"],
-        [$ffiOk, "ext-ffi enabled", "Enable ffi.enable=1 in php.ini"],
+        [$phpOk, "PHP version $phpVersion (8.4.0 or later required; 8.5 recommended)", "Run `myphp doctor --fix` or install PHP 8.4+ / 8.5 via Homebrew or system package manager"],
+        [$ffiOk, "ext-ffi enabled", "Run `myphp doctor --fix` or enable ffi.enable=1 in php.ini"],
         [$opcacheOk, "OPcache & JIT available", "Enable zend_extension=opcache in php.ini"],
-        [$mbstringOk && $zlibOk, "mbstring and zlib extensions loaded", "Install php-mbstring and php-zlib"],
+        [$mbstringOk && $zlibOk, "mbstring and zlib extensions loaded", "Run `myphp doctor --fix` or install php-mbstring and php-zlib"],
     ]);
 
     // 2. Apple & iOS Toolchain
@@ -2981,7 +3060,8 @@ function doctor(array $args): void
     ]);
 
     // 4. The PHP runtime of each phone platform: built by the first myphp run or build for it (scripts/build-*-php.sh), again when its script changes
-    $androidPhp = FRAMEWORK . '/build/android/php-8.3.16/libs/libphp.so';
+    $phonePhpVer = getenv('MYPHP_PHONE_PHP_VERSION') ?: '8.5.12';
+    $androidPhp = is_file(FRAMEWORK . "/build/android/php-$phonePhpVer/libs/libphp.so") ? FRAMEWORK . "/build/android/php-$phonePhpVer/libs/libphp.so" : FRAMEWORK . '/build/android/php-8.3.16/libs/libphp.so';
     $iosPhp = FRAMEWORK . '/build/ios/libs/libphp.a';
     $iosSimPhp = FRAMEWORK . '/build/ios-simulator/libs/libphp.a';
     $stale = fn(string $lib, string $script): bool => is_file($lib) && filemtime(FRAMEWORK . "/scripts/$script") > filemtime($lib);

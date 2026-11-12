@@ -235,7 +235,7 @@ final class Ass
                 if ($cmd === 'c' && count($spline) >= 3) { // the spline closed: its first three points again
                     $first = array_slice($spline, 0, 3);
                     foreach ($first as $q) { $spline[] = $q; $splineSegment(array_slice($spline, -4)); }
-                    $pen = $spline[count($spline) - 1]; $spline = [];
+                    $pen = array_last($spline); $spline = [];
                 }
                 continue;
             }

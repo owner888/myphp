@@ -238,7 +238,7 @@ final class Buffer
         $this->record($changes);
         $this->redo = [];
         $now = microtime(true);
-        $lastTx = $this->undo === [] ? null : $this->undo[count($this->undo) - 1];
+        $lastTx = $this->undo === [] ? null : array_last($this->undo);
         if ($this->openTx !== null) {
             $tx = $this->openTx;
             $tx->after = $text; $tx->changes[] = $changes; $tx->texts[] = $text;

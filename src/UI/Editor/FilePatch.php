@@ -158,7 +158,7 @@ final class FilePatch
         $eol = true;
         if ($old !== '') {
             $lines = explode("\n", $old);
-            if ($lines[count($lines) - 1] === '') { array_pop($lines); } else { $eol = false; }
+            if (array_last($lines) === '') { array_pop($lines); } else { $eol = false; }
         }
         $out = [];
         $at = 0;

@@ -166,7 +166,7 @@ trait EditorBrackets
                     continue;
                 }
                 if ($stack !== []) {
-                    if ($stack[count($stack) - 1] === $closes[$j]) { array_pop($stack); }
+                    if (array_last($stack) === $closes[$j]) { array_pop($stack); }
                     continue;
                 }
                 $at = $a + $k; $which = $j;

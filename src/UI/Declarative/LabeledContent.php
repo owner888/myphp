@@ -15,9 +15,9 @@ final class LabeledContent extends View
     {
         if ($env->inList) { return $c->cell(Localized::string($this->title, $env), $this->value); }
         $n = $c->row(0, 8)->alignItems(Node::CENTER)->alignSelf(Node::STRETCH);
-          (new Text($this->title))->render($c, $env->along(Node::ROW));
+          new Text($this->title)->render($c, $env->along(Node::ROW));
           $c->spacer();
-          (new Text($this->value))->render($c, $env->along(Node::ROW)->with(['color' => new ColorValue(\Color::secondary)]));
+          new Text($this->value)->render($c, $env->along(Node::ROW)->with(['color' => new ColorValue(\Color::secondary)]));
         $c->end();
         return $n;
     }
@@ -39,7 +39,7 @@ final class LabeledContent extends View
         }
         $stacked = $env->formRow && ($c->runtime?->touch ?? false) && $env->theme->textScale() >= 1.6; // the accessibility text sizes: the title over its control, as UIKit's cells then
         $row = $stacked ? $c->column(0, 4)->alignItems(Node::START) : $c->row(0, 8)->alignItems(Node::CENTER);
-          (new Text($title))->render($c, $env->along($stacked ? Node::COLUMN : Node::ROW)->with(['formRow' => false]));
+          new Text($title)->render($c, $env->along($stacked ? Node::COLUMN : Node::ROW)->with(['formRow' => false]));
           if (!$wide && $env->formRow && !$stacked) { $c->spacer(); }
           $n = $control();
           if ($wide) { $n->grow = max($n->grow, 1); }
