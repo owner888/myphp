@@ -137,6 +137,10 @@ the theme, painted over the node's own face and under its children
 (mygo's Draw): the search field's magnifying glass is a ring and a line
 drawn that way, at mygo's MingCute proportions.
 
+### 3D RenderPass (Metal and D3D11)
+
+Native 3D rendering (`Plugins\Scene`: `Mesh`, `Entity`, `Material`, `Camera3D`, `Scene`) runs through a dedicated 3D pass directly into a `Canvas` target texture without CPU round-trips. Meshes upload their geometry (position, normal, UV, color: 48-byte aligned) into GPU-resident `MTLBuffer`s on initialization, incurring zero transfer overhead per frame. The 3D pass pairs color attachments with a cached 32-bit float depth texture (`MTLPixelFormatDepth32Float`), configured with `MTLCompareFunctionLess`, write-enabled depth states, and backface culling (`MTLCullModeBack`). A single binary block of model-view-projection and Blinn-Phong lighting uniforms (208 bytes) drives the vertex and fragment pipeline per entity. The resulting rendered target is composited by GPU blit into the canvas atlas in the same command buffer, giving full 3D geometry alongside 2D UI with sub-millisecond frame times (~0.25 ms / frame on Apple Silicon).
+
 ### Transforms and opacity
 
 A node's visual transform is mygo's transform.go: `Transform` composes

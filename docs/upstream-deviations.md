@@ -3094,3 +3094,10 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
     COM brings each call to the main thread's apartment.
   - Why: PHP runs on its main thread alone; a callback of PHP's on another
     thread would run PHP there.
+- **3D Scene and RenderPass** (v1.179)
+  - mygo: purely 2D UI and 2D canvas drawing; no native 3D render pass.
+  - myphp: `Plugins\Scene` provides native 3D RenderPass (Metal / D3D11)
+    with GPU-resident mesh buffers, depth testing (MTLPixelFormatDepth32Float),
+    Blinn-Phong directional lighting, and zero-copy VRAM compositing into Canvas.
+  - Why: game and 3D visual application development requires hardware-accelerated
+    depth and geometry pipelines without dropping 2D quad batching performance.
