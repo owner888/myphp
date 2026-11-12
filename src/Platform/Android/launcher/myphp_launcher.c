@@ -1,3 +1,6 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <jni.h>
 #include <android/log.h>
 #include <android/looper.h>

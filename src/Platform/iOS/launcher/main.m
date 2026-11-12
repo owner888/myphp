@@ -687,14 +687,6 @@ int myphp_ios_is_app_paused(void) {
     return g_app_paused;
 }
 
-int myphp_ios_poll_memory_warning(void) {
-    if (g_memory_warning) {
-        g_memory_warning = 0;
-        return 1;
-    }
-    return 0;
-}
-
 void myphp_ios_create_web_view(int page_id) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!g_webviews) g_webviews = [NSMutableDictionary dictionary];
