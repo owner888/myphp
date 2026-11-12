@@ -10,7 +10,7 @@ namespace MyPHP\Tests;
 use Closure;
 use MyPHP\UI\{AccessTree, Context, DisplayList, Image, Input, Key, Layout, Node, Painter, Path, Runtime, SVG, TextPainter, Theme};
 
-spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_with($c, 'MyPHP\\Tests\\') && (require __DIR__ . '/../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'));
+require_once __DIR__ . '/../src/autoload.php';
 
 /** The system's icons where there are none to draw (Linux without GTK): each a clear square of its size, so that a view of SF Symbols builds as it would. */
 final class StandInSymbols implements \MyPHP\Platform\Symbols
