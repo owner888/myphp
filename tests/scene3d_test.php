@@ -82,4 +82,7 @@ $h = new Headless(function (\MyPHP\UI\Context $c) use ($app): void {
 }, 400, 300);
 $h->paint();
 check($app->canvas->drawn > 0, 'Headless frame rendered 3D scene canvas and painted UI overlay');
+$taken = \MyPHP\UI\CanvasAtlas::take();
+check(in_array($app->canvas, $taken, true), 'CanvasAtlas::take() returns 3D scene canvas for GPU rendering');
+
 
