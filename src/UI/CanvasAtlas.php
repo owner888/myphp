@@ -85,7 +85,7 @@ final class CanvasAtlas
         $list = array_values(self::$pending);
         self::$pending = [];
         usort($list, fn(Canvas $a, Canvas $b): int => $a->drawn <=> $b->drawn);
-        return array_values(array_filter($list, fn(Canvas $c): bool => ($c->slot !== null || $c->loose()) && $c->list !== null));
+        return array_values(array_filter($list, fn(Canvas $c): bool => ($c->slot !== null || $c->loose()) && ($c->list !== null || $c->scene !== null)));
     }
 
     /** Forgets every canvas, for tests. */
