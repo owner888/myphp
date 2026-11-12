@@ -19,5 +19,11 @@ if (!function_exists('array_last')) {
     function array_last(array $array): mixed { return $array === [] ? null : $array[array_key_last($array)]; }
 }
 
+// When ext-intl is not loaded (iOS, Android, or a lightweight desktop PHP / micro runtime without ICU),
+// load the built-in Locale / IntlDateFormatter / NumberFormatter polyfill.
+if (!extension_loaded('intl')) {
+    require_once __DIR__ . '/Native/LocalePolyfill.php';
+}
+
 // The declarative views, global as SwiftUI's: VStack, Text, Button, Color, Font, NavigationPath… (docs/swiftui.md)
 require_once __DIR__ . '/UI/Declarative/functions.php';
