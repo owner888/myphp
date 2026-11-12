@@ -2183,6 +2183,21 @@ function ensureMicro(?string $phpVersion = null): array
         echo "myphp: $micro $lacks, as one of a myphp before 1.28; building it again\n";
     }
     $php = $phpVersion ?? getenv('MYPHP_PHP_VERSION') ?: MICRO_PHP;
+    if ($own === false && getenv('MYPHP_BUILD_FROM_SOURCE') !== '1') {
+        $osName = PHP_OS_FAMILY === 'Linux' ? 'linux' : 'darwin';
+        $archName = hostArch();
+        $prebuiltUrl = (getenv('MYPHP_PREBUILT_URL') ?: 'https://github.com/owner888/myphp/releases/download/runtime-php-8.3.16')
+            . "/myphp-micro-{$osName}-{$archName}-php-{$php}.sfx";
+        @mkdir(dirname($micro), 0755, true);
+        if (quiet(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '120', '-o', $micro, $prebuiltUrl]) === 0 && is_file($micro)) {
+            chmod($micro, 0755);
+            if (microLacks($micro) === '') {
+                echo "myphp: downloaded prebuilt micro.sfx ($osName-$archName)\n";
+                return [$spc, $micro];
+            }
+            @unlink($micro);
+        }
+    }
     $build = getenv('HOME') . '/.myphp/build';
     @mkdir($build, 0755, true);
     // doctor unpacks tools (pkg-config) into its working directory, which download and build must share.

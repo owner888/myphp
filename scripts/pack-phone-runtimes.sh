@@ -57,6 +57,25 @@ pack_android() {
     ls -lh "${archive}"
 }
 
+pack_micro() {
+    local micro="${HOME}/.myphp/micro.sfx"
+    if [ ! -f "$micro" ]; then
+        echo "==> Skipping desktop micro.sfx ($micro not built yet; run 'myphp micro' to build)"
+        return
+    fi
+    local os_name="darwin"
+    [ "$(uname -s)" = "Linux" ] && os_name="linux"
+    local arch_name="arm64"
+    [ "$(uname -m)" = "x86_64" ] && arch_name="amd64"
+    local dest="${OUT_DIR}/myphp-micro-${os_name}-${arch_name}-php-8.4.sfx"
+    cp "$micro" "$dest"
+    ls -lh "$dest"
+}
+
+# Note for future TV platforms:
+# - Android TV (arm64-v8a / aarch64) shares `myphp-runtime-android-arm64-php-8.3.16.tar.gz` directly (zero extra build).
+# - tvOS will add `pack_ios "tvos" "tvos-arm64"` and `pack_ios "tvos-simulator" "tvos-simulator-arm64"` when targeted.
 pack_ios "ios" "ios-arm64"
 pack_ios "ios-simulator" "ios-simulator-arm64"
 pack_android
+pack_micro
