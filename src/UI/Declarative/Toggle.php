@@ -47,9 +47,9 @@ final class Toggle extends View
         if ($this->sources !== null) { return $this->mixed($c, $title, $style); }
         $was = $this->isOn;
         if ($env->formRow && $style === \ToggleStyle::switch) { // a form's row, as SwiftUI's: the title leading, wrapping as long text does, the switch at the row's end
-            $row = $c->row(0, 8)->alignItems(Node::CENTER)->minHeight($c->theme->rowHeight);
+            $row = $c->row(0, 8)->alignItems(Node::CENTER);
               (new Text($this->title))->render($c, $env->along(Node::ROW)->with(['formRow' => false]))?->shrink(1)->grow(1);
-              $n = $c->switch('', $this->isOn)->shrink(0)->alignSelf(Node::STRETCH); // takes the full 44pt row height so taps slightly above/below the 28pt track still hit it
+              $n = $c->switch('', $this->isOn)->shrink(0);
               $n->label($title);
             $c->end();
             View::takeRoom($row, $env->axis, View::FLEX_X);

@@ -3488,7 +3488,28 @@ final class Runtime
             }
             [$x, $y] = $inv->point($x, $y);
         }
-        if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+        [$rx, $ry, $rw, $rh] = $r;
+        // On a touch screen, expand small interactive controls (buttons, switches, inputs, sliders, checkboxes)
+        // invisibly up to 44x44 points (UIKit's pointInside hit slop) without changing their visual layout size,
+        // unless another interactive sibling's actual rect already contains ($x, $y).
+        if ($this->touchMode && ($rw < 44.0 || $rh < 44.0) && ($rw > 0 && $rh > 0)
+            && (isset($this->clickable[$id]) || isset($this->fields[$id]) || isset($this->sliders[$id]) || in_array($id, $this->focusables, true))) {
+            $padX = max(0.0, min(8.0, (44.0 - $rw) / 2));
+            $padY = max(0.0, min(8.0, (44.0 - $rh) / 2));
+            if ($x < $rx || $x >= $rx + $rw || $y < $ry || $y >= $ry + $rh) {
+                if ($x < $rx - $padX || $x >= $rx + $rw + $padX || $y < $ry - $padY || $y >= $ry + $rh + $padY) {
+                    return false;
+                }
+                foreach ($this->focusables as $other) {
+                    if ($other !== $id && isset($this->rects[$other])) {
+                        $or = $this->rects[$other];
+                        if ($x >= $or[0] && $x < $or[0] + $or[2] && $y >= $or[1] && $y < $or[1] + $or[3]) {
+                            return false; // never steal a direct hit from a neighboring control
+                        }
+                    }
+                }
+            }
+        } elseif ($x < $rx || $x >= $rx + $rw || $y < $ry || $y >= $ry + $rh) {
             return false;
         }
         if (isset($this->frags[$id])) {
