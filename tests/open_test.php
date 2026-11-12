@@ -111,7 +111,7 @@ $got = null;
 $off = App::onSecondInstance(function (array $args, string $wd) use (&$got): void { $got = [$args, $wd]; });
 $script = "$dir/second.php";
 file_put_contents($script, '<?php
-spl_autoload_register(fn($c) => require ' . var_export(realpath(__DIR__ . '/../src'), true) . ' . "/" . str_replace("\\\\", "/", substr($c, 6)) . ".php");
+require ' . var_export(realpath(__DIR__ . '/../src/autoload.php'), true) . ';
 MyPHP\App::setName(' . var_export(App::name(), true) . ');
 MyPHP\Native\SingleInstance::$self = [["notes://second", "a.md"], ' . var_export($dir, true) . '];
 echo var_export(MyPHP\App::requestSingleInstanceLock(), true);
