@@ -102,11 +102,98 @@ final class Scene
         }
 
         $camPos = $this->camera->position;
+        $collidable = [];
         foreach ($this->allEntities() as $entity) {
             if ($entity->billboard) {
                 $entity->faceCamera($camPos);
             }
+            if ($entity->collider !== null) {
+                $collidable[] = $entity;
+            }
         }
+
+        $nCol = count($collidable);
+        for ($i = 0; $i < $nCol; $i++) {
+            $a = $collidable[$i];
+            $ca = $a->collider;
+            for ($j = $i + 1; $j < $nCol; $j++) {
+                $b = $collidable[$j];
+                $cb = $b->collider;
+                if ($ca->isStatic && $cb->isStatic) {
+                    continue;
+                }
+                $hit = Collider3D::intersect($a, $b);
+                if ($hit === null) {
+                    continue;
+                }
+                [$normal, $pen] = $hit;
+
+                // Resolve solid push-out if neither is a trigger
+                if (!$ca->isTrigger && !$cb->isTrigger) {
+                    if ($ca->isStatic) {
+                        $b->position = $b->position->sub($normal->scale($pen));
+                    } elseif ($cb->isStatic) {
+                        $a->position = $a->position->add($normal->scale($pen));
+                    } else {
+                        $half = $normal->scale($pen * 0.5);
+                        $a->position = $a->position->add($half);
+                        $b->position = $b->position->sub($half);
+                    }
+                }
+
+                if ($ca->onCollide !== null) {
+                    ($ca->onCollide)($a, $b, $normal, $pen);
+                }
+                if ($cb->onCollide !== null) {
+                    ($cb->onCollide)($b, $a, $normal->scale(-1.0), $pen);
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds a hardware-instanced 3D reference grid and XYZ color-coded coordinate axes at $y.
+     */
+    public function addGridHelper(float $size = 10.0, int $divisions = 10, float $y = 0.0): Entity
+    {
+        $divisions = max(2, $divisions);
+        $half = $size * 0.5;
+        $step = $size / $divisions;
+        $lineThickness = 0.022;
+        $axisThickness = 0.048;
+
+        $gridEnt = new Entity(
+            Mesh::cube(1.0),
+            new Material([1.0, 1.0, 1.0, 1.0], shininess: 16.0),
+            scale: new Vec3(0.0, 0.0, 0.0),
+            name: 'GridHelper'
+        );
+        $gridEnt->pickable = false;
+        $gridEnt->castShadow = false;
+
+        $transforms = [];
+        $colors = [];
+
+        for ($i = 0; $i <= $divisions; $i++) {
+            $pos = -$half + $i * $step;
+            $isCenter = abs($pos) < 1e-4;
+
+            // Line parallel to X axis (at Z = $pos)
+            $transforms[] = Mat4::translation(0.0, $y, $pos)->multiply(Mat4::scaling($size, $isCenter ? $axisThickness : $lineThickness, $isCenter ? $axisThickness : $lineThickness));
+            $colors[] = $isCenter ? [0.95, 0.28, 0.32, 1.0] : [0.32, 0.36, 0.44, 1.0]; // Red X-axis or gray grid line
+
+            // Line parallel to Z axis (at X = $pos)
+            $transforms[] = Mat4::translation($pos, $y, 0.0)->multiply(Mat4::scaling($isCenter ? $axisThickness : $lineThickness, $isCenter ? $axisThickness : $lineThickness, $size));
+            $colors[] = $isCenter ? [0.28, 0.58, 0.98, 1.0] : [0.32, 0.36, 0.44, 1.0]; // Blue Z-axis or gray grid line
+        }
+
+        // Vertical Y-axis indicator at origin (Green)
+        $axisH = $size * 0.25;
+        $transforms[] = Mat4::translation(0.0, $y + $axisH * 0.5, 0.0)->multiply(Mat4::scaling($axisThickness, $axisH, $axisThickness));
+        $colors[] = [0.28, 0.92, 0.45, 1.0];
+
+        $gridEnt->setInstances($transforms, $colors);
+        return $this->add($gridEnt);
     }
 
     /**

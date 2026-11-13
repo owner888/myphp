@@ -24,6 +24,7 @@ final class Entity
     public bool $castShadow = true;
     /** When true, Scene::step() automatically rotates this entity to face the camera */
     public bool $billboard = false;
+    public ?Collider3D $collider = null;
     public string $name = '';
 
     /** Scene Graph hierarchy */

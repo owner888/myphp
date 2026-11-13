@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
+use MyPHP\Plugins\Scene\{Camera3D, Collider3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
 use MyPHP\Plugins\Scene\Math\{Frustum, Mat4, Ray, Vec3};
 use MyPHP\UI\Canvas;
 
@@ -152,6 +152,32 @@ check(abs($tweenEnt->rotation->y - atan2(-5.0, 5.0)) < 1e-4, 'Entity::$billboard
 
 $glbEntity = Mesh::sceneFromGlb($glbBytes);
 check($glbEntity instanceof Entity && $glbEntity->mesh->vertexCount === 3, 'Mesh::sceneFromGlb parses GLB into Scene Graph Entity');
+
+// 4g. Extended Procedural Primitives (cylinder, cone, torus, capsule), Collider3D & GridHelper tests
+$cyl = Mesh::cylinder(0.8, 0.8, 2.0, 16);
+$cone = Mesh::cone(0.9, 2.0, 16);
+$torus = Mesh::torus(1.0, 0.35, 16, 12);
+$capsule = Mesh::capsule(0.5, 1.0, 16, 12);
+check($cyl->vertexCount > 30 && $cyl->indexCount > 90, 'Mesh::cylinder generates valid geometry');
+check($cone->vertexCount > 15 && $cone->indexCount > 45, 'Mesh::cone generates valid geometry');
+check($torus->vertexCount === 17 * 13 && $torus->indexCount === 16 * 12 * 6, 'Mesh::torus generates valid geometry');
+check($capsule->vertexCount > 100 && $capsule->indexCount > 300, 'Mesh::capsule generates valid geometry');
+
+$physScene = new Scene();
+$gridEnt = $physScene->addGridHelper(size: 10.0, divisions: 10);
+check($gridEnt->instanceCount === 23, 'Scene::addGridHelper creates 23 hardware-instanced grid & XYZ axis lines');
+
+$collided = false;
+$wall = new Entity(Mesh::cube(2.0), position: new Vec3(0.0, 0.0, 0.0));
+$wall->collider = Collider3D::box(new Vec3(1.0, 1.0, 1.0), isStatic: true);
+$ball = new Entity(Mesh::sphere(0.5), position: new Vec3(1.2, 0.0, 0.0)); // penetrating wall by 0.3m along +X
+$ball->collider = Collider3D::sphere(0.5, onCollide: static function () use (&$collided): void {
+    $collided = true;
+});
+$physScene->add($wall);
+$physScene->add($ball);
+$physScene->step(0.016);
+check($collided && abs($ball->position->x - 1.5) < 1e-4, 'Collider3D resolves Sphere-vs-Box penetration and fires onCollide');
 
 // 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
 if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {

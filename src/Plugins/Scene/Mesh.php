@@ -330,6 +330,248 @@ final class Mesh
     }
 
     /**
+     * Creates a cylinder (or truncated cone / frustum) mesh along the Y axis.
+     * When $topRadius = 0.0, produces a cone.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $color
+     */
+    public static function cylinder(
+        float $topRadius = 0.8,
+        float $bottomRadius = 0.8,
+        float $height = 2.0,
+        int $segments = 24,
+        array $color = [1.0, 1.0, 1.0, 1.0]
+    ): self {
+        $segments = max(3, $segments);
+        $hh = $height * 0.5;
+        [$r, $g, $b, $a] = $color;
+        $vFloats = [];
+        $indices = [];
+        $vCount = 0;
+
+        // Side wall normal slope
+        $dr = $bottomRadius - $topRadius;
+        $slant = hypot($dr, $height);
+        $ny = $slant > 1e-6 ? ($dr / $slant) : 0.0;
+        $nr = $slant > 1e-6 ? ($height / $slant) : 1.0;
+
+        // 1. Side wall ring vertices
+        for ($i = 0; $i <= $segments; $i++) {
+            $u = $i / $segments;
+            $phi = $u * 2.0 * M_PI;
+            $cos = cos($phi);
+            $sin = sin($phi);
+
+            $nx = $cos * $nr;
+            $nz = -$sin * $nr;
+
+            // Top ring vertex
+            array_push($vFloats,
+                $topRadius * $cos, $hh, -$topRadius * $sin,
+                $nx, $ny, $nz,
+                $u, 0.0,
+                $r, $g, $b, $a
+            );
+            // Bottom ring vertex
+            array_push($vFloats,
+                $bottomRadius * $cos, -$hh, -$bottomRadius * $sin,
+                $nx, $ny, $nz,
+                $u, 1.0,
+                $r, $g, $b, $a
+            );
+        }
+
+        for ($i = 0; $i < $segments; $i++) {
+            $t0 = $i * 2;
+            $b0 = $t0 + 1;
+            $t1 = $t0 + 2;
+            $b1 = $t0 + 3;
+            array_push($indices, $t0, $b0, $t1, $b0, $b1, $t1);
+        }
+        $vCount += ($segments + 1) * 2;
+
+        // 2. Top cap (if topRadius > 0)
+        if ($topRadius > 1e-5) {
+            $topCenter = $vCount++;
+            array_push($vFloats, 0.0, $hh, 0.0, 0.0, 1.0, 0.0, 0.5, 0.5, $r, $g, $b, $a);
+            for ($i = 0; $i <= $segments; $i++) {
+                $phi = ($i / $segments) * 2.0 * M_PI;
+                $cos = cos($phi);
+                $sin = sin($phi);
+                array_push($vFloats,
+                    $topRadius * $cos, $hh, -$topRadius * $sin,
+                    0.0, 1.0, 0.0,
+                    0.5 + 0.5 * $cos, 0.5 - 0.5 * $sin,
+                    $r, $g, $b, $a
+                );
+            }
+            for ($i = 0; $i < $segments; $i++) {
+                array_push($indices, $topCenter, $topCenter + 1 + $i, $topCenter + 2 + $i);
+            }
+            $vCount += $segments + 1;
+        }
+
+        // 3. Bottom cap (if bottomRadius > 0)
+        if ($bottomRadius > 1e-5) {
+            $botCenter = $vCount++;
+            array_push($vFloats, 0.0, -$hh, 0.0, 0.0, -1.0, 0.0, 0.5, 0.5, $r, $g, $b, $a);
+            for ($i = 0; $i <= $segments; $i++) {
+                $phi = ($i / $segments) * 2.0 * M_PI;
+                $cos = cos($phi);
+                $sin = sin($phi);
+                array_push($vFloats,
+                    $bottomRadius * $cos, -$hh, -$bottomRadius * $sin,
+                    0.0, -1.0, 0.0,
+                    0.5 + 0.5 * $cos, 0.5 + 0.5 * $sin,
+                    $r, $g, $b, $a
+                );
+            }
+            for ($i = 0; $i < $segments; $i++) {
+                array_push($indices, $botCenter, $botCenter + 2 + $i, $botCenter + 1 + $i);
+            }
+            $vCount += $segments + 1;
+        }
+
+        return new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices));
+    }
+
+    /**
+     * Creates a cone mesh along the Y axis with apex at +height/2 and base at -height/2.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $color
+     */
+    public static function cone(
+        float $radius = 0.9,
+        float $height = 2.0,
+        int $segments = 24,
+        array $color = [1.0, 1.0, 1.0, 1.0]
+    ): self {
+        return self::cylinder(0.0, $radius, $height, $segments, $color);
+    }
+
+    /**
+     * Creates a 3D Torus (donut) mesh in the XZ plane.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $color
+     */
+    public static function torus(
+        float $majorRadius = 1.0,
+        float $minorRadius = 0.35,
+        int $majorSegments = 32,
+        int $minorSegments = 18,
+        array $color = [1.0, 1.0, 1.0, 1.0]
+    ): self {
+        $majorSegments = max(3, $majorSegments);
+        $minorSegments = max(3, $minorSegments);
+        [$r, $g, $b, $a] = $color;
+        $vFloats = [];
+        $indices = [];
+
+        for ($i = 0; $i <= $majorSegments; $i++) {
+            $u = $i / $majorSegments;
+            $theta = $u * 2.0 * M_PI;
+            $cosT = cos($theta);
+            $sinT = sin($theta);
+
+            for ($j = 0; $j <= $minorSegments; $j++) {
+                $v = $j / $minorSegments;
+                $phi = $v * 2.0 * M_PI;
+                $cosP = cos($phi);
+                $sinP = sin($phi);
+
+                $tubeR = $majorRadius + $minorRadius * $cosP;
+                $px = $tubeR * $cosT;
+                $py = $minorRadius * $sinP;
+                $pz = -$tubeR * $sinT;
+
+                $nx = $cosP * $cosT;
+                $ny = $sinP;
+                $nz = -$cosP * $sinT;
+
+                array_push($vFloats,
+                    $px, $py, $pz,
+                    $nx, $ny, $nz,
+                    $u, $v,
+                    $r, $g, $b, $a
+                );
+            }
+        }
+
+        $stride = $minorSegments + 1;
+        for ($i = 0; $i < $majorSegments; $i++) {
+            for ($j = 0; $j < $minorSegments; $j++) {
+                $aIdx = $i * $stride + $j;
+                $bIdx = ($i + 1) * $stride + $j;
+                array_push($indices,
+                    $aIdx, $bIdx, $aIdx + 1,
+                    $bIdx, $bIdx + 1, $aIdx + 1
+                );
+            }
+        }
+
+        $vCount = ($majorSegments + 1) * ($minorSegments + 1);
+        return new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices));
+    }
+
+    /**
+     * Creates a vertical 3D Capsule mesh (cylinder capped with two hemispheres) along the Y axis.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $color
+     */
+    public static function capsule(
+        float $radius = 0.5,
+        float $cylinderHeight = 1.0,
+        int $segments = 24,
+        int $rings = 16,
+        array $color = [1.0, 1.0, 1.0, 1.0]
+    ): self {
+        $segments = max(4, $segments);
+        $rings = max(4, $rings | 1) + 1; // ensure even ring count
+        $halfCyl = $cylinderHeight * 0.5;
+        [$r, $g, $b, $a] = $color;
+        $vFloats = [];
+        $indices = [];
+
+        for ($ring = 0; $ring <= $rings; $ring++) {
+            $theta = $ring * M_PI / $rings;
+            $sinTheta = sin($theta);
+            $cosTheta = cos($theta);
+            $yOffset = $ring <= ($rings >> 1) ? $halfCyl : -$halfCyl;
+
+            for ($seg = 0; $seg <= $segments; $seg++) {
+                $phi = $seg * 2.0 * M_PI / $segments;
+                $nx = cos($phi) * $sinTheta;
+                $ny = $cosTheta;
+                $nz = sin($phi) * $sinTheta;
+
+                $u = $seg / $segments;
+                $v = $ring / $rings;
+
+                array_push($vFloats,
+                    $radius * $nx, $radius * $ny + $yOffset, $radius * $nz,
+                    $nx, $ny, $nz,
+                    $u, $v,
+                    $r, $g, $b, $a
+                );
+            }
+        }
+
+        for ($ring = 0; $ring < $rings; $ring++) {
+            for ($seg = 0; $seg < $segments; $seg++) {
+                $first = $ring * ($segments + 1) + $seg;
+                $second = $first + $segments + 1;
+                array_push($indices,
+                    $first, $first + 1, $second,
+                    $second, $first + 1, $second + 1
+                );
+            }
+        }
+
+        $vCount = ($rings + 1) * ($segments + 1);
+        return new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices));
+    }
+
+    /**
      * Loads a 3D mesh from a Wavefront .obj file.
      *
      * @param array{0: float, 1: float, 2: float, 3: float} $color
