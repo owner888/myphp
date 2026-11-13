@@ -68,4 +68,38 @@ final class Camera3D
 
         return new Ray($this->position, $dir);
     }
+
+    /**
+     * Projects a 3D world-space coordinate $worldPos into 2D viewport coordinates [x, y]
+     * within ($width, $height), or returns null if the point is behind the camera's near plane.
+     *
+     * @return ?array{0: float, 1: float}
+     */
+    public function worldToScreen(Vec3 $worldPos, float $width, float $height): ?array
+    {
+        $aspect = $this->aspect ?? ($width / max(1.0, $height));
+        $vp = $this->projectionMatrix($aspect)->multiply($this->viewMatrix());
+        $m = $vp->m;
+
+        $x = $worldPos->x;
+        $y = $worldPos->y;
+        $z = $worldPos->z;
+
+        $clipX = $m[0] * $x + $m[4] * $y + $m[8]  * $z + $m[12];
+        $clipY = $m[1] * $x + $m[5] * $y + $m[9]  * $z + $m[13];
+        $clipZ = $m[2] * $x + $m[6] * $y + $m[10] * $z + $m[14];
+        $clipW = $m[3] * $x + $m[7] * $y + $m[11] * $z + $m[15];
+
+        if ($clipW <= 0.001 || $clipZ < 0.0) {
+            return null;
+        }
+
+        $ndcX = $clipX / $clipW;
+        $ndcY = $clipY / $clipW;
+
+        $sx = ($ndcX + 1.0) * 0.5 * $width;
+        $sy = (1.0 - $ndcY) * 0.5 * $height;
+
+        return [$sx, $sy];
+    }
 }

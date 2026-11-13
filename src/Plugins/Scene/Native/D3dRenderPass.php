@@ -181,6 +181,12 @@ final class D3dRenderPass
             finalColor = lerp(horizon, finalColor, fogFactor);
         }
 
+        if (ambientColor.w > 0.01) {
+            float ndotv = max(dot(N, V), 0.0);
+            float rim = pow(1.0 - ndotv, 3.0) * ambientColor.w;
+            finalColor += rim * float3(0.35, 0.9, 1.0);
+        }
+
         return float4(finalColor, baseColor.a);
     }
     HLSL;
@@ -478,13 +484,14 @@ final class D3dRenderPass
             $model = $entity->modelMatrix();
             $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
 
-            // Pack 352-byte Uniforms
+            // Pack 352-byte Uniforms (ambientColor.w carries material->rimStrength)
             $lc = $scene->lightColor;
+            $ac = $scene->ambientColor;
             $uniformBinary = $mvp->toBinary()
                 . $model->toBinary()
                 . pack('f4', $lDir->x, $lDir->y, $lDir->z, $pixelated)
                 . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
-                . pack('f4', ...$scene->ambientColor)
+                . pack('f4', $ac[0], $ac[1], $ac[2], $mat->rimStrength)
                 . pack('f4', ...$mat->color)
                 . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess)
                 . $lightingExt;

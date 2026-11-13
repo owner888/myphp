@@ -49,9 +49,11 @@ particles and billboards, and 3D raycast picking via `onPick:`.
   mesh; `Mesh::sceneFromGlbFile($path)` parses a multi-mesh `.glb` hierarchy
   with PBR baseColorFactor materials and embedded PNG/JPEG textures into an
   `Entity` tree.
-- **Diffuse textures**: `Material::textured($image, shininess: 32.0)` binds any
-  `MyPHP\UI\Image` as a 3D surface texture (respecting `$image->pixelated()`
-  for crisp nearest-neighbor voxel/retro art).
+- **Diffuse textures, Wireframe & Fresnel Rim**: `Material::textured($image, shininess: 32.0)`
+  binds any `MyPHP\UI\Image` as a 3D surface texture (respecting
+  `$image->pixelated()` for crisp nearest-neighbor voxel/retro art). Set
+  `$material->wireframe = true` for hardware triangle-line rendering, or
+  `$material->rimStrength = 1.0` for Fresnel hologram rim lighting.
 
 ```php
 use MyPHP\Plugins\Scene\{Entity, Material, Mesh, Scene};
@@ -171,7 +173,9 @@ Pass `onPick:` to `SceneView()` (or call `$scene->pick($x, $y, $w, $h)` /
 `$scene->raycast($ray)`) to unproject 2D pointer coordinates into a 3D world
 ray and find the closest intersected entity (`['entity' => Entity, 'distance' => float, 'point' => Vec3]`).
 Set `$entity->pickable = false` on ground planes, skyboxes or particle
-emitters so they do not intercept clicks.
+emitters so they do not intercept clicks. To project a 3D world position onto
+2D viewport coordinates for floating labels or health bars, call
+`$scene->camera->worldToScreen($worldPos, $width, $height)`.
 
 For 3D collision detection and solid push-out resolution during
 `Scene::step($dt)`, attach a `Collider3D::sphere($radius)` or

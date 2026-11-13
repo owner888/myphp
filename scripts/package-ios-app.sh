@@ -35,7 +35,10 @@ mkdir -p "${APP_DIR}"
 
 # 2. Compile launcher binary
 echo "==> Compiling native iOS launcher..."
-xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -Wl,-dead_strip -fobjc-arc \
+# Export all myphp_ios_* C bridge symbols so -Wl,-dead_strip and strip -x keep them for PHP ext-ffi
+EXPORT_LIST="${BUILD_DIR}/myphp_ios_exports.txt"
+grep -oE 'myphp_ios_[a-zA-Z0-9_]+' "${ROOT_DIR}/src/Platform/iOS/launcher/main.m" | sort -u | sed 's/^/_/' > "${EXPORT_LIST}"
+xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -Wl,-dead_strip -Wl,-exported_symbols_list,"${EXPORT_LIST}" -fobjc-arc \
     -I"${PHP_BUILD}" \
     -I"${PHP_BUILD}/main" \
     -I"${PHP_BUILD}/Zend" \

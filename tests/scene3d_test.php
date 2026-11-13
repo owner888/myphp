@@ -179,6 +179,15 @@ $physScene->add($ball);
 $physScene->step(0.016);
 check($collided && abs($ball->position->x - 1.5) < 1e-4, 'Collider3D resolves Sphere-vs-Box penetration and fires onCollide');
 
+// 4h. Camera3D::worldToScreen, Material::$wireframe & Material::$rimStrength tests
+$projCam = new Camera3D(position: new Vec3(0.0, 0.0, 5.0), target: new Vec3(0.0, 0.0, 0.0));
+$screenPt = $projCam->worldToScreen(new Vec3(0.0, 0.0, 0.0), 800.0, 600.0);
+check($screenPt !== null && abs($screenPt[0] - 400.0) < 1e-3 && abs($screenPt[1] - 300.0) < 1e-3, 'Camera3D::worldToScreen projects origin to viewport center');
+$behindPt = $projCam->worldToScreen(new Vec3(0.0, 0.0, 10.0), 800.0, 600.0);
+check($behindPt === null, 'Camera3D::worldToScreen returns null for points behind camera');
+$rimMat = new Material(wireframe: true, rimStrength: 1.2);
+check($rimMat->wireframe === true && abs($rimMat->rimStrength - 1.2) < 1e-4, 'Material supports wireframe and Fresnel rimStrength properties');
+
 // 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
 if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {
     $img = $scene->renderOffscreen(128, 128);

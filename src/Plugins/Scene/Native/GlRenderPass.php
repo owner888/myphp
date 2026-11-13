@@ -190,6 +190,12 @@ final class GlRenderPass
             }
         }
 
+        if (uLightDir.w > 0.01) {
+            float ndotv = max(dot(N, V), 0.0);
+            float rim = pow(1.0 - ndotv, 3.0) * uLightDir.w;
+            finalColor += rim * vec3(0.35, 0.9, 1.0);
+        }
+
         if (uAmbientColor.w > 0.0001) {
             float camDist = length(uCameraPos.xyz - vWorldPos);
             float fogFactor = clamp(exp(-pow(camDist * uAmbientColor.w, 2.0)), 0.0, 1.0);
@@ -424,6 +430,7 @@ final class GlRenderPass
             FFI::memcpy($matBuf, $model->toBinary(), 64);
             ($g->epoxy_glUniformMatrix4fv)($this->u['uModel'], 1, 0, $matBuf);
 
+            ($g->epoxy_glUniform4f)($this->u['uLightDir'], $lDir->x, $lDir->y, $lDir->z, $mat->rimStrength);
             ($g->epoxy_glUniform4f)($this->u['uLightColor'], $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0);
             ($g->epoxy_glUniform4f)($this->u['uMaterialColor'], $mat->color[0], $mat->color[1], $mat->color[2], $mat->color[3]);
             ($g->epoxy_glUniform4f)($this->u['uCameraPos'], $camPos->x, $camPos->y, $camPos->z, $mat->shininess);
