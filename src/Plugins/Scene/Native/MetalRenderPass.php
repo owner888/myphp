@@ -230,6 +230,16 @@ final class MetalRenderPass
                 finalColor += att * u.pointCol1.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
             }
         }
+
+        // Exponential distance fog (u.shadowParams.w = fogDensity)
+        if (u.shadowParams.w > 0.0001) {
+            float camDist = length(u.cameraPos.xyz - in.worldPos);
+            float fogFactor = exp(-pow(camDist * u.shadowParams.w, 2.0));
+            fogFactor = clamp(fogFactor, 0.0, 1.0);
+            float3 horizon = u.ambientColor.rgb * 0.6;
+            finalColor = mix(horizon, finalColor, fogFactor);
+        }
+
         return float4(finalColor, baseColor.a);
     }
     MSL;

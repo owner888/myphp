@@ -10,7 +10,7 @@ declare(strict_types=1);
 // Run: myphp run -d macos|windows|linux|ios|android examples/scene3d
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, PointLight, Scene};
+use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
 use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
 use MyPHP\UI\{Content, Context, Image, Painter};
 
@@ -86,10 +86,10 @@ final class SceneApp
     public Entity $floor;
     public Entity $instancedRing;
     public PointLight $crystalLight;
+    public ParticleEmitter3D $sparks;
 
     public string $selectedName = 'None (Click a 3D object!)';
     public ?Entity $selectedEntity = null;
-    public float $bounceTimer = 0.0;
 
     public int $frames = 0;
     public float $fps = 60.0;
@@ -99,6 +99,11 @@ final class SceneApp
         $this->scene = new Scene(new Camera3D(position: new Vec3(2.1, 2.7, 6.6)));
         $this->scene->clearColor = [0.06, 0.07, 0.09, 1.0];
         $this->scene->shadowsEnabled = true;
+        $this->scene->fogEnabled = true;
+        $this->scene->fogDensity = 0.032;
+
+        // GPU Instanced 3D Particle Emitter for click bursts
+        $this->sparks = $this->scene->addEmitter(new ParticleEmitter3D(Mesh::cube(1.0), maxParticles: 256));
 
         // Pulsing cyan Point Light inside the crystal
         $this->crystalLight = new PointLight(new Vec3(0.0, 0.2, 0.0), [0.2, 0.9, 1.0], intensity: 2.2, radius: 7.0);
@@ -175,7 +180,14 @@ final class SceneApp
             $ent = $hit['entity'];
             $this->selectedEntity = $ent;
             $this->selectedName = sprintf('%s (dist: %.2fm)', $ent->name, $hit['distance']);
-            $this->bounceTimer = 1.0;
+
+            // Smooth Tween3D yoyo scale bounce + 3D Particle burst at hit point!
+            $this->scene->addTween(
+                (new Tween3D($ent, duration: 0.18, easing: Tween3D::EASE_OUT_CUBIC))
+                    ->toScale(new Vec3(1.32, 1.32, 1.32), new Vec3(1.0, 1.0, 1.0))
+                    ->yoyo(true)
+            );
+            $this->sparks->burst($hit['point'], count: 42, color: [1.0, 0.85, 0.3, 1.0]);
         } else {
             $this->selectedEntity = null;
             $this->selectedName = 'None (Click a 3D object!)';
@@ -201,13 +213,6 @@ final class SceneApp
 
         $this->sphere->rotation->y += 0.015;
         $this->sphere->rotation->z += 0.01;
-
-        // Selection bounce animation
-        if ($this->selectedEntity !== null && $this->bounceTimer > 0.0) {
-            $this->bounceTimer = max(0.0, $this->bounceTimer - $dt * 3.0);
-            $s = 1.0 + 0.35 * sin($this->bounceTimer * M_PI);
-            $this->selectedEntity->scale = new Vec3($s, $s, $s);
-        }
     }
 }
 

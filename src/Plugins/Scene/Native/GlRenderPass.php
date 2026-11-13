@@ -190,6 +190,13 @@ final class GlRenderPass
             }
         }
 
+        if (uAmbientColor.w > 0.0001) {
+            float camDist = length(uCameraPos.xyz - vWorldPos);
+            float fogFactor = clamp(exp(-pow(camDist * uAmbientColor.w, 2.0)), 0.0, 1.0);
+            vec3 horizon = uAmbientColor.rgb * 0.6;
+            finalColor = mix(horizon, finalColor, fogFactor);
+        }
+
         fragColor = vec4(finalColor, baseColor.a);
     }
     GLSL;
@@ -377,8 +384,9 @@ final class GlRenderPass
         $lc = $scene->lightColor;
         $ac = $scene->ambientColor;
 
+        $fogDensity = $scene->fogEnabled ? max(0.0, $scene->fogDensity) : 0.0;
         ($g->epoxy_glUniform4f)($this->u['uLightDir'], $lDir->x, $lDir->y, $lDir->z, 0.0);
-        ($g->epoxy_glUniform4f)($this->u['uAmbientColor'], $ac[0], $ac[1], $ac[2], $ac[3]);
+        ($g->epoxy_glUniform4f)($this->u['uAmbientColor'], $ac[0], $ac[1], $ac[2], $fogDensity);
         ($g->epoxy_glUniform1f)($this->u['uFlipY'], $flipY);
         ($g->epoxy_glUniform1i)($this->u['uTex'], 0);
 

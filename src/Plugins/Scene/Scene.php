@@ -38,6 +38,18 @@ final class Scene
     /** @var int Number of entities culled in the last render pass */
     public int $lastCulledCount = 0;
 
+    /** Exponential Distance Fog (blends distant geometry into horizon/clearColor) */
+    public bool $fogEnabled = false;
+    public float $fogDensity = 0.045;
+    /** @var ?array{0: float, 1: float, 2: float, 3: float} Defaults to $clearColor when null */
+    public ?array $fogColor = null;
+
+    /** @var list<ParticleEmitter3D> Active GPU-instanced 3D particle emitters */
+    public array $emitters = [];
+
+    /** @var list<Tween3D> Active 3D transform tweens */
+    public array $tweens = [];
+
     public function __construct(?Camera3D $camera = null)
     {
         $this->camera = $camera ?? new Camera3D();
@@ -54,6 +66,47 @@ final class Scene
     {
         $this->pointLights[] = $light;
         return $light;
+    }
+
+    public function addEmitter(ParticleEmitter3D $emitter): ParticleEmitter3D
+    {
+        $this->emitters[] = $emitter;
+        if (!in_array($emitter->entity, $this->entities, true)) {
+            $this->entities[] = $emitter->entity;
+        }
+        return $emitter;
+    }
+
+    public function addTween(Tween3D $tween): Tween3D
+    {
+        $this->tweens[] = $tween;
+        return $tween;
+    }
+
+    /**
+     * Steps all active 3D tweens, particle emitters, and updates billboard orientations.
+     */
+    public function step(float $dt): void
+    {
+        foreach ($this->tweens as $k => $tween) {
+            if ($tween->step($dt)) {
+                unset($this->tweens[$k]);
+            }
+        }
+        if ($this->tweens !== []) {
+            $this->tweens = array_values($this->tweens);
+        }
+
+        foreach ($this->emitters as $emitter) {
+            $emitter->step($dt);
+        }
+
+        $camPos = $this->camera->position;
+        foreach ($this->allEntities() as $entity) {
+            if ($entity->billboard) {
+                $entity->faceCamera($camPos);
+            }
+        }
     }
 
     /**
@@ -144,7 +197,8 @@ final class Scene
         $p1Col = $pl1 !== null ? pack('f4', $pl1->color[0], $pl1->color[1], $pl1->color[2], $pl1->intensity) : pack('f4', 0.0, 0.0, 0.0, 0.0);
 
         $plCount = min(2, count($this->pointLights));
-        $params = pack('f4', $this->shadowsEnabled ? 1.0 : 0.0, (float)$plCount, 0.004, 0.0);
+        $fogDensity = $this->fogEnabled ? max(0.0, $this->fogDensity) : 0.0;
+        $params = pack('f4', $this->shadowsEnabled ? 1.0 : 0.0, (float)$plCount, 0.004, $fogDensity);
 
         return $lvp . $p0Pos . $p0Col . $p1Pos . $p1Col . $params;
     }
@@ -313,6 +367,7 @@ final class Scene
             }
 
             $scene->camera->aspect = $r[2] / max(1.0, $r[3]);
+            $scene->step(min(0.1, $dt));
             if ($onUpdate !== null) {
                 $onUpdate($dt);
             }
