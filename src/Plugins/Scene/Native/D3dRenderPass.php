@@ -63,12 +63,13 @@ final class D3dRenderPass
         column_major float4x4 mvp;
         column_major float4x4 model;
         float4 lightDir;      // xyz = direction, w = pixelated (1.0 = point, 0.0 = linear)
-        float4 lightColor;    // rgb = color, a = intensity
+        float4 lightColor;    // rgb = color, a = instanced flag (1.0 = instanced, 0.0 = single)
         float4 ambientColor;  // rgb = color, a = intensity
         float4 materialColor; // rgba
         float4 cameraPos;     // xyz = position, w = shininess
     };
 
+    Buffer<float4> instances : register(t0);
     Texture2D<float4> tex : register(t0);
     SamplerState linearSampler : register(s0);
     SamplerState pointSampler  : register(s1);
@@ -88,13 +89,29 @@ final class D3dRenderPass
         float4 color    : COLOR0;
     };
 
-    PSIn vs_scene(VSIn input) {
+    PSIn vs_scene(VSIn input, uint iid : SV_InstanceID) {
         PSIn output;
-        output.position = mul(mvp, float4(input.position, 1.0));
-        output.worldPos = mul(model, float4(input.position, 1.0)).xyz;
-        output.normal   = mul(model, float4(input.normal, 0.0)).xyz;
-        output.uv       = input.uv;
-        output.color    = input.color * materialColor;
+        if (lightColor.w > 0.5) {
+            uint base = iid * 5;
+            float4 c0 = instances[base + 0];
+            float4 c1 = instances[base + 1];
+            float4 c2 = instances[base + 2];
+            float4 c3 = instances[base + 3];
+            float4 ic = instances[base + 4];
+            float4 world = c0 * input.position.x + c1 * input.position.y + c2 * input.position.z + c3;
+            float3 norm  = (c0 * input.normal.x   + c1 * input.normal.y   + c2 * input.normal.z).xyz;
+            output.position = mul(mvp, world);
+            output.worldPos = world.xyz;
+            output.normal   = norm;
+            output.uv       = input.uv;
+            output.color    = input.color * materialColor * ic;
+        } else {
+            output.position = mul(mvp, float4(input.position, 1.0));
+            output.worldPos = mul(model, float4(input.position, 1.0)).xyz;
+            output.normal   = mul(model, float4(input.normal, 0.0)).xyz;
+            output.uv       = input.uv;
+            output.color    = input.color * materialColor;
+        }
         return output;
     }
 
@@ -411,15 +428,17 @@ final class D3dRenderPass
             $srvs[0] = $this->srvFor($mat->texture);
             ($c->v->PSSetShaderResources)($c, 0, 1, $srvs);
 
+            $isInstanced = $entity->instanceCount > 0;
             $pixelated = ($mat->texture?->pixelated ?? false) ? 1.0 : 0.0;
             $model = $entity->modelMatrix();
-            $mvp = $viewProj->multiply($model);
+            $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
 
             // Pack 208-byte Uniforms
+            $lc = $scene->lightColor;
             $uniformBinary = $mvp->toBinary()
                 . $model->toBinary()
                 . pack('f4', $lDir->x, $lDir->y, $lDir->z, $pixelated)
-                . pack('f4', ...$scene->lightColor)
+                . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
                 . pack('f4', ...$scene->ambientColor)
                 . pack('f4', ...$mat->color)
                 . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess);
@@ -432,7 +451,14 @@ final class D3dRenderPass
             ($c->v->IASetVertexBuffers)($c, 0, 1, $vbs, $strides, $offsets);
             ($c->v->IASetIndexBuffer)($c, $mesh->nativeIndexBuffer, self::FORMAT_R32_UINT, 0);
 
-            ($c->v->DrawIndexed)($c, $mesh->indexCount, 0, 0);
+            if ($isInstanced) {
+                $entity->uploadInstancesD3d($f, $this->device);
+                $srvs[0] = $entity->nativeInstanceSrv;
+                ($c->v->VSSetShaderResources)($c, 0, 1, $srvs);
+                ($c->v->DrawIndexedInstanced)($c, $mesh->indexCount, $entity->instanceCount, 0, 0, 0);
+            } else {
+                ($c->v->DrawIndexed)($c, $mesh->indexCount, 0, 0);
+            }
         }
 
         // Reset depth state to null so subsequent 2D passes are unaffected

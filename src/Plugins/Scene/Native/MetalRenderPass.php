@@ -62,23 +62,43 @@ final class MetalRenderPass
         float4 color;
     };
 
+    struct InstanceData {
+        float4x4 model;
+        float4   color;
+    };
+
     struct Uniforms {
-        float4x4 mvp;
+        float4x4 mvp;           // for single entity: MVP; for instanced: ViewProj
         float4x4 model;
         float4   lightDir;      // xyz = direction, w = pixelated (1.0 = nearest, 0.0 = linear)
-        float4   lightColor;    // rgb = color, a = intensity
+        float4   lightColor;    // rgb = color, a = instanced flag (1.0 = instanced, 0.0 = single)
         float4   ambientColor;  // rgb = color, a = intensity
         float4   materialColor; // rgba
         float4   cameraPos;     // xyz = position, w = shininess
     };
 
-    vertex VertexOut v_scene(VertexIn in [[stage_in]], constant Uniforms& u [[buffer(1)]]) {
+    vertex VertexOut v_scene(
+        VertexIn in [[stage_in]],
+        uint iid [[instance_id]],
+        constant Uniforms& u [[buffer(1)]],
+        const device InstanceData* instances [[buffer(2)]]
+    ) {
         VertexOut out;
-        out.position = u.mvp * float4(in.position, 1.0);
-        out.worldPos = (u.model * float4(in.position, 1.0)).xyz;
-        out.normal   = (u.model * float4(in.normal, 0.0)).xyz;
-        out.uv       = in.uv;
-        out.color    = in.color * u.materialColor;
+        if (u.lightColor.w > 0.5) {
+            InstanceData inst = instances[iid];
+            float4 world = inst.model * float4(in.position, 1.0);
+            out.position = u.mvp * world;
+            out.worldPos = world.xyz;
+            out.normal   = (inst.model * float4(in.normal, 0.0)).xyz;
+            out.uv       = in.uv;
+            out.color    = in.color * u.materialColor * inst.color;
+        } else {
+            out.position = u.mvp * float4(in.position, 1.0);
+            out.worldPos = (u.model * float4(in.position, 1.0)).xyz;
+            out.normal   = (u.model * float4(in.normal, 0.0)).xyz;
+            out.uv       = in.uv;
+            out.color    = in.color * u.materialColor;
+        }
         return out;
     }
 
@@ -314,14 +334,16 @@ final class MetalRenderPass
             $tex = $this->textureFor($mat->texture);
             $pixelated = ($mat->texture?->pixelated ?? false) ? 1.0 : 0.0;
 
+            $isInstanced = $entity->instanceCount > 0;
             $model = $entity->modelMatrix();
-            $mvp = $viewProj->multiply($model);
+            $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
 
             // Pack Uniforms (208 bytes)
+            $lc = $scene->lightColor;
             $uniformBinary = $mvp->toBinary()
                 . $model->toBinary()
                 . pack('f4', $lDir->x, $lDir->y, $lDir->z, $pixelated)
-                . pack('f4', ...$scene->lightColor)
+                . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
                 . pack('f4', ...$scene->ambientColor)
                 . pack('f4', ...$mat->color)
                 . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess);
@@ -331,13 +353,28 @@ final class MetalRenderPass
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $tex, 0);
             ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $mesh->nativeVertexBuffer, 0, 0);
 
-            ObjC::msg('v:LLLpL', $enc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:',
-                self::PRIMITIVE_TRIANGLE,
-                $mesh->indexCount,
-                self::INDEX_TYPE_UINT32,
-                $mesh->nativeIndexBuffer,
-                0
-            );
+            if ($isInstanced) {
+                $entity->uploadInstancesMetal($this->device);
+                ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $entity->nativeInstanceBuffer, 0, 2);
+                ObjC::msg('v:LLLpLL', $enc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:',
+                    self::PRIMITIVE_TRIANGLE,
+                    $mesh->indexCount,
+                    self::INDEX_TYPE_UINT32,
+                    $mesh->nativeIndexBuffer,
+                    0,
+                    $entity->instanceCount
+                );
+            } else {
+                // Bind dummy buffer at index 2 for non-instanced draw
+                ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $mesh->nativeVertexBuffer, 0, 2);
+                ObjC::msg('v:LLLpL', $enc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:',
+                    self::PRIMITIVE_TRIANGLE,
+                    $mesh->indexCount,
+                    self::INDEX_TYPE_UINT32,
+                    $mesh->nativeIndexBuffer,
+                    0
+                );
+            }
         }
 
         ObjC::msg('v:', $enc, 'endEncoding');

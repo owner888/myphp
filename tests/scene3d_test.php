@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, Scene};
-use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
+use MyPHP\Plugins\Scene\Math\{Mat4, Ray, Vec3};
 use MyPHP\UI\Canvas;
 
 // 1. Vec3 tests
@@ -80,14 +80,38 @@ $glbMesh = Mesh::fromGlb($glbBytes);
 check($glbMesh->vertexCount === 3 && $glbMesh->indexCount === 3, 'Mesh::fromGlb parses binary glTF 2.0 mesh');
 check(strlen($glbMesh->vertexData) === 3 * 48, 'Mesh::fromGlb 48-byte stride');
 
-// 4. Scene & Entity
+// 4. Scene, Entity, Raycasting & Instancing
 $scene = new Scene();
-$entity = new Entity($cube);
+$entity = new Entity($cube, name: 'TestCube');
 $entity->position = new Vec3(0.0, 0.0, -5.0);
 $entity->rotation = new Vec3(0.1, 0.2, 0.3);
 $scene->add($entity);
 check(count($scene->entities) === 1, 'Scene entities count');
 check($entity->modelMatrix() instanceof Mat4, 'Entity cached model matrix');
+
+// 4b. Ray & Screen-to-Ray Picking tests
+$ray = new Ray(new Vec3(0.0, 0.0, 3.0), new Vec3(0.0, 0.0, -1.0));
+$sphereHit = $ray->intersectSphere(new Vec3(0.0, 0.0, -5.0), 1.0);
+check($sphereHit !== null && abs($sphereHit - 7.0) < 1e-4, 'Ray::intersectSphere hits at distance 7.0');
+$aabbHit = $ray->intersectAABB(new Vec3(-1.0, -1.0, -6.0), new Vec3(1.0, 1.0, -4.0));
+check($aabbHit !== null && abs($aabbHit - 7.0) < 1e-4, 'Ray::intersectAABB hits at distance 7.0');
+
+$picked = $scene->pick(64.0, 64.0, 128.0, 128.0);
+check($picked !== null && $picked['entity'] === $entity, 'Scene::pick hits center 3D entity');
+$missed = $scene->pick(2.0, 2.0, 128.0, 128.0);
+check($missed === null, 'Scene::pick misses at far corner');
+
+// 4c. Hardware Instancing data packing
+$instEntity = new Entity(Mesh::cube(1.0));
+$instEntity->setInstances([
+    Mat4::translation(-1.0, 0.0, -5.0),
+    Mat4::translation(1.0, 0.0, -5.0),
+], [
+    [1.0, 0.0, 0.0, 1.0],
+    [0.0, 0.0, 1.0, 1.0],
+]);
+check($instEntity->instanceCount === 2, 'Entity::setInstances sets instanceCount = 2');
+check(strlen($instEntity->instanceData) === 2 * Entity::INSTANCE_STRIDE, 'Entity::setInstances packs 80 bytes per instance');
 
 // 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
 if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {
@@ -110,6 +134,15 @@ if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY 
     $tOffset = (32 * 64 + 32) * 4;
     $tBytes = unpack('C4', substr($texRendered->pixels(), $tOffset, 4));
     check($tBytes[2] > 50 && $tBytes[1] < 20, 'Textured 3D mesh samples green texture on GPU');
+
+    // Hardware Instanced 3D rendering verification
+    $instScene = new Scene();
+    $instCenter = new Entity(Mesh::cube(2.0));
+    $instCenter->setInstances([Mat4::translation(0.0, 0.0, -4.0)], [[0.0, 0.0, 1.0, 1.0]]);
+    $instScene->add($instCenter);
+    $instImg = $instScene->renderOffscreen(64, 64);
+    $iBytes = unpack('C4', substr($instImg->pixels(), $tOffset, 4));
+    check($iBytes[3] > 50 && $iBytes[1] < 20, 'Hardware GPU Instancing renders blue instanced mesh');
 }
 check(str_contains(\MyPHP\Plugins\Scene\Native\D3dRenderPass::SHADER_HLSL, 'vs_scene'), 'D3dRenderPass HLSL shader defined');
 

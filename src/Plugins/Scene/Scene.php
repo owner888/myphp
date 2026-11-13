@@ -5,7 +5,7 @@ namespace MyPHP\Plugins\Scene;
 
 use MyPHP\Native\Mem;
 use MyPHP\Native\ObjC;
-use MyPHP\Plugins\Scene\Math\Vec3;
+use MyPHP\Plugins\Scene\Math\{Ray, Vec3};
 use MyPHP\Plugins\Scene\Native\MetalRenderPass;
 use MyPHP\UI\{Canvas, Context, Image, Node, Painter};
 use RuntimeException;
@@ -46,6 +46,50 @@ final class Scene
         if ($idx !== false) {
             array_splice($this->entities, $idx, 1);
         }
+    }
+
+    /**
+     * Casts a 3D ray and returns the closest hit pickable Entity and distance, or null if none hit.
+     *
+     * @return ?array{entity: Entity, distance: float, point: Vec3}
+     */
+    public function raycast(Ray $ray): ?array
+    {
+        $closestEntity = null;
+        $closestDist = INF;
+
+        foreach ($this->entities as $entity) {
+            if (!$entity->pickable || $entity->instanceCount > 0) {
+                continue;
+            }
+            $radius = $entity->worldBoundingRadius();
+            $t = $ray->intersectSphere($entity->position, $radius);
+            if ($t !== null && $t < $closestDist) {
+                $closestDist = $t;
+                $closestEntity = $entity;
+            }
+        }
+
+        if ($closestEntity === null) {
+            return null;
+        }
+
+        return [
+            'entity'   => $closestEntity,
+            'distance' => $closestDist,
+            'point'    => $ray->at($closestDist),
+        ];
+    }
+
+    /**
+     * Picks the closest 3D Entity under 2D viewport coordinates ($x, $y) within ($width, $height).
+     *
+     * @return ?array{entity: Entity, distance: float, point: Vec3}
+     */
+    public function pick(float $x, float $y, float $width, float $height): ?array
+    {
+        $ray = $this->camera->screenToRay($x, $y, $width, $height);
+        return $this->raycast($ray);
     }
 
     /**
