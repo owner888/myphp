@@ -51,6 +51,23 @@ final class Mat4
     }
 
     /**
+     * Orthographic projection matrix for directional shadow mapping (depth [0, 1], right-handed).
+     */
+    public static function ortho(float $left, float $right, float $bottom, float $top, float $near, float $far): self
+    {
+        $rl = 1.0 / ($right - $left);
+        $tb = 1.0 / ($top - $bottom);
+        $nf = 1.0 / ($near - $far);
+
+        return new self([
+            2.0 * $rl,                 0.0,                       0.0,              0.0,
+            0.0,                       2.0 * $tb,                 0.0,              0.0,
+            0.0,                       0.0,                       $nf,              0.0,
+            -($right + $left) * $rl,  -($top + $bottom) * $tb,    $near * $nf,      1.0,
+        ]);
+    }
+
+    /**
      * LookAt view matrix (right-handed).
      */
     public static function lookAt(Vec3 $eye, Vec3 $target, Vec3 $up): self

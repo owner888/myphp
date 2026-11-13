@@ -67,6 +67,12 @@ final class D3dRenderPass
         float4 ambientColor;  // rgb = color, a = intensity
         float4 materialColor; // rgba
         float4 cameraPos;     // xyz = position, w = shininess
+        column_major float4x4 lightVP;
+        float4 pointPos0;     // xyz = pos, w = radius
+        float4 pointCol0;     // rgb = color, w = intensity
+        float4 pointPos1;     // xyz = pos, w = radius
+        float4 pointCol1;     // rgb = color, w = intensity
+        float4 shadowParams;  // x = shadowsEnabled, y = pointLightCount, z = bias, w = pad
     };
 
     Buffer<float4> instances : register(t0);
@@ -137,6 +143,37 @@ final class D3dRenderPass
         float3 specular = spec * lightColor.rgb * 0.35;
 
         float3 finalColor = ambient + diffuse + specular;
+
+        // Point lights
+        if (shadowParams.y > 0.5) {
+            float3 toL = pointPos0.xyz - input.worldPos;
+            float d = length(toL);
+            float r = max(pointPos0.w, 0.1);
+            if (d < r) {
+                float3 pL = toL / max(d, 1e-4);
+                float att = (1.0 - d / r);
+                att = att * att * pointCol0.w;
+                float pDiff = max(dot(N, pL), 0.0);
+                float3 pH = normalize(pL + V);
+                float pSpec = pow(max(dot(N, pH), 0.0), max(cameraPos.w, 1.0));
+                finalColor += att * pointCol0.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
+            }
+        }
+        if (shadowParams.y > 1.5) {
+            float3 toL = pointPos1.xyz - input.worldPos;
+            float d = length(toL);
+            float r = max(pointPos1.w, 0.1);
+            if (d < r) {
+                float3 pL = toL / max(d, 1e-4);
+                float att = (1.0 - d / r);
+                att = att * att * pointCol1.w;
+                float pDiff = max(dot(N, pL), 0.0);
+                float3 pH = normalize(pL + V);
+                float pSpec = pow(max(dot(N, pH), 0.0), max(cameraPos.w, 1.0));
+                finalColor += att * pointCol1.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
+            }
+        }
+
         return float4(finalColor, baseColor.a);
     }
     HLSL;
@@ -240,9 +277,9 @@ final class D3dRenderPass
             'CreateSamplerState (point)'
         );
 
-        // Constant Buffer (208 bytes rounded up to 16-byte multiple = 208)
+        // Constant Buffer (352 bytes)
         $cbDesc = $f->new('D3D11_BUFFER_DESC');
-        $cbDesc->ByteWidth = 208;
+        $cbDesc->ByteWidth = 352;
         $cbDesc->Usage = self::USAGE_DYNAMIC;
         $cbDesc->BindFlags = self::BIND_CONSTANT_BUFFER;
         $cbDesc->CPUAccessFlags = self::CPU_WRITE;
@@ -411,6 +448,7 @@ final class D3dRenderPass
 
         $camPos = $scene->camera->position;
         $lDir = $scene->lightDirection->normalize();
+        $lightingExt = $scene->packLightingExtension();
 
         $vbs = $f->new('void *[1]');
         $strides = $f->new('uint32_t[1]');
@@ -420,7 +458,7 @@ final class D3dRenderPass
         $srvs = $f->new('void *[1]');
         $mapped = $f->new('D3D11_MAPPED_SUBRESOURCE');
 
-        foreach ($scene->entities as $entity) {
+        foreach ($scene->visibleEntities($viewProj) as $entity) {
             $mesh = $entity->mesh;
             $mesh->uploadD3d($f, $this->device);
 
@@ -433,7 +471,7 @@ final class D3dRenderPass
             $model = $entity->modelMatrix();
             $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
 
-            // Pack 208-byte Uniforms
+            // Pack 352-byte Uniforms
             $lc = $scene->lightColor;
             $uniformBinary = $mvp->toBinary()
                 . $model->toBinary()
@@ -441,10 +479,11 @@ final class D3dRenderPass
                 . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
                 . pack('f4', ...$scene->ambientColor)
                 . pack('f4', ...$mat->color)
-                . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess);
+                . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess)
+                . $lightingExt;
 
             Com::check(($c->v->Map)($c, $this->constantBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($mapped)), 'Map (3D constants)');
-            FFI::memcpy($mapped->pData, $uniformBinary, 208);
+            FFI::memcpy($mapped->pData, $uniformBinary, 352);
             ($c->v->Unmap)($c, $this->constantBuffer, 0);
 
             $vbs[0] = $mesh->nativeVertexBuffer;

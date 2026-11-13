@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, Scene};
-use MyPHP\Plugins\Scene\Math\{Mat4, Ray, Vec3};
+use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, PointLight, Scene};
+use MyPHP\Plugins\Scene\Math\{Frustum, Mat4, Ray, Vec3};
 use MyPHP\UI\Canvas;
 
 // 1. Vec3 tests
@@ -113,6 +113,28 @@ $instEntity->setInstances([
 check($instEntity->instanceCount === 2, 'Entity::setInstances sets instanceCount = 2');
 check(strlen($instEntity->instanceData) === 2 * Entity::INSTANCE_STRIDE, 'Entity::setInstances packs 80 bytes per instance');
 
+// 4d. Scene Graph Parent-Child Hierarchy & Frustum Culling tests
+$parentEnt = new Entity(Mesh::cube(1.0), position: new Vec3(10.0, 0.0, 0.0));
+$childEnt  = new Entity(Mesh::cube(0.5), position: new Vec3(0.0, 5.0, 0.0));
+$parentEnt->addChild($childEnt);
+$childWorldPos = $childEnt->worldPosition();
+check(abs($childWorldPos->x - 10.0) < 1e-4 && abs($childWorldPos->y - 5.0) < 1e-4, 'Scene Graph child inherits parent world transform');
+
+$cullScene = new Scene(new Camera3D(position: new Vec3(0.0, 0.0, 5.0), target: new Vec3(0.0, 0.0, 0.0)));
+$inFront = new Entity(Mesh::cube(1.0), position: new Vec3(0.0, 0.0, 0.0));
+$behindCam = new Entity(Mesh::cube(1.0), position: new Vec3(0.0, 0.0, 25.0)); // far behind camera
+$cullScene->add($inFront);
+$cullScene->add($behindCam);
+$vpMat = $cullScene->camera->projectionMatrix(1.0)->multiply($cullScene->camera->viewMatrix());
+$visibleList = $cullScene->visibleEntities($vpMat);
+check(count($visibleList) === 1 && $visibleList[0] === $inFront && $cullScene->lastCulledCount === 1, 'Frustum culling culls entity behind camera');
+
+// 4e. Point Lights & Shadow Map extension packing
+$cullScene->shadowsEnabled = true;
+$cullScene->addPointLight(new PointLight(new Vec3(1.0, 2.0, 3.0), [1.0, 0.5, 0.2], intensity: 2.0, radius: 8.0));
+$extBin = $cullScene->packLightingExtension();
+check(strlen($extBin) === 144, 'Scene::packLightingExtension packs 144-byte shadow & point light block');
+
 // 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
 if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {
     $img = $scene->renderOffscreen(128, 128);
@@ -143,6 +165,15 @@ if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY 
     $instImg = $instScene->renderOffscreen(64, 64);
     $iBytes = unpack('C4', substr($instImg->pixels(), $tOffset, 4));
     check($iBytes[3] > 50 && $iBytes[1] < 20, 'Hardware GPU Instancing renders blue instanced mesh');
+
+    // Shadow Mapping + Point Light rendering verification
+    $shadowScene = new Scene();
+    $shadowScene->shadowsEnabled = true;
+    $shadowScene->addPointLight(new PointLight(new Vec3(0.0, 1.0, -2.0), [1.0, 0.1, 0.1], intensity: 4.0, radius: 10.0));
+    $shadowScene->add(new Entity(Mesh::cube(2.0), position: new Vec3(0.0, 0.0, -4.0)));
+    $sImg = $shadowScene->renderOffscreen(64, 64);
+    $sBytes = unpack('C4', substr($sImg->pixels(), $tOffset, 4));
+    check($sBytes[1] > $sBytes[3], 'Point light & shadow pass illuminates 3D surface with red point light');
 }
 check(str_contains(\MyPHP\Plugins\Scene\Native\D3dRenderPass::SHADER_HLSL, 'vs_scene'), 'D3dRenderPass HLSL shader defined');
 check(str_contains(\MyPHP\Plugins\Scene\Native\GlRenderPass::VERTEX_GLSL, 'iModelC0'), 'GlRenderPass GLSL vertex shader supports hardware instancing');

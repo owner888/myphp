@@ -6,7 +6,7 @@ namespace MyPHP\Plugins\Scene;
 use Closure;
 use MyPHP\Native\Mem;
 use MyPHP\Native\ObjC;
-use MyPHP\Plugins\Scene\Math\{Ray, Vec3};
+use MyPHP\Plugins\Scene\Math\{Frustum, Mat4, Ray, Vec3};
 use MyPHP\Plugins\Scene\Native\MetalRenderPass;
 use MyPHP\UI\{Canvas, Context, Image, InputEvent, Node, Painter};
 use RuntimeException;
@@ -20,6 +20,8 @@ final class Scene
 {
     /** @var list<Entity> */
     public array $entities = [];
+    /** @var list<PointLight> */
+    public array $pointLights = [];
     public Camera3D $camera;
     public Vec3 $lightDirection;
     /** @var array{0: float, 1: float, 2: float, 3: float} */
@@ -28,6 +30,13 @@ final class Scene
     public array $ambientColor = [0.2, 0.2, 0.25, 1.0];
     /** @var array{0: float, 1: float, 2: float, 3: float} */
     public array $clearColor = [0.08, 0.09, 0.11, 1.0];
+
+    /** Real-time Directional Shadow Mapping & Frustum Culling */
+    public bool $shadowsEnabled = false;
+    public float $shadowBounds = 9.0;
+    public bool $frustumCulling = true;
+    /** @var int Number of entities culled in the last render pass */
+    public int $lastCulledCount = 0;
 
     public function __construct(?Camera3D $camera = null)
     {
@@ -39,6 +48,105 @@ final class Scene
     {
         $this->entities[] = $entity;
         return $entity;
+    }
+
+    public function addPointLight(PointLight $light): PointLight
+    {
+        $this->pointLights[] = $light;
+        return $light;
+    }
+
+    /**
+     * Returns all entities in the scene graph (flattening parent-child hierarchies).
+     *
+     * @return list<Entity>
+     */
+    public function allEntities(): array
+    {
+        $out = [];
+        $walk = static function (array $list) use (&$walk, &$out): void {
+            foreach ($list as $e) {
+                $out[] = $e;
+                if ($e->children !== []) {
+                    $walk($e->children);
+                }
+            }
+        };
+        $walk($this->entities);
+        $walk = null;
+        return $out;
+    }
+
+    /**
+     * Returns only the entities visible inside the camera's view frustum (or instanced entities).
+     * Updates $this->lastCulledCount.
+     *
+     * @return list<Entity>
+     */
+    public function visibleEntities(Mat4 $viewProj): array
+    {
+        $all = $this->allEntities();
+        if (!$this->frustumCulling) {
+            $this->lastCulledCount = 0;
+            return $all;
+        }
+
+        $frustum = Frustum::fromViewProjection($viewProj);
+        $visible = [];
+        $culled = 0;
+
+        foreach ($all as $entity) {
+            // Instanced entities span wide areas; keep them always visible
+            if ($entity->instanceCount > 0 || $frustum->intersectsSphere($entity->worldPosition(), $entity->worldBoundingRadius())) {
+                $visible[] = $entity;
+            } else {
+                $culled++;
+            }
+        }
+
+        $this->lastCulledCount = $culled;
+        return $visible;
+    }
+
+    /**
+     * Computes the orthographic View-Projection matrix from the directional light's perspective.
+     */
+    public function lightViewProjectionMatrix(): Mat4
+    {
+        $dir = $this->lightDirection->normalize();
+        $center = $this->camera->target;
+        $lightPos = $center->sub($dir->scale(15.0));
+        $up = abs($dir->y) > 0.99 ? new Vec3(0.0, 0.0, 1.0) : Vec3::up();
+
+        $lightView = Mat4::lookAt($lightPos, $center, $up);
+        $b = $this->shadowBounds;
+        $lightProj = Mat4::ortho(-$b, $b, -$b, $b, 1.0, 35.0);
+        return $lightProj->multiply($lightView);
+    }
+
+    /**
+     * Packs point light & shadow parameters into a 144-byte binary block (9 x float4):
+     * - Mat4 lightVP (64 bytes)
+     * - 2 x PointLight (pos+radius, color+intensity = 64 bytes)
+     * - float4 shadowParams (x = shadowsEnabled, y = pointLightCount, z = shadowBias, w = pad = 16 bytes)
+     */
+    public function packLightingExtension(?Mat4 $lightVP = null): string
+    {
+        $lvp = ($lightVP ?? $this->lightViewProjectionMatrix())->toBinary();
+
+        $pl0 = $this->pointLights[0] ?? null;
+        $pl1 = $this->pointLights[1] ?? null;
+
+        $p0Pos = $pl0 !== null ? pack('f4', $pl0->position->x, $pl0->position->y, $pl0->position->z, $pl0->radius) : pack('f4', 0.0, 0.0, 0.0, 1.0);
+        $p0Col = $pl0 !== null ? pack('f4', $pl0->color[0], $pl0->color[1], $pl0->color[2], $pl0->intensity) : pack('f4', 0.0, 0.0, 0.0, 0.0);
+
+        $p1Pos = $pl1 !== null ? pack('f4', $pl1->position->x, $pl1->position->y, $pl1->position->z, $pl1->radius) : pack('f4', 0.0, 0.0, 0.0, 1.0);
+        $p1Col = $pl1 !== null ? pack('f4', $pl1->color[0], $pl1->color[1], $pl1->color[2], $pl1->intensity) : pack('f4', 0.0, 0.0, 0.0, 0.0);
+
+        $plCount = min(2, count($this->pointLights));
+        $params = pack('f4', $this->shadowsEnabled ? 1.0 : 0.0, (float)$plCount, 0.004, 0.0);
+
+        return $lvp . $p0Pos . $p0Col . $p1Pos . $p1Col . $params;
     }
 
     public function remove(Entity $entity): void
@@ -59,12 +167,12 @@ final class Scene
         $closestEntity = null;
         $closestDist = INF;
 
-        foreach ($this->entities as $entity) {
+        foreach ($this->allEntities() as $entity) {
             if (!$entity->pickable || $entity->instanceCount > 0) {
                 continue;
             }
             $radius = $entity->worldBoundingRadius();
-            $t = $ray->intersectSphere($entity->position, $radius);
+            $t = $ray->intersectSphere($entity->worldPosition(), $radius);
             if ($t !== null && $t < $closestDist) {
                 $closestDist = $t;
                 $closestEntity = $entity;
