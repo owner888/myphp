@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, PointLight, Scene};
+use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
 use MyPHP\Plugins\Scene\Math\{Frustum, Mat4, Ray, Vec3};
 use MyPHP\UI\Canvas;
 
@@ -131,9 +131,27 @@ check(count($visibleList) === 1 && $visibleList[0] === $inFront && $cullScene->l
 
 // 4e. Point Lights & Shadow Map extension packing
 $cullScene->shadowsEnabled = true;
+$cullScene->fogEnabled = true;
+$cullScene->fogDensity = 0.05;
 $cullScene->addPointLight(new PointLight(new Vec3(1.0, 2.0, 3.0), [1.0, 0.5, 0.2], intensity: 2.0, radius: 8.0));
 $extBin = $cullScene->packLightingExtension();
-check(strlen($extBin) === 144, 'Scene::packLightingExtension packs 144-byte shadow & point light block');
+check(strlen($extBin) === 144, 'Scene::packLightingExtension packs 144-byte shadow, point light & fog block');
+
+// 4f. Tween3D, ParticleEmitter3D, Billboard, and sceneFromGlb tests
+$tweenEnt = new Entity(Mesh::cube(1.0), position: new Vec3(0.0, 0.0, 0.0));
+$tweenEnt->billboard = true;
+$cullScene->add($tweenEnt);
+$cullScene->addTween((new Tween3D($tweenEnt, duration: 1.0, easing: Tween3D::LINEAR))->toPosition(new Vec3(10.0, 0.0, 0.0)));
+$emitter = $cullScene->addEmitter(new ParticleEmitter3D(Mesh::cube(0.5), maxParticles: 64));
+$emitter->burst(new Vec3(0.0, 1.0, 0.0), count: 16, lifeMin: 1.0, lifeMax: 2.0);
+check($emitter->activeCount() === 16, 'ParticleEmitter3D::burst spawns 16 active 3D particles');
+$cullScene->step(0.5);
+check(abs($tweenEnt->position->x - 5.0) < 1e-4, 'Tween3D interpolates Entity position over time');
+check($emitter->entity->instanceCount === 16, 'ParticleEmitter3D::step packs live particles into GPU instance buffer');
+check(abs($tweenEnt->rotation->y - atan2(-5.0, 5.0)) < 1e-4, 'Entity::$billboard rotates entity toward camera during Scene::step');
+
+$glbEntity = Mesh::sceneFromGlb($glbBytes);
+check($glbEntity instanceof Entity && $glbEntity->mesh->vertexCount === 3, 'Mesh::sceneFromGlb parses GLB into Scene Graph Entity');
 
 // 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
 if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {
@@ -180,6 +198,7 @@ check(str_contains(\MyPHP\Plugins\Scene\Native\GlRenderPass::VERTEX_GLSL, 'iMode
 check(str_contains(\MyPHP\Plugins\Scene\Native\GlRenderPass::FRAGMENT_GLSL, 'uTex'), 'GlRenderPass GLSL fragment shader supports texture mapping');
 
 // 7. Full headless UI build & paint pass with Scene::view & SceneView()
+\MyPHP\UI\CanvasAtlas::take(); // flush any pending canvases left by earlier tests
 $sceneForView = new Scene();
 $sceneForView->add(new Entity(Mesh::cube(1.5), name: 'ViewCube'));
 $updated = false;

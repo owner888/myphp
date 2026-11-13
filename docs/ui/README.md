@@ -105,6 +105,9 @@ UI as they read other apps (see [Accessibility](accessibility.md)).
   shaping text, and values that ease to their targets.
 - [Shaders](shaders.md): pixels computed on the GPU by shaders written in
   Go's syntax, with values and images the app passes them.
+- [3D scenes](scene3d.md): hardware-accelerated 3D scenes (`SceneView`,
+  meshes, textures, `.obj`/`.glb` models, GPU instancing, PCF soft shadows,
+  point lights, 3D particles and raycast picking).
 - [Transitions](transitions.md): nodes that move, resize and recolor
   smoothly as the layout changes, and come and go.
 - [Motion](motion.md): springs that keep their velocity, curves, delays,

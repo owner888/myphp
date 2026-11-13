@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace MyPHP\Plugins\Scene;
 
 use MyPHP\Native\ObjC;
+use MyPHP\Plugins\Scene\Math\Vec3;
+use MyPHP\UI\Image;
 use RuntimeException;
 
 /**
@@ -569,6 +571,8 @@ final class Mesh
         $normals = isset($attrs['NORMAL']) ? $readAccessor((int)$attrs['NORMAL']) : null;
         /** @var ?list<array{0: float, 1: float}> $uvs */
         $uvs = isset($attrs['TEXCOORD_0']) ? $readAccessor((int)$attrs['TEXCOORD_0']) : null;
+        /** @var ?list<array{0: float, 1: float, 2: float, 3?: float}> $vColors */
+        $vColors = isset($attrs['COLOR_0']) ? $readAccessor((int)$attrs['COLOR_0']) : null;
 
         [$cr, $cg, $cb, $ca] = $color;
         $vFloats = [];
@@ -577,12 +581,16 @@ final class Mesh
             $p = $positions[$i];
             $n = $normals[$i] ?? [0.0, 1.0, 0.0];
             $u = $uvs[$i] ?? [0.0, 0.0];
+            $vc = $vColors[$i] ?? null;
 
             array_push($vFloats,
                 (float)$p[0], (float)$p[1], (float)$p[2],
                 (float)$n[0], (float)$n[1], (float)$n[2],
                 (float)$u[0], (float)$u[1],
-                $cr, $cg, $cb, $ca
+                $vc !== null ? (float)$vc[0] * $cr : $cr,
+                $vc !== null ? (float)$vc[1] * $cg : $cg,
+                $vc !== null ? (float)$vc[2] * $cb : $cb,
+                $vc !== null ? (float)($vc[3] ?? 1.0) * $ca : $ca
             );
         }
 
@@ -594,5 +602,199 @@ final class Mesh
         }
 
         return new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices));
+    }
+
+    /**
+     * Parses a binary glTF 2.0 (.glb) file into a full 3D Scene Graph Entity hierarchy,
+     * extracting multiple meshes, PBR baseColorFactor materials, embedded PNG/JPEG textures,
+     * and node transforms.
+     */
+    public static function sceneFromGlbFile(string $path): Entity
+    {
+        $bytes = @file_get_contents($path);
+        if ($bytes === false) {
+            throw new RuntimeException("Scene: cannot read GLB file: $path");
+        }
+        return self::sceneFromGlb($bytes);
+    }
+
+    /**
+     * Parses a binary glTF 2.0 (.glb) payload into a root Entity containing all scene nodes/meshes,
+     * materials, and embedded textures.
+     */
+    public static function sceneFromGlb(string $glbBytes): Entity
+    {
+        if (strlen($glbBytes) < 20) {
+            throw new RuntimeException('Scene: invalid GLB header');
+        }
+        $header = unpack('Vmagic/Vversion/Vlength', substr($glbBytes, 0, 12));
+        if ($header['magic'] !== 0x46546C67) {
+            throw new RuntimeException('Scene: invalid GLB magic bytes');
+        }
+
+        $offset = 12;
+        $totalLen = strlen($glbBytes);
+        $jsonChunk = null;
+        $binChunk = '';
+
+        while ($offset + 8 <= $totalLen) {
+            $chunkHeader = unpack('Vlength/Vtype', substr($glbBytes, $offset, 8));
+            $cLen = $chunkHeader['length'];
+            $cType = $chunkHeader['type'];
+            $offset += 8;
+            $chunkData = substr($glbBytes, $offset, $cLen);
+            $offset += $cLen;
+
+            if ($cType === 0x4E4F534A) {
+                $jsonChunk = json_decode($chunkData, true, flags: JSON_THROW_ON_ERROR);
+            } elseif ($cType === 0x004E4942) {
+                $binChunk = $chunkData;
+            }
+        }
+
+        if (!is_array($jsonChunk) || empty($jsonChunk['meshes'])) {
+            throw new RuntimeException('Scene: GLB contains no meshes');
+        }
+
+        $accessors = $jsonChunk['accessors'] ?? [];
+        $bufferViews = $jsonChunk['bufferViews'] ?? [];
+        $images = $jsonChunk['images'] ?? [];
+        $textures = $jsonChunk['textures'] ?? [];
+        $gltfMaterials = $jsonChunk['materials'] ?? [];
+
+        $decodedImages = [];
+        $getImage = static function (int $texIdx) use (&$decodedImages, $textures, $images, $bufferViews, $binChunk): ?Image {
+            $texDef = $textures[$texIdx] ?? null;
+            if ($texDef === null || !isset($texDef['source'])) {
+                return null;
+            }
+            $imgIdx = (int)$texDef['source'];
+            if (array_key_exists($imgIdx, $decodedImages)) {
+                return $decodedImages[$imgIdx];
+            }
+            $imgDef = $images[$imgIdx] ?? null;
+            if ($imgDef === null || !isset($imgDef['bufferView'])) {
+                return $decodedImages[$imgIdx] = null;
+            }
+            $bv = $bufferViews[(int)$imgDef['bufferView']] ?? null;
+            if ($bv === null) {
+                return $decodedImages[$imgIdx] = null;
+            }
+            $imgBytes = substr($binChunk, (int)($bv['byteOffset'] ?? 0), (int)$bv['byteLength']);
+            try {
+                return $decodedImages[$imgIdx] = Image::fromBytes($imgBytes);
+            } catch (\Throwable) {
+                return $decodedImages[$imgIdx] = null;
+            }
+        };
+
+        $parsedMaterials = [];
+        foreach ($gltfMaterials as $mIdx => $mDef) {
+            $pbr = $mDef['pbrMetallicRoughness'] ?? [];
+            $bcf = $pbr['baseColorFactor'] ?? [1.0, 1.0, 1.0, 1.0];
+            $color = [(float)$bcf[0], (float)$bcf[1], (float)$bcf[2], (float)($bcf[3] ?? 1.0)];
+            $tex = null;
+            if (isset($pbr['baseColorTexture']['index'])) {
+                $tex = $getImage((int)$pbr['baseColorTexture']['index']);
+            }
+            $parsedMaterials[$mIdx] = new Material(color: $color, texture: $tex);
+        }
+
+        $readAccessor = static function (int $accIdx) use ($accessors, $bufferViews, $binChunk): array {
+            $acc = $accessors[$accIdx] ?? throw new RuntimeException("Scene: missing accessor $accIdx");
+            $bv = $bufferViews[$acc['bufferView']] ?? throw new RuntimeException('Scene: missing bufferView');
+            $count = (int)$acc['count'];
+            $compType = (int)$acc['componentType'];
+            $type = (string)$acc['type'];
+            $numComps = match ($type) {
+                'SCALAR' => 1, 'VEC2' => 2, 'VEC3' => 3, 'VEC4' => 4, default => 1,
+            };
+            $compBytes = match ($compType) {
+                5126 => 4, 5125 => 4, 5123 => 2, 5121 => 1,
+                default => throw new RuntimeException("Scene: unsupported GLB componentType $compType"),
+            };
+            $byteOffset = (int)($bv['byteOffset'] ?? 0) + (int)($acc['byteOffset'] ?? 0);
+            $stride = (int)($bv['byteStride'] ?? ($numComps * $compBytes));
+            $out = [];
+            for ($i = 0; $i < $count; $i++) {
+                $pos = $byteOffset + $i * $stride;
+                $slice = substr($binChunk, $pos, $numComps * $compBytes);
+                $vals = match ($compType) {
+                    5126 => array_values(unpack("f$numComps", $slice)),
+                    5125 => array_values(unpack("V$numComps", $slice)),
+                    5123 => array_values(unpack("v$numComps", $slice)),
+                    5121 => array_values(unpack("C$numComps", $slice)),
+                };
+                $out[] = $numComps === 1 ? $vals[0] : $vals;
+            }
+            return $out;
+        };
+
+        $buildPrimitiveEntity = static function (array $prim, string $name) use ($readAccessor, $parsedMaterials): Entity {
+            $attrs = $prim['attributes'] ?? [];
+            $positions = $readAccessor((int)$attrs['POSITION']);
+            $vCount = count($positions);
+            $normals = isset($attrs['NORMAL']) ? $readAccessor((int)$attrs['NORMAL']) : null;
+            $uvs = isset($attrs['TEXCOORD_0']) ? $readAccessor((int)$attrs['TEXCOORD_0']) : null;
+            $vColors = isset($attrs['COLOR_0']) ? $readAccessor((int)$attrs['COLOR_0']) : null;
+
+            $vFloats = [];
+            for ($i = 0; $i < $vCount; $i++) {
+                $p = $positions[$i];
+                $n = $normals[$i] ?? [0.0, 1.0, 0.0];
+                $u = $uvs[$i] ?? [0.0, 0.0];
+                $vc = $vColors[$i] ?? [1.0, 1.0, 0.0 + 1.0, 1.0];
+                array_push($vFloats,
+                    (float)$p[0], (float)$p[1], (float)$p[2],
+                    (float)$n[0], (float)$n[1], (float)$n[2],
+                    (float)$u[0], (float)$u[1],
+                    (float)$vc[0], (float)$vc[1], (float)$vc[2], (float)($vc[3] ?? 1.0)
+                );
+            }
+            $indices = isset($prim['indices'])
+                ? array_map('intval', $readAccessor((int)$prim['indices']))
+                : range(0, $vCount - 1);
+
+            $mesh = new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices));
+            $mat = isset($prim['material']) ? ($parsedMaterials[(int)$prim['material']] ?? new Material()) : new Material();
+            return new Entity($mesh, $mat, name: $name);
+        };
+
+        $meshes = $jsonChunk['meshes'];
+        if (count($meshes) === 1 && count($meshes[0]['primitives'] ?? []) === 1 && empty($jsonChunk['nodes'])) {
+            return $buildPrimitiveEntity($meshes[0]['primitives'][0], (string)($meshes[0]['name'] ?? 'glb_root'));
+        }
+
+        $root = new Entity(self::cube(0.0001, [0.0, 0.0, 0.0, 0.0]), name: 'glb_scene');
+        $root->pickable = false;
+        $root->castShadow = false;
+
+        $nodes = $jsonChunk['nodes'] ?? [];
+        if ($nodes === []) {
+            foreach ($meshes as $mDef) {
+                foreach ($mDef['primitives'] ?? [] as $prim) {
+                    $root->addChild($buildPrimitiveEntity($prim, (string)($mDef['name'] ?? 'mesh')));
+                }
+            }
+            return $root;
+        }
+
+        foreach ($nodes as $nDef) {
+            $t = $nDef['translation'] ?? [0.0, 0.0, 0.0];
+            $s = $nDef['scale'] ?? [1.0, 1.0, 1.0];
+            $pos = new Vec3((float)$t[0], (float)$t[1], (float)$t[2]);
+            $scl = new Vec3((float)$s[0], (float)$s[1], (float)$s[2]);
+            if (isset($nDef['mesh'])) {
+                $mDef = $meshes[(int)$nDef['mesh']] ?? null;
+                foreach ($mDef['primitives'] ?? [] as $prim) {
+                    $ent = $buildPrimitiveEntity($prim, (string)($nDef['name'] ?? $mDef['name'] ?? 'node'));
+                    $ent->position = $pos;
+                    $ent->scale = $scl;
+                    $root->addChild($ent);
+                }
+            }
+        }
+
+        return count($root->children) === 1 ? $root->children[0] : $root;
     }
 }

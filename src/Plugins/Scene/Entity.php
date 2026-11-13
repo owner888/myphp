@@ -22,6 +22,8 @@ final class Entity
     public Mesh $mesh;
     public bool $pickable = true;
     public bool $castShadow = true;
+    /** When true, Scene::step() automatically rotates this entity to face the camera */
+    public bool $billboard = false;
     public string $name = '';
 
     /** Scene Graph hierarchy */
@@ -80,6 +82,21 @@ final class Entity
             array_splice($this->children, $idx, 1);
             $child->parent = null;
         }
+    }
+
+    /**
+     * Rotates this entity around Y/X so its +Z face points directly toward $cameraPos.
+     */
+    public function faceCamera(Vec3 $cameraPos): self
+    {
+        $wp = $this->worldPosition();
+        $dx = $cameraPos->x - $wp->x;
+        $dy = $cameraPos->y - $wp->y;
+        $dz = $cameraPos->z - $wp->z;
+        $horiz = hypot($dx, $dz);
+        $this->rotation->y = atan2($dx, $dz);
+        $this->rotation->x = -atan2($dy, max(1e-5, $horiz));
+        return $this;
     }
 
     /**

@@ -12,7 +12,7 @@ declare(strict_types=1);
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Game\{Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, PointLight, Scene};
+use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
 use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
 use MyPHP\UI\{Canvas, Content, Context, Image, Key, Node, Painter};
 
@@ -70,6 +70,7 @@ final class CrystalRunner3D extends Game
 
     public PointLight $gemLight;
     public PointLight $playerLight;
+    public ParticleEmitter3D $particles;
 
     public float $px = 0.0, $pz = 2.5;
     public float $py = 0.0, $vy = 0.0;
@@ -93,6 +94,10 @@ final class CrystalRunner3D extends Game
         $this->scene->clearColor = [0.04, 0.05, 0.08, 1.0];
         $this->scene->shadowsEnabled = true;
         $this->scene->shadowBounds = 10.0;
+        $this->scene->fogEnabled = true;
+        $this->scene->fogDensity = 0.035;
+
+        $this->particles = $this->scene->addEmitter(new ParticleEmitter3D(Mesh::cube(1.0), maxParticles: 320));
 
         // 1. Arena Floor
         $floor = new Entity(
@@ -237,8 +242,16 @@ final class CrystalRunner3D extends Game
                 $this->highScore = $this->score;
             }
             $this->flashTimer = 0.35;
+            // Burst 48 emerald 3D sparks at gem location!
+            $this->particles->burst($this->gem->position, count: 48, color: [0.2, 1.0, 0.6, 1.0]);
             $this->respawnGem();
+            $this->scene->addTween(
+                (new Tween3D($this->gem, duration: 0.25, easing: Tween3D::EASE_OUT_CUBIC))
+                    ->toScale(new Vec3(1.0, 1.0, 1.0), new Vec3(0.05, 0.05, 0.05))
+            );
         }
+
+        $this->scene->step(1.0 / 60.0);
 
         // Update patrolling sentinels
         foreach ($this->sentinels as $i => $s) {

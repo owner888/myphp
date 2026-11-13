@@ -174,6 +174,13 @@ final class D3dRenderPass
             }
         }
 
+        if (shadowParams.w > 0.0001) {
+            float camDist = length(cameraPos.xyz - input.worldPos);
+            float fogFactor = saturate(exp(-pow(camDist * shadowParams.w, 2.0)));
+            float3 horizon = ambientColor.rgb * 0.6;
+            finalColor = lerp(horizon, finalColor, fogFactor);
+        }
+
         return float4(finalColor, baseColor.a);
     }
     HLSL;

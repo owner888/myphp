@@ -79,7 +79,7 @@ src/Text/          the text system (mygo's internal/text): System, Layout, Engin
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html; Native/ in native UI); Game/ (Game::view, Camera, Gamepad/); Glass/
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html; Native/ in native UI); Game/ (Game::view, Camera, Gamepad/); Scene/ (5-platform 3D engine: SceneView, Mesh OBJ/GLB, GPU Instancing, PCF shadows, PointLight, ParticleEmitter3D, Tween3D); Glass/
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
@@ -102,7 +102,7 @@ examples/          native (inbox over a million rows), form (fields, text area, 
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
                    over curl — the API's proving ground), files (a file manager: sidebar, breadcrumbs, grid or table of
                    the folder, one Selection shared by both, find bar, image preview, Trash), glass (Liquid Glass over a
-                   photo), widgets (the small controls), titlebar, game (Plugins\Game), piano (Audio); mygo's own (v1.11): hello … gallery, run headless by examples_test.php
+                   photo), widgets (the small controls), titlebar, game (Plugins\Game), scene3d/game3d (Plugins\Scene 3D), piano (Audio); mygo's own (v1.11): hello … gallery, run headless by examples_test.php
 tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
                    view sends them, paint into an FFI buffer, the widgets and files examples without their windows), *_test.php
                    (check()/same() assertions, no PHPUnit; svg_test reads the renderer's pixels); php tests/bench.php [frames] times build/layout/record/paint
