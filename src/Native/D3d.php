@@ -184,7 +184,7 @@ final class D3d
                 void (*IASetInputLayout)(void *self, void *layout);
                 void (*IASetVertexBuffers)(void *self, uint32_t start, uint32_t n, void **buffers, const uint32_t *strides, const uint32_t *offsets);
                 void (*IASetIndexBuffer)(void *self, void *buffer, uint32_t format, uint32_t offset);
-                void *r20;
+                void (*DrawIndexedInstanced)(void *self, uint32_t indexCountPerInstance, uint32_t instanceCount, uint32_t startIndexLocation, int32_t baseVertexLocation, uint32_t startInstanceLocation);
                 void (*DrawInstanced)(void *self, uint32_t vertices, uint32_t instances, uint32_t startVertex, uint32_t startInstance);
                 void *r22[2];
                 void (*IASetPrimitiveTopology)(void *self, uint32_t topology);

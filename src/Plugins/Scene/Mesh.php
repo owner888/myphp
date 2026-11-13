@@ -25,6 +25,8 @@ final class Mesh
     public mixed $nativeIndexBuffer = null;
     public int $vertexCount = 0;
     public int $indexCount = 0;
+    /** Bounding sphere radius in local space */
+    public float $boundingRadius = 1.0;
 
     /**
      * @param string $vertexData Raw binary float data (48 bytes per vertex)
@@ -34,10 +36,25 @@ final class Mesh
         public readonly string $vertexData,
         public readonly string $indexData,
         int $vertexCount,
-        int $indexCount
+        int $indexCount,
+        ?float $boundingRadius = null
     ) {
         $this->vertexCount = $vertexCount;
         $this->indexCount = $indexCount;
+        $this->boundingRadius = $boundingRadius ?? self::computeBoundingRadius($vertexData, $vertexCount);
+    }
+
+    private static function computeBoundingRadius(string $vertexData, int $vertexCount): float
+    {
+        $maxR2 = 0.0;
+        for ($i = 0; $i < $vertexCount; $i++) {
+            $pos = unpack('f3', substr($vertexData, $i * self::VERTEX_STRIDE, 12));
+            $r2 = $pos[1] * $pos[1] + $pos[2] * $pos[2] + $pos[3] * $pos[3];
+            if ($r2 > $maxR2) {
+                $maxR2 = $r2;
+            }
+        }
+        return max(0.001, sqrt($maxR2));
     }
 
     /**

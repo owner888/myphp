@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Plugins\Scene;
 
-use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
+use MyPHP\Plugins\Scene\Math\{Mat4, Ray, Vec3};
 
 /**
  * 3D Perspective Camera.
@@ -41,5 +41,30 @@ final class Camera3D
     public function projectionMatrix(float $aspect): Mat4
     {
         return Mat4::perspective($this->fovY, $aspect, $this->near, $this->far);
+    }
+
+    /**
+     * Unprojects 2D viewport coordinates ($x, $y) within ($width, $height) into a 3D world-space Ray.
+     * ($x, $y) has origin (0, 0) at top-left of the viewport.
+     */
+    public function screenToRay(float $x, float $y, float $width, float $height): Ray
+    {
+        $aspect = $width / max(1.0, $height);
+        // Normalized Device Coordinates: x in [-1, 1], y in [-1, 1] (top is +1)
+        $ndcX = ($x / max(1.0, $width)) * 2.0 - 1.0;
+        $ndcY = 1.0 - ($y / max(1.0, $height)) * 2.0;
+
+        $tanHalfFov = tan($this->fovY * 0.5);
+
+        // Camera orthonormal basis (right-handed)
+        $forward = $this->target->sub($this->position)->normalize();
+        $right   = $forward->cross($this->up)->normalize();
+        $camUp   = $right->cross($forward);
+
+        $dir = $forward
+            ->add($right->scale($ndcX * $aspect * $tanHalfFov))
+            ->add($camUp->scale($ndcY * $tanHalfFov));
+
+        return new Ray($this->position, $dir);
     }
 }
