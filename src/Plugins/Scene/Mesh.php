@@ -41,7 +41,7 @@ final class Mesh
     }
 
     /**
-     * Ensures GPU buffers are allocated and resident in VRAM.
+     * Ensures GPU buffers are allocated and resident in VRAM (Metal).
      */
     public function uploadMetal($device): void
     {
@@ -60,8 +60,64 @@ final class Mesh
             ?? throw new RuntimeException('Scene: failed to create index buffer');
     }
 
+    /**
+     * Ensures GPU buffers are allocated and resident in VRAM (Direct3D 11).
+     */
+    public function uploadD3d(\FFI $f, \FFI\CData $device): void
+    {
+        if ($this->nativeVertexBuffer !== null) {
+            return;
+        }
+
+        $vLen = strlen($this->vertexData);
+        $iLen = strlen($this->indexData);
+
+        // Vertex Buffer (D3D11_BIND_VERTEX_BUFFER = 0x1, D3D11_USAGE_IMMUTABLE = 1)
+        $vDesc = $f->new('D3D11_BUFFER_DESC');
+        $vDesc->ByteWidth = $vLen;
+        $vDesc->Usage = 1; // IMMUTABLE
+        $vDesc->BindFlags = 0x1; // VERTEX_BUFFER
+
+        $vBuf = $f->new("char[$vLen]");
+        \FFI::memcpy($vBuf, $this->vertexData, $vLen);
+        $vInit = $f->new('D3D11_SUBRESOURCE_DATA');
+        $vInit->pSysMem = $f->cast('void *', \FFI::addr($vBuf));
+
+        $vOut = $f->new('void *');
+        $hr = ($device->v->CreateBuffer)($device, \FFI::addr($vDesc), \FFI::addr($vInit), \FFI::addr($vOut));
+        \MyPHP\Native\Com::check($hr, 'Scene: CreateBuffer (vertex)');
+        $this->nativeVertexBuffer = \MyPHP\Native\Com::typed($f, $vOut, 'void *');
+
+        // Index Buffer (D3D11_BIND_INDEX_BUFFER = 0x2, D3D11_USAGE_IMMUTABLE = 1)
+        $iDesc = $f->new('D3D11_BUFFER_DESC');
+        $iDesc->ByteWidth = $iLen;
+        $iDesc->Usage = 1; // IMMUTABLE
+        $iDesc->BindFlags = 0x2; // INDEX_BUFFER
+
+        $iBuf = $f->new("char[$iLen]");
+        \FFI::memcpy($iBuf, $this->indexData, $iLen);
+        $iInit = $f->new('D3D11_SUBRESOURCE_DATA');
+        $iInit->pSysMem = $f->cast('void *', \FFI::addr($iBuf));
+
+        $iOut = $f->new('void *');
+        $hr = ($device->v->CreateBuffer)($device, \FFI::addr($iDesc), \FFI::addr($iInit), \FFI::addr($iOut));
+        \MyPHP\Native\Com::check($hr, 'Scene: CreateBuffer (index)');
+        $this->nativeIndexBuffer = \MyPHP\Native\Com::typed($f, $iOut, 'void *');
+    }
+
     public function release(): void
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            if ($this->nativeVertexBuffer !== null) {
+                \MyPHP\Native\Com::release($this->nativeVertexBuffer);
+                $this->nativeVertexBuffer = null;
+            }
+            if ($this->nativeIndexBuffer !== null) {
+                \MyPHP\Native\Com::release($this->nativeIndexBuffer);
+                $this->nativeIndexBuffer = null;
+            }
+            return;
+        }
         if ($this->nativeVertexBuffer !== null) {
             ObjC::msg('v:', $this->nativeVertexBuffer, 'release');
             $this->nativeVertexBuffer = null;

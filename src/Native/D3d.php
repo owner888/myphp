@@ -50,6 +50,20 @@ final class D3d
     private static ?FFI $f = null;
     /** The device and its immediate context, shared by the renderers; the shaders and states they draw with. */
     private static ?CData $device = null, $context = null;
+
+    /** @internal exposes shared D3D11 device for 3D RenderPass */
+    public static function device(): CData
+    {
+        self::start();
+        return self::$device;
+    }
+
+    /** @internal exposes shared D3D11 immediate context for 3D RenderPass */
+    public static function context(): CData
+    {
+        self::start();
+        return self::$context;
+    }
     private static CData $quadVS, $quadPS, $blurVS, $blurPS, $shaderVS, $sampler, $rasterizer, $frameBuffer, $blurBuffer, $noBackdrop;
     /** @var ?\WeakMap<Code, CData> each shader's pixel stage, compiled the first time it draws */
     private static ?\WeakMap $pixelShaders = null;
@@ -123,6 +137,9 @@ final class D3d
             typedef struct { uint32_t Format, ViewDimension; uint32_t u[4]; } D3D11_SHADER_RESOURCE_VIEW_DESC;
             typedef struct { const void *pSysMem; uint32_t SysMemPitch, SysMemSlicePitch; } D3D11_SUBRESOURCE_DATA;
             typedef struct { void *pData; uint32_t RowPitch, DepthPitch; } D3D11_MAPPED_SUBRESOURCE;
+            typedef struct { const char *SemanticName; uint32_t SemanticIndex, Format, InputSlot, AlignedByteOffset, InputSlotClass, InstanceDataStepRate; } D3D11_INPUT_ELEMENT_DESC;
+            typedef struct { int32_t DepthWritingOp0, DepthWritingOp1, DepthWritingOp2, DepthCompareFunc; } D3D11_DEPTH_STENCILOP_DESC;
+            typedef struct { int32_t DepthEnable; uint32_t DepthWriteMask, DepthFunc; int32_t StencilEnable; uint8_t StencilReadMask, StencilWriteMask; D3D11_DEPTH_STENCILOP_DESC FrontFace, BackFace; } D3D11_DEPTH_STENCIL_DESC;
             typedef struct { int32_t BlendEnable; uint32_t SrcBlend, DestBlend, BlendOp, SrcBlendAlpha, DestBlendAlpha, BlendOpAlpha; uint8_t RenderTargetWriteMask; } D3D11_RENDER_TARGET_BLEND_DESC;
             typedef struct { int32_t AlphaToCoverageEnable, IndependentBlendEnable; D3D11_RENDER_TARGET_BLEND_DESC RenderTarget[8]; } D3D11_BLEND_DESC;
             typedef struct { uint32_t Filter, AddressU, AddressV, AddressW; float MipLODBias; uint32_t MaxAnisotropy, ComparisonFunc; float BorderColor[4]; float MinLOD, MaxLOD; } D3D11_SAMPLER_DESC;
@@ -141,13 +158,14 @@ final class D3d
                 int32_t (*CreateShaderResourceView)(void *self, void *resource, const D3D11_SHADER_RESOURCE_VIEW_DESC *desc, void **out);
                 void *r8;
                 int32_t (*CreateRenderTargetView)(void *self, void *resource, const void *desc, void **out);
-                void *r10[2];
+                int32_t (*CreateDepthStencilView)(void *self, void *resource, const void *desc, void **out);
+                int32_t (*CreateInputLayout)(void *self, const D3D11_INPUT_ELEMENT_DESC *elements, uint32_t n, const void *code, size_t codeLen, void **out);
                 int32_t (*CreateVertexShader)(void *self, const void *code, size_t n, void *linkage, void **out);
                 void *r13[2];
                 int32_t (*CreatePixelShader)(void *self, const void *code, size_t n, void *linkage, void **out);
                 void *r16[4];
                 int32_t (*CreateBlendState)(void *self, const D3D11_BLEND_DESC *desc, void **out);
-                void *r21;
+                int32_t (*CreateDepthStencilState)(void *self, const D3D11_DEPTH_STENCIL_DESC *desc, void **out);
                 int32_t (*CreateRasterizerState)(void *self, const D3D11_RASTERIZER_DESC *desc, void **out);
                 int32_t (*CreateSamplerState)(void *self, const D3D11_SAMPLER_DESC *desc, void **out);
             } ID3D11DeviceVtbl;
@@ -158,12 +176,15 @@ final class D3d
                 void (*PSSetShader)(void *self, void *shader, void **instances, uint32_t n);
                 void (*PSSetSamplers)(void *self, uint32_t start, uint32_t n, void **samplers);
                 void (*VSSetShader)(void *self, void *shader, void **instances, uint32_t n);
-                void *r12;
+                void (*DrawIndexed)(void *self, uint32_t indices, uint32_t startIndex, int32_t baseVertex);
                 void (*Draw)(void *self, uint32_t vertices, uint32_t start);
                 int32_t (*Map)(void *self, void *resource, uint32_t sub, uint32_t type, uint32_t flags, D3D11_MAPPED_SUBRESOURCE *out);
                 void (*Unmap)(void *self, void *resource, uint32_t sub);
                 void (*PSSetConstantBuffers)(void *self, uint32_t start, uint32_t n, void **buffers);
-                void *r17[4];
+                void (*IASetInputLayout)(void *self, void *layout);
+                void (*IASetVertexBuffers)(void *self, uint32_t start, uint32_t n, void **buffers, const uint32_t *strides, const uint32_t *offsets);
+                void (*IASetIndexBuffer)(void *self, void *buffer, uint32_t format, uint32_t offset);
+                void *r20;
                 void (*DrawInstanced)(void *self, uint32_t vertices, uint32_t instances, uint32_t startVertex, uint32_t startInstance);
                 void *r22[2];
                 void (*IASetPrimitiveTopology)(void *self, uint32_t topology);
@@ -172,7 +193,8 @@ final class D3d
                 void (*OMSetRenderTargets)(void *self, uint32_t n, void **views, void *depth);
                 void *r34;
                 void (*OMSetBlendState)(void *self, void *state, const float *factor, uint32_t mask);
-                void *r36[7];
+                void (*OMSetDepthStencilState)(void *self, void *state, uint32_t stencilRef);
+                void *r37[6];
                 void (*RSSetState)(void *self, void *state);
                 void (*RSSetViewports)(void *self, uint32_t n, const D3D11_VIEWPORT *viewports);
                 void *r45;
@@ -181,6 +203,8 @@ final class D3d
                 void (*UpdateSubresource)(void *self, void *dst, uint32_t sub, const D3D11_BOX *box, const void *data, uint32_t rowPitch, uint32_t depthPitch);
                 void *r49;
                 void (*ClearRenderTargetView)(void *self, void *view, const float *rgba);
+                void *r51[2];
+                void (*ClearDepthStencilView)(void *self, void *view, uint32_t flags, float depth, uint8_t stencil);
             } ID3D11DeviceContextVtbl;
             typedef struct { ID3D11DeviceContextVtbl *v; } ID3D11DeviceContext;
             typedef struct { void *r0[7]; int32_t (*GetAdapter)(void *self, void **adapter); } IDXGIDeviceVtbl;
@@ -663,11 +687,16 @@ final class D3d
             $this->releaseCanvasTargets();
         }
         $target = $this->canvasTargets[$key] ??= self::targetTexture($c->w, $c->h, self::R8G8B8A8_UNORM);
-        self::renderTo($target[1], $c->w, $c->h);
-        $clear = $f->new('float[4]');
-        ($ctx->v->ClearRenderTargetView)($ctx, $target[1], $clear);
+        if ($c->scene !== null) {
+            \MyPHP\Plugins\Scene\Native\D3dRenderPass::instance()->render($c->scene, $c->w, $c->h, $target[1]);
+        } else {
+            self::renderTo($target[1], $c->w, $c->h);
+            $clear = $f->new('float[4]');
+            ($ctx->v->ClearRenderTargetView)($ctx, $target[1], $clear);
+        }
         $list = $c->list;
-        if ($list->n > 0) {
+        if ($list !== null && $list->n > 0) {
+            self::renderTo($target[1], $c->w, $c->h);
             $this->target = [(float)$c->w, (float)$c->h, 1.0, (float)$c->h];
             $this->upload($this->quads, $list->buf, $list->n * DisplayList::FLOATS_PER_RECT * 4);
             $this->upload($this->xforms, $list->xforms, $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4);

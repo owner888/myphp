@@ -89,8 +89,8 @@ $scene->add($entity);
 check(count($scene->entities) === 1, 'Scene entities count');
 check($entity->modelMatrix() instanceof Mat4, 'Entity cached model matrix');
 
-// 5. Metal Off-screen RenderPass (macOS arm64 only)
-if (PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') {
+// 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
+if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {
     $img = $scene->renderOffscreen(128, 128);
     check($img->w === 128 && $img->h === 128, 'Scene::renderOffscreen image size');
     check($img->address() !== 0, 'Scene::renderOffscreen has rendered pixels');
@@ -111,6 +111,7 @@ if (PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') {
     $tBytes = unpack('C4', substr($texRendered->pixels(), $tOffset, 4));
     check($tBytes[2] > 50 && $tBytes[1] < 20, 'Textured 3D mesh samples green texture on GPU');
 }
+check(str_contains(\MyPHP\Plugins\Scene\Native\D3dRenderPass::SHADER_HLSL, 'vs_scene'), 'D3dRenderPass HLSL shader defined');
 
 // 7. Full headless UI build & paint pass with examples/scene3d
 $app = new class {
