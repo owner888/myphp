@@ -120,7 +120,7 @@ final class SceneApp
         // 1. Textured 3D Wooden Crate (left)
         $cubeMesh = Mesh::cube(1.7);
         $cubeMat = Material::textured(makeCrateTexture(), shininess: 32.0);
-        $this->crate = new Entity($cubeMesh, $cubeMat, position: new Vec3(-2.2, -0.2, 0.0), name: 'Wooden Crate');
+        $this->crate = new Entity($cubeMesh, $cubeMat, position: new Vec3(-2.7, -0.2, 0.0), name: 'Wooden Crate');
         $this->scene->add($this->crate);
 
         // 2. Loaded Wavefront .OBJ Crystal (center) + Child Orbiting Moon (Scene Graph hierarchy!)
@@ -129,15 +129,15 @@ final class SceneApp
         $this->crystal = new Entity($crystalMesh, $crystalMat, position: new Vec3(0.0, 0.0, 0.0), name: 'OBJ Crystal');
         $this->scene->add($this->crystal);
 
-        $moonMesh = Mesh::sphere(0.28, 16, 12, [1.0, 0.9, 0.3, 1.0]);
+        $moonMesh = Mesh::sphere(0.24, 16, 12, [1.0, 0.9, 0.3, 1.0]);
         $moonMat = new Material([1.0, 0.9, 0.3, 1.0], shininess: 64.0);
-        $this->moon = new Entity($moonMesh, $moonMat, position: new Vec3(1.25, 0.3, 0.0), name: 'Crystal Moon (Child)');
+        $this->moon = new Entity($moonMesh, $moonMat, position: new Vec3(1.15, 0.35, 0.0), name: 'Crystal Moon (Child)');
         $this->crystal->addChild($this->moon);
 
         // 3. Smooth UV Sphere (right)
         $sphereMesh = Mesh::sphere(1.0, 28, 18, [1.0, 0.42, 0.28, 1.0]);
         $sphereMat = new Material([1.0, 0.42, 0.28, 1.0], shininess: 48.0);
-        $this->sphere = new Entity($sphereMesh, $sphereMat, position: new Vec3(2.2, -0.2, 0.0), name: 'Coral Sphere');
+        $this->sphere = new Entity($sphereMesh, $sphereMat, position: new Vec3(2.7, -0.2, 0.0), name: 'Coral Sphere');
         $this->scene->add($this->sphere);
 
         // 4. Hardware GPU Instanced Ring (64 cubes rendered in 1 single GPU draw call)
