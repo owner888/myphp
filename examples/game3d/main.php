@@ -87,8 +87,8 @@ final class CrystalRunner3D extends Game
         $this->viewport = new Canvas(800, 600);
 
         $this->scene = new Scene(new Camera3D(
-            position: new Vec3(0.0, 7.5, 9.5),
-            target: new Vec3(0.0, 0.0, 0.0),
+            position: new Vec3(0.0, 7.2, 9.625),
+            target: new Vec3(0.0, 0.0, 0.875),
             fovYDegrees: 52.0
         ));
         $this->scene->clearColor = [0.04, 0.05, 0.08, 1.0];
@@ -155,14 +155,17 @@ final class CrystalRunner3D extends Game
 
         // 5. Patrolling Red Sentinels
         for ($i = 0; $i < 3; $i++) {
+            $ang = $i * (2.0 * M_PI / 3.0);
+            $orbitR = 2.4 + $i * 1.6;
             $s = new Entity(
                 Mesh::cube(0.85, [1.0, 0.25, 0.3, 1.0]),
                 new Material([1.0, 0.25, 0.3, 1.0], shininess: 64.0),
-                position: new Vec3(0.0, 0.0, 0.0),
+                position: new Vec3(cos($ang) * $orbitR, 0.0, sin($ang) * $orbitR),
+                rotation: new Vec3(0.0, -$ang, 0.0),
                 name: "Sentinel-$i"
             );
             $this->sentinels[] = $s;
-            $this->sentinelAngles[] = $i * (2.0 * M_PI / 3.0);
+            $this->sentinelAngles[] = $ang;
             $this->scene->add($s);
         }
 
