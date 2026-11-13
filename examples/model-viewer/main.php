@@ -44,11 +44,13 @@ final class ModelViewerApp
 
     public string $preset = 'Torus';
     public bool $autoRotate = true;
+    public bool $wireframe = false;
     public bool $showGrid = true;
     public bool $showFloor = true;
     public bool $shadows = true;
     public bool $fog = true;
     public float $shininess = 64.0;
+    public float $rimStrength = 0.65;
     public float $lightAngle = 0.8;
     public float $pointIntensity = 2.0;
 
@@ -212,6 +214,8 @@ final class ModelViewerApp
         $this->scene->shadowsEnabled = $this->shadows;
         $this->scene->fogEnabled = $this->fog;
         $this->modelEntity->material->shininess = $this->shininess;
+        $this->modelEntity->material->wireframe = $this->wireframe;
+        $this->modelEntity->material->rimStrength = $this->rimStrength;
         $this->keyLight->intensity = $this->pointIntensity;
 
         // Toggle Grid & Floor visibility

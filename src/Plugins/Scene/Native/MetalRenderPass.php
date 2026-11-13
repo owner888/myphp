@@ -25,8 +25,11 @@ final class MetalRenderPass
     private const PIXEL_FORMAT_DEPTH32F = 252;  // MTLPixelFormatDepth32Float
     private const PRIMITIVE_TRIANGLE = 3;       // MTLPrimitiveTypeTriangle
     private const INDEX_TYPE_UINT32 = 1;        // MTLIndexTypeUInt32
+    private const CULL_MODE_NONE = 0;           // MTLCullModeNone
     private const CULL_MODE_BACK = 2;           // MTLCullModeBack
     private const WINDING_CCW = 1;              // MTLWindingCounterClockwise (0 is Clockwise)
+    private const FILL_MODE_FILL = 0;           // MTLTriangleFillModeFill
+    private const FILL_MODE_LINES = 1;          // MTLTriangleFillModeLines
     private const LOAD_CLEAR = 2;               // MTLLoadActionClear
     private const STORE_STORE = 1;              // MTLStoreActionStore
     private const STORE_DONT_CARE = 0;          // MTLStoreActionDontCare
@@ -157,7 +160,6 @@ final class MetalRenderPass
     ) {
         constexpr sampler linearSampler(coord::normalized, address::repeat, filter::linear);
         constexpr sampler nearestSampler(coord::normalized, address::repeat, filter::nearest);
-        constexpr sampler shadowSampler(coord::normalized, address::clamp_to_edge, filter::nearest);
 
         float4 texColor = u.lightDir.w > 0.5
             ? tex.sample(nearestSampler, in.uv)
@@ -229,6 +231,13 @@ final class MetalRenderPass
                 float pSpec = pow(max(dot(N, pH), 0.0), max(u.cameraPos.w, 1.0));
                 finalColor += att * u.pointCol1.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
             }
+        }
+
+        // Fresnel Rim Lighting (u.ambientColor.w = rimStrength)
+        if (u.ambientColor.w > 0.01) {
+            float ndotv = max(dot(N, V), 0.0);
+            float rim = pow(1.0 - ndotv, 3.0) * u.ambientColor.w;
+            finalColor += rim * float3(0.35, 0.9, 1.0);
         }
 
         // Exponential distance fog (u.shadowParams.w = fogDensity)
@@ -508,15 +517,19 @@ final class MetalRenderPass
             $model = $entity->modelMatrix();
             $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
 
-            // Pack 352-byte Uniforms
+            // Pack 352-byte Uniforms (ambientColor.w carries material->rimStrength)
+            $ac = $scene->ambientColor;
             $uniformBinary = $mvp->toBinary()
                 . $model->toBinary()
                 . pack('f4', $lDir->x, $lDir->y, $lDir->z, $pixelated)
                 . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
-                . pack('f4', ...$scene->ambientColor)
+                . pack('f4', $ac[0], $ac[1], $ac[2], $mat->rimStrength)
                 . pack('f4', ...$mat->color)
                 . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess)
                 . $lightingExt;
+
+            ObjC::msg('v:L', $enc, 'setTriangleFillMode:', $mat->wireframe ? self::FILL_MODE_LINES : self::FILL_MODE_FILL);
+            ObjC::msg('v:L', $enc, 'setCullMode:', $mat->wireframe ? self::CULL_MODE_NONE : self::CULL_MODE_BACK);
 
             ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $uniformBinary, 352, 1);
             ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $uniformBinary, 352, 1);

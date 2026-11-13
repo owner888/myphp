@@ -13,6 +13,7 @@ final class Material
     /**
      * @param array{0: float, 1: float, 2: float, 3: float} $color
      * @param ?Image $texture Optional diffuse texture map (uses pixelated flag for nearest vs linear sampling)
+     * @param array{0: float, 1: float, 2: float} $rimColor RGB color for Fresnel rim lighting
      */
     public function __construct(
         public array $color = [1.0, 1.0, 1.0, 1.0],
@@ -20,7 +21,10 @@ final class Material
         public float $diffuse = 0.85,
         public float $specular = 0.5,
         public float $shininess = 32.0,
-        public ?Image $texture = null
+        public ?Image $texture = null,
+        public bool $wireframe = false,
+        public float $rimStrength = 0.0,
+        public array $rimColor = [0.35, 0.9, 1.0]
     ) {}
 
     public static function basic(array $color = [1.0, 1.0, 1.0, 1.0], ?Image $texture = null): self
