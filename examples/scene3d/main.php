@@ -10,7 +10,7 @@ declare(strict_types=1);
 // Run: myphp run -d macos|windows|linux|ios|android examples/scene3d
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, Scene};
+use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, PointLight, Scene};
 use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
 use MyPHP\UI\{Content, Context, Image, Painter};
 
@@ -82,8 +82,10 @@ final class SceneApp
     public Entity $crate;
     public Entity $sphere;
     public Entity $crystal;
+    public Entity $moon;
     public Entity $floor;
     public Entity $instancedRing;
+    public PointLight $crystalLight;
 
     public string $selectedName = 'None (Click a 3D object!)';
     public ?Entity $selectedEntity = null;
@@ -96,12 +98,18 @@ final class SceneApp
     {
         $this->scene = new Scene(new Camera3D(position: new Vec3(2.1, 2.7, 6.6)));
         $this->scene->clearColor = [0.06, 0.07, 0.09, 1.0];
+        $this->scene->shadowsEnabled = true;
 
-        // 0. Textured Floor Plane (not pickable so clicks go to 3D objects)
+        // Pulsing cyan Point Light inside the crystal
+        $this->crystalLight = new PointLight(new Vec3(0.0, 0.2, 0.0), [0.2, 0.9, 1.0], intensity: 2.2, radius: 7.0);
+        $this->scene->addPointLight($this->crystalLight);
+
+        // 0. Textured Floor Plane (receives real-time PCF shadows)
         $floorMesh = Mesh::plane(18.0, 18.0, uvRepeat: 8.0);
         $floorMat = Material::textured(makeFloorTexture(), shininess: 16.0);
         $this->floor = new Entity($floorMesh, $floorMat, position: new Vec3(0.0, -1.6, 0.0), name: 'Floor');
         $this->floor->pickable = false;
+        $this->floor->castShadow = false;
         $this->scene->add($this->floor);
 
         // 1. Textured 3D Wooden Crate (left)
@@ -110,11 +118,16 @@ final class SceneApp
         $this->crate = new Entity($cubeMesh, $cubeMat, position: new Vec3(-2.2, -0.2, 0.0), name: 'Wooden Crate');
         $this->scene->add($this->crate);
 
-        // 2. Loaded Wavefront .OBJ Crystal (center)
+        // 2. Loaded Wavefront .OBJ Crystal (center) + Child Orbiting Moon (Scene Graph hierarchy!)
         $crystalMesh = Mesh::fromObj(CRYSTAL_OBJ, [0.25, 0.88, 0.95, 1.0]);
         $crystalMat = new Material([0.25, 0.88, 0.95, 1.0], shininess: 96.0);
         $this->crystal = new Entity($crystalMesh, $crystalMat, position: new Vec3(0.0, 0.0, 0.0), name: 'OBJ Crystal');
         $this->scene->add($this->crystal);
+
+        $moonMesh = Mesh::sphere(0.28, 16, 12, [1.0, 0.9, 0.3, 1.0]);
+        $moonMat = new Material([1.0, 0.9, 0.3, 1.0], shininess: 64.0);
+        $this->moon = new Entity($moonMesh, $moonMat, position: new Vec3(1.25, 0.3, 0.0), name: 'Crystal Moon (Child)');
+        $this->crystal->addChild($this->moon);
 
         // 3. Smooth UV Sphere (right)
         $sphereMesh = Mesh::sphere(1.0, 28, 18, [1.0, 0.42, 0.28, 1.0]);
@@ -177,11 +190,14 @@ final class SceneApp
         }
 
         // Idle animations
+        $t = hrtime(true) / 1e9;
         $this->crate->rotation->y += 0.012;
         $this->crate->rotation->x += 0.006;
 
         $this->crystal->rotation->y -= 0.022;
-        $this->crystal->position->y = sin((hrtime(true) / 1e9) * 2.5) * 0.2;
+        $this->crystal->position->y = sin($t * 2.5) * 0.25;
+        $this->crystalLight->position->y = $this->crystal->position->y;
+        $this->crystalLight->intensity = 1.8 + 0.8 * sin($t * 4.0);
 
         $this->sphere->rotation->y += 0.015;
         $this->sphere->rotation->z += 0.01;
@@ -205,9 +221,9 @@ App::whenReady(function () {
         onUpdate: $app->update(...),
         onPick: $app->onPick(...),
         overlay: function (Painter $p, array $r) use ($app): void {
-            $p->fill([$r[0] + 16, $r[1] + 16, 385, 102], 0x000000, 8.0, 0.68);
-            $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D Scene (Metal / D3D11 / GL)', 15, 0xffffff);
-            $p->text($r[0] + 28, $r[1] + 50, sprintf('FPS: %.1f | 64 GPU Instances + 3 Pickable Meshes', $app->fps), 12, 0x00e676);
+            $p->fill([$r[0] + 16, $r[1] + 16, 415, 102], 0x000000, 8.0, 0.68);
+            $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D Scene (Shadows + PointLight + SceneGraph)', 14, 0xffffff);
+            $p->text($r[0] + 28, $r[1] + 50, sprintf('FPS: %.1f | PCF Shadows: ON | Culled: %d', $app->fps, $app->scene->lastCulledCount), 12, 0x00e676);
             $p->text($r[0] + 28, $r[1] + 68, 'Picked: ' . $app->selectedName, 12, 0xffd54f);
             $p->text($r[0] + 28, $r[1] + 88, 'Click object to pick | Drag to orbit | Wheel to zoom', 11, 0xaaaaaa);
         }

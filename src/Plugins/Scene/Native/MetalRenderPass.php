@@ -13,11 +13,11 @@ use WeakMap;
 
 /**
  * High-performance 3D Metal RenderPass:
+ * - Real-time 1024x1024 Directional Shadow Mapping with 3x3 PCF soft shadows
+ * - Dynamic Point Lights with smooth radial attenuation
+ * - CPU Frustum Culling + Scene Graph parent-child hierarchy support
  * - Depth testing with cached MTLDepthStencilState (MTLPixelFormatDepth32Float)
  * - Zero-allocation per-frame: meshes & textures stay resident in VRAM
- * - Viewport-cached depth textures
- * - Blinn-Phong directional lighting + hardware texture mapping (Linear & Pixelated/Nearest)
- * - Backface culling (MTLCullModeBack)
  */
 final class MetalRenderPass
 {
@@ -26,18 +26,22 @@ final class MetalRenderPass
     private const PRIMITIVE_TRIANGLE = 3;       // MTLPrimitiveTypeTriangle
     private const INDEX_TYPE_UINT32 = 1;        // MTLIndexTypeUInt32
     private const CULL_MODE_BACK = 2;           // MTLCullModeBack
-    private const WINDING_CCW = 0;              // MTLWindingCounterClockwise
+    private const WINDING_CCW = 1;              // MTLWindingCounterClockwise (0 is Clockwise)
     private const LOAD_CLEAR = 2;               // MTLLoadActionClear
     private const STORE_STORE = 1;              // MTLStoreActionStore
     private const STORE_DONT_CARE = 0;          // MTLStoreActionDontCare
     private const TEXTURE_SHADER_READ = 1;      // MTLTextureUsageShaderRead
+    private const TEXTURE_RENDER_TARGET = 4;    // MTLTextureUsageRenderTarget
+    private const SHADOW_MAP_SIZE = 1024;
 
     private static ?self $instance = null;
 
     private mixed $device;
     private mixed $pipelineState = null;
+    private mixed $shadowPipelineState = null;
     private mixed $depthStencilState = null;
     private mixed $whiteTexture = null;
+    private mixed $shadowMapTexture = null;
     /** @var array<string, mixed> Cached depth textures by "widthxheight" */
     private array $depthTextures = [];
     /** @var WeakMap<Image, array{0: mixed, 1: int}> Cached GPU textures by Image instance and version */
@@ -60,6 +64,7 @@ final class MetalRenderPass
         float3 normal;
         float2 uv;
         float4 color;
+        float4 shadowPos;
     };
 
     struct InstanceData {
@@ -67,6 +72,7 @@ final class MetalRenderPass
         float4   color;
     };
 
+    // 352 bytes total
     struct Uniforms {
         float4x4 mvp;           // for single entity: MVP; for instanced: ViewProj
         float4x4 model;
@@ -75,7 +81,28 @@ final class MetalRenderPass
         float4   ambientColor;  // rgb = color, a = intensity
         float4   materialColor; // rgba
         float4   cameraPos;     // xyz = position, w = shininess
+        float4x4 lightVP;       // directional light ViewProj matrix for shadow mapping
+        float4   pointPos0;     // xyz = pos, w = radius
+        float4   pointCol0;     // rgb = color, w = intensity
+        float4   pointPos1;     // xyz = pos, w = radius
+        float4   pointCol1;     // rgb = color, w = intensity
+        float4   shadowParams;  // x = shadowsEnabled, y = pointLightCount, z = bias, w = pad
     };
+
+    // Shadow depth-only vertex shader
+    vertex float4 v_shadow(
+        VertexIn in [[stage_in]],
+        uint iid [[instance_id]],
+        constant Uniforms& u [[buffer(1)]],
+        const device InstanceData* instances [[buffer(2)]]
+    ) {
+        if (u.lightColor.w > 0.5) {
+            InstanceData inst = instances[iid];
+            float4 world = inst.model * float4(in.position, 1.0);
+            return u.lightVP * world;
+        }
+        return u.lightVP * (u.model * float4(in.position, 1.0));
+    }
 
     vertex VertexOut v_scene(
         VertexIn in [[stage_in]],
@@ -84,31 +111,53 @@ final class MetalRenderPass
         const device InstanceData* instances [[buffer(2)]]
     ) {
         VertexOut out;
+        float4 world;
         if (u.lightColor.w > 0.5) {
             InstanceData inst = instances[iid];
-            float4 world = inst.model * float4(in.position, 1.0);
+            world        = inst.model * float4(in.position, 1.0);
             out.position = u.mvp * world;
             out.worldPos = world.xyz;
             out.normal   = (inst.model * float4(in.normal, 0.0)).xyz;
             out.uv       = in.uv;
             out.color    = in.color * u.materialColor * inst.color;
         } else {
+            world        = u.model * float4(in.position, 1.0);
             out.position = u.mvp * float4(in.position, 1.0);
-            out.worldPos = (u.model * float4(in.position, 1.0)).xyz;
+            out.worldPos = world.xyz;
             out.normal   = (u.model * float4(in.normal, 0.0)).xyz;
             out.uv       = in.uv;
             out.color    = in.color * u.materialColor;
         }
+        out.shadowPos = u.lightVP * world;
         return out;
+    }
+
+    float calcPointLight(float3 worldPos, float3 N, float3 V, float shininess, float4 pPos, float4 pCol, float3 baseRgb, thread float3& outLight) {
+        float3 toLight = pPos.xyz - worldPos;
+        float dist = length(toLight);
+        float radius = max(pPos.w, 0.1);
+        if (dist >= radius) { return 0.0; }
+        float3 L = toLight / max(dist, 1e-4);
+        float atten = 1.0 - (dist / radius);
+        atten = atten * atten * pCol.w;
+
+        float diff = max(dot(N, L), 0.0);
+        float3 H = normalize(L + V);
+        float spec = pow(max(dot(N, H), 0.0), max(shininess, 1.0));
+
+        outLight += atten * pCol.rgb * (diff * baseRgb + spec * 0.4);
+        return 1.0;
     }
 
     fragment float4 f_scene(
         VertexOut in [[stage_in]],
         constant Uniforms& u [[buffer(1)]],
-        texture2d<float> tex [[texture(0)]]
+        texture2d<float> tex [[texture(0)]],
+        depth2d<float> shadowMap [[texture(1)]]
     ) {
         constexpr sampler linearSampler(coord::normalized, address::repeat, filter::linear);
         constexpr sampler nearestSampler(coord::normalized, address::repeat, filter::nearest);
+        constexpr sampler shadowSampler(coord::normalized, address::clamp_to_edge, filter::nearest);
 
         float4 texColor = u.lightDir.w > 0.5
             ? tex.sample(nearestSampler, in.uv)
@@ -126,16 +175,61 @@ final class MetalRenderPass
 
         // Ambient
         float3 ambient = u.ambientColor.rgb * baseColor.rgb;
-
-        // Diffuse
         float diff = max(dot(N, L), 0.0);
         float3 diffuse = diff * u.lightColor.rgb * baseColor.rgb;
-
-        // Specular (Blinn-Phong)
         float spec = pow(max(dot(N, H), 0.0), max(u.cameraPos.w, 1.0));
         float3 specular = spec * u.lightColor.rgb * 0.35;
 
-        float3 finalColor = ambient + diffuse + specular;
+        float shadow = 1.0;
+        if (u.shadowParams.x > 0.5) {
+            float3 proj = in.shadowPos.xyz / max(in.shadowPos.w, 1e-4);
+            float2 suv = float2(proj.x * 0.5 + 0.5, 0.5 - proj.y * 0.5);
+            float bias = max(u.shadowParams.z * (1.0 - dot(N, L)), 0.0015);
+            float currentDepth = proj.z - bias;
+            float sum = 0.0;
+            float texel = 1.0 / 1024.0;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    float closest = shadowMap.read(uint2(clamp(suv + float2(dx, dy) * texel, 0.0, 1.0) * 1023.0));
+                    sum += (currentDepth > closest) ? 0.25 : 1.0;
+                }
+            }
+            if (suv.x >= 0.0 && suv.x <= 1.0 && suv.y >= 0.0 && suv.y <= 1.0 && proj.z >= 0.0 && proj.z <= 1.0) {
+                shadow = sum / 9.0;
+            }
+        }
+
+        float3 finalColor = ambient + shadow * (diffuse + specular);
+
+        // Point lights
+        if (u.shadowParams.y > 0.5) {
+            float3 toL = u.pointPos0.xyz - in.worldPos;
+            float d = length(toL);
+            float r = max(u.pointPos0.w, 0.1);
+            if (d < r) {
+                float3 pL = toL / max(d, 1e-4);
+                float att = (1.0 - d / r);
+                att = att * att * u.pointCol0.w;
+                float pDiff = max(dot(N, pL), 0.0);
+                float3 pH = normalize(pL + V);
+                float pSpec = pow(max(dot(N, pH), 0.0), max(u.cameraPos.w, 1.0));
+                finalColor += att * u.pointCol0.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
+            }
+        }
+        if (u.shadowParams.y > 1.5) {
+            float3 toL = u.pointPos1.xyz - in.worldPos;
+            float d = length(toL);
+            float r = max(u.pointPos1.w, 0.1);
+            if (d < r) {
+                float3 pL = toL / max(d, 1e-4);
+                float att = (1.0 - d / r);
+                att = att * att * u.pointCol1.w;
+                float pDiff = max(dot(N, pL), 0.0);
+                float3 pH = normalize(pL + V);
+                float pSpec = pow(max(dot(N, pH), 0.0), max(u.cameraPos.w, 1.0));
+                finalColor += att * u.pointCol1.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
+            }
+        }
         return float4(finalColor, baseColor.a);
     }
     MSL;
@@ -147,6 +241,7 @@ final class MetalRenderPass
         $this->initPipeline();
         $this->initDepthStencil();
         $this->initWhiteTexture();
+        $this->initShadowMap();
     }
 
     public static function instance(mixed $device): self
@@ -163,41 +258,47 @@ final class MetalRenderPass
 
         $vfn = ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str('v_scene'));
         $ffn = ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str('f_scene'));
-
-        $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
-        ObjC::msg('v:p', $desc, 'setVertexFunction:', $vfn);
-        ObjC::msg('v:p', $desc, 'setFragmentFunction:', $ffn);
-
-        $ca = ObjC::msg('p:L', ObjC::msg('p:', $desc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
-        ObjC::msg('v:L', $ca, 'setPixelFormat:', self::PIXEL_FORMAT_RGBA8);
-        ObjC::msg('v:L', $desc, 'setDepthAttachmentPixelFormat:', self::PIXEL_FORMAT_DEPTH32F);
+        $vShadow = ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str('v_shadow'));
 
         // Vertex Descriptor (48-byte stride)
         $vdesc = ObjC::msg('p:', ObjC::cls('MTLVertexDescriptor'), 'vertexDescriptor');
         $attrs = ObjC::msg('p:', $vdesc, 'attributes');
         $layouts = ObjC::msg('p:', $vdesc, 'layouts');
 
-        // 0: position (float3)
         $a0 = ObjC::msg('p:L', $attrs, 'objectAtIndexedSubscript:', 0);
         ObjC::msg('v:L', $a0, 'setFormat:', 30); ObjC::msg('v:L', $a0, 'setOffset:', 0); ObjC::msg('v:L', $a0, 'setBufferIndex:', 0);
-        // 1: normal (float3)
         $a1 = ObjC::msg('p:L', $attrs, 'objectAtIndexedSubscript:', 1);
         ObjC::msg('v:L', $a1, 'setFormat:', 30); ObjC::msg('v:L', $a1, 'setOffset:', 12); ObjC::msg('v:L', $a1, 'setBufferIndex:', 0);
-        // 2: uv (float2)
         $a2 = ObjC::msg('p:L', $attrs, 'objectAtIndexedSubscript:', 2);
         ObjC::msg('v:L', $a2, 'setFormat:', 29); ObjC::msg('v:L', $a2, 'setOffset:', 24); ObjC::msg('v:L', $a2, 'setBufferIndex:', 0);
-        // 3: color (float4)
         $a3 = ObjC::msg('p:L', $attrs, 'objectAtIndexedSubscript:', 3);
         ObjC::msg('v:L', $a3, 'setFormat:', 31); ObjC::msg('v:L', $a3, 'setOffset:', 32); ObjC::msg('v:L', $a3, 'setBufferIndex:', 0);
 
         $l0 = ObjC::msg('p:L', $layouts, 'objectAtIndexedSubscript:', 0);
         ObjC::msg('v:L', $l0, 'setStride:', Mesh::VERTEX_STRIDE);
-        ObjC::msg('v:L', $l0, 'setStepFunction:', 1); // per-vertex
+        ObjC::msg('v:L', $l0, 'setStepFunction:', 1);
 
+        // 1. Main Scene Pipeline
+        $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
+        ObjC::msg('v:p', $desc, 'setVertexFunction:', $vfn);
+        ObjC::msg('v:p', $desc, 'setFragmentFunction:', $ffn);
+        $ca = ObjC::msg('p:L', ObjC::msg('p:', $desc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+        ObjC::msg('v:L', $ca, 'setPixelFormat:', self::PIXEL_FORMAT_RGBA8);
+        ObjC::msg('v:L', $desc, 'setDepthAttachmentPixelFormat:', self::PIXEL_FORMAT_DEPTH32F);
         ObjC::msg('v:p', $desc, 'setVertexDescriptor:', $vdesc);
 
         $this->pipelineState = ObjC::msg('p:pp', $this->device, 'newRenderPipelineStateWithDescriptor:error:', $desc, FFI::addr($err))
             ?? throw new RuntimeException('Metal 3D pipeline state creation failed');
+
+        // 2. Shadow Depth-Only Pipeline
+        $sDesc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
+        ObjC::msg('v:p', $sDesc, 'setVertexFunction:', $vShadow);
+        ObjC::msg('v:p', $sDesc, 'setFragmentFunction:', null);
+        ObjC::msg('v:L', $sDesc, 'setDepthAttachmentPixelFormat:', self::PIXEL_FORMAT_DEPTH32F);
+        ObjC::msg('v:p', $sDesc, 'setVertexDescriptor:', $vdesc);
+
+        $this->shadowPipelineState = ObjC::msg('p:pp', $this->device, 'newRenderPipelineStateWithDescriptor:error:', $sDesc, FFI::addr($err))
+            ?? throw new RuntimeException('Metal shadow pipeline state creation failed');
     }
 
     private function initDepthStencil(): void
@@ -223,9 +324,16 @@ final class MetalRenderPass
         ObjC::msg('v:RLpL', $this->whiteTexture, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $region, 0, $white, 4);
     }
 
-    /**
-     * Obtains or uploads a GPU resident texture for $img.
-     */
+    private function initShadowMap(): void
+    {
+        $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
+            self::PIXEL_FORMAT_DEPTH32F, self::SHADOW_MAP_SIZE, self::SHADOW_MAP_SIZE, false);
+        ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
+        ObjC::msg('v:L', $desc, 'setStorageMode:', 2); // private
+        $this->shadowMapTexture = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
+            ?? throw new RuntimeException('Metal shadow map allocation failed');
+    }
+
     private function textureFor(?Image $img): mixed
     {
         if ($img === null) {
@@ -257,9 +365,6 @@ final class MetalRenderPass
         return $newTex;
     }
 
-    /**
-     * Obtains or creates a cached depth texture for viewport $w x $h.
-     */
     private function depthTexture(int $w, int $h): mixed
     {
         $key = "{$w}x{$h}";
@@ -269,8 +374,8 @@ final class MetalRenderPass
 
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
             self::PIXEL_FORMAT_DEPTH32F, $w, $h, false);
-        ObjC::msg('v:L', $desc, 'setUsage:', 4); // MTLTextureUsageRenderTarget
-        ObjC::msg('v:L', $desc, 'setStorageMode:', 2); // MTLStorageModePrivate
+        ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_RENDER_TARGET);
+        ObjC::msg('v:L', $desc, 'setStorageMode:', 2);
 
         $tex = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
             ?? throw new RuntimeException('Metal depth texture allocation failed');
@@ -286,15 +391,79 @@ final class MetalRenderPass
     }
 
     /**
-     * Executes the 3D RenderPass into $targetColorTexture.
+     * Executes the 3D RenderPass (Shadow Pass + Main Pass) into $targetColorTexture.
      */
     public function render(Scene $scene, int $width, int $height, mixed $targetColorTexture, mixed $commandBuffer): void
     {
+        $aspect = (float)$width / max(1.0, (float)$height);
+        $view = $scene->camera->viewMatrix();
+        $proj = $scene->camera->projectionMatrix($aspect);
+        $viewProj = $proj->multiply($view);
+
+        $lightVP = $scene->lightViewProjectionMatrix();
+        $lightingExt = $scene->packLightingExtension($lightVP);
+
+        $camPos = $scene->camera->position;
+        $lDir = $scene->lightDirection->normalize();
+        $lc = $scene->lightColor;
+
+        // 1. Optional Shadow Depth Pass
+        if ($scene->shadowsEnabled) {
+            $sPass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
+            $sDa = ObjC::msg('p:', $sPass, 'depthAttachment');
+            ObjC::msg('v:p', $sDa, 'setTexture:', $this->shadowMapTexture);
+            ObjC::msg('v:L', $sDa, 'setLoadAction:', self::LOAD_CLEAR);
+            ObjC::msg('v:L', $sDa, 'setStoreAction:', self::STORE_STORE);
+            ObjC::msg('v:d', $sDa, 'setClearDepth:', 1.0);
+
+            $sEnc = ObjC::msg('p:p', $commandBuffer, 'renderCommandEncoderWithDescriptor:', $sPass);
+            ObjC::msg('v:p', $sEnc, 'setRenderPipelineState:', $this->shadowPipelineState);
+            ObjC::msg('v:p', $sEnc, 'setDepthStencilState:', $this->depthStencilState);
+            ObjC::msg('v:L', $sEnc, 'setCullMode:', self::CULL_MODE_BACK);
+            ObjC::msg('v:L', $sEnc, 'setFrontFacingWinding:', self::WINDING_CCW);
+
+            foreach ($scene->allEntities() as $entity) {
+                if (!$entity->castShadow) {
+                    continue;
+                }
+                $mesh = $entity->mesh;
+                $mesh->uploadMetal($this->device);
+
+                $isInstanced = $entity->instanceCount > 0;
+                $model = $entity->modelMatrix();
+                $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
+
+                $uniformBinary = $mvp->toBinary()
+                    . $model->toBinary()
+                    . pack('f4', $lDir->x, $lDir->y, $lDir->z, 0.0)
+                    . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
+                    . pack('f4', ...$scene->ambientColor)
+                    . pack('f4', ...$entity->material->color)
+                    . pack('f4', $camPos->x, $camPos->y, $camPos->z, $entity->material->shininess)
+                    . $lightingExt;
+
+                ObjC::msg('v:pLL', $sEnc, 'setVertexBytes:length:atIndex:', $uniformBinary, 352, 1);
+                ObjC::msg('v:pLL', $sEnc, 'setVertexBuffer:offset:atIndex:', $mesh->nativeVertexBuffer, 0, 0);
+
+                if ($isInstanced) {
+                    $entity->uploadInstancesMetal($this->device);
+                    ObjC::msg('v:pLL', $sEnc, 'setVertexBuffer:offset:atIndex:', $entity->nativeInstanceBuffer, 0, 2);
+                    ObjC::msg('v:LLLpLL', $sEnc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:',
+                        self::PRIMITIVE_TRIANGLE, $mesh->indexCount, self::INDEX_TYPE_UINT32, $mesh->nativeIndexBuffer, 0, $entity->instanceCount);
+                } else {
+                    ObjC::msg('v:pLL', $sEnc, 'setVertexBuffer:offset:atIndex:', $mesh->nativeVertexBuffer, 0, 2);
+                    ObjC::msg('v:LLLpL', $sEnc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:',
+                        self::PRIMITIVE_TRIANGLE, $mesh->indexCount, self::INDEX_TYPE_UINT32, $mesh->nativeIndexBuffer, 0);
+                }
+            }
+            ObjC::msg('v:', $sEnc, 'endEncoding');
+        }
+
+        // 2. Main Color + Depth Pass (with Frustum Culling)
+        $visibleEntities = $scene->visibleEntities($viewProj);
         $depthTex = $this->depthTexture($width, $height);
 
         $rpDesc = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
-
-        // Color attachment
         $ca = ObjC::msg('p:L', ObjC::msg('p:', $rpDesc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
         ObjC::msg('v:p', $ca, 'setTexture:', $targetColorTexture);
         ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
@@ -304,29 +473,20 @@ final class MetalRenderPass
         [$clr->r, $clr->g, $clr->b, $clr->a] = $scene->clearColor;
         ObjC::msg('v:k', $ca, 'setClearColor:', $clr);
 
-        // Depth attachment
         $da = ObjC::msg('p:', $rpDesc, 'depthAttachment');
         ObjC::msg('v:p', $da, 'setTexture:', $depthTex);
         ObjC::msg('v:L', $da, 'setLoadAction:', self::LOAD_CLEAR);
         ObjC::msg('v:L', $da, 'setStoreAction:', self::STORE_DONT_CARE);
         ObjC::msg('v:d', $da, 'setClearDepth:', 1.0);
 
-        // Begin encoding 3D Pass
         $enc = ObjC::msg('p:p', $commandBuffer, 'renderCommandEncoderWithDescriptor:', $rpDesc);
         ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->pipelineState);
         ObjC::msg('v:p', $enc, 'setDepthStencilState:', $this->depthStencilState);
         ObjC::msg('v:L', $enc, 'setCullMode:', self::CULL_MODE_BACK);
         ObjC::msg('v:L', $enc, 'setFrontFacingWinding:', self::WINDING_CCW);
+        ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->shadowMapTexture, 1);
 
-        $aspect = (float)$width / max(1.0, (float)$height);
-        $view = $scene->camera->viewMatrix();
-        $proj = $scene->camera->projectionMatrix($aspect);
-        $viewProj = $proj->multiply($view);
-
-        $camPos = $scene->camera->position;
-        $lDir = $scene->lightDirection->normalize();
-
-        foreach ($scene->entities as $entity) {
+        foreach ($visibleEntities as $entity) {
             $mesh = $entity->mesh;
             $mesh->uploadMetal($this->device);
 
@@ -338,18 +498,18 @@ final class MetalRenderPass
             $model = $entity->modelMatrix();
             $mvp = $isInstanced ? $viewProj : $viewProj->multiply($model);
 
-            // Pack Uniforms (208 bytes)
-            $lc = $scene->lightColor;
+            // Pack 352-byte Uniforms
             $uniformBinary = $mvp->toBinary()
                 . $model->toBinary()
                 . pack('f4', $lDir->x, $lDir->y, $lDir->z, $pixelated)
                 . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
                 . pack('f4', ...$scene->ambientColor)
                 . pack('f4', ...$mat->color)
-                . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess);
+                . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess)
+                . $lightingExt;
 
-            ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $uniformBinary, strlen($uniformBinary), 1);
-            ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $uniformBinary, strlen($uniformBinary), 1);
+            ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $uniformBinary, 352, 1);
+            ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $uniformBinary, 352, 1);
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $tex, 0);
             ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $mesh->nativeVertexBuffer, 0, 0);
 
@@ -357,23 +517,11 @@ final class MetalRenderPass
                 $entity->uploadInstancesMetal($this->device);
                 ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $entity->nativeInstanceBuffer, 0, 2);
                 ObjC::msg('v:LLLpLL', $enc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:',
-                    self::PRIMITIVE_TRIANGLE,
-                    $mesh->indexCount,
-                    self::INDEX_TYPE_UINT32,
-                    $mesh->nativeIndexBuffer,
-                    0,
-                    $entity->instanceCount
-                );
+                    self::PRIMITIVE_TRIANGLE, $mesh->indexCount, self::INDEX_TYPE_UINT32, $mesh->nativeIndexBuffer, 0, $entity->instanceCount);
             } else {
-                // Bind dummy buffer at index 2 for non-instanced draw
                 ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $mesh->nativeVertexBuffer, 0, 2);
                 ObjC::msg('v:LLLpL', $enc, 'drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:',
-                    self::PRIMITIVE_TRIANGLE,
-                    $mesh->indexCount,
-                    self::INDEX_TYPE_UINT32,
-                    $mesh->nativeIndexBuffer,
-                    0
-                );
+                    self::PRIMITIVE_TRIANGLE, $mesh->indexCount, self::INDEX_TYPE_UINT32, $mesh->nativeIndexBuffer, 0);
             }
         }
 

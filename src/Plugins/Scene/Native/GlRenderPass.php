@@ -132,6 +132,11 @@ final class GlRenderPass
     uniform vec4 uLightColor;
     uniform vec4 uAmbientColor;
     uniform vec4 uCameraPos; // xyz = pos, w = shininess
+    uniform vec4 uPointPos0; // xyz = pos, w = radius
+    uniform vec4 uPointCol0; // rgb = color, w = intensity
+    uniform vec4 uPointPos1;
+    uniform vec4 uPointCol1;
+    uniform float uPointCount;
     uniform sampler2D uTex;
 
     out vec4 fragColor;
@@ -154,7 +159,38 @@ final class GlRenderPass
         float spec    = pow(max(dot(N, H), 0.0), max(uCameraPos.w, 1.0));
         vec3 specular = spec * uLightColor.rgb * 0.35;
 
-        fragColor = vec4(ambient + diffuse + specular, baseColor.a);
+        vec3 finalColor = ambient + diffuse + specular;
+
+        if (uPointCount > 0.5) {
+            vec3 toL = uPointPos0.xyz - vWorldPos;
+            float d = length(toL);
+            float r = max(uPointPos0.w, 0.1);
+            if (d < r) {
+                vec3 pL = toL / max(d, 1e-4);
+                float att = (1.0 - d / r);
+                att = att * att * uPointCol0.w;
+                float pDiff = max(dot(N, pL), 0.0);
+                vec3 pH = normalize(pL + V);
+                float pSpec = pow(max(dot(N, pH), 0.0), max(uCameraPos.w, 1.0));
+                finalColor += att * uPointCol0.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
+            }
+        }
+        if (uPointCount > 1.5) {
+            vec3 toL = uPointPos1.xyz - vWorldPos;
+            float d = length(toL);
+            float r = max(uPointPos1.w, 0.1);
+            if (d < r) {
+                vec3 pL = toL / max(d, 1e-4);
+                float att = (1.0 - d / r);
+                att = att * att * uPointCol1.w;
+                float pDiff = max(dot(N, pL), 0.0);
+                vec3 pH = normalize(pL + V);
+                float pSpec = pow(max(dot(N, pH), 0.0), max(uCameraPos.w, 1.0));
+                finalColor += att * uPointCol1.rgb * (pDiff * baseColor.rgb + pSpec * 0.4);
+            }
+        }
+
+        fragColor = vec4(finalColor, baseColor.a);
     }
     GLSL;
 
@@ -211,7 +247,7 @@ final class GlRenderPass
         }
         $this->program = $p;
 
-        foreach (['uMvp', 'uModel', 'uLightDir', 'uLightColor', 'uAmbientColor', 'uMaterialColor', 'uCameraPos', 'uFlipY', 'uTex'] as $name) {
+        foreach (['uMvp', 'uModel', 'uLightDir', 'uLightColor', 'uAmbientColor', 'uMaterialColor', 'uCameraPos', 'uPointPos0', 'uPointCol0', 'uPointPos1', 'uPointCol1', 'uPointCount', 'uFlipY', 'uTex'] as $name) {
             $this->u[$name] = ($g->epoxy_glGetUniformLocation)($p, $name);
         }
 
@@ -346,9 +382,22 @@ final class GlRenderPass
         ($g->epoxy_glUniform1f)($this->u['uFlipY'], $flipY);
         ($g->epoxy_glUniform1i)($this->u['uTex'], 0);
 
+        $pl0 = $scene->pointLights[0] ?? null;
+        $pl1 = $scene->pointLights[1] ?? null;
+        $plCount = min(2, count($scene->pointLights));
+        ($g->epoxy_glUniform1f)($this->u['uPointCount'], (float)$plCount);
+        if ($pl0 !== null) {
+            ($g->epoxy_glUniform4f)($this->u['uPointPos0'], $pl0->position->x, $pl0->position->y, $pl0->position->z, $pl0->radius);
+            ($g->epoxy_glUniform4f)($this->u['uPointCol0'], $pl0->color[0], $pl0->color[1], $pl0->color[2], $pl0->intensity);
+        }
+        if ($pl1 !== null) {
+            ($g->epoxy_glUniform4f)($this->u['uPointPos1'], $pl1->position->x, $pl1->position->y, $pl1->position->z, $pl1->radius);
+            ($g->epoxy_glUniform4f)($this->u['uPointCol1'], $pl1->color[0], $pl1->color[1], $pl1->color[2], $pl1->intensity);
+        }
+
         $matBuf = $g->new('float[16]');
 
-        foreach ($scene->entities as $entity) {
+        foreach ($scene->visibleEntities($viewProj) as $entity) {
             $mesh = $entity->mesh;
             $mesh->uploadGl($g);
 

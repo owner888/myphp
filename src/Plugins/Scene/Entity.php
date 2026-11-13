@@ -21,9 +21,15 @@ final class Entity
     public Material $material;
     public Mesh $mesh;
     public bool $pickable = true;
+    public bool $castShadow = true;
     public string $name = '';
 
-    private ?Mat4 $cachedModel = null;
+    /** Scene Graph hierarchy */
+    public ?self $parent = null;
+    /** @var list<self> */
+    public array $children = [];
+
+    private ?Mat4 $cachedLocal = null;
     private float $lastPx = 0.0, $lastPy = 0.0, $lastPz = 0.0;
     private float $lastRx = 0.0, $lastRy = 0.0, $lastRz = 0.0;
     private float $lastSx = 1.0, $lastSy = 1.0, $lastSz = 1.0;
@@ -52,12 +58,52 @@ final class Entity
     }
 
     /**
-     * World-space bounding sphere radius for fast raycast picking.
+     * Adds a child entity to this node in the 3D Scene Graph.
+     */
+    public function addChild(self $child): self
+    {
+        if ($child->parent !== null) {
+            $child->parent->removeChild($child);
+        }
+        $child->parent = $this;
+        $this->children[] = $child;
+        return $child;
+    }
+
+    /**
+     * Removes a child entity from this node.
+     */
+    public function removeChild(self $child): void
+    {
+        $idx = array_search($child, $this->children, true);
+        if ($idx !== false) {
+            array_splice($this->children, $idx, 1);
+            $child->parent = null;
+        }
+    }
+
+    /**
+     * World-space position of the entity's origin (accounting for parent hierarchy).
+     */
+    public function worldPosition(): Vec3
+    {
+        if ($this->parent === null) {
+            return $this->position;
+        }
+        $m = $this->modelMatrix()->m;
+        return new Vec3($m[12], $m[13], $m[14]);
+    }
+
+    /**
+     * World-space bounding sphere radius for fast raycast picking & frustum culling.
      */
     public function worldBoundingRadius(): float
     {
-        $maxScale = max(abs($this->scale->x), abs($this->scale->y), abs($this->scale->z));
-        return $this->mesh->boundingRadius * $maxScale;
+        $m = $this->modelMatrix()->m;
+        $sx = sqrt($m[0] * $m[0] + $m[1] * $m[1] + $m[2] * $m[2]);
+        $sy = sqrt($m[4] * $m[4] + $m[5] * $m[5] + $m[6] * $m[6]);
+        $sz = sqrt($m[8] * $m[8] + $m[9] * $m[9] + $m[10] * $m[10]);
+        return $this->mesh->boundingRadius * max($sx, $sy, $sz);
     }
 
     /**
@@ -211,19 +257,19 @@ final class Entity
         $this->releaseInstances();
     }
 
-    public function modelMatrix(): Mat4
+    public function localMatrix(): Mat4
     {
         $p = $this->position;
         $r = $this->rotation;
         $s = $this->scale;
 
         if (
-            $this->cachedModel !== null &&
+            $this->cachedLocal !== null &&
             $p->x === $this->lastPx && $p->y === $this->lastPy && $p->z === $this->lastPz &&
             $r->x === $this->lastRx && $r->y === $this->lastRy && $r->z === $this->lastRz &&
             $s->x === $this->lastSx && $s->y === $this->lastSy && $s->z === $this->lastSz
         ) {
-            return $this->cachedModel;
+            return $this->cachedLocal;
         }
 
         // T * Rz * Ry * Rx * S
@@ -233,12 +279,21 @@ final class Entity
         $rz = Mat4::rotationZ($r->z);
         $sc = Mat4::scaling($s->x, $s->y, $s->z);
 
-        $this->cachedModel = $t->multiply($rz)->multiply($ry)->multiply($rx)->multiply($sc);
+        $this->cachedLocal = $t->multiply($rz)->multiply($ry)->multiply($rx)->multiply($sc);
 
         $this->lastPx = $p->x; $this->lastPy = $p->y; $this->lastPz = $p->z;
         $this->lastRx = $r->x; $this->lastRy = $r->y; $this->lastRz = $r->z;
         $this->lastSx = $s->x; $this->lastSy = $s->y; $this->lastSz = $s->z;
 
-        return $this->cachedModel;
+        return $this->cachedLocal;
+    }
+
+    /**
+     * World transformation matrix (parent's world matrix * local matrix).
+     */
+    public function modelMatrix(): Mat4
+    {
+        $local = $this->localMatrix();
+        return $this->parent !== null ? $this->parent->modelMatrix()->multiply($local) : $local;
     }
 }
