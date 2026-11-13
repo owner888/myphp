@@ -3,11 +3,12 @@ declare(strict_types=1);
 
 namespace MyPHP\Plugins\Scene;
 
+use Closure;
 use MyPHP\Native\Mem;
 use MyPHP\Native\ObjC;
 use MyPHP\Plugins\Scene\Math\{Ray, Vec3};
 use MyPHP\Plugins\Scene\Native\MetalRenderPass;
-use MyPHP\UI\{Canvas, Context, Image, Node, Painter};
+use MyPHP\UI\{Canvas, Context, Image, InputEvent, Node, Painter};
 use RuntimeException;
 
 /**
@@ -100,6 +101,123 @@ final class Scene
     {
         $canvas->scene = $this;
         $canvas->rendered();
+    }
+
+    /**
+     * A native UI node that displays this 3D $scene across all 5 platforms
+     * (macOS, Windows, Linux, iOS, Android), with optional interactive camera
+     * orbit controls (mouse drag / touch drag / wheel zoom / pinch zoom) and
+     * 3D raycast click picking.
+     *
+     * @param ?Closure(float $dt): void $onUpdate Called each frame before rendering
+     * @param ?Closure(?array{entity: Entity, distance: float, point: Vec3}): void $onPick Called when the user clicks/taps
+     * @param ?Closure(Painter $p, array{0: float, 1: float, 2: float, 3: float} $r): void $overlay Optional 2D HUD overlay callback
+     */
+    public static function view(
+        Context $c,
+        self $scene,
+        bool $orbitControls = true,
+        ?Closure $onUpdate = null,
+        ?Closure $onPick = null,
+        ?Closure $overlay = null,
+        int $canvasWidth = 800,
+        int $canvasHeight = 600
+    ): Node {
+        $e = $c->column();
+        $c->end();
+        $e->focusable()->autoFocus();
+
+        $rt = $c->runtime;
+        $state = $rt?->local($e->id, static fn() => (object)[
+            'canvas'   => new Canvas($canvasWidth, $canvasHeight),
+            'yaw'      => atan2($scene->camera->position->x - $scene->camera->target->x, $scene->camera->position->z - $scene->camera->target->z),
+            'pitch'    => asin(max(-1.0, min(1.0, ($scene->camera->position->y - $scene->camera->target->y) / max(0.001, $scene->camera->position->sub($scene->camera->target)->length())))),
+            'dist'     => max(0.5, $scene->camera->position->sub($scene->camera->target)->length()),
+            'dragging' => false,
+            'downX'    => 0.0,
+            'downY'    => 0.0,
+            'lastX'    => 0.0,
+            'lastY'    => 0.0,
+            'lastTime' => hrtime(true) / 1e9,
+            'rect'     => [0.0, 0.0, (float)$canvasWidth, (float)$canvasHeight],
+        ]) ?? (object)[
+            'canvas'   => new Canvas($canvasWidth, $canvasHeight),
+            'yaw'      => 0.0,
+            'pitch'    => 0.2,
+            'dist'     => 6.0,
+            'dragging' => false,
+            'downX'    => 0.0,
+            'downY'    => 0.0,
+            'lastX'    => 0.0,
+            'lastY'    => 0.0,
+            'lastTime' => hrtime(true) / 1e9,
+            'rect'     => [0.0, 0.0, (float)$canvasWidth, (float)$canvasHeight],
+        ];
+
+        $e->handleInput(static function (InputEvent $ev) use ($scene, $state, $orbitControls, $onPick): bool {
+            if ($ev->kind === InputEvent::POINTER_DOWN) {
+                $state->dragging = true;
+                [$state->downX, $state->downY] = [$ev->x, $ev->y];
+                [$state->lastX, $state->lastY] = [$ev->x, $ev->y];
+                return true;
+            }
+            if ($ev->kind === InputEvent::POINTER_UP) {
+                $state->dragging = false;
+                if ($onPick !== null && hypot($ev->x - $state->downX, $ev->y - $state->downY) < 6.0) {
+                    $hit = $scene->pick($ev->x, $ev->y, $state->rect[2], $state->rect[3]);
+                    $onPick($hit);
+                }
+                return true;
+            }
+            if ($ev->kind === InputEvent::POINTER_MOVE && $state->dragging && $orbitControls) {
+                $dx = $ev->x - $state->lastX;
+                $dy = $ev->y - $state->lastY;
+                $state->yaw -= $dx * 0.008;
+                $state->pitch = max(-1.45, min(1.45, $state->pitch + $dy * 0.008));
+                [$state->lastX, $state->lastY] = [$ev->x, $ev->y];
+                return true;
+            }
+            if ($ev->kind === InputEvent::SCROLL && $orbitControls) {
+                $state->dist = max(1.5, min(50.0, $state->dist - $ev->dy * 0.05));
+                return true;
+            }
+            if ($ev->kind === InputEvent::ZOOM && $orbitControls && $ev->scale > 0.0) {
+                $state->dist = max(1.5, min(50.0, $state->dist / $ev->scale));
+                return true;
+            }
+            return false;
+        });
+
+        $e->draw(static function (Painter $p, array $r) use ($scene, $state, $orbitControls, $onUpdate, $overlay): void {
+            $state->rect = $r;
+            $p->animationFrame();
+
+            $now = hrtime(true) / 1e9;
+            $dt = max(0.001, $now - $state->lastTime);
+            $state->lastTime = $now;
+
+            if ($orbitControls) {
+                $target = $scene->camera->target;
+                $cx = $target->x + $state->dist * cos($state->pitch) * sin($state->yaw);
+                $cy = $target->y + $state->dist * sin($state->pitch);
+                $cz = $target->z + $state->dist * cos($state->pitch) * cos($state->yaw);
+                $scene->camera->position = new Vec3($cx, $cy, $cz);
+            }
+
+            $scene->camera->aspect = $r[2] / max(1.0, $r[3]);
+            if ($onUpdate !== null) {
+                $onUpdate($dt);
+            }
+
+            $state->canvas->renderScene($scene);
+            $p->image($state->canvas->bitmap(), $r, Node::FILL_BOX);
+
+            if ($overlay !== null) {
+                $overlay($p, $r);
+            }
+        });
+
+        return $e;
     }
 
     /**

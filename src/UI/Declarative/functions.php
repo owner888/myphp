@@ -653,6 +653,22 @@ function Representable(Closure $make, bool $fills = false): D\Representable { re
 /** A game of the Game plugin, its scene, taking the room it is given, as SwiftUI's SpriteView(scene:). */
 function SpriteView(MyPHP\Plugins\Game\Game $scene): D\Representable { return new D\Representable(static fn(MyPHP\UI\Context $c) => MyPHP\Plugins\Game\Game::view($c, $scene), true); }
 
+/** A 3D scene of the Scene plugin, taking the room it is given, as SwiftUI's SceneView(scene:). */
+function SceneView(
+    MyPHP\Plugins\Scene\Scene $scene,
+    bool $orbitControls = true,
+    ?Closure $onUpdate = null,
+    ?Closure $onPick = null,
+    ?Closure $overlay = null,
+    int $canvasWidth = 800,
+    int $canvasHeight = 600
+): D\Representable {
+    return new D\Representable(
+        static fn(MyPHP\UI\Context $c) => MyPHP\Plugins\Scene\Scene::view($c, $scene, $orbitControls, $onUpdate, $onPick, $overlay, $canvasWidth, $canvasHeight),
+        true
+    );
+}
+
 /** A film and its controls, taking the room it is given, as SwiftUI's VideoPlayer(player:). */
 function VideoPlayer(MyPHP\UI\MediaPlayerState $player, ?MyPHP\UI\MediaPlayerOptions $options = null): D\Representable
 {

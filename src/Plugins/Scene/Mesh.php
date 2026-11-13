@@ -122,8 +122,47 @@ final class Mesh
         $this->nativeIndexBuffer = \MyPHP\Native\Com::typed($f, $iOut, 'void *');
     }
 
+    /**
+     * Ensures GPU buffers are allocated and resident in VRAM (OpenGL 3.3 / GLES 3.0).
+     */
+    public function uploadGl(\FFI $g): void
+    {
+        if ($this->nativeVertexBuffer !== null) {
+            return;
+        }
+
+        $ids = $g->new('unsigned int[2]');
+        ($g->epoxy_glGenBuffers)(2, $ids);
+        $vbo = (int)$ids[0];
+        $ebo = (int)$ids[1];
+
+        // GL_ARRAY_BUFFER = 0x8892, GL_STATIC_DRAW = 0x88E4
+        ($g->epoxy_glBindBuffer)(0x8892, $vbo);
+        ($g->epoxy_glBufferData)(0x8892, strlen($this->vertexData), $this->vertexData, 0x88E4);
+
+        // GL_ELEMENT_ARRAY_BUFFER = 0x8893
+        ($g->epoxy_glBindBuffer)(0x8893, $ebo);
+        ($g->epoxy_glBufferData)(0x8893, strlen($this->indexData), $this->indexData, 0x88E4);
+
+        ($g->epoxy_glBindBuffer)(0x8892, 0);
+        ($g->epoxy_glBindBuffer)(0x8893, 0);
+
+        $this->nativeVertexBuffer = $vbo;
+        $this->nativeIndexBuffer = $ebo;
+    }
+
     public function release(): void
     {
+        if (is_int($this->nativeVertexBuffer)) {
+            $g = \MyPHP\Native\Gl::ffi();
+            $ids = $g->new('unsigned int[2]');
+            $ids[0] = $this->nativeVertexBuffer;
+            $ids[1] = (int)$this->nativeIndexBuffer;
+            ($g->epoxy_glDeleteBuffers)(2, $ids);
+            $this->nativeVertexBuffer = null;
+            $this->nativeIndexBuffer = null;
+            return;
+        }
         if (PHP_OS_FAMILY === 'Windows') {
             if ($this->nativeVertexBuffer !== null) {
                 \MyPHP\Native\Com::release($this->nativeVertexBuffer);

@@ -145,32 +145,31 @@ if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY 
     check($iBytes[3] > 50 && $iBytes[1] < 20, 'Hardware GPU Instancing renders blue instanced mesh');
 }
 check(str_contains(\MyPHP\Plugins\Scene\Native\D3dRenderPass::SHADER_HLSL, 'vs_scene'), 'D3dRenderPass HLSL shader defined');
+check(str_contains(\MyPHP\Plugins\Scene\Native\GlRenderPass::VERTEX_GLSL, 'iModelC0'), 'GlRenderPass GLSL vertex shader supports hardware instancing');
+check(str_contains(\MyPHP\Plugins\Scene\Native\GlRenderPass::FRAGMENT_GLSL, 'uTex'), 'GlRenderPass GLSL fragment shader supports texture mapping');
 
-// 7. Full headless UI build & paint pass with examples/scene3d
-$app = new class {
-    public Scene $scene;
-    public Canvas $canvas;
-    public function __construct() {
-        $this->canvas = new Canvas(200, 150);
-        $this->scene = new Scene();
-        $this->scene->add(new Entity(Mesh::cube(1.5)));
-    }
-};
-$h = new Headless(function (\MyPHP\UI\Context $c) use ($app): void {
-    $e = $c->column();
-    $c->end();
-    $e->grow = 1;
-    $e->draw(function (\MyPHP\UI\Painter $p, array $r) use ($app): void {
-        $p->animationFrame();
-        $app->canvas->renderScene($app->scene);
-        $p->image($app->canvas->bitmap(), $r, \MyPHP\UI\Node::FILL_BOX);
-        $p->fill([$r[0] + 10, $r[1] + 10, 100, 40], 0x000000, 8.0, 0.5);
-        $p->text($r[0] + 15, $r[1] + 15, 'MyPHP 3D', 14, 0xffffff);
-    });
+// 7. Full headless UI build & paint pass with Scene::view & SceneView()
+$sceneForView = new Scene();
+$sceneForView->add(new Entity(Mesh::cube(1.5), name: 'ViewCube'));
+$updated = false;
+$h = new Headless(function (\MyPHP\UI\Context $c) use ($sceneForView, &$updated): void {
+    Scene::view(
+        $c,
+        $sceneForView,
+        orbitControls: true,
+        onUpdate: static function (float $dt) use (&$updated): void {
+            $updated = $dt > 0.0;
+        },
+        overlay: static function (\MyPHP\UI\Painter $p, array $r): void {
+            $p->fill([$r[0] + 10, $r[1] + 10, 100, 40], 0x000000, 8.0, 0.5);
+            $p->text($r[0] + 15, $r[1] + 15, 'MyPHP 3D', 14, 0xffffff);
+        }
+    )->grow = 1;
 }, 400, 300);
 $h->paint();
-check($app->canvas->drawn > 0, 'Headless frame rendered 3D scene canvas and painted UI overlay');
+check($updated, 'Scene::view invokes onUpdate callback during paint');
 $taken = \MyPHP\UI\CanvasAtlas::take();
-check(in_array($app->canvas, $taken, true), 'CanvasAtlas::take() returns 3D scene canvas for GPU rendering');
+check(count($taken) > 0 && $taken[0]->scene === $sceneForView, 'CanvasAtlas::take() returns Scene::view 3D canvas for GPU rendering');
+check(function_exists('SceneView'), 'Declarative SceneView() helper is registered');
 
 
