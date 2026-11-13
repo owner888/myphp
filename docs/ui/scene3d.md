@@ -40,7 +40,9 @@ particles and billboards, and 3D raycast picking via `onPick:`.
 `color`) and uploads them to VRAM once on first draw:
 
 - **Procedural primitives**: `Mesh::cube($size)`, `Mesh::sphere($radius, $sectors, $rings)`,
-  and `Mesh::plane($width, $depth, $uvRepeat)`.
+  `Mesh::plane($width, $depth, $uvRepeat)`, `Mesh::cylinder($topRadius, $bottomRadius, $height)`,
+  `Mesh::cone($radius, $height)`, `Mesh::torus($majorRadius, $minorRadius)`,
+  and `Mesh::capsule($radius, $cylinderHeight)`.
 - **Wavefront `.obj`**: `Mesh::fromObj($src)` or `Mesh::fromObjFile($path)`
   parses positions, UVs, normals, and triangulates n-gon faces.
 - **Binary glTF 2.0 (`.glb`)**: `Mesh::fromGlbFile($path)` loads a single
@@ -163,10 +165,16 @@ $scene->addTween(
 $view = fn() => SceneView($scene);
 ```
 
-## 3D raycast picking
+## 3D raycast picking, colliders and reference grid
 
 Pass `onPick:` to `SceneView()` (or call `$scene->pick($x, $y, $w, $h)` /
 `$scene->raycast($ray)`) to unproject 2D pointer coordinates into a 3D world
 ray and find the closest intersected entity (`['entity' => Entity, 'distance' => float, 'point' => Vec3]`).
 Set `$entity->pickable = false` on ground planes, skyboxes or particle
 emitters so they do not intercept clicks.
+
+For 3D collision detection and solid push-out resolution during
+`Scene::step($dt)`, attach a `Collider3D::sphere($radius)` or
+`Collider3D::box($halfExtents)` to `$entity->collider`, and call
+`$scene->addGridHelper($size, $divisions)` to add a hardware-instanced 3D
+reference grid with color-coded XYZ axes.
