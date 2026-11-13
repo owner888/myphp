@@ -1,17 +1,18 @@
 <?php
 declare(strict_types=1);
 
-// 3D Scene rendered via native Metal / D3D11 RenderPass into a Canvas:
+// 3D Scene rendered via native Metal / D3D11 / OpenGL / GLES3 RenderPass:
 // - 3D Texture Mapping (Wooden Crate + Tiled Floor)
 // - Wavefront .OBJ Model Loader (Floating Crystal)
 // - Hardware GPU Instancing (Ring of 64 orbiting Pillars in a SINGLE Draw Call)
 // - 3D Raycasting / Mouse Picking (Click any 3D object to select & bounce it)
-// Run: myphp run -d macos examples/scene3d
+// - Declarative SceneView() / Scene::view() across all 5 platforms
+// Run: myphp run -d macos|windows|linux|ios|android examples/scene3d
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, Scene};
 use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
-use MyPHP\UI\{Canvas, Content, Context, Image, InputEvent, Key, Node, Painter};
+use MyPHP\UI\{Content, Context, Image, Painter};
 
 class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
@@ -83,17 +84,6 @@ final class SceneApp
     public Entity $crystal;
     public Entity $floor;
     public Entity $instancedRing;
-    public Canvas $canvas;
-
-    public float $yaw = 0.3;
-    public float $pitch = 0.38;
-    public float $dist = 7.5;
-
-    public float $downX = 0.0;
-    public float $downY = 0.0;
-    public float $lastMouseX = 0.0;
-    public float $lastMouseY = 0.0;
-    public bool $dragging = false;
 
     public string $selectedName = 'None (Click a 3D object!)';
     public ?Entity $selectedEntity = null;
@@ -101,12 +91,10 @@ final class SceneApp
 
     public int $frames = 0;
     public float $fps = 60.0;
-    public float $lastTime = 0.0;
 
     public function __construct()
     {
-        $this->canvas = new Canvas(800, 600);
-        $this->scene = new Scene();
+        $this->scene = new Scene(new Camera3D(position: new Vec3(2.1, 2.7, 6.6)));
         $this->scene->clearColor = [0.06, 0.07, 0.09, 1.0];
 
         // 0. Textured Floor Plane (not pickable so clicks go to 3D objects)
@@ -159,14 +147,13 @@ final class SceneApp
         }
         $this->instancedRing->setInstances($transforms, $colors);
         $this->scene->add($this->instancedRing);
-
-        $this->lastTime = hrtime(true) / 1e9;
     }
 
-    public function handleClick(float $x, float $y, float $w, float $h): void
+    /**
+     * @param ?array{entity: Entity, distance: float, point: Vec3} $hit
+     */
+    public function onPick(?array $hit): void
     {
-        $hit = $this->scene->pick($x, $y, $w, $h);
-        // Reset previous selection highlight
         foreach ([$this->crate, $this->crystal, $this->sphere] as $ent) {
             $ent->scale = new Vec3(1.0, 1.0, 1.0);
         }
@@ -178,19 +165,15 @@ final class SceneApp
             $this->bounceTimer = 1.0;
         } else {
             $this->selectedEntity = null;
-            $this->selectedName = sprintf('Missed at (%.0f, %.0f)', $x, $y);
+            $this->selectedName = 'None (Click a 3D object!)';
         }
     }
 
-    public function update(float $viewW = 800.0, float $viewH = 600.0): void
+    public function update(float $dt): void
     {
-        $now = hrtime(true) / 1e9;
-        $dt = max(0.001, $now - $this->lastTime);
-        $this->lastTime = $now;
-
         $this->frames++;
         if ($this->frames % 20 === 0) {
-            $this->fps = 1.0 / $dt;
+            $this->fps = 1.0 / max(0.001, $dt);
         }
 
         // Idle animations
@@ -198,7 +181,7 @@ final class SceneApp
         $this->crate->rotation->x += 0.006;
 
         $this->crystal->rotation->y -= 0.022;
-        $this->crystal->position->y = sin($now * 2.5) * 0.2;
+        $this->crystal->position->y = sin((hrtime(true) / 1e9) * 2.5) * 0.2;
 
         $this->sphere->rotation->y += 0.015;
         $this->sphere->rotation->z += 0.01;
@@ -209,74 +192,29 @@ final class SceneApp
             $s = 1.0 + 0.35 * sin($this->bounceTimer * M_PI);
             $this->selectedEntity->scale = new Vec3($s, $s, $s);
         }
-
-        // Sync camera aspect ratio to live viewport and update orbit position
-        $this->scene->camera->aspect = $viewW / max(1.0, $viewH);
-        $cx = $this->dist * cos($this->pitch) * sin($this->yaw);
-        $cy = $this->dist * sin($this->pitch);
-        $cz = $this->dist * cos($this->pitch) * cos($this->yaw);
-        $this->scene->camera->position = new Vec3($cx, $cy, $cz);
-
-        // Execute GPU 3D RenderPass into canvas target
-        $this->canvas->renderScene($this->scene);
     }
 }
 
 App::whenReady(function () {
     $app = new SceneApp();
-    $viewRect = [0.0, 0.0, 800.0, 600.0];
 
-    $content = Content::view(function (Context $c) use ($app, &$viewRect) {
-        $e = $c->column();
-        $c->end();
-        $e->grow = 1;
-
-        $e->focusable()->autoFocus()->handleInput(function (InputEvent $ev) use ($app, &$viewRect): bool {
-            if ($ev->kind === InputEvent::POINTER_DOWN) {
-                $app->dragging = true;
-                [$app->downX, $app->downY] = [$ev->x, $ev->y];
-                [$app->lastMouseX, $app->lastMouseY] = [$ev->x, $ev->y];
-                return true;
-            } elseif ($ev->kind === InputEvent::POINTER_UP) {
-                $app->dragging = false;
-                // If pointer barely moved, treat as a 3D Raycast click! ($ev->x, $ev->y are already node-local)
-                if (hypot($ev->x - $app->downX, $ev->y - $app->downY) < 6.0) {
-                    $app->handleClick($ev->x, $ev->y, $viewRect[2], $viewRect[3]);
-                }
-                return true;
-            } elseif ($ev->kind === InputEvent::POINTER_MOVE && $app->dragging) {
-                $dx = $ev->x - $app->lastMouseX;
-                $dy = $ev->y - $app->lastMouseY;
-                $app->yaw -= $dx * 0.008;
-                $app->pitch = max(-0.05, min(1.4, $app->pitch + $dy * 0.008));
-                [$app->lastMouseX, $app->lastMouseY] = [$ev->x, $ev->y];
-                return true;
-            } elseif ($ev->kind === InputEvent::SCROLL) {
-                $app->dist = max(3.0, min(16.0, $app->dist - $ev->dy * 0.05));
-                return true;
-            }
-            return false;
-        });
-
-        $e->draw(function (Painter $p, array $r) use ($app, &$viewRect) {
-            $viewRect = $r;
-            $p->animationFrame();
-            $app->update($r[2], $r[3]);
-
-            // 1. Draw 3D scene canvas
-            $p->image($app->canvas->bitmap(), $r, Node::FILL_BOX);
-
-            // 2. Draw 2D HUD overlay on top
-            $p->fill([$r[0] + 16, $r[1] + 16, 365, 102], 0x000000, 8.0, 0.68);
-            $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D Scene (Metal / D3D11)', 15, 0xffffff);
+    $content = Content::view(fn(Context $c) => Scene::view(
+        $c,
+        $app->scene,
+        orbitControls: true,
+        onUpdate: $app->update(...),
+        onPick: $app->onPick(...),
+        overlay: function (Painter $p, array $r) use ($app): void {
+            $p->fill([$r[0] + 16, $r[1] + 16, 385, 102], 0x000000, 8.0, 0.68);
+            $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D Scene (Metal / D3D11 / GL)', 15, 0xffffff);
             $p->text($r[0] + 28, $r[1] + 50, sprintf('FPS: %.1f | 64 GPU Instances + 3 Pickable Meshes', $app->fps), 12, 0x00e676);
             $p->text($r[0] + 28, $r[1] + 68, 'Picked: ' . $app->selectedName, 12, 0xffd54f);
             $p->text($r[0] + 28, $r[1] + 88, 'Click object to pick | Drag to orbit | Wheel to zoom', 11, 0xaaaaaa);
-        });
-    });
+        }
+    )->grow = 1);
 
     new Window(new WindowOptions(
-        title: 'MyPHP 3D Scene (Instancing & Raycast Picking)',
+        title: 'MyPHP 3D Scene (5-Platform Native RenderPass)',
         width: 800,
         height: 600,
         content: $content

@@ -158,9 +158,40 @@ final class Entity
         $this->instancesDirty = false;
     }
 
+    public function uploadInstancesGl(\FFI $g): void
+    {
+        if ($this->instanceCount <= 0) {
+            return;
+        }
+        if ($this->nativeInstanceBuffer !== null && !$this->instancesDirty) {
+            return;
+        }
+        $this->releaseInstances();
+
+        $ids = $g->new('unsigned int[1]');
+        ($g->epoxy_glGenBuffers)(1, $ids);
+        $vbo = (int)$ids[0];
+
+        // GL_ARRAY_BUFFER = 0x8892, GL_STATIC_DRAW = 0x88E4
+        ($g->epoxy_glBindBuffer)(0x8892, $vbo);
+        ($g->epoxy_glBufferData)(0x8892, strlen($this->instanceData), $this->instanceData, 0x88E4);
+        ($g->epoxy_glBindBuffer)(0x8892, 0);
+
+        $this->nativeInstanceBuffer = $vbo;
+        $this->instancesDirty = false;
+    }
+
     public function releaseInstances(): void
     {
         if ($this->nativeInstanceBuffer === null) {
+            return;
+        }
+        if (is_int($this->nativeInstanceBuffer)) {
+            $g = \MyPHP\Native\Gl::ffi();
+            $ids = $g->new('unsigned int[1]');
+            $ids[0] = $this->nativeInstanceBuffer;
+            ($g->epoxy_glDeleteBuffers)(1, $ids);
+            $this->nativeInstanceBuffer = null;
             return;
         }
         if (PHP_OS_FAMILY === 'Windows') {

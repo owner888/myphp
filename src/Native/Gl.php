@@ -193,6 +193,24 @@ final class Gl
             void (*epoxy_glClear)(GLbitfield);
             void (*epoxy_glDrawArrays)(GLenum, GLint, GLsizei);
             void (*epoxy_glDrawArraysInstanced)(GLenum, GLint, GLsizei, GLsizei);
+            void (*epoxy_glDrawElements)(GLenum, GLsizei, GLenum, const void*);
+            void (*epoxy_glDrawElementsInstanced)(GLenum, GLsizei, GLenum, const void*, GLsizei);
+            void (*epoxy_glEnableVertexAttribArray)(GLuint);
+            void (*epoxy_glDisableVertexAttribArray)(GLuint);
+            void (*epoxy_glVertexAttribPointer)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*);
+            void (*epoxy_glVertexAttribDivisor)(GLuint, GLuint);
+            void (*epoxy_glDepthFunc)(GLenum);
+            void (*epoxy_glDepthMask)(GLboolean);
+            void (*epoxy_glClearDepthf)(GLfloat);
+            void (*epoxy_glCullFace)(GLenum);
+            void (*epoxy_glFrontFace)(GLenum);
+            void (*epoxy_glGenRenderbuffers)(GLsizei, GLuint*);
+            void (*epoxy_glBindRenderbuffer)(GLenum, GLuint);
+            void (*epoxy_glRenderbufferStorage)(GLenum, GLenum, GLsizei, GLsizei);
+            void (*epoxy_glFramebufferRenderbuffer)(GLenum, GLenum, GLenum, GLuint);
+            void (*epoxy_glDeleteRenderbuffers)(GLsizei, const GLuint*);
+            void (*epoxy_glUniform4f)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
+            void (*epoxy_glUniformMatrix4fv)(GLint, GLsizei, GLboolean, const GLfloat*);
             void (*epoxy_glReadPixels)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*);
             void (*epoxy_glGenFramebuffers)(GLsizei, GLuint*);
             void (*epoxy_glBindFramebuffer)(GLenum, GLuint);
@@ -827,9 +845,13 @@ final class Gl
         $target = $this->canvasTargets[$key];
         ($g->epoxy_glBindFramebuffer)(self::FRAMEBUFFER, $this->fbo);
         ($g->epoxy_glFramebufferTexture2D)(self::FRAMEBUFFER, self::COLOR_ATTACHMENT0, self::TEXTURE_2D, $target, 0);
-        ($g->epoxy_glViewport)(0, 0, $c->w, $c->h);
-        ($g->epoxy_glClearColor)(0.0, 0.0, 0.0, 0.0);
-        ($g->epoxy_glClear)(self::COLOR_BUFFER_BIT);
+        if ($c->scene !== null) {
+            \MyPHP\Plugins\Scene\Native\GlRenderPass::instance()->render($c->scene, $c->w, $c->h, $this->fbo, -1.0);
+        } else {
+            ($g->epoxy_glViewport)(0, 0, $c->w, $c->h);
+            ($g->epoxy_glClearColor)(0.0, 0.0, 0.0, 0.0);
+            ($g->epoxy_glClear)(self::COLOR_BUFFER_BIT);
+        }
         $list = $c->list;
         if ($list !== null && $list->n > 0) {
             $this->prepareShaders($list); // copied before the canvas's target is bound
