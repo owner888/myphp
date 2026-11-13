@@ -233,8 +233,8 @@ $app = new ModelViewerApp();
 App::whenReady(function () use ($app) {
     $app->window = new Window(new WindowOptions(
         title: 'MyPHP 3D Model Viewer & Studio',
-        width: 1060,
-        height: 680,
+        width: 1080,
+        height: 740,
         content: Content::file(__DIR__ . '/view.php', $app)
     ));
     $app->window->on('fileDrop', function (FileDropEvent $ev) use ($app): void {
