@@ -59,13 +59,16 @@ final class Scene
     }
 
     /**
-     * Renders this scene off-screen into an RGBA Image on macOS Metal.
+     * Renders this scene off-screen into an RGBA Image on macOS (Metal) or Windows (Direct3D 11).
      * Ideal for testing, snapshots, or headless environments.
      */
     public function renderOffscreen(int $width, int $height, mixed $device = null): Image
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            return $this->renderOffscreenD3d($width, $height);
+        }
         if (PHP_OS_FAMILY !== 'Darwin') {
-            throw new RuntimeException('Scene::renderOffscreen currently requires macOS Metal');
+            throw new RuntimeException('Scene::renderOffscreen requires macOS Metal or Windows Direct3D 11');
         }
 
         ObjC::boot(['Metal']);
@@ -98,6 +101,59 @@ final class Scene
         $rawRgba = \FFI::string($buf, $totalBytes);
         ObjC::msg('v:', $colorTex, 'release');
         ObjC::msg('v:', $queue, 'release');
+
+        return Image::fromPixels($width, $height, $rawRgba);
+    }
+
+    private function renderOffscreenD3d(int $width, int $height): Image
+    {
+        $f = \MyPHP\Native\D3d::ffi();
+        $dev = \MyPHP\Native\D3d::device();
+        $ctx = \MyPHP\Native\D3d::context();
+
+        // Render Target Texture (R8G8B8A8_UNORM = 28, BIND_RENDER_TARGET = 0x20)
+        $desc = $f->new('D3D11_TEXTURE2D_DESC');
+        $desc->Width = $width;
+        $desc->Height = $height;
+        $desc->MipLevels = 1;
+        $desc->ArraySize = 1;
+        $desc->Format = 28; // R8G8B8A8_UNORM
+        $desc->SampleDesc->Count = 1;
+        $desc->Usage = 0;   // DEFAULT
+        $desc->BindFlags = 0x20; // BIND_RENDER_TARGET
+
+        $texOut = $f->new('void *');
+        \MyPHP\Native\Com::check(($dev->v->CreateTexture2D)($dev, \FFI::addr($desc), null, \FFI::addr($texOut)), 'D3D11 offscreen texture');
+        $colorTex = \MyPHP\Native\Com::typed($f, $texOut, 'void *');
+
+        $rtvOut = $f->new('void *');
+        \MyPHP\Native\Com::check(($dev->v->CreateRenderTargetView)($dev, $colorTex, null, \FFI::addr($rtvOut)), 'D3D11 offscreen RTV');
+        $rtv = \MyPHP\Native\Com::typed($f, $rtvOut, 'void *');
+
+        \MyPHP\Plugins\Scene\Native\D3dRenderPass::instance()->render($this, $width, $height, $rtv);
+
+        // Staging texture for CPU readback
+        $desc->Usage = 3; // STAGING
+        $desc->BindFlags = 0;
+        $desc->CPUAccessFlags = 0x20000; // CPU_READ
+        $stgOut = $f->new('void *');
+        \MyPHP\Native\Com::check(($dev->v->CreateTexture2D)($dev, \FFI::addr($desc), null, \FFI::addr($stgOut)), 'D3D11 staging texture');
+        $staging = \MyPHP\Native\Com::typed($f, $stgOut, 'void *');
+
+        ($ctx->v->CopyResource)($ctx, $staging, $colorTex);
+
+        $map = $f->new('D3D11_MAPPED_SUBRESOURCE');
+        \MyPHP\Native\Com::check(($ctx->v->Map)($ctx, $staging, 0, 1 /* MAP_READ */, 0, \FFI::addr($map)), 'D3D11 Map readback');
+        $rawRgba = '';
+        $baseAddr = Mem::addr($map->pData);
+        for ($y = 0; $y < $height; $y++) {
+            $rawRgba .= \FFI::string($f->cast('char *', $baseAddr + $y * $map->RowPitch), $width * 4);
+        }
+        ($ctx->v->Unmap)($ctx, $staging, 0);
+
+        \MyPHP\Native\Com::release($staging);
+        \MyPHP\Native\Com::release($rtv);
+        \MyPHP\Native\Com::release($colorTex);
 
         return Image::fromPixels($width, $height, $rawRgba);
     }
