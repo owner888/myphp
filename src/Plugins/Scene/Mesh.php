@@ -295,8 +295,8 @@ final class Mesh
                 $second = $first + $segments + 1;
 
                 array_push($indices,
-                    $first, $second, $first + 1,
-                    $second, $second + 1, $first + 1
+                    $first, $first + 1, $second,
+                    $second, $first + 1, $second + 1
                 );
             }
         }

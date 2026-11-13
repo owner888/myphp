@@ -43,7 +43,7 @@ final class ParticleEmitter3D
     {
         $this->maxParticles = max(1, $maxParticles);
         $mesh = $particleMesh ?? Mesh::cube(1.0);
-        $this->entity = new Entity($mesh, new Material(color: [1.0, 1.0, 1.0, 1.0], shininess: 64.0), name: 'particle_emitter');
+        $this->entity = new Entity($mesh, new Material(color: [1.0, 1.0, 1.0, 1.0], shininess: 64.0), scale: new Vec3(0.0, 0.0, 0.0), name: 'particle_emitter');
         $this->entity->pickable = false;
         $this->entity->castShadow = false;
     }

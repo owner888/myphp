@@ -139,16 +139,18 @@ final class Scene
     public function visibleEntities(Mat4 $viewProj): array
     {
         $all = $this->allEntities();
-        if (!$this->frustumCulling) {
-            $this->lastCulledCount = 0;
-            return $all;
-        }
-
-        $frustum = Frustum::fromViewProjection($viewProj);
+        $frustum = $this->frustumCulling ? Frustum::fromViewProjection($viewProj) : null;
         $visible = [];
         $culled = 0;
 
         foreach ($all as $entity) {
+            if ($entity->scale->x === 0.0 && $entity->scale->y === 0.0 && $entity->scale->z === 0.0 && $entity->instanceCount === 0) {
+                continue;
+            }
+            if (!$this->frustumCulling) {
+                $visible[] = $entity;
+                continue;
+            }
             // Instanced entities span wide areas; keep them always visible
             if ($entity->instanceCount > 0 || $frustum->intersectsSphere($entity->worldPosition(), $entity->worldBoundingRadius())) {
                 $visible[] = $entity;
