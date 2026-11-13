@@ -831,10 +831,10 @@ final class Gl
         ($g->epoxy_glClearColor)(0.0, 0.0, 0.0, 0.0);
         ($g->epoxy_glClear)(self::COLOR_BUFFER_BIT);
         $list = $c->list;
-        $this->prepareShaders($list); // copied before the canvas's target is bound
-        ($g->epoxy_glBindFramebuffer)(self::FRAMEBUFFER, $this->fbo);
-        ($g->epoxy_glFramebufferTexture2D)(self::FRAMEBUFFER, self::COLOR_ATTACHMENT0, self::TEXTURE_2D, $target, 0);
-        if ($list->n > 0) {
+        if ($list !== null && $list->n > 0) {
+            $this->prepareShaders($list); // copied before the canvas's target is bound
+            ($g->epoxy_glBindFramebuffer)(self::FRAMEBUFFER, $this->fbo);
+            ($g->epoxy_glFramebufferTexture2D)(self::FRAMEBUFFER, self::COLOR_ATTACHMENT0, self::TEXTURE_2D, $target, 0);
             $this->target = [(float)$c->w, (float)$c->h, 1.0, -1.0, (float)$c->h]; // upside down: its first row the top one, as the atlas's
             $this->bindList($list);
             $this->drawRuns($list, 0, $list->n, true);
