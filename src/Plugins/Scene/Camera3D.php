@@ -16,6 +16,7 @@ final class Camera3D
     public float $fovY; // in radians
     public float $near;
     public float $far;
+    public ?float $aspect = null; // optional explicit aspect ratio override
 
     public function __construct(
         ?Vec3 $position = null,
@@ -40,7 +41,7 @@ final class Camera3D
 
     public function projectionMatrix(float $aspect): Mat4
     {
-        return Mat4::perspective($this->fovY, $aspect, $this->near, $this->far);
+        return Mat4::perspective($this->fovY, $this->aspect ?? $aspect, $this->near, $this->far);
     }
 
     /**
@@ -49,7 +50,7 @@ final class Camera3D
      */
     public function screenToRay(float $x, float $y, float $width, float $height): Ray
     {
-        $aspect = $width / max(1.0, $height);
+        $aspect = $this->aspect ?? ($width / max(1.0, $height));
         // Normalized Device Coordinates: x in [-1, 1], y in [-1, 1] (top is +1)
         $ndcX = ($x / max(1.0, $width)) * 2.0 - 1.0;
         $ndcY = 1.0 - ($y / max(1.0, $height)) * 2.0;

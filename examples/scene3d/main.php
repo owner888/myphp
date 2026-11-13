@@ -178,11 +178,11 @@ final class SceneApp
             $this->bounceTimer = 1.0;
         } else {
             $this->selectedEntity = null;
-            $this->selectedName = 'None (Click a 3D object!)';
+            $this->selectedName = sprintf('Missed at (%.0f, %.0f)', $x, $y);
         }
     }
 
-    public function update(): void
+    public function update(float $viewW = 800.0, float $viewH = 600.0): void
     {
         $now = hrtime(true) / 1e9;
         $dt = max(0.001, $now - $this->lastTime);
@@ -210,7 +210,8 @@ final class SceneApp
             $this->selectedEntity->scale = new Vec3($s, $s, $s);
         }
 
-        // Update camera position from orbit parameters (yaw, pitch, dist)
+        // Sync camera aspect ratio to live viewport and update orbit position
+        $this->scene->camera->aspect = $viewW / max(1.0, $viewH);
         $cx = $this->dist * cos($this->pitch) * sin($this->yaw);
         $cy = $this->dist * sin($this->pitch);
         $cz = $this->dist * cos($this->pitch) * cos($this->yaw);
@@ -238,9 +239,9 @@ App::whenReady(function () {
                 return true;
             } elseif ($ev->kind === InputEvent::POINTER_UP) {
                 $app->dragging = false;
-                // If pointer barely moved, treat as a 3D Raycast click!
-                if (hypot($ev->x - $app->downX, $ev->y - $app->downY) < 5.0) {
-                    $app->handleClick($ev->x - $viewRect[0], $ev->y - $viewRect[1], $viewRect[2], $viewRect[3]);
+                // If pointer barely moved, treat as a 3D Raycast click! ($ev->x, $ev->y are already node-local)
+                if (hypot($ev->x - $app->downX, $ev->y - $app->downY) < 6.0) {
+                    $app->handleClick($ev->x, $ev->y, $viewRect[2], $viewRect[3]);
                 }
                 return true;
             } elseif ($ev->kind === InputEvent::POINTER_MOVE && $app->dragging) {
@@ -260,7 +261,7 @@ App::whenReady(function () {
         $e->draw(function (Painter $p, array $r) use ($app, &$viewRect) {
             $viewRect = $r;
             $p->animationFrame();
-            $app->update();
+            $app->update($r[2], $r[3]);
 
             // 1. Draw 3D scene canvas
             $p->image($app->canvas->bitmap(), $r, Node::FILL_BOX);
