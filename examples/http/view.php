@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MyPHP\Clipboard;
+use MyPHP\Device;
 
 /** A line of pretty-printed JSON, its tokens colored: keys, strings, numbers and literals, punctuation. */
 $json = function (string $line): View {
@@ -37,31 +38,39 @@ $response = fn(?array $r) => match (true) {
     ))->font(Font::callout)->id($r['id'] . '/' . count($r['lines'])), // from the top for each response
 };
 
-return fn() => HStack(spacing: 0)(
-    // History: a table of the requests; the headers sort them, their edges resize the columns.
-    VStack(spacing: 0)(
-        HStack()(Text('Requests')->font(Font::headline), Spacer(), Text(verbatim: (string)count($this->history))->foregroundStyle(Color::secondary))->padding(10),
-        Table($this->history, id: 'id', selection: $this->chosen, sortOrder: $this->sortOrder)(
-            TableColumn('Method', fn(array $r) => Text(verbatim: $r['method'])->bold()->foregroundStyle(Color::secondary), value: 'method')->width(ideal: 64),
-            TableColumn('Status', fn(array $r) => Text(verbatim: $r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'])->bold()
-                ->foregroundStyle($r['error'] !== '' ? Color::red : ($r['status'] === null ? Color::secondary : ($r['status'] < 400 ? Color::green : Color::red))), value: 'status')->width(ideal: 56),
-            TableColumn('Time', fn(array $r) => Text(verbatim: $r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : '')->foregroundStyle(Color::secondary), value: 'time')->width(ideal: 60)->alignment(HorizontalAlignment::trailing),
-            TableColumn('URL', fn(array $r) => Text(verbatim: preg_replace('#^https?://#', '', $r['url']))->lineLimit(1)->help($r['url']), value: 'url')->width(min: 120),
-        )->font(Font::caption)->monospaced()->onChange(of: $this->sortOrder, action: $this->sort(...)),
-    )->frame(width: 320)->background(Color::gray->opacity(0.08)),
+$historyPane = fn() => VStack(spacing: 0)(
+    HStack()(Text('Requests')->font(Font::headline), Spacer(), Text(verbatim: (string)count($this->history))->foregroundStyle(Color::secondary))->padding(10),
+    Table($this->history, id: 'id', selection: $this->chosen, sortOrder: $this->sortOrder)(
+        TableColumn('Method', fn(array $r) => Text(verbatim: $r['method'])->bold()->foregroundStyle(Color::secondary), value: 'method')->width(ideal: 64),
+        TableColumn('Status', fn(array $r) => Text(verbatim: $r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'])->bold()
+            ->foregroundStyle($r['error'] !== '' ? Color::red : ($r['status'] === null ? Color::secondary : ($r['status'] < 400 ? Color::green : Color::red))), value: 'status')->width(ideal: 56),
+        TableColumn('Time', fn(array $r) => Text(verbatim: $r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : '')->foregroundStyle(Color::secondary), value: 'time')->width(ideal: 60)->alignment(HorizontalAlignment::trailing),
+        TableColumn('URL', fn(array $r) => Text(verbatim: preg_replace('#^https?://#', '', $r['url']))->lineLimit(1)->help($r['url']), value: 'url')->width(min: 120),
+    )->font(Font::caption)->monospaced()->onChange(of: $this->sortOrder, action: $this->sort(...)),
+)->background(Color::gray->opacity(0.08));
+
+$editorPane = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+    HStack(spacing: 8)(
+        Picker('Method', selection: $this->method)(Each(Http::METHODS)(fn(string $m, int $i) => Text(verbatim: $m)->tag($i)))->labelsHidden(),
+        TextField('https://…', text: $this->url)->onSubmit($this->send(...)),
+        Button($this->inFlight === null ? 'Send' : 'Sending…', action: $this->send(...))->buttonStyle(ButtonStyle::borderedProminent)->help('Cmd+Enter'),
+    ),
+    HStack(alignment: VerticalAlignment::top, spacing: 10)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 4)(Text('Headers, one a line')->font(Font::caption)->foregroundStyle(Color::secondary), TextField('Name: value', text: $this->headers, axis: Axis::vertical)->lineLimit(3, reservesSpace: true)->monospaced()),
+        VStack(alignment: HorizontalAlignment::leading, spacing: 4)(Text('Body')->font(Font::caption)->foregroundStyle(Color::secondary), TextField('sent with POST, PUT, PATCH', text: $this->body, axis: Axis::vertical)->lineLimit(3, reservesSpace: true)->monospaced()),
+    ),
     Divider(),
-    // Request and response
-    VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
-        HStack(spacing: 8)(
-            Picker('Method', selection: $this->method)(Each(Http::METHODS)(fn(string $m, int $i) => Text(verbatim: $m)->tag($i)))->labelsHidden(),
-            TextField('https://…', text: $this->url)->onSubmit($this->send(...)),
-            Button($this->inFlight === null ? 'Send' : 'Sending…', action: $this->send(...))->buttonStyle(ButtonStyle::borderedProminent)->help('Cmd+Enter'),
-        ),
-        HStack(alignment: VerticalAlignment::top, spacing: 10)(
-            VStack(alignment: HorizontalAlignment::leading, spacing: 4)(Text('Headers, one a line')->font(Font::caption)->foregroundStyle(Color::secondary), TextField('Name: value', text: $this->headers, axis: Axis::vertical)->lineLimit(3, reservesSpace: true)->monospaced()),
-            VStack(alignment: HorizontalAlignment::leading, spacing: 4)(Text('Body')->font(Font::caption)->foregroundStyle(Color::secondary), TextField('sent with POST, PUT, PATCH', text: $this->body, axis: Axis::vertical)->lineLimit(3, reservesSpace: true)->monospaced()),
-        ),
+    $response($this->shown()),
+)->padding(16)->frame(maxWidth: INF, maxHeight: INF);
+
+return fn() => Device::isDesktop()
+    ? HStack(spacing: 0)(
+        $historyPane()->frame(width: 320),
         Divider(),
-        $response($this->shown()),
-    )->padding(16)->frame(maxWidth: INF, maxHeight: INF),
-);
+        $editorPane(),
+    )
+    : VStack(spacing: 0)(
+        $editorPane(),
+        Divider(),
+        $historyPane()->frame(height: 220),
+    );

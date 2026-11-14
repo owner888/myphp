@@ -266,6 +266,29 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         nativeBack();
     }
 
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN || action == KeyEvent.ACTION_UP) {
+            switch (code) {
+                case KeyEvent.KEYCODE_DPAD_UP:
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                case KeyEvent.KEYCODE_DPAD_CENTER:
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                case KeyEvent.KEYCODE_SPACE:
+                case KeyEvent.KEYCODE_TAB:
+                case KeyEvent.KEYCODE_ESCAPE:
+                    nativeKeyEvent(code, action, code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER ? '\n' : 0);
+                    return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     /** PHP's run loop ended (App::quit, or Back at the first page): the activity goes. */
     public static void finishActivity() {
         if (sInstance != null) {

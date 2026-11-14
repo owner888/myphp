@@ -40,7 +40,6 @@ for TARGET in ios ios-simulator; do
             "${BDIR}/sysroot/include" \
             "${BDIR}/php-build/main"/*.h \
             "${BDIR}/php-build/Zend"/*.h \
-            "${BDIR}/php-build/TSRM"/*.h \
             "${ANDROID_PHP}/main"/*.h \
             "${ANDROID_PHP}/Zend"/*.h \
             "${ANDROID_PHP}/TSRM"/*.h

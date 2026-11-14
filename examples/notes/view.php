@@ -16,7 +16,7 @@ $toolbar = function (Document $doc) use ($format) {
         get: fn() => $f->paragraphsMixed ? -1 : [1 => 0, 2 => 1, 3 => 2][$f->paragraph->heading] ?? 3,
         set: fn(int $i) => $i >= 0 ? $doc->setHeading([1, 2, 3, 0][$i]) : null,
     );
-    return HStack(spacing: 4)(
+    return FlowLayout(spacing: 4)(
         Picker('Paragraph style', selection: $style)(Each(['Title', 'Heading', 'Subheading', 'Body'])(fn(string $s, int $i) => Text($s)->tag($i)))->labelsHidden(), // at least 140 wide, a pop-up button's least
         Divider()->frame(height: 20),
         $format('B', 'Bold (⌘B)', $f->bold === FormatState::FormatOn, $doc->toggleBold(...))->bold(),
@@ -37,7 +37,6 @@ $toolbar = function (Document $doc) use ($format) {
         $format('☐', 'Checklist (⇧⌘L)', $f->paragraph->list === ListKind::Tasks, fn() => $doc->toggleList(ListKind::Tasks)),
         $format('❝', 'Quote', $f->paragraph->quote, $doc->toggleQuote(...)),
         $format('{}', 'Code block', $f->paragraph->codeBlock, $doc->toggleCodeBlock(...)),
-        Spacer(),
     );
 };
 

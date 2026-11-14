@@ -674,15 +674,38 @@ final class Window implements Platform\Window
         if ($input === null) {
             return;
         }
-        if ($unicodeChar === 10) { // Enter / newline
-            if ($input->focus !== null) {
-                if ($input->focus->multiline) {
+        // Map Android KeyEvent codes (DPAD / TV remote / hardware keyboard) to MyPHP\UI\Key codes
+        $mapped = match ($keyCode) {
+            19 => [Key::UP, ''],            // KEYCODE_DPAD_UP
+            20 => [Key::DOWN, ''],          // KEYCODE_DPAD_DOWN
+            21 => [Key::LEFT, ''],          // KEYCODE_DPAD_LEFT
+            22 => [Key::RIGHT, ''],         // KEYCODE_DPAD_RIGHT
+            23, 66, 160 => [Key::RETURN, "\r"], // KEYCODE_DPAD_CENTER, KEYCODE_ENTER, KEYCODE_NUMPAD_ENTER
+            61 => [Key::TAB, "\t"],         // KEYCODE_TAB
+            62 => [Key::SPACE, ' '],        // KEYCODE_SPACE
+            67 => [Key::DELETE, ''],        // KEYCODE_DEL
+            111 => [Key::ESCAPE, ''],       // KEYCODE_ESCAPE
+            default => null,
+        };
+        if ($mapped !== null) {
+            [$k, $ch] = $mapped;
+            if ($action === 0) { // KeyEvent.ACTION_DOWN
+                if ($k === Key::RETURN && $input->focus !== null && $input->focus->multiline) {
                     $input->focus->insert("\n");
                 } else {
-                    $input->push(['key', "\n", Key::ENTER, 0, false]);
+                    $input->push(['key', $ch, $k, 0, false]);
                 }
+            } else { // KeyEvent.ACTION_UP
+                $input->push(['keyUp', $ch, $k, 0]);
+            }
+            $this->requestFrame();
+            return;
+        }
+        if ($unicodeChar === 10 && $action === 0) {
+            if ($input->focus !== null && $input->focus->multiline) {
+                $input->focus->insert("\n");
             } else {
-                $input->push(['key', "\n", Key::ENTER, 0, false]);
+                $input->push(['key', "\r", Key::RETURN, 0, false]);
             }
             $this->requestFrame();
         }
