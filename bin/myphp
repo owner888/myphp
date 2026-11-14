@@ -23,6 +23,8 @@ Commands:
 	install-skills [dir] install or update the bundled MyPHP agent skills (alias: update-skills)
 	generate             write the typed TypeScript client for bound PHP services,
 	                     and the accessors of the app's catalogs of messages
+	ffigen [flags]       generate type-safe PHP bindings for C headers or Apple Objective-C classes
+	jnigen [flags]       generate type-safe PHP bindings for Android Java/Kotlin classes over JNI
 	i18n check [dir]     check the app's catalogs of messages
 	dev                  run the app in development, restarting it on changes
 	build                build production apps (a .app and a .dmg, Linux packages)
@@ -41,7 +43,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, FfiGen, Icns, JniGen, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -3483,6 +3485,61 @@ function syncSkillsIfNeeded(string $dir): void
     writeSkills($dir);
 }
 
+/** Generates type-safe PHP bindings for C headers or Apple Objective-C classes (Flutter 3.50-style ffigen). */
+function ffigen(array $args): void
+{
+    help($args, "ffigen [flags] <header.h>\n\nGenerates a type-safe PHP 8.5 wrapper class for a C header file (.h) or an\nApple Objective-C @interface declaration.\n\nFlags:\n  -out file          output PHP file path (prints to stdout when omitted)\n  -class name        generated PHP class name (default: derived from header or -objc)\n  -namespace ns      PHP namespace (default: App\\Native)\n  -lib library       shared library path/name for FFI::cdef()\n  -objc class        generate an Apple Objective-C wrapper for @interface <class>\n  -framework list    comma-separated Apple frameworks for ObjC::boot (default: Foundation)");
+    $out       = option($args, 'out');
+    $class     = option($args, 'class');
+    $ns        = option($args, 'namespace') ?? 'App\\Native';
+    $lib       = option($args, 'lib');
+    $objcClass = option($args, 'objc');
+    $fwRaw     = option($args, 'framework') ?? 'Foundation';
+    $header    = $args[0] ?? fail('ffigen requires a header file path (run `myphp ffigen -h` for usage)');
+    is_file($header) || fail("cannot read header: $header");
+    $src = (string)file_get_contents($header);
+
+    if ($objcClass !== null && $objcClass !== '') {
+        $fws = array_values(array_filter(array_map('trim', explode(',', $fwRaw))));
+        $code = FfiGen::fromObjCHeader($src, $objcClass, $ns, $fws);
+    } else {
+        $cls = $class ?: ucfirst(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($header, PATHINFO_FILENAME))) . 'Ffi';
+        $code = FfiGen::fromCHeader($src, $cls, $ns, $lib);
+    }
+
+    if ($out !== null && $out !== '') {
+        is_dir(dirname($out)) || mkdir(dirname($out), 0755, true);
+        file_put_contents($out, $code) !== false || fail("cannot write $out");
+        logf("wrote $out");
+    } else {
+        echo $code;
+    }
+}
+
+/** Generates type-safe PHP bindings for Android/Java classes over JNI (Flutter 3.50-style jnigen). */
+function jnigen(array $args): void
+{
+    help($args, "jnigen [flags] <java.class.Name>\n\nInspects an Android SDK or Java/Kotlin class via javap and generates a\ntype-safe PHP 8.5 wrapper class over MyPHP\\Native\\Jni.\n\nFlags:\n  -out file          output PHP file path (prints to stdout when omitted)\n  -namespace ns      PHP namespace (default: App\\Native\\Android)\n  -cp classpath      optional JAR/directory classpath (default: Android SDK android.jar)");
+    $out = option($args, 'out');
+    $ns  = option($args, 'namespace') ?? 'App\\Native\\Android';
+    $cp  = option($args, 'cp');
+    $cls = $args[0] ?? fail('jnigen requires a Java class name, e.g. android.os.BatteryManager (run `myphp jnigen -h` for usage)');
+
+    try {
+        $code = JniGen::fromJavaClass($cls, $ns, $cp);
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
+    }
+
+    if ($out !== null && $out !== '') {
+        is_dir(dirname($out)) || mkdir(dirname($out), 0755, true);
+        file_put_contents($out, $code) !== false || fail("cannot write $out");
+        logf("wrote $out");
+    } else {
+        echo $code;
+    }
+}
+
 // ---- main ---------------------------------------------------------------
 $args = array_slice($_SERVER['argv'], 1);
 $cmd = array_shift($args);
@@ -3505,6 +3562,8 @@ function run(string $cmd, array $args): void
         'install-skills', 'update-skills' => installSkills($args),
         'dev' => dev($args),
         'generate', 'gen' => generate($args),
+        'ffigen' => ffigen($args),
+        'jnigen' => jnigen($args),
         'i18n' => i18nCheck($args),
         'build' => build($args),
         'sign-uninstaller' => signUninstaller($args),

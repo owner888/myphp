@@ -54,7 +54,7 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ```
 bin/myphp          CLI, as Flutter's, the one way to run and build on every platform: init, dev (restart on change, TS client, --lang), generate,
-                   i18n check, run -d android|ios|macos|linux (packages, installs, starts, follows the log; builds a phone's PHP runtime the
+                   ffigen/jnigen (C, Apple ObjC & Android JNI bindings), i18n check, run -d android|ios|macos|linux (packages, installs, starts, follows the log; builds a phone's PHP runtime the
                    first time, scripts/ are its internals, never run by hand), devices, doctor, build (.app/.dmg, .deb, APK, .ipa), micro,
                    screenshot (runs the app once: a PNG of its window, its elements; Xvfb without a display); bin/cldr-tables
 src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenURL/File, single instance, recent
@@ -69,7 +69,7 @@ src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenUR
                    the core calls the system only through App::backend() (Platform\Backend, by PHP_OS_FAMILY)
 src/Platform/      the interfaces of mygo's internal/platform (Backend, Window, Page, WebView, Dialogs, Fonts, Tray, ...);
                    Darwin/ (macOS), Linux/ (GTK 3 + GL), Android/ (EGL/GLES), iOS/ (Metal/UIKit) over src/Native/
-src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale (AppleLanguages,
+src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), Jni (Android direct JNI bridge), Build/FfiGen+JniGen, SystemLocale (AppleLanguages,
                    the locale's formats), Carbon (hot keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance

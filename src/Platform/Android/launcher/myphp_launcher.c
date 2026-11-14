@@ -1139,3 +1139,170 @@ int myphp_bt_poll(uint8_t *out, int max_len) {
     (*env)->DeleteLocalRef(env, jarr);
     return (int)len;
 }
+
+// ============================================================================
+// Direct JNI Bridge for PHP ext-ffi & JNIgen (Flutter 3.50-style direct interop)
+// Allows calling ANY Android Java/Kotlin class, constructor, method or field
+// directly and synchronously from PHP without writing C glue per method!
+// ============================================================================
+
+void* myphp_jni_env(void) {
+    return (void*)get_jni_env();
+}
+
+void* myphp_jni_activity(void) {
+    return (void*)g_activity_obj;
+}
+
+void* myphp_jni_find_class(const char *name) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !name) return NULL;
+    jclass local = (*env)->FindClass(env, name);
+    if ((*env)->ExceptionCheck(env) || !local) {
+        (*env)->ExceptionClear(env);
+        return NULL;
+    }
+    jclass global = (jclass)(*env)->NewGlobalRef(env, local);
+    (*env)->DeleteLocalRef(env, local);
+    return (void*)global;
+}
+
+void* myphp_jni_get_method(void *cls, const char *name, const char *sig, int is_static) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !cls || !name || !sig) return NULL;
+    jmethodID mid = is_static
+        ? (*env)->GetStaticMethodID(env, (jclass)cls, name, sig)
+        : (*env)->GetMethodID(env, (jclass)cls, name, sig);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        return NULL;
+    }
+    return (void*)mid;
+}
+
+void* myphp_jni_get_field(void *cls, const char *name, const char *sig, int is_static) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !cls || !name || !sig) return NULL;
+    jfieldID fid = is_static
+        ? (*env)->GetStaticFieldID(env, (jclass)cls, name, sig)
+        : (*env)->GetFieldID(env, (jclass)cls, name, sig);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        return NULL;
+    }
+    return (void*)fid;
+}
+
+void* myphp_jni_new_string(const char *utf8) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !utf8) return NULL;
+    jstring local = (*env)->NewStringUTF(env, utf8);
+    if (!local) return NULL;
+    jobject global = (*env)->NewGlobalRef(env, local);
+    (*env)->DeleteLocalRef(env, local);
+    return (void*)global;
+}
+
+int myphp_jni_get_string(void *jstr, char *out, int max_len) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !jstr || !out || max_len <= 0) return 0;
+    const char *chars = (*env)->GetStringUTFChars(env, (jstring)jstr, NULL);
+    if (!chars) return 0;
+    int len = (int)strlen(chars);
+    if (len >= max_len) len = max_len - 1;
+    memcpy(out, chars, len);
+    out[len] = '\0';
+    (*env)->ReleaseStringUTFChars(env, (jstring)jstr, chars);
+    return len;
+}
+
+void myphp_jni_delete_ref(void *global_ref) {
+    JNIEnv *env = get_jni_env();
+    if (env && global_ref) {
+        (*env)->DeleteGlobalRef(env, (jobject)global_ref);
+    }
+}
+
+void* myphp_jni_new_object(void *cls, void *ctor_mid, const jvalue *args) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !cls || !ctor_mid) return NULL;
+    jobject local = (*env)->NewObjectA(env, (jclass)cls, (jmethodID)ctor_mid, args);
+    if ((*env)->ExceptionCheck(env) || !local) {
+        (*env)->ExceptionClear(env);
+        return NULL;
+    }
+    jobject global = (*env)->NewGlobalRef(env, local);
+    (*env)->DeleteLocalRef(env, local);
+    return (void*)global;
+}
+
+int64_t myphp_jni_call_long(void *target, void *mid, int is_static, char ret_type, const jvalue *args) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !target || !mid) return 0;
+    int64_t res = 0;
+    switch (ret_type) {
+        case 'V':
+            if (is_static) (*env)->CallStaticVoidMethodA(env, (jclass)target, (jmethodID)mid, args);
+            else           (*env)->CallVoidMethodA(env, (jobject)target, (jmethodID)mid, args);
+            break;
+        case 'Z':
+            res = is_static ? (*env)->CallStaticBooleanMethodA(env, (jclass)target, (jmethodID)mid, args)
+                            : (*env)->CallBooleanMethodA(env, (jobject)target, (jmethodID)mid, args);
+            break;
+        case 'B':
+            res = is_static ? (*env)->CallStaticByteMethodA(env, (jclass)target, (jmethodID)mid, args)
+                            : (*env)->CallByteMethodA(env, (jobject)target, (jmethodID)mid, args);
+            break;
+        case 'S':
+            res = is_static ? (*env)->CallStaticShortMethodA(env, (jclass)target, (jmethodID)mid, args)
+                            : (*env)->CallShortMethodA(env, (jobject)target, (jmethodID)mid, args);
+            break;
+        case 'I':
+            res = is_static ? (*env)->CallStaticIntMethodA(env, (jclass)target, (jmethodID)mid, args)
+                            : (*env)->CallIntMethodA(env, (jobject)target, (jmethodID)mid, args);
+            break;
+        case 'J':
+            res = is_static ? (*env)->CallStaticLongMethodA(env, (jclass)target, (jmethodID)mid, args)
+                            : (*env)->CallLongMethodA(env, (jobject)target, (jmethodID)mid, args);
+            break;
+    }
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        return 0;
+    }
+    return res;
+}
+
+double myphp_jni_call_double(void *target, void *mid, int is_static, char ret_type, const jvalue *args) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !target || !mid) return 0.0;
+    double res = 0.0;
+    if (ret_type == 'F') {
+        res = is_static ? (double)(*env)->CallStaticFloatMethodA(env, (jclass)target, (jmethodID)mid, args)
+                        : (double)(*env)->CallFloatMethodA(env, (jobject)target, (jmethodID)mid, args);
+    } else {
+        res = is_static ? (*env)->CallStaticDoubleMethodA(env, (jclass)target, (jmethodID)mid, args)
+                        : (*env)->CallDoubleMethodA(env, (jobject)target, (jmethodID)mid, args);
+    }
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        return 0.0;
+    }
+    return res;
+}
+
+void* myphp_jni_call_object(void *target, void *mid, int is_static, const jvalue *args) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !target || !mid) return NULL;
+    jobject local = is_static
+        ? (*env)->CallStaticObjectMethodA(env, (jclass)target, (jmethodID)mid, args)
+        : (*env)->CallObjectMethodA(env, (jobject)target, (jmethodID)mid, args);
+    if ((*env)->ExceptionCheck(env) || !local) {
+        (*env)->ExceptionClear(env);
+        return NULL;
+    }
+    jobject global = (*env)->NewGlobalRef(env, local);
+    (*env)->DeleteLocalRef(env, local);
+    return (void*)global;
+}
+
