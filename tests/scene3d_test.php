@@ -166,6 +166,8 @@ check($capsule->vertexCount > 100 && $capsule->indexCount > 300, 'Mesh::capsule 
 $physScene = new Scene();
 $gridEnt = $physScene->addGridHelper(size: 10.0, divisions: 10);
 check($gridEnt->instanceCount === 23, 'Scene::addGridHelper creates 23 hardware-instanced grid & XYZ axis lines');
+$gridNoY = $physScene->addGridHelper(size: 10.0, divisions: 10, showYAxis: false);
+check($gridNoY->instanceCount === 22, 'Scene::addGridHelper($showYAxis: false) omits vertical center axis');
 
 $collided = false;
 $wall = new Entity(Mesh::cube(2.0), position: new Vec3(0.0, 0.0, 0.0));

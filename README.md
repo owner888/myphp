@@ -252,6 +252,7 @@ What works today, macOS first (the rows name the version that brought them):
 | `tabView` adapting as SwiftUI's TabView (v1.174): a tab bar on a phone, tabs across the top on a tablet upright, a sidebar on its side and on the desktop; iOS rendering through Metal with the UIScene life cycle, a simulator runtime, libxml2 on phones | works |
 | Written for people and agents who know SwiftUI (v1.175): [docs/swiftui.md](docs/swiftui.md) maps every SwiftUI view, modifier and pattern to myphp; `preferredFont()` with UIKit's text styles at the HIG's sizes (iOS's on a phone, macOS's on the desktop); `Haptics` (impact, selection, success, warning, error); Dynamic Type and Reduce Motion followed on phones as the desktop's settings are; `section()` and `cell()` for inset grouped lists as Settings'; the bundled `myphp-app` skill chooses widgets by need | works (`tests/text_styles_test.php`, `tests/haptics_test.php`, `tests/mobile_preferences_test.php`; the phones need the developer's devices) |
 | Windows (Win32 + D3D11, DirectWrite, WebView2, WASAPI, NSIS installer): native UI on Direct3D 11 (HLSL shaders, Mica/Acrylic backdrops), DirectWrite text, WebView2 pages and embedded web views, OLE drag & drop, Credential Manager secrets, SystemMediaTransportControls, `myphp build -platform windows/amd64,windows/arm64` making the standalone folder, zip, signed NSIS installer and `install.ps1` | works (`bin\myphp.cmd run -d windows`) |
+| 5-platform native 3D engine (`Plugins\Scene`, v1.179–v1.188): hardware 3D RenderPass across Metal (macOS/iOS), Direct3D 11 (Windows), OpenGL 3.3 (Linux) and OpenGL ES 3.0 (Android) with zero-copy `Canvas` compositing (`SceneView`); procedural primitives (`cube`, `sphere`, `plane`, `cylinder`, `cone`, `torus`, `capsule`), Wavefront `.obj` and binary glTF 2.0 (`.glb`) loaders; 1024×1024 3×3 PCF soft shadow mapping, dynamic point lights, exponential fog, Fresnel hologram rim lighting and wireframe mode; hardware GPU instancing, `ParticleEmitter3D`, `Tween3D`, Scene Graph hierarchy, frustum culling, 3D raycast picking (`worldToScreen`), `Collider3D` and `addGridHelper` | works (`examples/scene3d`, `game3d`, `model-viewer`, `rubiks-cube`; `tests/scene3d_test.php`) |
 
 Measured in `examples/inbox 1000` on an M-series Mac: 9 000 nodes rebuilt,
 laid out and painted per frame in about 6 ms with real text, 60 fps while
@@ -351,6 +352,10 @@ myphp run -d macos examples/confetti         # canvas-confetti's demos, every pi
 myphp run -d macos examples/effort-slider    # an effort slider stepping into Galaxy, letters blurring as they change
 myphp run -d macos examples/farm             # a farming game: till, plant, water, harvest, day and night, music
 myphp run -d macos examples/mayoi            # a survivor game: sing at stage fright, gather stones, find your band
+myphp run -d macos examples/scene3d          # 5-platform 3D scene: textures, .obj crystal, 64 GPU-instanced pillars, PCF soft shadows, 3D picking & particles
+myphp run -d macos examples/game3d           # a 3D action game: hero with halo, glowing crystals, patrolling sentinels, PCF shadows & touch joystick
+myphp run -d macos examples/model-viewer     # a 3D model studio: presets, drag-and-drop .obj/.glb, wireframe, Fresnel rim, lighting sliders & PNG export
+myphp run -d macos examples/rubiks-cube      # an interactive 3D Rubik's Cube (Scramble & Auto-Solve) surrounded by a 64-bar 3D audio spectrum ring
 myphp run -d macos examples/gallery          # the tour of the toolkit: every widget, lists, charts, motion, languages
 myphp run -d macos examples/loading          # loading.dev's 29 indicators, their size, color, easing and caps
 ```
@@ -629,6 +634,7 @@ App::run();
 | 像 SwiftUI TabView 一样自适应的 `tabView`（v1.174）：手机底部标签栏、iPad 竖放顶部标签、横放和桌面侧边栏；iOS 走 Metal 渲染与 UIScene 生命周期，模拟器运行时，手机上的 libxml2 | 可用 |
 | 面向会 SwiftUI 的人和 agent（v1.175）：[docs/swiftui.md](docs/swiftui.md) 把 SwiftUI 的每个视图、修饰符和模式对应到 myphp；`preferredFont()` 用 UIKit 的文字层级、HIG 的尺寸（手机取 iOS 的，桌面取 macOS 的）；`Haptics`（impact、selection、success、warning、error）；手机的动态字体和减弱动态效果像桌面设置一样被主题跟随；`section()` 与 `cell()` 做设置页那种 inset grouped 列表；内置的 `myphp-app` skill 按需求选控件 | 可用（`tests/text_styles_test.php`、`tests/haptics_test.php`、`tests/mobile_preferences_test.php`；真机要开发者的设备） |
 | Windows（Win32 + D3D11、DirectWrite、WebView2、WASAPI、NSIS 安装包）：Direct3D 11 原生 UI（HLSL 着色器、Mica/Acrylic 材质）、DirectWrite 排版、WebView2 网页与内嵌 web view、OLE 拖放、凭据管理器密钥、系统媒体控制，`myphp build -platform windows/amd64,windows/arm64` 产出独立目录、zip、签名 NSIS 安装程序与 `install.ps1` | 可用（`bin\myphp.cmd run -d windows`） |
+| 5 平台原生 3D 引擎（`Plugins\Scene`，v1.179–v1.188）：跨 Metal（macOS/iOS）、Direct3D 11（Windows）、OpenGL 3.3（Linux）与 OpenGL ES 3.0（Android）的硬件 3D RenderPass，零拷贝合成至 `Canvas`（`SceneView`）；内置 7 种程序化几何体（`cube`、`sphere`、`plane`、`cylinder`、`cone`、`torus`、`capsule`）、Wavefront `.obj` 与二进制 glTF 2.0（`.glb`）多节点内嵌贴图加载；1024×1024 3×3 PCF 实时软阴影、动态衰减点光源、指数距离雾、菲涅尔全息边缘光与硬件线框模式；硬件 GPU Instancing、`ParticleEmitter3D`、`Tween3D`、Scene Graph 父子层级、视锥体剔除、3D 射线拾取（`worldToScreen`）、`Collider3D` 碰撞检测与 `addGridHelper` | 可用（`examples/scene3d`、`game3d`、`model-viewer`、`rubiks-cube`；`tests/scene3d_test.php`） |
 
 在 M 系列 Mac 上用 `examples/inbox 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
 
@@ -725,6 +731,10 @@ myphp run -d macos examples/confetti         # canvas-confetti 的演示，每�
 myphp run -d macos examples/effort-slider    # 力度滑杆，越过 Max 进入 Galaxy，字母变化时模糊
 myphp run -d macos examples/farm             # 种田小游戏：翻地、播种、浇水、收获，昼夜与音乐
 myphp run -d macos examples/mayoi            # 幸存者小游戏：对舞台恐惧唱歌、收集石子、找齐乐队
+myphp run -d macos examples/scene3d          # 5 平台 3D 场景：木箱贴图、.obj 水晶、64 柱 GPU 硬件实例化、PCF 软阴影、3D 拾取与粒子火花
+myphp run -d macos examples/game3d           # 3D 动作收集游戏：悬浮光环角色、脉冲点光源水晶、巡逻哨兵、实时地面软阴影与触屏虚拟摇杆
+myphp run -d macos examples/model-viewer     # 3D 模型检视工作台：7 种预设几何体、拖入 .obj/.glb 文件、硬件线框、菲涅尔边缘光与高清 PNG 导出
+myphp run -d macos examples/rubiks-cube      # 交互式 3D 魔方（支持随机打乱与自动还原动画）+ 64 柱 3D 实时音频频谱环
 myphp run -d macos examples/gallery          # 工具包总览：所有控件、列表、图表、动效、语言
 myphp run -d macos examples/loading          # loading.dev 的 29 个加载指示器，可调尺寸、颜色、缓动、线端
 ```
