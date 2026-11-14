@@ -9,7 +9,7 @@ declare(strict_types=1);
 // - Real-time 1024x1024 PCF Soft Shadows on the tiled arena floor
 // Run: myphp run -d macos|windows|linux|ios|android examples/game3d
 
-use MyPHP\{App, Window, WindowOptions};
+use MyPHP\{App, Device, Window, WindowOptions};
 use MyPHP\Plugins\Game\{Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
 use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
@@ -78,6 +78,13 @@ final class CrystalRunner3D extends Game
     public int $highScore = 0;
     public float $time = 0.0;
     public float $flashTimer = 0.0;
+
+    /** Mobile Virtual Joystick & Jump Button state */
+    public bool $joyActive = false;
+    public float $joyBaseX = 95.0, $joyBaseY = 0.0;
+    public float $joyDx = 0.0, $joyDz = 0.0;
+    public bool $jumpPressed = false;
+    private float $lastViewW = 860.0, $lastViewH = 620.0;
 
     private State $lastPad;
 
@@ -194,6 +201,42 @@ final class CrystalRunner3D extends Game
         $dz = ($in->down(Key::S) || $in->down(Key::DOWN) ? 1.0 : 0.0) - ($in->down(Key::W) || $in->down(Key::UP) ? 1.0 : 0.0);
         $jump = $in->pressed(Key::SPACE);
 
+        // Mobile / Pointer Virtual Joystick & Jump button
+        [$mx, $my] = $in->pointer();
+        $vw = max(200.0, $this->lastViewW);
+        $vh = max(200.0, $this->lastViewH);
+        $this->joyBaseX = 90.0;
+        $this->joyBaseY = $vh - 95.0;
+        $jumpBtnX = $vw - 90.0;
+        $jumpBtnY = $vh - 95.0;
+
+        if ($in->pointerPressed(0)) {
+            if (hypot($mx - $jumpBtnX, $my - $jumpBtnY) <= 52.0) {
+                $jump = true;
+                $this->jumpPressed = true;
+            } elseif ($mx < $vw * 0.5 && $my > $vh * 0.45) {
+                $this->joyActive = true;
+            }
+        }
+        if ($in->pointerDown(0) && $this->joyActive) {
+            $jdx = $mx - $this->joyBaseX;
+            $jdy = $my - $this->joyBaseY;
+            $jlen = hypot($jdx, $jdy);
+            $maxR = 46.0;
+            if ($jlen > 1e-4) {
+                $clamped = min($jlen, $maxR) / $maxR;
+                $this->joyDx = ($jdx / $jlen) * $clamped;
+                $this->joyDz = ($jdy / $jlen) * $clamped;
+                $dx += $this->joyDx;
+                $dz += $this->joyDz;
+            }
+        } else {
+            $this->joyActive = false;
+            $this->joyDx = 0.0;
+            $this->joyDz = 0.0;
+            $this->jumpPressed = false;
+        }
+
         foreach (array_slice(Gamepad::pads(), 0, 1) as $pad) {
             $s = $pad->state();
             [$sx, $sy] = $s->leftStick();
@@ -282,6 +325,7 @@ final class CrystalRunner3D extends Game
 
     public function draw(Painter $p, array $r, float $alpha): void
     {
+        [$this->lastViewW, $this->lastViewH] = [$r[2], $r[3]];
         $this->scene->camera->aspect = $r[2] / max(1.0, $r[3]);
         $this->viewport->renderScene($this->scene);
 
@@ -291,7 +335,23 @@ final class CrystalRunner3D extends Game
         $p->fill([$r[0] + 16, $r[1] + 16, 355, 86], 0x000000, 8.0, 0.68);
         $p->text($r[0] + 28, $r[1] + 28, 'Crystal Runner 3D (MyPHP Native 3D Game)', 15, 0xffffff);
         $p->text($r[0] + 28, $r[1] + 50, sprintf('Score: %d   |   Best: %d', $this->score, $this->highScore), 14, $this->flashTimer > 0 ? 0x00e676 : 0xffd54f);
-        $p->text($r[0] + 28, $r[1] + 72, 'WASD / Arrows: Move | Space: Jump over Sentinels', 11, 0xbbbbbb);
+        $p->text($r[0] + 28, $r[1] + 72, 'WASD / Touch Joystick: Move | Space / JUMP: Jump', 11, 0xbbbbbb);
+
+        // On-screen Virtual Joystick (bottom-left) & Jump Button (bottom-right) for touch / mobile play
+        if (!Device::isDesktop() || $this->joyActive || $this->jumpPressed) {
+            $jx = $r[0] + 90.0;
+            $jy = $r[1] + $r[3] - 95.0;
+            $p->fill([$jx - 50, $jy - 50, 100, 100], 0xffffff, 50.0, 0.14);
+            $p->stroke([$jx - 50, $jy - 50, 100, 100], 0x4dd0e1, 50.0, 2.0, 0.45);
+            $kx = $jx + $this->joyDx * 36.0;
+            $ky = $jy + $this->joyDz * 36.0;
+            $p->fill([$kx - 22, $ky - 22, 44, 44], 0x4dd0e1, 22.0, 0.78);
+
+            $bx = $r[0] + $r[2] - 90.0;
+            $by = $r[1] + $r[3] - 95.0;
+            $p->fill([$bx - 44, $by - 44, 88, 88], $this->jumpPressed ? 0x00e676 : 0xffb300, 44.0, 0.72);
+            $p->text($bx - 21, $by - 8, 'JUMP', 14, 0x111111);
+        }
     }
 }
 
