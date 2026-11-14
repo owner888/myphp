@@ -3096,8 +3096,14 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
     thread would run PHP there.
 - **3D Scene and RenderPass** (v1.179)
   - mygo: purely 2D UI and 2D canvas drawing; no native 3D render pass.
-  - myphp: `Plugins\Scene` provides native 3D RenderPass (Metal / D3D11)
-    with GPU-resident mesh buffers, depth testing (MTLPixelFormatDepth32Float),
-    Blinn-Phong directional lighting, and zero-copy VRAM compositing into Canvas.
+  - myphp: `Plugins\Scene` (`Scene`, `Entity`, `Mesh`, `Material`, `Camera3D`,
+    `PointLight`, `ParticleEmitter3D`, `Tween3D`, `Collider3D`, and declarative
+    `SceneView`) provides a 5-platform native 3D RenderPass (Metal on macOS/iOS,
+    Direct3D 11 on Windows, OpenGL 3.3 Core on Linux, OpenGL ES 3.0 on Android)
+    with GPU-resident mesh and hardware-instancing buffers, hardware depth
+    testing, 1024×1024 3×3 PCF soft shadow mapping, dynamic point lights,
+    exponential fog, Fresnel rim lighting, wireframe mode, Wavefront `.obj` and
+    binary glTF 2.0 (`.glb`) loaders, frustum culling, 3D raycast picking, and
+    zero-copy VRAM compositing into `UI\Canvas`.
   - Why: game and 3D visual application development requires hardware-accelerated
     depth and geometry pipelines without dropping 2D quad batching performance.
