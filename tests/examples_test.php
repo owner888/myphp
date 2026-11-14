@@ -1094,6 +1094,7 @@ check($t->rt->partPaints === 200 && $t->painted()->transforms <= 2 * $first, "lo
 // mobile (the declarative views, as SwiftUI's): a row of the list goes to its page and further, Back comes back, the
 // tabs keep their stacks, the alert's buttons run their actions, the field writes the name.
 [$view, $s] = Headless::load('mobile');
+$s->homePath->transition = \MyPHP\UI\Router::NONE;
 $t = new Headless($view, 390, 844);
 $t->rt->touch = true;
 $t->frame(2);
@@ -1204,3 +1205,37 @@ $t->clickText('Press me'); $t->frame(2);
 same(1, $s->presses, 'glass: the glass button counts a press');
 $box = null; $find = function (Node $n) use (&$find, &$box, $t) { foreach ($n->kids as $k) { if ($k === $t->byText('Blur, fading downward')) { $box = $n; } $find($k); } }; $find($t->root); $find = null;
 same([820.0, 90.0], [$box->w, $box->h], "glass: the blur's frame, the window's width");
+
+// scene3d: 3D scene view builds, steps animations, and picks 3D objects with particle bursts & tweens.
+[$view, $s] = Headless::load('scene3d', 'App::whenReady');
+$t = new Headless($view, 800, 600);
+$t->frame(2);
+$t->paint();
+check($s->frames > 0 && $s->instancedRing->instanceCount === 64, 'scene3d: 64 instanced pillars and update loop running');
+$hit = $s->scene->pick(400.0, 300.0, 800.0, 600.0);
+$s->onPick($hit);
+check($s->sparks->activeCount() === 42 && count($s->scene->tweens) > 0, 'scene3d: picking object bursts 42 3D particles and starts Tween3D');
+
+// game3d: 3D game loop builds, steps player movement, gem collection, and 3D particle bursts.
+[$view, $g] = Headless::load('game3d', 'App::whenReady');
+$t = new Headless($view, 860, 620);
+$t->frame(2);
+$t->paint();
+$g->px = $g->gem->position->x;
+$g->pz = $g->gem->position->z;
+$g->update(new \MyPHP\Plugins\Game\Input());
+same(1, $g->score, 'game3d: collecting crystal gem increments score');
+check($g->particles->activeCount() > 0, 'game3d: collecting crystal gem bursts emerald 3D particles');
+
+// model-viewer: preset switching, wireframe toggle, Fresnel rim slider, and particle burst button.
+[$view, $m] = Headless::load('model-viewer', 'App::whenReady');
+$t = new Headless($view, 1080, 740);
+$t->frame(2);
+$t->clickText('Capsule'); $t->frame(2);
+same('Capsule', $m->preset, 'model-viewer: Capsule preset selected');
+$t->clickText('Hardware Wireframe Mode'); $t->frame(2);
+check($m->wireframe, 'model-viewer: Hardware Wireframe Mode toggled on');
+$t->clickText('Spark Burst'); $t->frame(2);
+check($m->emitter->activeCount() === 56, 'model-viewer: Spark Burst button spawns 56 3D particles');
+\MyPHP\UI\CanvasAtlas::take();
+

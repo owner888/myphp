@@ -216,9 +216,9 @@ final class SceneApp
     }
 }
 
-App::whenReady(function () {
-    $app = new SceneApp();
+$app = new SceneApp();
 
+App::whenReady(function () use ($app) {
     new Window(new WindowOptions(
         title: 'MyPHP 3D Scene (5-Platform Native RenderPass)',
         width: 800,
