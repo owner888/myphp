@@ -748,7 +748,16 @@ function rangeServer(string $dir): array
     $port = freePort(); // nothing listens on it: an earlier test's server (its workers outlive it a moment) would answer of its own folder
     $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/range_server.php'], [['file', DEVNULL, 'r'], ['file', DEVNULL, 'w'], ['file', DEVNULL, 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4', 'MYPHP_FILES' => $dir] + getenv());
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
-    return ["http://127.0.0.1:$port", static function () use ($server): void { proc_terminate($server); }];
+    return ["http://127.0.0.1:$port", static function () use (&$server): void {
+        if (!is_resource($server)) { return; }
+        $st = proc_get_status($server);
+        if (PHP_OS_FAMILY !== 'Windows' && ($pid = (int)($st['pid'] ?? 0)) > 0) {
+            @exec("pkill -9 -P $pid 2>/dev/null");
+        }
+        proc_terminate($server, 9);
+        proc_close($server);
+        $server = null;
+    }];
 }
 
 /**
