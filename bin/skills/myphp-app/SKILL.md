@@ -5,7 +5,7 @@ description: Write new PHP desktop (macOS, Windows, Linux) and mobile (Android, 
 
 # Writing MyPHP apps
 
-MyPHP draws SwiftUI-style declarative views directly on the GPU (Metal on macOS/iOS, Direct3D 11 on Windows, OpenGL/GLES on Linux/Android) in pure PHP 8.3+. Write SwiftUI's view names, argument labels, and modifiers in PHP syntax; never guess React, HTML, or CSS APIs.
+MyPHP draws SwiftUI-style declarative views directly on the GPU (Metal on macOS/iOS, Direct3D 11 on Windows, OpenGL/GLES on Linux/Android) in pure PHP 8.4+ / 8.5. Write SwiftUI's view names, argument labels, and modifiers in PHP syntax; never guess React, HTML, or CSS APIs.
 
 ## 1. Quick Reference: SwiftUI -> MyPHP
 

@@ -43,7 +43,7 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 ## What this is
 
 mygo (`github.com/egoist/mygo`, a pure-Go desktop framework) ported in
-spirit to PHP 8.3+: windows with a system webview or native UI we draw on
+spirit to PHP 8.4+ / 8.5: windows with a system webview or native UI we draw on
 the GPU, reaching the OS through `ext-ffi` only (`FFI::cdef`/`cast` and PHP
 closures play `purego`'s part). No C extension of our own, ever.
 Reference checkout: `../../other/mygo` (read its `AGENTS.md`,
@@ -182,7 +182,7 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 
 ## Working on it
 
-- PHP ≥ 8.3 with `ext-ffi`; `myphp run` and `myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
+- PHP ≥ 8.4 (8.5 recommended) with `ext-ffi`; `myphp run` and `myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
 - Before handing back: `php -l` on changed files; run relevant checks (`php tests/run.php [name]`); full suite only for final milestones; ask the developer to run GUI examples; `php tests/bench.php` after per-frame changes.
 - New ObjC calls: selector/types from Apple's headers, letters in `ObjC::MAP`, structs via `ObjC::$c->new`/`ObjC::rect`, no variadics (`arrayWithObjects:`).
 - Record each solved problem in `docs/architecture.md` (one paragraph).

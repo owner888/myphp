@@ -1,5 +1,13 @@
 # Game
 
+In a view, `SpriteView(scene: $this)` shows a `Game` taking the room it is
+given, as SwiftUI's `SpriteView` (`examples/game/view.php`, `examples/game3d/view.php`):
+
+<!-- no-test -->
+```php
+return fn() => SpriteView(scene: $this);
+```
+
 The game plugin (`MyPHP\Plugins\Game`) has what games need beyond what
 apps do: MyPHP is an app framework, and these are opt-in, in a namespace of
 their own. It is all PHP. Native UI draws a game as it draws the rest:
@@ -47,16 +55,14 @@ final class Farm extends Game
 }
 
 $farm = new Farm();
-$view = function (Context $c) use ($farm) {
-    Game::view($c, $farm)->fill();
-};
+$view = fn() => SpriteView(scene: $farm);
 ```
 
-In an app, the view is a window's content:
+In an app, the view is a window's content (`examples/game/view.php`):
 
 <!-- no-test -->
 ```php
-new Window(new WindowOptions(title: 'Farm', content: Content::view(fn(Context $c) => Game::view($c, $farm)->fill())));
+new Window(new WindowOptions(title: 'Farm', content: Content::file(__DIR__ . '/view.php', $farm)));
 ```
 
 Steps are fixed, `Game::RATE` (60) a second, or what the game's `rate()`

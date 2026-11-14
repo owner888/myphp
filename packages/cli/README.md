@@ -24,7 +24,7 @@ npm install -D myphp-cli
 of the MyPHP checkout the package is part of (a `file:` dependency, as
 `myphp init -template web` writes it); else
 `vendor/owner888/myphp/bin/myphp` in the current directory or the nearest
-directory above it that has one. It needs PHP 8.3 or later with FFI.
+directory above it that has one. It needs PHP 8.4 or later (8.5 recommended) with FFI.
 
 `defineConfig` types the configuration of `myphp.config.ts`, which takes
 the place of myphp.json:

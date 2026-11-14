@@ -18,7 +18,7 @@ bin/myphp init my-app          # from a checkout of MyPHP
 cd my-app && bun run dev       # in a project with a frontend: myphp-cli dev
 ```
 
-`myphp doctor` checks that the machine has what MyPHP needs: PHP 8.3 or
+`myphp doctor` checks that the machine has what MyPHP needs: PHP 8.4 or
 later with `ext-ffi`, and the system's libraries.
 
 ## myphp init

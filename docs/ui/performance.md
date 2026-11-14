@@ -8,7 +8,7 @@
 layout, record (the runtime's hit-test rectangles) and paint (quads into a
 buffer) — for the examples' views and a few dense ones, headless. What it
 leaves out is the platform's half: shaping text, the atlas, Metal. Measured
-on PHP 8.3 with the JIT (see [docs/architecture.md](../architecture.md)
+on PHP 8.5 with the JIT (see [docs/architecture.md](../architecture.md)
 for the full table and the machine):
 
 | View | ms per frame | Quads |
