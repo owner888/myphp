@@ -22,7 +22,7 @@ App::whenReady(function () {
 A window of native UI takes `content` in place of `url`:
 
 ```php
-new Window(new WindowOptions(title: 'Inspector', content: Content::view(fn(Context $c) => $app->view($c))));
+new Window(new WindowOptions(title: 'Inspector', content: Content::file(__DIR__ . '/view.php', $app)));
 ```
 
 Everything in this guide applies to windows of both kinds, apart from
@@ -233,7 +233,7 @@ $fl = Window::flyout(new FlyoutOptions(
     gap: 4,
     width: 240,
     height: 300,
-    content: Content::view(fn(Context $c) => $app->suggestions($c)),
+    content: Content::file(__DIR__ . '/suggestions.php', $app),
 ));
 ```
 
@@ -281,7 +281,7 @@ $tray->onClick(function () use ($tray, &$panel, $app) {
         height: 230,
         focusable: true,
         popover: true,
-        content: Content::view(fn(Context $c) => $app->panel($c)),
+        content: Content::file(__DIR__ . '/panel.php', $app),
     ));
     $panel->on('closed', function () use (&$panel) { $panel = null; });
 });

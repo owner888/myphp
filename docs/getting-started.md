@@ -7,7 +7,7 @@ the other kind later.
 
 ## Install
 
-Install PHP 8.3 or later with `ext-ffi` (`ffi.enable=1` for scripts run
+Install PHP 8.4 or later (8.5 recommended) with `ext-ffi` (`ffi.enable=1` for scripts run
 outside `myphp dev`). A project with a web frontend also needs
 [Bun](https://bun.sh), which runs its tools, and apps with web pages need
 the system's webview: on Linux, GTK 3 and WebKitGTK 4.1, e.g. `sudo apt

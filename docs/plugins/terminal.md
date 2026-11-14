@@ -1,5 +1,18 @@
 # Terminal
 
+In a view, `Representable` puts a terminal among the declarative views:
+
+<!-- no-test -->
+```php
+use MyPHP\Plugins\Terminal\{Options, Terminal};
+
+$view = fn() => Representable(fn(Context $c) => Terminal::view($c, $this->term)->autoFocus(), fills: true);
+```
+
+> The rest of this page is about the engine under the views: its builder,
+> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
+> $c) => …)` ([custom widgets](../ui/custom-widgets.md)).
+
 The terminal plugin is a terminal for apps of [native UI](../ui/README.md):
 a view that runs the user's shell, or any program, in a pseudo-terminal,
 with the terminal emulator of [Ghostty](https://ghostty.org),
@@ -24,9 +37,7 @@ App::whenReady(function () {
         onExit: function (int $code) use (&$win) { $win?->close(); },
     ));
     $win = new Window(new WindowOptions(title: 'Terminal', width: 760, height: 480,
-        content: Content::view(function (Context $c) use ($term) {
-            Terminal::view($c, $term)->fill()->autoFocus();
-        })));
+        content: Content::view(fn() => Representable(fn(Context $c) => Terminal::view($c, $term)->fill()->autoFocus(), fills: true))));
     $win->on('closed', fn() => $term->close());
 });
 App::run();

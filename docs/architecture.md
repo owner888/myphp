@@ -8270,8 +8270,8 @@ through it.
 
 Android is the third implementation of `Platform\Backend` (target
 `aarch64-linux-android`, API 31+). `scripts/build-android-php.sh` builds
-`libphp.so` (PHP 8.3 embed SAPI) using NDK Clang against a static `libffi`
-(`ext-ffi`), with `opcache`, `mbstring`, and `zlib`. Bionic differences
+`libphp.so` (PHP 8.5 embed SAPI) using NDK Clang against a static `libffi`
+(`ext-ffi`), with `opcache`, `mbstring`, `zlib`, `curl`, `openssl`, `dom`, and `xml`. Bionic differences
 (lack of `getdtablesize`, incomplete `resolv.h` symbols) are patched at
 configuration. The launcher (`src/Platform/Android/launcher/myphp_launcher.c`,
 compiled to `libmyphp.so`) starts an attached `pthread` with an `ALooper`,

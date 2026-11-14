@@ -279,7 +279,7 @@ See [the CLI](docs/cli.md) for every command and flag.
 
 ### Requirements
 
-- PHP ≥ 8.3 with `ext-ffi` and `ext-intl` (Homebrew's `php` has both), OPcache JIT recommended
+- PHP ≥ 8.4 (8.5 recommended) with `ext-ffi` and `ext-intl` (Homebrew's `php` has both), OPcache JIT recommended
 - macOS on Apple Silicon, Windows (10 1809+ / 11, amd64 and arm64) and Linux: native UI, web views, system services, packaging and the media player; Android and iOS (iPhone and iPad): native UI in one full-screen window with embedded web views, built by the CLI with the NDK or Xcode (`myphp doctor` lists what is missing). Not targeted: tvOS, Android TV, visionOS and watchOS.
 
 A window with a web page, whose frontend calls PHP:
@@ -659,7 +659,7 @@ myphp install-skills               # 把内置的 agent skill 装进项目的 .a
 
 ### 环境要求
 
-- PHP ≥ 8.3，带 `ext-ffi` 和 `ext-intl`（Homebrew 的 `php` 都自带），建议开 OPcache JIT
+- PHP ≥ 8.4（推荐 8.5），带 `ext-ffi` 和 `ext-intl`（Homebrew 的 `php` 都自带），建议开 OPcache JIT
 - Apple Silicon 的 macOS、Windows（10 1809+ / 11，amd64 与 arm64）和 Linux：原生 UI、网页视图、系统服务、打包与媒体播放器；Android 和 iOS（iPhone 与 iPad）：全屏原生 UI 与内嵌 WebView，由命令行用 NDK 或 Xcode 构建（`myphp doctor` 会列出缺什么）。暂不支持：tvOS、Android TV、visionOS、watchOS。
 
 一个网页窗口，前端直接调用 PHP：
