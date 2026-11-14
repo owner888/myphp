@@ -301,7 +301,7 @@ App::whenReady(function () {
         title: 'Crystal Runner 3D — MyPHP Native 3D Game',
         width: 860,
         height: 620,
-        content: Content::view(fn(Context $c) => Game::view($c, $game)->grow = 1)
+        content: Content::file(__DIR__ . '/view.php', $game)
     ));
 });
 

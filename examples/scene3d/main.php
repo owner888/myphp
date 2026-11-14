@@ -219,26 +219,11 @@ final class SceneApp
 App::whenReady(function () {
     $app = new SceneApp();
 
-    $content = Content::view(fn(Context $c) => Scene::view(
-        $c,
-        $app->scene,
-        orbitControls: true,
-        onUpdate: $app->update(...),
-        onPick: $app->onPick(...),
-        overlay: function (Painter $p, array $r) use ($app): void {
-            $p->fill([$r[0] + 16, $r[1] + 16, 415, 102], 0x000000, 8.0, 0.68);
-            $p->text($r[0] + 28, $r[1] + 28, 'MyPHP Native 3D Scene (Shadows + PointLight + SceneGraph)', 14, 0xffffff);
-            $p->text($r[0] + 28, $r[1] + 50, sprintf('FPS: %.1f | PCF Shadows: ON | Culled: %d', $app->fps, $app->scene->lastCulledCount), 12, 0x00e676);
-            $p->text($r[0] + 28, $r[1] + 68, 'Picked: ' . $app->selectedName, 12, 0xffd54f);
-            $p->text($r[0] + 28, $r[1] + 88, 'Click object to pick | Drag to orbit | Wheel to zoom', 11, 0xaaaaaa);
-        }
-    )->grow = 1);
-
     new Window(new WindowOptions(
         title: 'MyPHP 3D Scene (5-Platform Native RenderPass)',
         width: 800,
         height: 600,
-        content: $content
+        content: Content::file(__DIR__ . '/view.php', $app)
     ));
 });
 

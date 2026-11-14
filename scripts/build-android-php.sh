@@ -42,6 +42,26 @@ echo "==> Target: aarch64-linux-android${ANDROID_API}"
 
 mkdir -p "$BUILD_DIR" "$SYSROOT"
 
+# Fast-path: download prebuilt Android PHP runtime archive BEFORE compiling any dependencies
+PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"
+PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-android-arm64-php-${PHP_VERSION}.tar.gz"
+if [ ! -f "${PHP_DIR}/libs/libphp.so" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
+    echo "==> Trying prebuilt Android PHP runtime (android-arm64)..."
+    TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
+    if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
+        echo "==> Extracting prebuilt Android runtime..."
+        tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
+        if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
+            touch "${PHP_DIR}/libs/libphp.so"
+            echo "==> Prebuilt Android PHP runtime ready:"
+            ls -lh "${PHP_DIR}/libs/libphp.so"
+            exit 0
+        fi
+    fi
+    rm -f "${TMP_TAR}"
+    echo "==> Prebuilt runtime not available; building from source..."
+fi
+
 # Toolchain environment
 export PATH="/opt/homebrew/opt/bison/bin:/opt/homebrew/bin:${PATH}"
 export CC="${TOOLCHAIN}/bin/aarch64-linux-android${ANDROID_API}-clang"
@@ -146,25 +166,6 @@ if [ ! -f "${SYSROOT}/lib/libxml2.a" ]; then
 fi
 
 # 5. Build PHP
-PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"
-PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-android-arm64-php-${PHP_VERSION}.tar.gz"
-if [ ! -f "${PHP_DIR}/libs/libphp.so" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
-    echo "==> Trying prebuilt Android PHP runtime (android-arm64)..."
-    mkdir -p "${BUILD_DIR}"
-    TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
-    if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
-        echo "==> Extracting prebuilt Android runtime..."
-        tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
-        if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
-            touch "${PHP_DIR}/libs/libphp.so"
-            echo "==> Prebuilt Android PHP runtime ready:"
-            ls -lh "${PHP_DIR}/libs/libphp.so"
-            exit 0
-        fi
-    fi
-    rm -f "${TMP_TAR}"
-    echo "==> Prebuilt runtime not available; building from source..."
-fi
 # Built again when this script changed since (an extension added, as curl was): the one stamp of what libphp has.
 if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so" ]; then
     rm -f "${PHP_DIR}/libs/libphp.so"

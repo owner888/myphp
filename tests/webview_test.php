@@ -213,7 +213,7 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     $surface = $O::msg('p:r', $O::alloc('NSView'), 'initWithFrame:', $rect);
     $in = new \MyPHP\UI\Input();
     $inputs = new \ReflectionProperty(\MyPHP\Native\View::class, 'inputs');
-    $inputs->setValue(null, $inputs->getValue() + [$O::addr($surface) => $in]);
+    $inputs->setValue(null, $inputs->getValue() + [\MyPHP\Native\Mem::addr($surface) => $in]);
     $sv = \MyPHP\Native\WebView::create($rect, [], function () {});
     $sv->scrollTo = $surface;
     $cg = \FFI::cdef('void *CGEventCreateScrollWheelEvent2(void *, uint32_t, uint32_t, int32_t, int32_t, int32_t); void CFRelease(void *);', '/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics');

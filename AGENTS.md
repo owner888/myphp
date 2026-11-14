@@ -190,7 +190,7 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 
 ## Roadmap
 
-Done: macOS (Metal/Cocoa/WKWebView), Windows (D3D11/Win32/DirectWrite/WebView2), Linux (GTK 3/OpenGL/WebKitGTK), Android (EGL/GLES 3) and iOS/iPadOS (Metal/UIKit). Not targeted: tvOS, Android TV, visionOS.
+Done: macOS (Metal/Cocoa/WKWebView), Windows (D3D11/Win32/DirectWrite/WebView2), Linux (GTK 3/OpenGL/WebKitGTK), Android (EGL/GLES 3), iOS/iPadOS (Metal/UIKit), and 5-platform native 3D (`Plugins\Scene`). Not targeted: tvOS, Android TV, visionOS.
 The UI is declarative, as SwiftUI's (docs/swiftui.md, docs/ui/views.md): every example, doc page and the skill show views; the builder (`$c->column()…`) is the engine's own, `@internal`, which apps reach only inside a `Representable`.
-Remaining: prebuilt phone runtimes the CLI downloads; what building real apps turns up (examples/logview, notes, photos, http, mobile).
+Remaining: what building real apps turns up (examples/logview, notes, photos, http, mobile, model-viewer).
 With each new platform (Windows, Linux's bridges), update the app-writing skill `bin/skills/myphp-app/` with it: its description and opening (which GPU API draws where), "Verify before you say it is done" (how to run, screenshot and read the log there; `myphp devices`/`emulators`/`doctor` as they grow), and `references/` where its behavior differs.
