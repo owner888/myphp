@@ -326,12 +326,21 @@ $view = fn() => VStack()(
 )->task(fn() => $app->load());
 ```
 
-## Beyond the views
+## Beyond the views: 3D scenes, games & native OS interop (`ffigen` / `jnigen`)
 
-What no view does: `Canvas(fn(GraphicsContext $g, CGSize $size) => …)`
-draws, as SwiftUI's; `Representable(fn(Context $c) => …)` is a control of
-your own, made with the engine's builder inside one view, as
-`NSViewRepresentable` (see [Custom widgets](ui/custom-widgets.md)).
+- **2D Canvas & Custom Widgets**: `Canvas(fn(GraphicsContext $g, CGSize $size) => …)` draws 2D vector graphics, as SwiftUI's; `Representable(fn(Context $c) => …)` wraps a custom engine node inside a view, as `NSViewRepresentable` / `UIViewRepresentable` (see [Custom widgets](ui/custom-widgets.md)).
+- **3D Scenes (`SceneView`) & 2D/3D Games (`SpriteView`)**: `SceneView($this->scene, orbitControls: true, onUpdate: …, onPick: …)` embeds a 5-platform hardware 3D viewport (Metal / D3D11 / OpenGL / GLES 3 with `.obj`/`.glb` models, 1024×1024 PCF soft shadows, GPU instancing and 3D particles; see [3D scenes](ui/scene3d.md)); `SpriteView(scene: $this->game)` runs a fixed-timestep `Game` loop ([game plugin](plugins/game.md)).
+- **Calling C, Apple Objective-C & Android Java/Kotlin APIs (`ffigen` & `jnigen`)**: When an app or coding agent needs a native C library, an iOS/macOS framework (`AVFAudio`, `CoreBluetooth`, `LocalAuthentication`), or an Android Java/Kotlin SDK class (`BatteryManager`, `SensorManager`, third-party `.jar`), generate type-safe PHP 8.5 bindings directly with the CLI instead of writing `FFI::cdef`, `ObjC::msg` type letters, or C JNI glue by hand (see [Native interop](interop.md)):
+  ```sh
+  # 1. C header -> PHP FFI class
+  myphp ffigen -class AudioFfi -lib libaudio.dylib -out src/Native/AudioFfi.php audio.h
+
+  # 2. Apple Objective-C header -> PHP wrapper over MyPHP\Native\ObjC
+  myphp ffigen -objc AVAudioSession -framework AVFAudio -out src/Native/AVAudioSession.php AVAudioSession.h
+
+  # 3. Android SDK / Java class -> PHP wrapper over MyPHP\Native\Jni
+  myphp jnigen -out src/Native/BatteryManager.php android.os.BatteryManager
+  ```
 
 ## Platform behavior you get for free
 
@@ -371,4 +380,5 @@ your own, made with the engine's builder inside one view, as
    `Color::secondarySystemBackground`); a literal only for data.
 6. Before a view you have not seen, `grep -n "function Name("
    src/UI/Declarative/functions.php`; what is not there does not exist.
-7. Run on a device with the CLI only: `myphp run -d macos|windows|linux|ios|android <app>`.
+7. For native OS or C/ObjC/Android Java APIs not yet wrapped by MyPHP, run `myphp ffigen` or `myphp jnigen` to generate a typed PHP wrapper class rather than hand-writing raw `ObjC::msg` signatures or C JNI code.
+8. Run on a device with the CLI only: `myphp run -d macos|windows|linux|ios|android <app>`.

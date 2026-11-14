@@ -270,6 +270,13 @@ Writes the TypeScript client of the bound services and declared events
 app's catalogs of messages (see [languages](i18n.md)). `myphp dev` and
 `myphp build` run it, so you rarely do.
 
+## myphp ffigen and myphp jnigen
+
+Generates type-safe PHP 8.5 wrapper classes for C headers (`.h`), Apple
+Objective-C `@interface` headers (`-objc <Class> -framework <Framework>`),
+and Android Java/Kotlin classes (`myphp jnigen <java.class.Name>`). See
+[Native interop](interop.md).
+
 ## myphp i18n check
 
 Checks the app's catalogs of messages, as `myphp dev` and `myphp build` do:

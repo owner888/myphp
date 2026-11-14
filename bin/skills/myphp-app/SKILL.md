@@ -133,7 +133,13 @@ App::run();
    - Bind controls directly to state properties (`isOn: $this->items[$i]['done']`), never to a loop variable copy (`$item['done']`).
    - Always pass a stable key to `Each($items, id: 'id')` and `ListView($items, id: 'id')`.
    - Never mutate state or perform I/O inside `view.php` while building; only inside action/lifecycle closures (`action:`, `onSubmit`, `onAppear`, `task`, `onChange`).
-4. **Packaging & Bundle Size (`myphp.json` & `myphp build`)**:
+4. **3D Views & Native OS Interop (`SceneView`, `myphp ffigen`, `myphp jnigen`)**:
+   - **3D Scenes**: Use `SceneView($this->scene, orbitControls: true, onUpdate: ..., onPick: ...)` with `MyPHP\Plugins\Scene\{Scene, Entity, Mesh, Material, PointLight, ParticleEmitter3D, Tween3D, Collider3D}` for hardware-accelerated 3D across all 5 platforms.
+   - **Native C / Apple ObjC / Android Java Interop**: When an app needs a native C library, an iOS/macOS Objective-C framework, or an Android Java SDK class not already in MyPHP, use `myphp ffigen` or `myphp jnigen` to generate a typed PHP wrapper class (never hand-write raw `ObjC::msg` type strings or C JNI glue):
+     - C header: `myphp ffigen -class FooFfi -lib libfoo.dylib -out src/Native/FooFfi.php foo.h`
+     - Apple ObjC: `myphp ffigen -objc AVAudioSession -framework AVFAudio -out src/Native/AVAudioSession.php AVAudioSession.h`
+     - Android Java: `myphp jnigen -out src/Native/BatteryManager.php android.os.BatteryManager` (calls `MyPHP\Native\Jni` synchronously).
+5. **Packaging & Bundle Size (`myphp.json` & `myphp build`)**:
    - Always build with `myphp build -platform ios/arm64|android/arm64|darwin/arm64|linux/amd64|windows/amd64` (never invoke `scripts/*.sh` directly); the CLI automatically strips symbols, dead-strips unused sections, excludes `tests/` / `*.local.php`, and outputs ~10 MB release bundles.
    - Load bundled assets via `App::path('resources') . '/file.png'` (with fallback to `dirname(__DIR__) . '/resources/file.png'`) so standalone desktop `-launcher micro` (`phar://`) and mobile bundles both resolve them.
    - Add scratch/reference directories (e.g. `design/`, `docs/`, `mocks/`) to `"exclude": ["design", "docs"]` in `myphp.json`, and keep `resources/icon.png` at `<= 1024×1024` PNG. Use an ASCII slug for `"name"` and localized titles in `"displayName"`.
