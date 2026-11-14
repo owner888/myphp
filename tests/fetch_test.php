@@ -80,7 +80,11 @@ try {
         $parts = $run($s, ['url' => "$base/slow", 'method' => 'GET'], $ctx, function ($p) use ($ctx) { if (isset($p['chunk'])) { $ctx->cancel(); } return false; });
         check($body($parts) === 'first' && microtime(true) - $t < 5, 'a request stops when its page goes away');
     } finally {
-        proc_terminate($server);
+        $st = proc_get_status($server);
+        if (PHP_OS_FAMILY !== 'Windows' && ($pid = (int)($st['pid'] ?? 0)) > 0) {
+            @exec("pkill -9 -P $pid 2>/dev/null");
+        }
+        proc_terminate($server, 9);
         proc_close($server);
     }
 })();
