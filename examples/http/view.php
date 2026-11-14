@@ -2,7 +2,7 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\Native\Pasteboard;
+use MyPHP\Clipboard;
 
 /** A line of pretty-printed JSON, its tokens colored: keys, strings, numbers and literals, punctuation. */
 $json = function (string $line): View {
@@ -25,7 +25,7 @@ $response = fn(?array $r) => match (true) {
                 Text(verbatim: (string)$r['status'])->font(Font::system(size: 15, weight: Weight::bold))->monospaced()->foregroundStyle($r['status'] < 400 ? Color::green : Color::red),
                 Text(verbatim: sprintf('%.0f ms · %s', $r['time'] * 1000, size(strlen($r['body']))))->foregroundStyle(Color::secondary),
                 Spacer(),
-                Button('Copy body', action: fn() => Pasteboard::setText($r['body'])),
+                Button('Copy body', action: fn() => Clipboard::writeText($r['body'])),
             )->padding(Edge::bottom, 6),
             'error' => Text(verbatim: $l[1])->monospaced()->foregroundStyle(Color::red),
             'header' => Text(verbatim: $l[1])->font(Font::caption)->monospaced()->foregroundStyle(Color::secondary),

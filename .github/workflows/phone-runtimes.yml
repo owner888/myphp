@@ -1,0 +1,52 @@
+name: Phone Runtimes
+
+# Builds and publishes the prebuilt Android arm64, iOS arm64, and iOS Simulator arm64
+# PHP 8.5 embed runtime archives (tag: runtime-php-<version>) so `myphp run` and
+# `myphp build` download them in seconds instead of compiling from source.
+on:
+  workflow_dispatch:
+    inputs:
+      php_version:
+        description: "PHP version to build"
+        default: "8.5.12"
+        required: true
+  push:
+    tags: ["runtime-php-*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-runtimes:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      MYPHP_PHONE_PHP_VERSION: ${{ inputs.php_version || '8.5.12' }}
+      MYPHP_BUILD_FROM_SOURCE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: brew install autoconf automake libtool pkg-config bison re2c
+      - name: Build Android arm64 runtime
+        run: ./scripts/build-android-php.sh
+      - name: Build iOS arm64 device runtime
+        env:
+          MYPHP_IOS_SDK: iphoneos
+        run: ./scripts/build-ios-php.sh
+      - name: Build iOS arm64 simulator runtime
+        env:
+          MYPHP_IOS_SDK: iphonesimulator
+        run: ./scripts/build-ios-php.sh
+      - name: Package runtime archives
+        run: |
+          chmod +x scripts/package-phone-runtimes.sh
+          ./scripts/package-phone-runtimes.sh dist-runtimes
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="runtime-php-${MYPHP_PHONE_PHP_VERSION}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Prebuilt Phone PHP Runtimes (${MYPHP_PHONE_PHP_VERSION})" --notes "Prebuilt Android arm64, iOS arm64, and iOS Simulator arm64 PHP embed runtimes."
+          fi
+          gh release upload "$TAG" dist-runtimes/*.tar.gz dist-runtimes/SHA256SUMS --clobber

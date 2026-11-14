@@ -158,6 +158,7 @@ $t->clickLabel('Hide Sidebar'); $t->frame();
 check($s->visibility === \NavigationSplitViewVisibility::detailOnly && $t->byLabel('Show Sidebar') !== null, 'Hide Sidebar hides it');
 $t->clickLabel('Show Sidebar'); $t->frame();
 check($s->visibility === \NavigationSplitViewVisibility::all, 'and Show Sidebar shows it');
+$s->vibrant = false; $t->frame();
 check($t->byText('This window shows no material here, so the sidebar draws a background of its own: materials show on macOS.') !== null, 'without a material, the pane says why');
 gc_collect_cycles(); gc_disable(); $t->frame(10); $cycles = gc_collect_cycles(); gc_enable();
 same(0, $cycles, 'its frames leave no cycles to collect: its sections, and their parsed icons, made once');
