@@ -154,7 +154,7 @@ final class Scene
     /**
      * Adds a hardware-instanced 3D reference grid and XYZ color-coded coordinate axes at $y.
      */
-    public function addGridHelper(float $size = 10.0, int $divisions = 10, float $y = 0.0): Entity
+    public function addGridHelper(float $size = 10.0, int $divisions = 10, float $y = 0.0, bool $showYAxis = true): Entity
     {
         $divisions = max(2, $divisions);
         $half = $size * 0.5;
@@ -188,9 +188,11 @@ final class Scene
         }
 
         // Vertical Y-axis indicator at origin (Green)
-        $axisH = $size * 0.25;
-        $transforms[] = Mat4::translation(0.0, $y + $axisH * 0.5, 0.0)->multiply(Mat4::scaling($axisThickness, $axisH, $axisThickness));
-        $colors[] = [0.28, 0.92, 0.45, 1.0];
+        if ($showYAxis) {
+            $axisH = $size * 0.25;
+            $transforms[] = Mat4::translation(0.0, $y + $axisH * 0.5, 0.0)->multiply(Mat4::scaling($axisThickness, $axisH, $axisThickness));
+            $colors[] = [0.28, 0.92, 0.45, 1.0];
+        }
 
         $gridEnt->setInstances($transforms, $colors);
         return $this->add($gridEnt);
