@@ -295,8 +295,9 @@ final class CrystalRunner3D extends Game
     }
 }
 
-App::whenReady(function () {
-    $game = new CrystalRunner3D();
+$game = new CrystalRunner3D();
+
+App::whenReady(function () use ($game) {
     new Window(new WindowOptions(
         title: 'Crystal Runner 3D — MyPHP Native 3D Game',
         width: 860,
