@@ -1239,3 +1239,19 @@ $t->clickText('Spark Burst'); $t->frame(2);
 check($m->emitter->activeCount() === 56, 'model-viewer: Spark Burst button spawns 56 3D particles');
 \MyPHP\UI\CanvasAtlas::take();
 
+// rubiks-cube: 27 3D cubies, 64 audio spectrum bars, Scramble and Auto-Solve queue.
+[$view, $r] = Headless::load('rubiks-cube', 'App::whenReady');
+$r->soundEnabled = false;
+$t = new Headless($view, 1080, 720);
+$t->frame(2);
+same(27, count($r->cubies), 'rubiks-cube: 27 3D cubies initialized');
+$t->clickText('Scramble'); $t->frame(2);
+same(12, count($r->moveQueue) + ($r->activeMove !== null ? 1 : 0), 'rubiks-cube: Scramble queues 12 layer rotations');
+for ($i = 0; $i < 80; $i++) { $r->update(0.05); }
+same(12, count($r->moveHistory), 'rubiks-cube: 12 scramble twists completed');
+$t->clickText('Auto-Solve'); $t->frame(2);
+for ($i = 0; $i < 80; $i++) { $r->update(0.05); }
+same(0, count($r->moveHistory) + count($r->moveQueue), 'rubiks-cube: Auto-Solve unwinds all moves back to solved state');
+\MyPHP\UI\CanvasAtlas::take();
+
+
