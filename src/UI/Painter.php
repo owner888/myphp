@@ -892,23 +892,26 @@ final class Painter
             return [$x, $y, $x + $w, $y + $h];
         };
         $meet = static fn(array $a, ?array $b): array => $b === null ? $a : [max($a[0], $b[0]), max($a[1], $b[1]), min($a[2], $b[2]), min($a[3], $b[3])];
-        $walk = static function (Node $p, ?array $clip) use (&$walk, &$area, $grown, $in, $meet): void {
+        $stack = [[$n, null]];
+        while ($stack !== []) {
+            [$p, $clip] = array_pop($stack);
             foreach ($p->kids as $k) {
                 if ($k->invisible) { continue; }
                 $r = $meet($in($k, $grown($k, $k->inkMargin())), $clip);
                 if ($r[2] > $r[0] && $r[3] > $r[1]) {
                     $area = [min($area[0], $r[0]), min($area[1], $r[1]), max($area[2], $r[2]), max($area[3], $r[3])];
                 }
-                if ($k->scroll !== null || $k->clip !== 0) {
-                    $c = $in($k, [($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x : -1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y : -1e6,
-                        ($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x + $k->w : 1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y + $k->h : 1e6]);
-                    $walk($k, $meet($c, $clip));
-                } else {
-                    $walk($k, $clip);
+                if ($k->kids !== []) {
+                    if ($k->scroll !== null || $k->clip !== 0) {
+                        $c = $in($k, [($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x : -1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y : -1e6,
+                            ($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x + $k->w : 1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y + $k->h : 1e6]);
+                        $stack[] = [$k, $meet($c, $clip)];
+                    } else {
+                        $stack[] = [$k, $clip];
+                    }
                 }
             }
-        };
-        $walk($n, null);
+        }
         return $area;
     }
 
@@ -1081,19 +1084,24 @@ final class Painter
             }
             return;
         }
-        if ($n->focusVisible && $n->color !== null && $n->radii !== null) { // around corners each their own
-            $list->box($n->x - 3, $n->y - 3, $n->w + 6, $n->h + 6, array_map(static fn(float $r): float => $r + 3, $n->radii), 0, 0.0, [2.0, 2.0, 2.0, 2.0], $t->focus, $t->focusAlpha);
-        } elseif ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
-            self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON => $n->radius > 0 ? $n->radius : $t->radius, default => $n->radius }, $t);
+        $radius = $n->kind === Node::BUTTON ? ($n->radius > 0 ? $n->radius : $t->radius) : $n->radius; // a button rounds as the theme does, unless made otherwise (a phone's capsule)
+        if ($n->focusVisible && $n->color !== null) {
+            if ($n->radii !== null) { // around corners each their own
+                $list->box($n->x - 3, $n->y - 3, $n->w + 6, $n->h + 6, array_map(static fn(float $r): float => $r + 3, $n->radii), 0, 0.0, [2.0, 2.0, 2.0, 2.0], $t->focus, $t->focusAlpha);
+            } else { // a ring around a button or other faced node
+                self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, $radius, $t);
+            }
         }
-        $radius = match ($n->kind) { Node::BUTTON => $n->radius > 0 ? $n->radius : $t->radius, default => $n->radius }; // a button rounds as the theme does, unless made otherwise (a phone's capsule)
-        $box = [$n->x, $n->y, $n->w, $n->h];
-        $radii = $n->radii ?? [$radius, $radius, $radius, $radius];
-        foreach ($n->shadows as $sh) { // outside the box, under it (mygo's Shadow)
-            if (!$sh[6]) { self::boxShadow($list, $box, $radii, $sh); }
+        $radii = null;
+        if ($n->shadows !== []) {
+            $box = [$n->x, $n->y, $n->w, $n->h];
+            $radii = $n->radii ?? [$radius, $radius, $radius, $radius];
+            foreach ($n->shadows as $sh) { // outside the box, under it (mygo's Shadow)
+                if (!$sh[6]) { self::boxShadow($list, $box, $radii, $sh); }
+            }
         }
         if ($n->material !== null) {
-            $n->material->paintMaterial(new self($list, $text, $t, $rt), $box, $n->radius);
+            $n->material->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
         } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box; its ring over the face, which shows through neither when it is dimmed (a disabled button's border stays a ring, as mygo's)
             if ($n->borderGradient === null) { // the face inside its border, as one fill (mygo's): a face of its own alpha (background()) under none of it
                 $bw = $n->borderWidth;
@@ -1102,53 +1110,63 @@ final class Painter
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->bgAlpha, $radius);
             }
         } elseif ($n->gradient !== null) {
+            $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
             [$paint, $c1, $a1, $c2, $a2, $line, $stops] = self::gradientPaint($n->gradient, $n->w, $n->h, $n->alpha);
             $list->box($n->x, $n->y, $n->w, $n->h, $radii, $c1, $a1, paint: $paint, rgb2: $c2, alpha2: $a2, g: $line, stops: $stops);
         } elseif ($n->stripes !== null) { // over the color, if any
+            $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
             [$sc, $sa, $sw, $sg, $angle] = $n->stripes;
             $a = deg2rad($angle);
             $list->box($n->x, $n->y, $n->w, $n->h, $radii, $sc, $sa * $n->alpha, paint: DisplayList::PAINT_STRIPES, rgb2: $n->color ?? 0, alpha2: $n->color === null ? 0.0 : $n->alpha * $n->bgAlpha, g: [cos($a), sin($a), max($sw, 0.25), max($sw, 0.25) + max($sg, 0.0)]);
         } elseif ($n->color !== null) {
             if ($n->radii !== null) {
-                $list->box($n->x, $n->y, $n->w, $n->h, $radii, $n->color, $n->alpha * $n->bgAlpha);
+                $list->box($n->x, $n->y, $n->w, $n->h, $n->radii, $n->color, $n->alpha * $n->bgAlpha);
             } else {
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha * $n->bgAlpha, $radius);
             }
         }
         if ($n->bordered && $n->color === null && $n->material === null && $n->borderGradient === null) { // a border without a face (mygo's Border on a box with no background): its ring, or dashed
             if ($n->borderStyle === BorderStyle::Dashed) {
+                $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
                 $bw = $n->borderWidth;
                 $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, $n->alpha, true);
             } else {
                 $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, $n->alpha, $radius, $n->borderWidth);
             }
         }
-                foreach ($n->shadows as $sh) { // inside the padding edge, over the background (mygo's InsetShadow)
-            if ($sh[6]) { self::insetShadow($list, $box, $radii, $n->borders, $sh); }
+        if ($n->shadows !== []) {
+            foreach ($n->shadows as $sh) { // inside the padding edge, over the background (mygo's InsetShadow)
+                if ($sh[6]) { self::insetShadow($list, $box, $radii, $n->borders, $sh); }
+            }
         }
-        [$bt, $br, $bb, $bl] = $n->borders;
         if ($n->borderGradient !== null) { // a gradient paints it, over the background (mygo's border): border()'s, else borderWidth()'s
             $bw = $n->bordered ? [$n->borderWidth, $n->borderWidth, $n->borderWidth, $n->borderWidth] : $n->borders;
             if (max($bw) > 0 && $n->material === null) {
+                $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
                 [$paint, , , , , $line, $stops] = self::gradientPaint($n->borderGradient, $n->w, $n->h, 1.0, true);
                 $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, $bw, 0xffffff, $n->alpha, $n->borderStyle === BorderStyle::Dashed, paint: $paint, g: $line, stops: $stops, borderPaint: true);
             }
-        } elseif (($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) && ($n->borderStyle === BorderStyle::Dashed || $n->radii !== null)) { // dashed, or around corners each its own
-            $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, $n->borders, $n->borderColor ?? $t->border, $n->alpha, $n->borderStyle === BorderStyle::Dashed);
-        } elseif ($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) { // borders inside the edges (mygo's BorderWidth): around the corners where they are one width, else a side each
-            $bc = $n->borderColor ?? $t->border;
-            if ($bt === $br && $br === $bb && $bb === $bl) {
-                $list->ring($n->x, $n->y, $n->w, $n->h, $bc, $n->alpha, $n->radius, $bt);
-            } else {
-                if ($bt > 0) { $list->rect($n->x, $n->y, $n->w, $bt, $bc, $n->alpha); }
-                if ($bb > 0) { $list->rect($n->x, $n->y + $n->h - $bb, $n->w, $bb, $bc, $n->alpha); }
-                if ($bl > 0) { $list->rect($n->x, $n->y + $bt, $bl, $n->h - $bt - $bb, $bc, $n->alpha); }
-                if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
+        } elseif ($n->borders !== [0.0, 0.0, 0.0, 0.0]) {
+            [$bt, $br, $bb, $bl] = $n->borders;
+            if ($n->borderStyle === BorderStyle::Dashed || $n->radii !== null) { // dashed, or around corners each its own
+                $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
+                $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, $n->borders, $n->borderColor ?? $t->border, $n->alpha, $n->borderStyle === BorderStyle::Dashed);
+            } else { // borders inside the edges (mygo's BorderWidth): around the corners where they are one width, else a side each
+                $bc = $n->borderColor ?? $t->border;
+                if ($bt === $br && $br === $bb && $bb === $bl) {
+                    $list->ring($n->x, $n->y, $n->w, $n->h, $bc, $n->alpha, $n->radius, $bt);
+                } else {
+                    if ($bt > 0) { $list->rect($n->x, $n->y, $n->w, $bt, $bc, $n->alpha); }
+                    if ($bb > 0) { $list->rect($n->x, $n->y + $n->h - $bb, $n->w, $bb, $bc, $n->alpha); }
+                    if ($bl > 0) { $list->rect($n->x, $n->y + $bt, $bl, $n->h - $bt - $bb, $bc, $n->alpha); }
+                    if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
+                }
             }
         }
         if ($n->systemMaterial !== null && $rt !== null && $rt->overLayer && !$rt->paintingOver && !$rt->reachable($n->id)) { // under a modal: myphp's glass in place of the system's, which would show over the modal
             new \MyPHP\Plugins\Glass\Glass()->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
         } elseif (($n->webView !== null || $n->movie !== null || $n->systemMaterial !== null) && $rt !== null) {
+            $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
             self::nativeHole($n, $list, $text, $radii, $rt);
         }
         if ($n->selected) { // filled with the accent, as mygo's Selected; its text in accentText (Context::list)
@@ -1184,8 +1202,9 @@ final class Painter
                     $shown = rtrim(substr($shown, 0, $cut)) . '…';
                 }
             }
-            if ($n->kind === Node::TEXT && !in_array($n->textStyle()->align ?? Node::START, [Node::CENTER, Node::END], true)
-                && ($n->rtl || (preg_match('/[\x80-\xFF]/', $shown) === 1 && \MyPHP\Text\System::isRTL(array_map(mb_ord(...), mb_str_split($shown, 1, 'UTF-8')), false)))) {
+            $tsAlign = ($n->ts ?? $n->inherit)?->align ?? Node::START;
+            if ($n->kind === Node::TEXT && $tsAlign !== Node::CENTER && $tsAlign !== Node::END
+                && ($n->rtl || (!mb_check_encoding($shown, 'ASCII') && \MyPHP\Text\System::isRTL(\MyPHP\Text\System::runes($shown), false)))) {
                 [$tw] = $text->measure($shown, $n->fontSize, $n->style);
                 $x += max(0.0, $room - $tw); // right to left, a line starts at the right of its box; so does one that reads right to left (Arabic, Hebrew), as its paragraph's start (mygo's)
             }

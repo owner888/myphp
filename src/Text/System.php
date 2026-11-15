@@ -145,7 +145,7 @@ final class System
         if ($s === '') {
             return [];
         }
-        if (preg_match('/[\x80-\xff]/', $s) !== 1) {
+        if (mb_check_encoding($s, 'ASCII')) {
             return array_values(unpack('C*', $s));
         }
         return array_values(unpack('N*', mb_convert_encoding($s, 'UTF-32BE', 'UTF-8')));
