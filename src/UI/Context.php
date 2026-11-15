@@ -143,10 +143,24 @@ final class Context
     private function add(Node $n): Node
     {
         $top = array_last($this->stack);
-        $placed = $this->place($top); // before it is one of the kids
+        if ($this->row !== null && $top === $this->row[0]) {
+            $base = $this->row[1];
+            $index = $this->row[2]++;
+        } elseif ($top === $this->root) {
+            if ($this->inOverlay) {
+                $base = self::OVERLAY;
+                $index = $this->overlayCount++;
+            } else {
+                $base = $top->id;
+                $index = $this->rootCount++;
+            }
+        } else {
+            $base = $top->id;
+            $index = count($top->kids);
+        }
         $top->kids[] = $n;
         $n->context = $this;
-        $n->disabledIn = $top->isDisabled(); // inside a disabled node (mygo's IsDisabled)
+        $n->disabledIn = $top->disabled || $top->disabledIn; // inside a disabled node (mygo's IsDisabled)
         if ($this->theme !== $this->window && $n->theme === null) { // built in a themed() scope: its theme, which an overlay opened there, at the root, takes as its own
             if ($top === $this->root) { self::takeTheme($n, $this->theme); } else { $n->theme = $this->theme; }
         }
@@ -162,8 +176,6 @@ final class Context
             $n->scope = $this->selectScope();
         }
         $in = $this->runtime?->inspector;
-        [$base, $index] = $placed;
-        $this->took($top);
         if ($this->nextKey !== null) {
             $n->id = self::mix($base, self::keyHash($this->nextKey));
             if (isset($this->keyed[$n->id])) {
@@ -174,7 +186,11 @@ final class Context
             if ($in !== null && $in->open) { $in->keys[$n->id] = $this->nextKey; } // the tree shows it
             $this->nextKey = null; // the key is this node's alone: a leaf must not pass it on to the next node built
         } else {
-            $n->id = self::mix($base, $index | $n->kind << 40); // mygo's: its parent's, mixed with its place among its children and its kind
+            $b = $index | ($n->kind << 40);
+            $h = $base ^ $b ^ ($b << 23) ^ 0x632BE59BD9B4E019;
+            $h ^= $h << 13; $h ^= ($h >> 7) & 0x01FFFFFFFFFFFFFF; $h ^= $h << 17;
+            $h ^= $h << 13; $h ^= ($h >> 7) & 0x01FFFFFFFFFFFFFF; $h ^= $h << 17;
+            $n->id = $h; // mygo's: its parent's, mixed with its place among its children and its kind
         }
         if ($in !== null && $in->open && $n->id === $in->selected) {
             $in->source = Inspector::callSite(); // where the app builds the node the inspector shows
@@ -1338,7 +1354,9 @@ final class Context
     {
         $in = $this->inheritedText();
         $size ??= $in->size;
-        $style |= Node::fontBits($in);
+        if ($in !== $this->base) {
+            $style |= (($in->weight ?? 0) >= 600 ? Font::BOLD : 0) | ($in->italic ? Font::ITALIC : 0) | ($in->family !== null && str_starts_with($in->family, 'monospace') ? Font::MONO : 0);
+        }
         [$w, $h] = $this->metrics->measure($s, $size, $style);
         $n = $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color ?? $in->color));
         $n->style = $style;
