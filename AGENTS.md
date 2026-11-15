@@ -12,44 +12,20 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 6. Small and literal: no speculative abstractions, no silent fallbacks, no magic numbers that make a symptom go away. Unclear? Ask before changing.
 7. Delete dead code when you touch it; never comment it out.
 8. `bin/myphp` stays executable: `chmod 755 bin/myphp` after any change, checked with `ls -l` (file syncs drop the bit).
-9. **UI is 1:1 with mygo** (the developer's rule): every size — padding,
-   gap, height, icon, stroke, radius, color role — comes from mygo's
-   source (`t.Space(n)`, the SVG viewBox), never guessed or approximated.
-   Before drawing a control, read its mygo function and copy the numbers.
-10. **Public API takes mygo's names** (the developer's rule): lowerCamel of
-    the Go name, never one of our own. Anything that is not mygo's yet —
-    left out, done differently, named otherwise — goes in
-    `docs/upstream-deviations.md` as it is found; take it out once it matches.
-11. **Native is native** (the developer's rule): a system view (glass,
-    materials, controls) is used as the system draws it, its defaults left
-    alone; never force its appearance, tint or style to chase a look. If it
-    looks wrong, find why (what it samples, how it is placed), not a knob.
-12. **An arrow function copies what it reads as it is made**: a closure run later that must see a variable change
-    (`CurlLoop::waitUntil`, `App::wait`, a stored `->key`) is `function () use (&$v)`; `$this` and objects are fine.
-    A closure something keeps that holds its keeper is a cycle (a node's `draw` holding the node or the Context, a
-    recursive `$walk`): `static`, the node its third argument, `$walk = null` when done; `tests/memory_test.php` checks.
-13. **What comes and goes is keyed** (`$c->key()`): a node's id is its parent's mixed with its place there (mygo's),
-    so content shown or hidden renumbers the siblings after it, and a scroll, a field's focus or an animation among
-    them takes another's state. Put it in a container of its own, or key what follows it.
-14. **Logs go through `MyPHP\Logger` at their level** (the developer's rule): `verbose` (step by step), `debug` (what it did), `warn` (went on
-    without something), `error` (failed), with a subsystem; never `error_log`/`echo`/`fwrite(STDERR)`. Dev apps log debug up, `myphp build` warn up.
-15. **Mobile widgets, which mygo has none of** (the developer's rule): written as the desktop's — immediate mode, a value's state as `&$ref`,
-    a lifetime's as a State object (TextState, ListState), `changed()`/`dismissed()` to report — named and sized after UIKit and the HIG;
-    a notion Apple has no name for takes Flutter's (`safeArea`); never a Flutter `Scaffold`/`AppBar`/`SnackBar`-style API. Each goes in
-    `docs/upstream-deviations.md`; docs/mobile.md maps SwiftUI's and Flutter's names to them, for anyone (an agent) coming from either.
+9. **Declarative SwiftUI is the sole public UI paradigm** (the developer's rule): apps, examples, templates and docs use SwiftUI's view names, modifiers and Apple HIG / platform metrics (`VStack`, `HStack`, `TabView`, `NavigationStack`, `ListView`, `SceneView`, `SpriteView`); the imperative `Context` builder is `@internal` engine IR, reached by apps only inside a `Representable`.
+10. **PHP 8.4+ / 8.5 native idioms & performance first** (the developer's rule): leverage PHP's reference-counted CoW strings/arrays, `ext-ffi` preallocated `CData` buffers on hot per-frame paths, and single-thread `Fiber` concurrency; avoid per-frame closure allocations or unnecessary array/string packing.
+11. **Native is native** (the developer's rule): a system view (glass, materials, controls) is used as the system draws it, its defaults left alone; never force its appearance, tint or style to chase a look.
+12. **An arrow function copies what it reads as it is made**: a closure run later that must see a variable change (`CurlLoop::waitUntil`, `App::wait`, a stored `->key`) is `function () use (&$v)`; `$this` and objects are fine. A closure something keeps that holds its keeper is a cycle (a node's `draw` holding the node or the Context, a recursive `$walk`): `static`, the node its third argument, `$walk = null` when done; `tests/memory_test.php` checks.
+13. **What comes and goes is keyed** (`->id()` / `Each($items, id: 'id')`): a node's id is its parent's mixed with its place there, so content shown or hidden renumbers the siblings after it. Key conditional or dynamic siblings so scroll, focus and animation state stay attached.
+14. **Logs go through `MyPHP\Logger` at their level** (the developer's rule): `verbose` (step by step), `debug` (what it did), `warn` (went on without something), `error` (failed), with a subsystem; never `error_log`/`echo`/`fwrite(STDERR)`. Dev apps log debug up, `myphp build` warn up.
+15. **Mobile & cross-platform views follow SwiftUI and Apple HIG** (the developer's rule): `TabViewStyle::sidebarAdaptable`, `NavigationStack`, `sheet`, `confirmationDialog`; `docs/mobile.md` and `docs/swiftui.md` map SwiftUI's and Flutter's names for developers and AI agents.
 16. **Nothing a user sees carries upstream's name** (the developer's iron rule): an example's, a template's or a doc sample's
     text, links and URLs are myphp's own (`https://github.com/owner888/myphp`), never mygo's or egoist's; credit stays in README and comments.
 17. **Every feature change updates both GitHub and `smart-book` docs** (the developer's rule): whenever adding a feature or modifying existing behavior, check and sync both this repo's `docs/` (`README.md`, `bin/skills/myphp-app/`) and `/Users/ada/Development/owner/smart-book/app/Views/myphp/docs/` (both English and `zh-cn/`).
 
 ## What this is
 
-mygo (`github.com/egoist/mygo`, a pure-Go desktop framework) ported in
-spirit to PHP 8.4+ / 8.5: windows with a system webview or native UI we draw on
-the GPU, reaching the OS through `ext-ffi` only (`FFI::cdef`/`cast` and PHP
-closures play `purego`'s part). No C extension of our own, ever.
-Reference checkout: `../../other/mygo` (read its `AGENTS.md`,
-`docs/architecture.md`, `ui/runtime.go` first). Port behaviour by reading
-mygo's version and keeping its semantics; rename to PHP, do not redesign.
+A 5-platform native application and 2D/3D game framework for PHP 8.4+ / 8.5 (originally inspired by `github.com/egoist/mygo`, now evolved into a full SwiftUI declarative & 5-platform GPU engine): windows and mobile screens with native UI and 3D scenes drawn on the GPU (Metal, Direct3D 11, OpenGL 3.3, OpenGL ES 3.0) or a system WebView, reaching the OS through `ext-ffi` and direct JNI (`myphp ffigen` / `myphp jnigen`). No custom PHP C extension required.
 
 ## Layout
 

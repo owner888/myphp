@@ -780,6 +780,15 @@ abstract class View
     /** The view and its boxing modifiers. */
     private function renderBox(Context $c, Env $env): ?Node
     {
+        // Fast path for plain views with no boxing modifiers, identity, or animations (e.g. Text, Spacer, Icon, Stack)
+        if ($this->mods === [] && $this->identity === null && $this->animated === null && $this->moves === null) {
+            $node = $this->build($c, $env);
+            if ($node !== null && $this->events !== []) {
+                $this->events($c, $node, $node, $env);
+            }
+            return $node;
+        }
+
         // The boxing modifiers in layers, as SwiftUI's wrap the view: a frame is a box around what is before it, the view
         // keeping its own size in it, placed by the frame's alignment (one that takes the room filling it); a padding
         // after one that paints the box goes on a box around it too.
@@ -1030,6 +1039,9 @@ abstract class View
         }
     }
 
+    /** @var ?\WeakMap<Closure, int> Cached parameter count for tap closures to avoid per-click ReflectionFunction */
+    private static ?\WeakMap $arityCache = null;
+
     /** @var list<?\ColorScheme> the appearance preferredColorScheme() set last, none before */
     private static array $scheme = [];
     /** The DynamicTypeSize the app's views asked for last, in a list: [] before any. @var list<?\DynamicTypeSize> */
@@ -1133,7 +1145,9 @@ abstract class View
                 case 'tap':
                     $whole->focusable(false);
                     if ($a[1] === 2 ? $c->doubleClicked($whole) : $c->clicked($whole)) {
-                        if (new \ReflectionFunction($a[0])->getNumberOfParameters() === 0) { ($a[0])(); break; }
+                        self::$arityCache ??= new \WeakMap();
+                        $arity = self::$arityCache[$a[0]] ??= (new \ReflectionFunction($a[0]))->getNumberOfParameters();
+                        if ($arity === 0) { ($a[0])(); break; }
                         $rt = $c->runtime;
                         [$mx, $my] = [$rt?->input->mouseX ?? 0.0, $rt?->input->mouseY ?? 0.0];
                         $at = $a[2] === \CoordinateSpace::global ? [$mx, $my] : ($rt?->toLocal($whole->id, $mx, $my) ?? [0.0, 0.0]);
