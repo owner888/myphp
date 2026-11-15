@@ -113,15 +113,17 @@ final class Layout
     private static function revealAll(Node $root, array $ids): void
     {
         $found = [];
-        $walk = function (Node $n, array $chain) use (&$walk, &$found, $ids): void {
+        $stack = [[$root, []]];
+        while ($stack !== []) {
+            [$n, $chain] = array_pop($stack);
             $chain[] = $n;
             if (!isset($found[$n->id]) && in_array($n->id, $ids, true)) {
                 $found[$n->id] = $chain;
             }
-            foreach ($n->kids as $k) { $walk($k, $chain); }
-        };
-        $walk($root, []);
-        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
+            for ($i = count($n->kids) - 1; $i >= 0; $i--) {
+                $stack[] = [$n->kids[$i], $chain];
+            }
+        }
         foreach ($ids as $id) {
             if (isset($found[$id])) {
                 self::reveal($found[$id]);

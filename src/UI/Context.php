@@ -3779,17 +3779,23 @@ final class Context
     private static function focusIn(Node $e): ?Node
     {
         if ($e->focusable || $e->kind === Node::BUTTON || $e->kind === Node::INPUT || $e->kind === Node::TEXTAREA || $e->kind === Node::SLIDER) { return $e; }
-        $first = null; $chosen = null;
-        $walk = function (Node $e) use (&$walk, &$first, &$chosen) {
-            foreach ($e->kids as $k) {
-                if ($chosen !== null) { return; }
-                if ($k->focusable || $k->kind === Node::BUTTON) { $first ??= $k; if ($k->on) { $chosen = $k; } }
-                $walk($k);
+        $first = null;
+        $stack = [$e];
+        while ($stack !== []) {
+            $cur = array_pop($stack);
+            foreach ($cur->kids as $k) {
+                if ($k->focusable || $k->kind === Node::BUTTON) {
+                    $first ??= $k;
+                    if ($k->on) {
+                        return $k;
+                    }
+                }
             }
-        };
-        $walk($e);
-        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
-        return $chosen ?? $first;
+            for ($i = count($cur->kids) - 1; $i >= 0; $i--) {
+                $stack[] = $cur->kids[$i];
+            }
+        }
+        return $first;
     }
 
     /**

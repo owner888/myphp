@@ -60,17 +60,21 @@ final class OutlineState
             throw new \InvalidArgumentException("an OutlineState's indent must not be negative");
         }
         $this->rows = [];
-        $walk = function (array $items, int $depth, int $parent) use (&$walk, $children): void {
-            foreach ($items as $item) {
-                $kids = $children($item);
-                $this->rows[] = ['item' => $item, 'depth' => $depth, 'parent' => $parent, 'branch' => $kids !== null];
-                if ($kids !== null && $this->open->has($item)) {
-                    $walk($kids, $depth + 1, count($this->rows) - 1);
+        $stack = [];
+        for ($i = count($roots) - 1; $i >= 0; $i--) {
+            $stack[] = [$roots[$i], 0, -1];
+        }
+        while ($stack !== []) {
+            [$item, $depth, $parent] = array_pop($stack);
+            $kids = $children($item);
+            $idx = count($this->rows);
+            $this->rows[] = ['item' => $item, 'depth' => $depth, 'parent' => $parent, 'branch' => $kids !== null];
+            if ($kids !== null && $this->open->has($item)) {
+                for ($i = count($kids) - 1; $i >= 0; $i--) {
+                    $stack[] = [$kids[$i], $depth + 1, $idx];
                 }
             }
-        };
-        $walk($roots, 0, -1);
-        $walk = null; // a recursive closure holds itself: let it go, or it and what it reached wait for the cycle collector (docs/architecture.md)
+        }
     }
 
     /** Opens or closes $item, with $all every item inside it too. @internal */
