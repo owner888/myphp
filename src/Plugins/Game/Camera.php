@@ -14,12 +14,55 @@ use MyPHP\UI\{Painter, Transform};
  */
 final class Camera
 {
+    public float $shakeIntensity = 0.0;
+    public float $shakeDuration = 0.0;
+    public float $shakeElapsed = 0.0;
+    public float $shakeOffsetX = 0.0;
+    public float $shakeOffsetY = 0.0;
+
     public function __construct(
         public float $x = 0,
         public float $y = 0,
         public float $zoom = 0,
         public float $rotation = 0,
     ) {}
+
+    /**
+     * Triggers a damped screen shake of $intensity world units over $duration seconds
+     * (inspired by Flame's CameraComponent viewfinder ShakeEffect).
+     */
+    public function shake(float $intensity = 4.0, float $duration = 0.25): self
+    {
+        $this->shakeIntensity = max(0.0, $intensity);
+        $this->shakeDuration = max(0.001, $duration);
+        $this->shakeElapsed = 0.0;
+        return $this;
+    }
+
+    /**
+     * Advances active camera effects (such as damped screen shake) by $dt seconds.
+     */
+    public function step(float $dt): void
+    {
+        if ($this->shakeIntensity <= 0.0 || $this->shakeElapsed >= $this->shakeDuration) {
+            $this->shakeIntensity = 0.0;
+            $this->shakeOffsetX = 0.0;
+            $this->shakeOffsetY = 0.0;
+            return;
+        }
+        $this->shakeElapsed += $dt;
+        if ($this->shakeElapsed >= $this->shakeDuration) {
+            $this->shakeIntensity = 0.0;
+            $this->shakeOffsetX = 0.0;
+            $this->shakeOffsetY = 0.0;
+            return;
+        }
+        $decay = 1.0 - ($this->shakeElapsed / $this->shakeDuration);
+        $amp = $this->shakeIntensity * $decay * $decay;
+        $phase = $this->shakeElapsed * 65.0;
+        $this->shakeOffsetX = sin($phase * 1.13) * $amp;
+        $this->shakeOffsetY = cos($phase * 1.71) * $amp;
+    }
 
     private function z(): float
     {
@@ -30,7 +73,9 @@ final class Camera
     public function transform(array $r): Transform
     {
         $z = $this->z();
-        $t = Transform::translation(-$this->x, -$this->y);
+        $cx = $this->x + $this->shakeOffsetX;
+        $cy = $this->y + $this->shakeOffsetY;
+        $t = Transform::translation(-$cx, -$cy);
         if ($this->rotation != 0) {
             $t = $t->then(Transform::rotation(-$this->rotation));
         }
@@ -52,7 +97,9 @@ final class Camera
             $z = $this->z();
             $s = $p->scale();
             $snap = fn(float $v): float => round($v * $s) / $s;
-            $t = Transform::scaling($z, $z)->then(Transform::translation($snap($r[0] + $r[2] / 2 - $this->x * $z), $snap($r[1] + $r[3] / 2 - $this->y * $z)));
+            $cx = $this->x + $this->shakeOffsetX;
+            $cy = $this->y + $this->shakeOffsetY;
+            $t = Transform::scaling($z, $z)->then(Transform::translation($snap($r[0] + $r[2] / 2 - $cx * $z), $snap($r[1] + $r[3] / 2 - $cy * $z)));
         }
         $p->clip($r, fn() => $p->transform($t, 0, 0, $fn));
     }

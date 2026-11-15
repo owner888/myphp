@@ -85,8 +85,12 @@ final class Loop
         }
         $this->last = $now;
         while ($this->lag >= $step) {
-            $this->game->update($this->in);
-            $this->in->step();
+            if ($this->game->hitStopSteps > 0) {
+                $this->game->hitStopSteps--;
+            } else {
+                $this->game->update($this->in);
+                $this->in->step();
+            }
             $this->lag -= $step;
         }
         $this->game->draw($p, $r, $this->lag / $step);

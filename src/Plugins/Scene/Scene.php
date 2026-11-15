@@ -88,6 +88,7 @@ final class Scene
      */
     public function step(float $dt): void
     {
+        $this->camera->step($dt);
         foreach ($this->tweens as $k => $tween) {
             if ($tween->step($dt)) {
                 unset($this->tweens[$k]);

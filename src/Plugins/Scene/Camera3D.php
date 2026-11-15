@@ -18,6 +18,12 @@ final class Camera3D
     public float $far;
     public ?float $aspect = null; // optional explicit aspect ratio override
 
+    /** Damped 3D camera shake state */
+    public float $shakeIntensity = 0.0;
+    public float $shakeDuration = 0.0;
+    public float $shakeElapsed = 0.0;
+    public Vec3 $shakeOffset;
+
     public function __construct(
         ?Vec3 $position = null,
         ?Vec3 $target = null,
@@ -32,10 +38,56 @@ final class Camera3D
         $this->fovY = deg2rad($fovYDegrees);
         $this->near = $near;
         $this->far = $far;
+        $this->shakeOffset = Vec3::zero();
+    }
+
+    /**
+     * Triggers a damped 3D camera shake of $intensity world units over $duration seconds.
+     * Automatically stepped by Scene::step($dt).
+     */
+    public function shake(float $intensity = 0.18, float $duration = 0.25): self
+    {
+        $this->shakeIntensity = max(0.0, $intensity);
+        $this->shakeDuration = max(0.001, $duration);
+        $this->shakeElapsed = 0.0;
+        return $this;
+    }
+
+    /**
+     * Advances active camera shake by $dt seconds.
+     */
+    public function step(float $dt): void
+    {
+        if ($this->shakeIntensity <= 0.0 || $this->shakeElapsed >= $this->shakeDuration) {
+            $this->shakeIntensity = 0.0;
+            $this->shakeOffset = Vec3::zero();
+            return;
+        }
+        $this->shakeElapsed += $dt;
+        if ($this->shakeElapsed >= $this->shakeDuration) {
+            $this->shakeIntensity = 0.0;
+            $this->shakeOffset = Vec3::zero();
+            return;
+        }
+        $decay = 1.0 - ($this->shakeElapsed / $this->shakeDuration);
+        $amp = $this->shakeIntensity * $decay * $decay;
+        $phase = $this->shakeElapsed * 65.0;
+        $this->shakeOffset = new Vec3(
+            sin($phase * 1.13) * $amp,
+            cos($phase * 1.71) * $amp,
+            sin($phase * 2.37) * $amp * 0.5
+        );
     }
 
     public function viewMatrix(): Mat4
     {
+        if ($this->shakeIntensity > 0.0) {
+            return Mat4::lookAt(
+                $this->position->add($this->shakeOffset),
+                $this->target->add($this->shakeOffset),
+                $this->up
+            );
+        }
         return Mat4::lookAt($this->position, $this->target, $this->up);
     }
 

@@ -3107,3 +3107,13 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
     zero-copy VRAM compositing into `UI\Canvas`.
   - Why: game and 3D visual application development requires hardware-accelerated
     depth and geometry pipelines without dropping 2D quad batching performance.
+- **Game Feel & Handheld Toolkit** (v1.190)
+  - mygo: `plugins/game` provides `Game`, `Input`, `Camera`, and `Gamepad`.
+  - myphp: adds `Game::hitStop()`, `Camera::shake()` / `Camera3D::shake()`,
+    `VirtualPad` (on-screen handheld D-Pad/thumbstick + A/B/Start buttons with
+    synthetic key injection), `SpriteSheet` & `SpriteAnimation`, `GameAudio`
+    (in-memory SFX pool with pitch variance, procedural tone synth, and BGM
+    cross-fading), `ScreenTransition` (`FADE`, `SHUTTER`, `BATTLE_BLINDS`), and
+    `SpriteView(overlay:)`.
+  - Why: cross-platform desktop and mobile 2D/3D games require built-in touch
+    controls, sprite animation slicing, screen transitions, and audio pooling.

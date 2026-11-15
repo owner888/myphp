@@ -216,3 +216,120 @@ platforms report no pads yet.
 
 [examples/farm](../../examples/farm) plays with a gamepad as with the
 keyboard.
+
+---
+
+## Game Feel & Handheld Toolkit (Flame-inspired Utilities)
+
+Beyond the core loop and camera, `MyPHP\Plugins\Game` includes a suite of zero-allocation game utilities inspired by the Flutter Flame / Casual Games Toolkit ecosystem:
+
+### 1. Screen Shake & Hit-Stop Freeze-Frames (`Camera::shake`, `Camera3D::shake`, `Game::hitStop`)
+
+Add tactile impact to heavy attacks, critical hits, explosions, or collisions:
+
+<!-- no-test -->
+```php
+// Freeze logic updates for 3 steps while keeping rendering active
+$this->hitStop(3);
+
+// Damped 2D screen shake (intensity in world units, duration in seconds)
+$this->camera->shake(intensity: 5.0, duration: 0.25);
+// Inside update():
+$this->camera->step(1.0 / $this->rate());
+
+// Damped 3D camera shake (automatically stepped by Scene::step($dt))
+$this->scene->camera->shake(intensity: 0.22, duration: 0.25);
+```
+
+### 2. Mobile On-Screen Handheld Controller (`VirtualPad`)
+
+`VirtualPad` renders a translucent D-Pad / analog thumbstick plus `A`, `B`, and `MENU` buttons on touchscreens, and automatically injects synthetic keyboard events (`Key::UP/DOWN/LEFT/RIGHT`, `Key::SPACE`, `Key::ESCAPE`, `Key::TAB`) into `Game\Input` so desktop keyboard games run on iOS and Android with zero code changes:
+
+<!-- no-test -->
+```php
+use MyPHP\Plugins\Game\VirtualPad;
+
+$this->pad = new VirtualPad(enabled: !Device::isDesktop());
+
+// At the start of update(Input $in):
+$this->pad->step($in);
+
+// At the end of draw(Painter $p, array $r, float $alpha):
+$this->pad->draw($p, $r);
+```
+
+### 3. Sprite Sheets & Frame Animations (`SpriteSheet` & `SpriteAnimation`)
+
+Slice a texture atlas `Image` into a grid of tiles or sequenced frame animations, rendered zero-copy via `Painter::imageRegion()`:
+
+<!-- no-test -->
+```php
+use MyPHP\Plugins\Game\SpriteSheet;
+
+$sheet = new SpriteSheet($atlasImage, tileWidth: 16, tileHeight: 16);
+$walkRight = $sheet->animation(row: 1, fromCol: 0, count: 4, stepTime: 0.12, loop: true);
+
+// In update():
+$walkRight->step(1.0 / $this->rate());
+
+// In draw():
+$walkRight->draw($p, [$x, $y, 32, 32]);
+```
+
+### 4. Game Audio Pool & BGM Cross-Fader (`GameAudio`)
+
+`GameAudio` manages low-latency in-memory SFX playback (with optional random pitch variance to prevent ear fatigue), procedural 8-bit/16-bit retro tone synthesis (`registerTone`), and smooth BGM cross-fading when switching between field maps and battle scenes:
+
+<!-- no-test -->
+```php
+use MyPHP\Plugins\Game\GameAudio;
+
+$this->audio = new GameAudio();
+$this->audio->registerSfx('slash', __DIR__ . '/assets/slash.wav');
+$this->audio->registerTone('beep', startFreq: 520.0, endFreq: 880.0, duration: 0.08, square: true);
+
+// Play SFX with ±6% random pitch variation
+$this->audio->playSfx('slash', volume: 0.9, pitchVariance: 0.06);
+
+// Cross-fade from field BGM to battle BGM over 0.6s
+$this->audio->playBgm(__DIR__ . '/assets/battle.ogg', crossfadeDuration: 0.6);
+
+// In update():
+$this->audio->step(1.0 / $this->rate());
+```
+
+### 5. Classic Screen Transitions (`ScreenTransition`)
+
+Run full-screen fades (`FADE`), theater curtains (`SHUTTER`), or classic handheld RPG wild-encounter flashes + horizontal blinds (`BATTLE_BLINDS`) with a midpoint callback that fires when the screen is covered:
+
+<!-- no-test -->
+```php
+use MyPHP\Plugins\Game\ScreenTransition;
+
+$this->transition = new ScreenTransition();
+$this->transition->start(
+    ScreenTransition::BATTLE_BLINDS,
+    duration: 0.55,
+    onMidpoint: fn() => $this->enterWildBattle()
+);
+
+// In update():
+$this->transition->step(1.0 / $this->rate());
+// At the end of draw():
+$this->transition->draw($p, $r);
+```
+
+### 6. Declarative SwiftUI Overlays (`SpriteView(overlay:)`)
+
+Layer native declarative SwiftUI HUDs, pause menus, or inventory sheets directly over a 60fps `SpriteView`:
+
+<!-- no-test -->
+```php
+return fn() => SpriteView(
+    scene: $this,
+    overlay: fn() => $this->paused ? VStack(spacing: 12)(
+        Text('PAUSED')->font(Font::title2())->bold(),
+        Button('Resume', action: $this->togglePause(...))->buttonStyle(ButtonStyle::borderedProminent),
+    )->padding(24)->background(Color::secondarySystemBackground)->cornerRadius(16)->center() : null
+);
+```

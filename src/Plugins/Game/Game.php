@@ -32,6 +32,19 @@ abstract class Game
     /** The most time steps catch up on after a pause, as a window out of sight, in seconds (MonoGame's MaxElapsedTime). */
     public const MAX_CATCH_UP = 0.25;
 
+    /** Remaining logic steps to freeze for heavy hit-stop impact feedback. */
+    public int $hitStopSteps = 0;
+
+    /**
+     * Freezes update() for $steps logic ticks while continuing to render frames,
+     * giving heavy attacks, critical hits, or collisions tactile impact (hit-stop / freeze-frame).
+     */
+    public function hitStop(int $steps = 3): self
+    {
+        $this->hitStopSteps = max($this->hitStopSteps, $steps);
+        return $this;
+    }
+
     /** Advances the game one step, of 1/rate() seconds, with the input since the step before. */
     abstract public function update(Input $in): void;
 
@@ -58,9 +71,12 @@ abstract class Game
      * when it or its window loses the keyboard. Size it as any node, as
      * with $node->grow = 1 or size().
      */
-    public static function view(Context $c, self $g): Node
+    public static function view(Context $c, self $g, ?\Closure $overlay = null): Node
     {
         $e = $c->column();
+        if ($overlay !== null) {
+            $overlay($c);
+        }
         $c->end();
         $e->focusable()->autoFocus();
         $rt = $c->runtime;

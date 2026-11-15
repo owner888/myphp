@@ -6,7 +6,9 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Game\{Camera, Game, Input};
+use MyPHP\Plugins\Game\{Camera, Game, GameAudio, Input, ScreenTransition, SpriteSheet, VirtualPad};
+use MyPHP\Plugins\Scene\Camera3D;
+use MyPHP\UI\Image;
 use MyPHP\Plugins\Game\Gamepad\{Axis, Button, Device, Gamepad, State};
 use MyPHP\UI\{Context, DisplayList, Key, Painter, Theme};
 
@@ -211,3 +213,84 @@ check(abs(hypot($x, $y) - 1) < 1e-3, 'the diagonal rim is all the way');
 $s->axes[Axis::RightX->value] = -(Gamepad::DEADZONE + (1 - Gamepad::DEADZONE) / 2);
 check(abs($s->rightStick()[0] + 0.5) < 1e-4, 'half way past the dead zone');
 same(0.0, $s->axis(Axis::RightY), 'an axis at rest');
+
+// 1. Hit-stop (freeze-frame) & 2D/3D Camera Shake.
+$g = new GameStepper;
+$now = 1000 * 1000 * GAME_MS;
+$h = gameTester($g, $now);
+$g->hitStop(3);
+$now += 100 * GAME_MS; // 6 steps of time, 3 frozen by hitStop -> 3 steps executed
+$h->frame(1);
+same(3, $g->steps, 'hitStop(3) freezes 3 logic ticks out of 6');
+same(0, $g->hitStopSteps, 'hitStopSteps drained to 0');
+
+$cam2d = new Camera(100, 100);
+$cam2d->shake(6.0, 0.25);
+$cam2d->step(0.05);
+check($cam2d->shakeOffsetX != 0.0 || $cam2d->shakeOffsetY != 0.0, '2D camera shake offsets active');
+$cam2d->step(0.25);
+same([0.0, 0.0], [$cam2d->shakeOffsetX, $cam2d->shakeOffsetY], '2D camera shake decays back to zero');
+
+$cam3d = new Camera3D();
+$cam3d->shake(0.3, 0.2);
+$cam3d->step(0.04);
+check($cam3d->shakeOffset->length() > 0.0, '3D camera shake offset active');
+$cam3d->step(0.20);
+same(0.0, $cam3d->shakeOffset->length(), '3D camera shake decays back to zero');
+
+// 2. VirtualPad touch controller & synthetic key injection.
+$vpad = new VirtualPad();
+$vin = new Input();
+$vin->w = 800.0;
+$vin->h = 600.0;
+// Press right side of D-Pad (center is at x = 28 + 56 = 84, y = 600 - 32 - 56 = 512)
+$vin->buttons[0] = true;
+$vin->x = 124.0;
+$vin->y = 512.0;
+$vpad->step($vin);
+check($vpad->right && $vpad->axisX > 0.5 && $vin->down(Key::RIGHT) && $vin->pressed(Key::RIGHT), 'VirtualPad D-pad right injects Key::RIGHT');
+[$p] = gamePainter(1);
+$vpad->draw($p, [0.0, 0.0, 800.0, 600.0]);
+// Release touch
+$vin->step();
+$vin->buttons[0] = false;
+$vpad->step($vin);
+check(!$vpad->right && !$vin->down(Key::RIGHT) && $vin->released(Key::RIGHT), 'VirtualPad release emits Key::RIGHT released');
+
+// 3. SpriteSheet & SpriteAnimation.
+$fakeImg = Image::fromPixels(64, 32, str_repeat("\xFF\x00\x00\xFF", 64 * 32));
+$sheet = new SpriteSheet($fakeImg, tileWidth: 16, tileHeight: 16);
+same(4, $sheet->columns, 'SpriteSheet columns');
+same(2, $sheet->rows, 'SpriteSheet rows');
+same([32.0, 16.0, 16.0, 16.0], $sheet->rect(2, 1), 'SpriteSheet tile rect(2, 1)');
+$anim = $sheet->animation(row: 0, fromCol: 0, count: 4, stepTime: 0.1, loop: false);
+same(0, $anim->currentIndex, 'SpriteAnimation initial frame');
+$anim->step(0.25);
+same(2, $anim->currentIndex, 'SpriteAnimation after 0.25s');
+$anim->step(0.20);
+check($anim->currentIndex === 3 && $anim->done(), 'SpriteAnimation non-looping finishes at last frame');
+
+// 4. GameAudio procedural synth & SFX pool.
+$audio = new GameAudio();
+$sound = $audio->registerTone('hit', startFreq: 520.0, endFreq: 180.0, duration: 0.08, square: true);
+check($sound->frames() > 3000, 'GameAudio synthesized retro tone frames');
+$audio->muted = true;
+same(null, $audio->playSfx('hit'), 'GameAudio muted returns null player');
+
+// 5. ScreenTransition (Fade, Battle Blinds, Shutter).
+$trans = new ScreenTransition();
+$midCalled = $doneCalled = false;
+$trans->start(
+    ScreenTransition::BATTLE_BLINDS,
+    duration: 0.4,
+    onMidpoint: function () use (&$midCalled): void { $midCalled = true; },
+    onComplete: function () use (&$doneCalled): void { $doneCalled = true; }
+);
+$trans->step(0.10);
+$trans->draw($p, [0.0, 0.0, 800.0, 600.0]);
+check($trans->active && !$midCalled, 'ScreenTransition before midpoint');
+$trans->step(0.15); // total 0.25 >= 0.20 midpoint
+$trans->draw($p, [0.0, 0.0, 800.0, 600.0]);
+check($midCalled && !$doneCalled, 'ScreenTransition fired onMidpoint at 50%');
+$trans->step(0.20); // total 0.45 >= 0.40 duration
+check(!$trans->active && $doneCalled, 'ScreenTransition completed and fired onComplete');

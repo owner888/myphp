@@ -651,7 +651,22 @@ enum NavigationSplitViewVisibility { case automatic; case all; case detailOnly; 
 function Representable(Closure $make, bool $fills = false): D\Representable { return new D\Representable($make, $fills); }
 
 /** A game of the Game plugin, its scene, taking the room it is given, as SwiftUI's SpriteView(scene:). */
-function SpriteView(MyPHP\Plugins\Game\Game $scene): D\Representable { return new D\Representable(static fn(MyPHP\UI\Context $c) => MyPHP\Plugins\Game\Game::view($c, $scene), true); }
+function SpriteView(MyPHP\Plugins\Game\Game $scene, ?Closure $overlay = null): D\Representable
+{
+    return new D\Representable(
+        static fn(MyPHP\UI\Context $c) => MyPHP\Plugins\Game\Game::view(
+            $c,
+            $scene,
+            $overlay !== null ? static function (MyPHP\UI\Context $c) use ($overlay): void {
+                $node = $overlay();
+                if ($node instanceof D\View) {
+                    $node->mount($c);
+                }
+            } : null
+        ),
+        true
+    );
+}
 
 /** A 3D scene of the Scene plugin, taking the room it is given, as SwiftUI's SceneView(scene:). */
 function SceneView(
