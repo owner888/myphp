@@ -39,9 +39,17 @@ final class Layer
     {
         if ($this->dirty === null) { return; }
         [$x0, $y0, $x1, $y1] = $this->dirty;
-        $pix = $this->pix;
-        for ($y = $y0; $y < $y1; $y++) {
-            for ($i = ($y * $this->w + $x0) * 4, $e = ($y * $this->w + $x1) * 4; $i < $e; $i++) { $pix[$i] = 0; }
+        $spanBytes = ($x1 - $x0) * 4;
+        if ($spanBytes > 0) {
+            $pix = $this->pix;
+            $w = $this->w;
+            if ($x0 === 0 && $x1 === $w) {
+                FFI::memset($pix + ($y0 * $w * 4), 0, ($y1 - $y0) * $w * 4);
+            } else {
+                for ($y = $y0; $y < $y1; $y++) {
+                    FFI::memset($pix + (($y * $w + $x0) * 4), 0, $spanBytes);
+                }
+            }
         }
         $this->dirty = null;
     }

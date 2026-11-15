@@ -131,11 +131,15 @@ final class Renderer
                     $v = $cov[$ci + $x];
                     if ($v === 0) { continue; }
                     if ($v === 255 && $ca === 255) { $pix[$pi] = $cr; $pix[$pi + 1] = $cg; $pix[$pi + 2] = $cb; $pix[$pi + 3] = 255; continue; }
-                    $sa = self::div255($ca * $v); $ia = 255 - $sa;
-                    $pix[$pi] = self::div255($cr * $v) + self::div255($pix[$pi] * $ia);
-                    $pix[$pi + 1] = self::div255($cg * $v) + self::div255($pix[$pi + 1] * $ia);
-                    $pix[$pi + 2] = self::div255($cb * $v) + self::div255($pix[$pi + 2] * $ia);
-                    $pix[$pi + 3] = $sa + self::div255($pix[$pi + 3] * $ia);
+                    $t = $ca * $v + 128; $sa = ($t + ($t >> 8)) >> 8; $ia = 255 - $sa;
+                    $t0 = $cr * $v + 128; $t1 = $pix[$pi] * $ia + 128;
+                    $pix[$pi] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
+                    $t0 = $cg * $v + 128; $t1 = $pix[$pi + 1] * $ia + 128;
+                    $pix[$pi + 1] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
+                    $t0 = $cb * $v + 128; $t1 = $pix[$pi + 2] * $ia + 128;
+                    $pix[$pi + 2] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
+                    $t1 = $pix[$pi + 3] * $ia + 128;
+                    $pix[$pi + 3] = $sa + (($t1 + ($t1 >> 8)) >> 8);
                 }
             }
         } elseif ($p[0] === Shape::GRADIENT) {
@@ -160,11 +164,16 @@ final class Renderer
                     if ($linear) { $t = $tx * $px + $ty * $py + $t0; $t = $t < 0 ? 0.0 : ($t > 1 ? 1.0 : $t); }
                     else { $t = $g->at($i0 * $px + $i2 * $py + $i4, $i1 * $px + $i3 * $py + $i5); if ($t === null) { continue; } }
                     [$cr, $cg, $cb, $ca] = $lut[(int)($t * 255 + 0.5)];
-                    $sa = self::div255($ca * $v); $ia = 255 - $sa;
-                    $pix[$pi] = self::div255($cr * $v) + self::div255($pix[$pi] * $ia);
-                    $pix[$pi + 1] = self::div255($cg * $v) + self::div255($pix[$pi + 1] * $ia);
-                    $pix[$pi + 2] = self::div255($cb * $v) + self::div255($pix[$pi + 2] * $ia);
-                    $pix[$pi + 3] = $sa + self::div255($pix[$pi + 3] * $ia);
+                    if ($v === 255 && $ca === 255) { $pix[$pi] = $cr; $pix[$pi + 1] = $cg; $pix[$pi + 2] = $cb; $pix[$pi + 3] = 255; continue; }
+                    $tmp = $ca * $v + 128; $sa = ($tmp + ($tmp >> 8)) >> 8; $ia = 255 - $sa;
+                    $t0 = $cr * $v + 128; $t1 = $pix[$pi] * $ia + 128;
+                    $pix[$pi] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
+                    $t0 = $cg * $v + 128; $t1 = $pix[$pi + 1] * $ia + 128;
+                    $pix[$pi + 1] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
+                    $t0 = $cb * $v + 128; $t1 = $pix[$pi + 2] * $ia + 128;
+                    $pix[$pi + 2] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
+                    $t1 = $pix[$pi + 3] * $ia + 128;
+                    $pix[$pi + 3] = $sa + (($t1 + ($t1 >> 8)) >> 8);
                 }
             }
         } else {
@@ -186,12 +195,20 @@ final class Renderer
                 $sa = $s[$i + 3];
                 if ($sa === 0) { continue; }
                 $sr = $s[$i]; $sg = $s[$i + 1]; $sb = $s[$i + 2];
-                if ($k !== 255) { $sr = self::div255($sr * $k); $sg = self::div255($sg * $k); $sb = self::div255($sb * $k); $sa = self::div255($sa * $k); }
+                if ($k !== 255) {
+                    $tmp = $sr * $k + 128; $sr = ($tmp + ($tmp >> 8)) >> 8;
+                    $tmp = $sg * $k + 128; $sg = ($tmp + ($tmp >> 8)) >> 8;
+                    $tmp = $sb * $k + 128; $sb = ($tmp + ($tmp >> 8)) >> 8;
+                    $tmp = $sa * $k + 128; $sa = ($tmp + ($tmp >> 8)) >> 8;
+                } elseif ($sa === 255) {
+                    $t[$i] = $sr; $t[$i + 1] = $sg; $t[$i + 2] = $sb; $t[$i + 3] = 255;
+                    continue;
+                }
                 $ia = 255 - $sa;
-                $t[$i] = $sr + self::div255($t[$i] * $ia);
-                $t[$i + 1] = $sg + self::div255($t[$i + 1] * $ia);
-                $t[$i + 2] = $sb + self::div255($t[$i + 2] * $ia);
-                $t[$i + 3] = $sa + self::div255($t[$i + 3] * $ia);
+                $tmp = $t[$i] * $ia + 128;     $t[$i]     = $sr + (($tmp + ($tmp >> 8)) >> 8);
+                $tmp = $t[$i + 1] * $ia + 128; $t[$i + 1] = $sg + (($tmp + ($tmp >> 8)) >> 8);
+                $tmp = $t[$i + 2] * $ia + 128; $t[$i + 2] = $sb + (($tmp + ($tmp >> 8)) >> 8);
+                $tmp = $t[$i + 3] * $ia + 128; $t[$i + 3] = $sa + (($tmp + ($tmp >> 8)) >> 8);
             }
         }
         $dst->touch($d);
@@ -208,8 +225,10 @@ final class Renderer
                 $v = $mask[$mi + $x];
                 if ($v === 255) { continue; }
                 if ($v === 0) { $pix[$pi] = $pix[$pi + 1] = $pix[$pi + 2] = $pix[$pi + 3] = 0; continue; }
-                $pix[$pi] = self::div255($pix[$pi] * $v); $pix[$pi + 1] = self::div255($pix[$pi + 1] * $v);
-                $pix[$pi + 2] = self::div255($pix[$pi + 2] * $v); $pix[$pi + 3] = self::div255($pix[$pi + 3] * $v);
+                $tmp = $pix[$pi] * $v + 128;     $pix[$pi]     = ($tmp + ($tmp >> 8)) >> 8;
+                $tmp = $pix[$pi + 1] * $v + 128; $pix[$pi + 1] = ($tmp + ($tmp >> 8)) >> 8;
+                $tmp = $pix[$pi + 2] * $v + 128; $pix[$pi + 2] = ($tmp + ($tmp >> 8)) >> 8;
+                $tmp = $pix[$pi + 3] * $v + 128; $pix[$pi + 3] = ($tmp + ($tmp >> 8)) >> 8;
             }
         }
     }

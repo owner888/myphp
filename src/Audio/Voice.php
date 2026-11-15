@@ -243,10 +243,15 @@ final class Voice
             $t = $this->phase;
             $p0 = $this->h0l; $p1 = $this->h1l; $p2 = $this->h2l; $p3 = $this->h3l;
             $l = $p1 + 0.5 * $t * ($p2 - $p0 + $t * (2 * $p0 - 5 * $p1 + 4 * $p2 - $p3 + $t * (3 * ($p1 - $p2) + $p3 - $p0)));
-            $p0 = $this->h0r; $p1 = $this->h1r; $p2 = $this->h2r; $p3 = $this->h3r;
-            $r = $p1 + 0.5 * $t * ($p2 - $p0 + $t * (2 * $p0 - 5 * $p1 + 4 * $p2 - $p3 + $t * (3 * ($p1 - $p2) + $p3 - $p0)));
-            $out[$i] += $l * $g0 + $r * $g2;
-            $out[$i + 1] += $l * $g1 + $r * $g3;
+            if ($this->mono) {
+                $out[$i] += $l * $g0;
+                $out[$i + 1] += $l * $g3;
+            } else {
+                $p0 = $this->h0r; $p1 = $this->h1r; $p2 = $this->h2r; $p3 = $this->h3r;
+                $r = $p1 + 0.5 * $t * ($p2 - $p0 + $t * (2 * $p0 - 5 * $p1 + 4 * $p2 - $p3 + $t * (3 * ($p1 - $p2) + $p3 - $p0)));
+                $out[$i] += $l * $g0 + $r * $g2;
+                $out[$i + 1] += $l * $g1 + $r * $g3;
+            }
             $this->phase += $step;
         }
         $n = $frames;
