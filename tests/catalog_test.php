@@ -89,6 +89,22 @@ same('ok', $made, 'a phar of catalogs');
 $inPhar = new Catalog("phar://$pharFile/l10n", 'en');
 same([['en', 'de'], 'Hallo'], [$inPhar->languages(), $inPhar->format('de', 'hello')], 'its languages and messages');
 
+// SwiftUI-style PHP string interpolation (`Text("Count: {$this->count}")`) matched against catalog template keys (`"Count: {count}"`).
+Catalog::resetRegistry();
+$interpCat = new Catalog($files([
+    'en.json' => '{"Count: {count}": "Count: {count}", "Hello, {name}!": "Hello, {name}!", "Items: {count}": "{count, plural, one {# item} other {# items}}"}',
+    'zh-Hans.json' => '{"Count: {count}": "当前计数：{count}", "Hello, {name}!": "你好，{name}！", "Items: {count}": "共 {count} 项"}',
+    'de.json' => '{"Count: {count}": "Anzahl: {count}", "Hello, {name}!": "Hallo, {name}!", "Items: {count}": "{count, plural, one {# Element} other {# Elemente}}"}',
+]), 'en');
+I18n::register($interpCat);
+$n = 42;
+$user = 'Ada';
+same('当前计数：42', Catalog::say('zh-Hans', "Count: {$n}"), 'PHP interpolated string matches "Count: {count}" in zh-Hans');
+same('你好，Ada！', Catalog::say('zh-Hans', "Hello, {$user}!"), 'PHP interpolated string matches "Hello, {name}!" in zh-Hans');
+same('1 Element', Catalog::say('de', "Items: 1"), 'PHP interpolated numeric value feeds into target ICU plural in de (singular)');
+same('5 Elemente', Catalog::say('de', "Items: 5"), 'PHP interpolated numeric value feeds into target ICU plural in de (plural)');
+Catalog::resetRegistry();
+
 foreach (glob("$tmp/*/*") as $f) { unlink($f); }
 foreach (glob("$tmp/*") as $d) { rmdir($d); }
 rmdir($tmp);

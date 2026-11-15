@@ -1,14 +1,13 @@
 # Text
 
 `Text` shows a line or a paragraph, which wraps at the width it is given,
-as SwiftUI's. Its string is the key of its translation in the app's
-strings ([languages](../i18n.md)), its placeholders named arguments,
-`Text('Count: {count}', count: $n)`, as close as PHP comes to SwiftUI's
-`Text("Count: \(n)")` (or `args:`, an array, for a placeholder named
-`text`, `args` or `verbatim`). Not `Text("Count: {$n}")`: PHP joins
-that before `Text` sees it, a key of its own for every number, which no
-translation has. `Text(verbatim:)` shows a string as it is, as data
-should be.
+as SwiftUI's. Its string is looked up in the app's translation catalogs
+([languages](../i18n.md)): you can write either PHP string interpolation
+`Text("Count: {$this->count}")` (which automatically matches catalog template
+keys like `"Count: {count}"` and extracts `{count}` for translation and ICU
+plurals!) or explicit named arguments `Text('Count: {count}', count: $n)`.
+`Text(verbatim:)` shows a string as it is, without translation or Markdown
+parsing.
 
 ```php
 $app = new class { public int $files = 12; };

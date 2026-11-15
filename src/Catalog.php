@@ -318,15 +318,93 @@ final class Catalog
         Locales::catalogsChanged();
     }
 
+    /** @var ?array<string, list<array{0: string, 1: string, 2: list<string>}>> Compiled regex patterns for keys with `{name}` placeholders: [key, regex, argNames] */
+    private ?array $patterns = null;
+
     /**
      * $key said in $locale by the catalogs the app registered, $args in its
      * placeholders, or null when none has it: the views' text, whose key is
      * the text itself as SwiftUI's String Catalog has it (Text('Submit')).
+     *
+     * Also supports SwiftUI-style PHP string interpolation (`Text("Count: {$this->count}")`)
+     * by matching interpolated strings against catalog template keys (`"Count: {count}"`)
+     * when $args is empty and no exact key match exists!
      */
     public static function say(string $locale, string $key, array $args = []): ?string
     {
         foreach (self::$registered as $c) {
             if ($c->message($locale, $key) !== null) { return $c->format($locale, $key, $args); }
+        }
+        if ($args === []) {
+            foreach (self::$registered as $c) {
+                $matched = $c->matchInterpolated($locale, $key);
+                if ($matched !== null) {
+                    return $matched;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Matches an already-interpolated PHP string (e.g. "Count: 5" from `Text("Count: {$this->count}")`)
+     * against parameterized keys in this catalog (e.g. `"Count: {count}"` or `"Hello, {name}!"`),
+     * extracts the argument values, and formats the localized message in $locale.
+     */
+    private function matchInterpolated(string $locale, string $text): ?string
+    {
+        if ($this->patterns === null) {
+            $this->patterns = [];
+            foreach ($this->keys() as $k) {
+                // Match simple `{name}` placeholders (not nested ICU plural/select blocks)
+                if (!str_contains($k, '{') || preg_match('/\{[a-zA-Z0-9_]+\s*,/', $k)) {
+                    continue;
+                }
+                if (!preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $k, $m, PREG_OFFSET_CAPTURE)) {
+                    continue;
+                }
+                $argNames = [];
+                $regex = '/^';
+                $last = 0;
+                foreach ($m[0] as $idx => [$full, $offset]) {
+                    $lit = substr($k, $last, $offset - $last);
+                    $regex .= preg_quote($lit, '/');
+                    $argNames[] = $m[1][$idx][0];
+                    $regex .= '(.+?)';
+                    $last = $offset + strlen($full);
+                }
+                $tail = substr($k, $last);
+                // Replace the last (.+?) with (.+) if there is no trailing literal so it captures to the end
+                if ($tail === '') {
+                    $regex = substr($regex, 0, -5) . '(.+)$/su';
+                } else {
+                    $regex .= preg_quote($tail, '/') . '$/su';
+                }
+                $firstPrefix = substr($k, 0, $m[0][0][1]);
+                $bucket = $firstPrefix !== '' ? $firstPrefix[0] : '';
+                $this->patterns[$bucket][] = [$k, $regex, $argNames];
+            }
+        }
+
+        $buckets = [];
+        if ($text !== '' && isset($this->patterns[$text[0]])) {
+            $buckets[] = $this->patterns[$text[0]];
+        }
+        if (isset($this->patterns[''])) {
+            $buckets[] = $this->patterns[''];
+        }
+
+        foreach ($buckets as $list) {
+            foreach ($list as [$templateKey, $regex, $argNames]) {
+                if (preg_match($regex, $text, $matches)) {
+                    $extracted = [];
+                    foreach ($argNames as $i => $name) {
+                        $val = $matches[$i + 1];
+                        $extracted[$name] = is_numeric($val) ? (str_contains($val, '.') ? (float)$val : (int)$val) : $val;
+                    }
+                    return $this->format($locale, $templateKey, $extracted);
+                }
+            }
         }
         return null;
     }
