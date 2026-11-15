@@ -203,7 +203,7 @@ own, by its path in the app's resources, such as `bin/server` for
 
 A plugin that loads a native library, as the [terminal
 plugin](plugins/terminal.md) loads libghostty-vt, names its builds in a
-`mygo-plugin.json` next to its sources, with a file per platform, where to
+`myphp-plugin.json` next to its sources, with a file per platform, where to
 download it and its SHA-256. `myphp build` and `myphp dev` find these files
 in the plugins the app uses, download each library once into the user's
 cache, check its SHA-256, and install it at the top of the app's

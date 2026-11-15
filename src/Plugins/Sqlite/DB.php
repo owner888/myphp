@@ -20,13 +20,12 @@ final class DB
 
     /** The connection, null once closed. */
     private ?CData $handle;
-    /** The operation running now, whose busy handler and authorizer the shim keeps. */
-    private ?CData $token = null;
 
     /** @internal Sqlite::open() makes it */
     public function __construct(CData $handle, private readonly int $timeout)
     {
         $this->handle = $handle;
+        Lib::ffi()->sqlite3_busy_timeout($handle, $this->timeout);
     }
 
     /** Closes the connection. Repeated calls are harmless. */
@@ -86,8 +85,6 @@ final class DB
                 $this->control('COMMIT');
                 return $results;
             } catch (\Throwable $e) {
-                // Cleanup runs without the operation's authorizer.
-                Lib::ffi()->mygo_sqlite_operation_end($this->handle);
                 try {
                     $this->control('ROLLBACK');
                 } catch (Error $rollback) {
@@ -100,25 +97,23 @@ final class DB
         });
     }
 
-    /** Runs $fn as one operation of the shim: its busy timeout and its authorizer, which keeps transaction control and ATTACH out of the user's SQL. */
+    /** Runs $fn on the open connection. */
     private function operation(\Closure $fn): mixed
     {
         if ($this->handle === null) {
             throw new ErrClosed;
         }
-        $f = Lib::ffi();
-        $op = $f->mygo_sqlite_operation_new($this->timeout);
-        if (FFI::isNull($op)) {
-            throw new Error(7, 7, 'out of memory');
-        }
-        $this->token = $op;
-        $f->mygo_sqlite_operation_start($this->handle, $op);
-        try {
-            return $fn();
-        } finally {
-            $f->mygo_sqlite_operation_end($this->handle);
-            $f->sqlite3_free($op);
-            $this->token = null;
+        return $fn();
+    }
+
+    /** Rejects transaction control (BEGIN/COMMIT/ROLLBACK/SAVEPOINT/RELEASE), ATTACH/DETACH, and VACUUM INTO in user SQL. */
+    private static function checkAllowedSql(string $sql): void
+    {
+        // Strip SQL comments before checking leading keyword
+        $clean = (string)preg_replace('~--[^\r\n]*|/\*.*?\*/~s', ' ', $sql);
+        if (preg_match('/^\s*(BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE|ATTACH|DETACH)\b/i', $clean) === 1
+            || preg_match('/^\s*VACUUM\s+INTO\b/i', $clean) === 1) {
+            throw new Error(23, 23, 'not authorized');
         }
     }
 
@@ -140,16 +135,17 @@ final class DB
         if (strlen($sql) > 0x7ffffffe || str_contains($sql, "\0") || !mb_check_encoding($sql, 'UTF-8')) {
             throw new InvalidArgumentException('sqlite: SQL must be UTF-8 without NUL and fit in a C int');
         }
+        if (!$control) {
+            self::checkAllowedSql($sql);
+        }
         $f = Lib::ffi();
         $n = strlen($sql) + 1;
         $buf = $f->new("char[$n]");
         FFI::memcpy($buf, $sql . "\0", $n);
         $base = Mem::addr(FFI::addr($buf[0]));
-        $call = function (int $offset, CData $stmt, CData $tail) use ($f, $buf, $n, $control): int {
+        $call = function (int $offset, CData $stmt, CData $tail) use ($f, $buf, $n): int {
             $at = FFI::addr($buf[$offset]);
-            return $control
-                ? $f->sqlite3_prepare_v2($this->handle, $at, $n - $offset, FFI::addr($stmt), $f->cast('const char**', FFI::addr($tail)))
-                : $f->mygo_sqlite_prepare($this->handle, $at, $n - $offset, FFI::addr($stmt), $f->cast('const char**', FFI::addr($tail)), $this->token);
+            return $f->sqlite3_prepare_v2($this->handle, $at, $n - $offset, FFI::addr($stmt), $f->cast('const char**', FFI::addr($tail)));
         };
         $stmt = $f->new('sqlite3_stmt*');
         $tail = $f->new('intptr_t');

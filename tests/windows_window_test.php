@@ -39,7 +39,7 @@ namespace MyPHP\Tests;
     same([true, false], $r['icon'], "the app's icon on it, then the executable's");
     same(1, $r['bounce'], 'its taskbar button flashed');
     same([true, false, false, true], $r['hide'], 'the app hidden with its window, then shown again');
-    same([['application/x-mygo-file-list', 'text/uri-list', 'text/plain'], 'session-1', true, 'héllo', true], $r['dragData'] ?? null, "a drag's data object: its formats, session and files offered, its text as CF_UNICODETEXT, its files as CF_HDROP");
+    same([['application/x-myphp-file-list', 'text/uri-list', 'text/plain'], 'session-1', true, 'héllo', true], $r['dragData'] ?? null, "a drag's data object: its formats, session and files offered, its text as CF_UNICODETEXT, its files as CF_HDROP");
     same(1, $r['dropEffect'] ?? null, 'a file dropped on the window taken, a copy');
     same(true, $r['dropped'] ?? null, "the window's fileDrop listener told the file");
     same(['target' => 1], $r['dragAlive'] ?? null, 'the data object and its enumerators freed once released, the drop target alone alive');

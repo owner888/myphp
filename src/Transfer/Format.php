@@ -8,11 +8,11 @@ final class Format
 {
     public const TEXT = 'text/plain', HTML = 'text/html', URI_LIST = 'text/uri-list', PNG = 'image/png';
     /** A URI list known to hold local files, offered as the system's file list as well as a URI list. */
-    public const FILE_LIST = 'application/x-mygo-file-list';
+    public const FILE_LIST = 'application/x-myphp-file-list';
     /** Markdown's text (RFC 7763), net.daringfireball.markdown on macOS. */
     public const MARKDOWN = 'text/markdown';
     /** The key of a drag of this process, which no other reads (mygo's DragSessionFormat): never a value's own data. */
-    public const DRAG_SESSION = 'application/x-mygo-drag-session';
+    public const DRAG_SESSION = 'application/x-myphp-drag-session';
 
     public static function validate(string $format): void
     {

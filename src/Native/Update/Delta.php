@@ -25,7 +25,7 @@ use RuntimeException;
  */
 final class Delta
 {
-    private const MAGIC = "mygo delta 1\n";
+    private const MAGIC = "myphp delta 1\n";
     /** The largest files deltas patch; larger ones that changed are included whole. PHP's bsdiff takes about 70 bytes of memory and 3 µs a byte. */
     public const MAX_DIFF = 32 << 20;
     /** Where stapling writes the notarization ticket of a bundle, which deltas include whole. */

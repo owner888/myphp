@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.191.0';
+const VERSION = '1.192.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -1890,7 +1890,7 @@ function natives(string $appDir, string $framework, string $arch, string $goos =
         $sources .= file_get_contents($f) . "\n";
     }
     $out = []; $seen = [];
-    foreach (glob("$framework/src/Plugins/*/mygo-plugin.json") ?: [] as $json) {
+    foreach (glob("$framework/src/Plugins/*/myphp-plugin.json") ?: [] as $json) {
         $plugin = basename(dirname($json));
         if (!str_contains($sources, "MyPHP\\Plugins\\$plugin")) {
             continue;
@@ -1969,7 +1969,7 @@ function fetchNative(array $f): string
         fail('invalid native library ' . json_encode($f));
     }
     $xdg = (string)getenv('XDG_CACHE_HOME');
-    $dir = (PHP_OS_FAMILY === 'Linux' ? ($xdg !== '' ? $xdg : getenv('HOME') . '/.cache') : getenv('HOME') . '/Library/Caches') . "/mygo/natives/$sum";
+    $dir = (PHP_OS_FAMILY === 'Linux' ? ($xdg !== '' ? $xdg : getenv('HOME') . '/.cache') : getenv('HOME') . '/Library/Caches') . "/myphp/natives/$sum";
     $path = "$dir/$name";
     if (is_file($path) && hash_file('sha256', $path) === $sum) {
         return $path;

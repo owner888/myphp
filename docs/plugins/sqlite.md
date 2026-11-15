@@ -154,9 +154,9 @@ codes; closed connections throw `ErrClosed`.
 
 ## Building and shipping
 
-`myphp build` and `myphp dev` read the plugin's `mygo-plugin.json` and put
+`myphp build` and `myphp dev` read the plugin's `myphp-plugin.json` and put
 the right library among the app's resources, signed with the app on
 macOS; macOS universal builds merge both architectures. Packaged apps need
 no download at run time. Scripts run outside an app download the matching
-library once into a cache and verify its SHA-256. `MYGO_SQLITE_LIBRARY`
+library once into a cache and verify its SHA-256. `MYPHP_SQLITE_LIBRARY`
 names a custom build for development.

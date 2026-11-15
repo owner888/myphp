@@ -242,7 +242,7 @@ $st = \MyPHP\Page::encodeSessionState('darwin', 'app://localhost/docs?page=2', "
 same(['darwin', 'app://localhost/docs?page=2', "bplist\0state"], \MyPHP\Page::decodeSessionState($st), 'session state: read back, WebKit\'s NULs kept');
 same(['darwin', '', ''], \MyPHP\Page::decodeSessionState(\MyPHP\Page::encodeSessionState('darwin', '', '')), 'session state: of a blank page');
 same(null, \MyPHP\Page::decodeSessionState('app://localhost/saved'), 'session state: not one');
-$later = $st; $later[strlen('mygo-session')] = chr(2);
+$later = $st; $later[strlen('myphp-session')] = chr(2);
 same(null, \MyPHP\Page::decodeSessionState($later), "session state: a later version's");
 same(false, (new \MyPHP\WindowOpenRequest('https://x.org'))->userInitiated, 'a window-open request: not a gesture\'s unless told');
 

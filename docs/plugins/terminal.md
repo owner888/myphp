@@ -486,7 +486,7 @@ with `feed()`, as a log with colors would.
 libghostty-vt is a native library of Ghostty, built for each platform
 from the version of Ghostty the plugin binds, and published with the
 upstream framework's releases. The plugin names those builds and their
-SHA-256 in `mygo-plugin.json`, and the CLI puts the one of each platform
+SHA-256 in `myphp-plugin.json`, and the CLI puts the one of each platform
 into the apps it builds, among their resources, as `libghostty-vt.dylib`
 or `libghostty-vt.so`: a macOS app signs it with the app, and a universal
 app gets both architectures in one file.
@@ -494,7 +494,7 @@ app gets both architectures in one file.
 A script not built by the CLI, as `php app.php` or the tests, downloads
 the library once into the user's cache and checks its SHA-256. Packaged
 apps never download it. `Terminal::libraryPath()` returns the library a
-program loads, and `$MYGO_GHOSTTY_VT` names another library.
+program loads, and `$MYPHP_GHOSTTY_VT` names another library.
 
 `Terminal::load()` loads the library, which `Terminal::new()` does too:
 call it first to report a missing library before showing a window.

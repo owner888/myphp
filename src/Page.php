@@ -359,7 +359,7 @@ final class Page
     }
 
     /** Session states, as mygo's version 1: the magic, the version byte, the system that saved it and the URL each ended by a NUL, then WebKit's own. */
-    private const SESSION_MAGIC = 'mygo-session', SESSION_VERSION = 1;
+    private const SESSION_MAGIC = 'myphp-session', SESSION_VERSION = 1;
 
     /** @internal */
     public static function encodeSessionState(string $os, string $url, string $native): string

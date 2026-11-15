@@ -24,7 +24,7 @@ final class PasteOffer
         if ($format === Format::FILE_LIST) {
             return Format::URI_LIST;
         }
-        if (!str_contains($format, '/') || strpbrk($format, " \t") !== false || str_starts_with($format, 'application/x-mygo-')) {
+        if (!str_contains($format, '/') || strpbrk($format, " \t") !== false || str_starts_with($format, 'application/x-myphp-')) {
             return '';
         }
         return $format;

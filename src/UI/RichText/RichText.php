@@ -17,7 +17,7 @@ final class RichText
      * paragraphs, styles and runs as JSON, which other myphp and MyGo apps
      * paste whole, as Lexical and Slate copy a format of their own first.
      */
-    public const FORMAT = 'application/x-mygo-rich-text';
+    public const FORMAT = 'application/x-myphp-rich-text';
     /** The format of Rich Text Format, which macOS apps (TextEdit, Notes, Pages) copy. */
     public const RTF = 'text/rtf';
 

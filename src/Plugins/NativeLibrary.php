@@ -92,7 +92,7 @@ final class NativeLibrary
             $xdg = getenv('XDG_CACHE_HOME');
             $dir = is_string($xdg) && $xdg !== '' ? $xdg : getenv('HOME') . '/.cache';
         }
-        return "$dir/mygo/natives/{$f['sha256']}/{$f['name']}";
+        return "$dir/myphp/natives/{$f['sha256']}/{$f['name']}";
     }
 
     /** Downloads $f to $path, checking its SHA-256. @param array{name: string, url: string, sha256: string} $f */

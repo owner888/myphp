@@ -19,7 +19,7 @@ use MyPHP\UI\DataDragEvent;
 final class Drag
 {
     private const UT_STRING = 'public.utf8-plain-text', UT_HTML = 'public.html', UT_PNG = 'public.png';
-    private const FILE_URL = 'public.file-url', URL = 'public.url', URI_LIST = 'dev.mygo.uri-list', MIME = 'dev.mygo.mime.';
+    private const FILE_URL = 'public.file-url', URL = 'public.url', URI_LIST = 'dev.myphp.uri-list', MIME = 'dev.myphp.mime.';
     private const OPTION = 1 << 19, COMMAND = 1 << 20; // NSEventModifierFlags
 
     /** @var array<string, string> the system's types of formats found so far, and back */

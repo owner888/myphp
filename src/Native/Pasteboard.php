@@ -13,7 +13,7 @@ use MyPHP\Transfer\{Data, Format, Item, Representation};
 final class Pasteboard
 {
     private const STRING_TYPE = 'public.utf8-plain-text';
-    private const URL = 'public.url', FILE_URL = 'public.file-url', FILE_LIST = 'dev.mygo.file-list';
+    private const URL = 'public.url', FILE_URL = 'public.file-url', FILE_LIST = 'dev.myphp.file-list';
 
     private static bool $defined = false;
     /** The data on the pasteboard that providers give, while it is: its provider object, the pasteboard's change count after writing it, its items by their pasteboard item's address, and what runs once it is let go (mygo's macClipboardSource). @var ?array{obj: mixed, change: int, items: array<int, Item>, data: Data, onRelease: ?\Closure} */

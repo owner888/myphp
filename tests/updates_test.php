@@ -207,7 +207,7 @@ function updThrows(\Closure $fn): string
     check(str_contains(updThrows(fn() => Delta::apply("$dir/d.delta", filesize("$dir/d.delta"), '1.0.0', '1.2.0', $old, "$dir/x")), 'not 1.0.0 to 1.2.0'), 'another version refused');
     file_put_contents("$old/Contents/MacOS/App", 'changed since');
     check(str_contains(updThrows(fn() => Delta::apply("$dir/d.delta", filesize("$dir/d.delta"), '1.0.0', '1.1.0', $old, "$dir/y")), 'made Contents/MacOS/App wrong'), 'another app than the delta\'s');
-    file_put_contents("$dir/bad.delta", "mygo delta 1\n\x05xx");
+    file_put_contents("$dir/bad.delta", "myphp delta 1\n\x05xx");
     check(updThrows(fn() => Delta::apply("$dir/bad.delta", filesize("$dir/bad.delta"), '1.0.0', '1.1.0', $old, "$dir/z")) !== '', 'a damaged delta');
 })();
 

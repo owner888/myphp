@@ -91,7 +91,7 @@ final class Sqlite
      */
     public static function libraryPath(): string
     {
-        $path = NativeLibrary::find(__DIR__ . '/mygo-plugin.json', 'mygo-sqlite3', 'MYGO_SQLITE_LIBRARY', 'sqlite');
+        $path = NativeLibrary::find(__DIR__ . '/myphp-plugin.json', 'myphp-sqlite3', 'MYPHP_SQLITE_LIBRARY', 'sqlite');
         return \MyPHP\Native\Paths::absolute($path);
     }
 }
