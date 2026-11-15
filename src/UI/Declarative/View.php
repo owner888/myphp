@@ -317,6 +317,16 @@ abstract class View
     /** Clips the view to its bounding rectangle, as SwiftUI's clipped(). */
     public function clipped(): static { $this->mods[] = ['radius', [0.0]]; return $this; }
 
+    /**
+     * Composites the view's subtree into an offscreen GPU bitmap texture and reuses it across frames
+     * unless its contents change, as SwiftUI's drawingGroup() and Flutter's RepaintBoundary.
+     */
+    public function drawingGroup(bool $opaque = false, int $colorMode = 0): static
+    {
+        $this->mods[] = ['drawingGroup', []];
+        return $this;
+    }
+
     /** Sets the stacking order of overlapping views, as SwiftUI's zIndex. */
     public function zIndex(float $value): static { return $this; }
 
@@ -958,6 +968,7 @@ abstract class View
                     $n->material($m);
                     break;
                 case 'hidden': $n->invisible(); break;
+                case 'drawingGroup': $n->cache(); break;
                 case 'fixedSize':
                     if ($a[0] && $env->axis === Node::ROW) { $n->shrink(0); }
                     if ($a[1] && $env->axis === Node::COLUMN) { $n->shrink(0); }
