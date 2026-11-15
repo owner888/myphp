@@ -77,6 +77,10 @@ final class Window
     public readonly int $id;
     public readonly ?Input $input;
     public readonly ?Runtime $runtime;
+    /** The observed state object of Content::file, and its last property snapshot for automatic async dirty-checking. */
+    private ?object $observedState = null;
+    /** @var ?array<string, mixed> */
+    private ?array $observedSnapshot = null;
     private array $stats = ['frames' => 0, 'ms' => 0, 'since' => 0];
     /** The statistics of each frame MYPHP_FRAME_STATS asks for, or null (mygo's frameStats). */
     private ?UI\FrameStats $frameStats = null;
@@ -181,6 +185,10 @@ final class Window
             }
         } else {
             $content = $o->content;
+            if ($content->state !== null) {
+                $this->observedState = $content->state;
+                $this->observedSnapshot = get_object_vars($content->state);
+            }
             $after = null;
             if (($this->frameStats = UI\FrameStats::fromEnv()) !== null) {
                 $after = function (): void {
@@ -289,6 +297,9 @@ final class Window
                 return $c->root;
             });
             $this->runtime->builtAt($at);
+            if ($this->observedState !== null) {
+                $this->observedSnapshot = get_object_vars($this->observedState);
+            }
             if ($this->backStage === $stage) { $this->backStage = 0; } // the frame moved it on neither way: its key was taken, the Back is answered
         }
         $z = $this->runtime->frameZoom;
@@ -645,6 +656,26 @@ final class Window
     {
         if ($this->page === null && !$this->destroyed) {
             $this->native->requestFrame();
+        }
+    }
+
+    /**
+     * Checks whether any open window's observed state object (`Content::file($path, $state)`)
+     * mutated during an async Fiber step or timer callback, and automatically requests a frame
+     * for those windows — just like SwiftUI's `@Observable` without needing manual `$window->update()`.
+     *
+     * @internal
+     */
+    public static function checkObservedStates(): void
+    {
+        foreach (self::$open as $w) {
+            if ($w->observedState !== null && !$w->destroyed && $w->page === null) {
+                $now = get_object_vars($w->observedState);
+                if ($now !== $w->observedSnapshot) {
+                    $w->observedSnapshot = $now;
+                    $w->invalidate();
+                }
+            }
         }
     }
 

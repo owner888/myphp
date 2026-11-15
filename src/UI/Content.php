@@ -14,7 +14,7 @@ use Closure;
  */
 final class Content
 {
-    private function __construct(public readonly Closure $view) {}
+    private function __construct(public readonly Closure $view, public readonly ?object $state = null) {}
 
     /** A window's view: fn() => VStack()(…), as a view file returns it. @param Closure(): mixed $view */
     public static function view(Closure $view): self
@@ -36,7 +36,7 @@ final class Content
         return new self(static function (Context $c) use ($file, $state): void {
             $c->state = $state;
             self::render($file->view(), $c);
-        });
+        }, $state);
     }
 
     /**

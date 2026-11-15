@@ -25,7 +25,8 @@ final class Fibers
     /** Runs $fn in a fiber of its own, at once, until its first wait. */
     public static function go(Closure $fn): void
     {
-        new Fiber($fn)->start();
+        (new Fiber($fn))->start();
+        \MyPHP\Window::checkObservedStates();
     }
 
     /** Waits $seconds, letting the rest of the app run meanwhile. */
@@ -43,7 +44,10 @@ final class Fibers
             return;
         }
         if (App::running()) {
-            App::after($seconds, fn() => $fiber->resume());
+            App::after($seconds, static function () use ($fiber): void {
+                $fiber->resume();
+                \MyPHP\Window::checkObservedStates();
+            });
         } else {
             self::$queue[] = [microtime(true) + $seconds, $fiber];
         }
@@ -84,6 +88,7 @@ final class Fibers
                 continue;
             }
             $fiber->resume();
+            \MyPHP\Window::checkObservedStates();
         }
         return true;
     }
