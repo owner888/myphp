@@ -97,7 +97,7 @@ final class TabView extends View
         $sidebar = new ListView(null, null, $chosen, true);
         $sidebar(...array_map(fn(Tab $t) => new Label($t->title, $t->systemImage, $t->image)->badge($t->badgeValue)->tag($t->value), $this->tabs));
         $shown = array_find($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? $this->tabs[0] ?? null;
-        $kept = $c->runtime?->local($c->upcomingId(), fn() => new class { public \NavigationSplitViewVisibility $sidebar = \NavigationSplitViewVisibility::all; }); // whether the sidebar shows, its button's
+        $kept = $c->runtime?->local($c->upcomingId(), static fn() => new class { public \NavigationSplitViewVisibility $sidebar = \NavigationSplitViewVisibility::all; }); // whether the sidebar shows, its button's
         $visibility = $kept === null ? \NavigationSplitViewVisibility::all : $kept->sidebar;
         $split = new NavigationSplitView($sidebar, $shown === null ? [] : (count($shown->content) === 1 && $shown->content[0] instanceof View ? $shown->content[0] : $shown->content), $visibility, true);
         $n = $split->render($c, $env);

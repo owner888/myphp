@@ -26,7 +26,7 @@ final class VSplitView extends View
     {
         $panes = array_values(array_filter(ListView::flat($this->content), fn($v) => $v !== null));
         $wrap = $c->column(0, 0);
-          $kept = $c->runtime?->local($wrap->id, fn() => new SplitKept(), SplitKept::class) ?? new SplitKept();
+          $kept = $c->runtime?->local($wrap->id, static fn() => new SplitKept(), SplitKept::class) ?? new SplitKept();
           $paneEnv = $env->along(Node::COLUMN);
           $build = function (int $i) use (&$build, $c, $panes, $kept, $paneEnv): void {
               if ($i === count($panes) - 1) { View::fillPane($c, $paneEnv, $panes[$i]); return; }

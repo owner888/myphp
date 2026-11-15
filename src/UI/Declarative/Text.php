@@ -70,6 +70,7 @@ final class Text extends View
      */
     public static function markdown(string $text): ?array
     {
+        if (strpbrk($text, '*`~') === false) { return null; }
         if (!preg_match('/\*\*.+?\*\*|\*[^*\s][^*]*\*|`[^`]+`|~~.+?~~/u', $text)) { return null; }
         $spans = [];
         $at = 0;

@@ -131,7 +131,7 @@ final class NavigationSplitView extends View
     {
         foreach (ListView::flat($content) as $v) {
             if ($v instanceof Section) {
-                $own = $c->runtime?->local($c->upcomingId(), fn() => (object)['open' => true]) ?? (object)['open' => true];
+                $own = $c->runtime?->local($c->upcomingId(), static fn() => (object)['open' => true]) ?? (object)['open' => true];
                 $open = $own->open;
                 $c->sidebarSection(Localized::string($v->header, $env), $open, function () use ($c, $env, $v): void { self::items($c, $env, $v->content()); });
                 $own->open = $open;

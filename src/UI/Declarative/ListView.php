@@ -93,7 +93,7 @@ final class ListView extends View
     private function dataRows(Context $c, Env $env): Node
     {
         $rt = $c->runtime;
-        $state = $rt === null ? new ListState() : $rt->local($c->upcomingId(), fn() => new ListState(), ListState::class);
+        $state = $rt === null ? new ListState() : $rt->local($c->upcomingId(), static fn() => new ListState(), ListState::class);
         $count = is_int($this->items) ? $this->items : count($this->items);
         $items = is_int($this->items) ? null : array_values($this->items);
         $keys = is_int($this->items) ? null : array_keys($this->items);

@@ -746,7 +746,8 @@ abstract class View
     /** The search field of a searchable() layer, at the top of its box $box: bound to $f[0], its prompt $f[1]; with searchScopes(), $f[2] the scope and $f[3] its choices, a segmented control under it. @param array{0: string, 1: string, 2?: mixed, 3?: list<View>} $f */
     private static function searchField(Context $c, Env $env, Node $box, array &$f): void
     {
-        $make = fn() => (object)['query' => new \MyPHP\UI\TextState($f[0]), 'app' => $f[0]];
+        $initQ = $f[0];
+        $make = static fn() => (object)['query' => new \MyPHP\UI\TextState($initQ), 'app' => $initQ];
         $kept = $c->runtime?->local($box->id, $make, \stdClass::class, 'query') ?? $make();
         if ($f[0] !== $kept->app) { $kept->query->text = $f[0]; $kept->query->setCursor(strlen($f[0])); } // set by the app
         $row = $c->row(8, 0)->alignSelf(Node::STRETCH);
@@ -769,7 +770,8 @@ abstract class View
     /** The find bar of a findNavigator() layer, at the top of its box $box. @param array{0: bool, 1: string, 2: int, 3: int} $f */
     private static function findBar(Context $c, Node $box, array &$f): void
     {
-        $make = fn() => (object)['query' => new \MyPHP\UI\TextState($f[1]), 'app' => $f[1]];
+        $initQ = $f[1];
+        $make = static fn() => (object)['query' => new \MyPHP\UI\TextState($initQ), 'app' => $initQ];
         $kept = $c->runtime?->local($box->id, $make, \stdClass::class, 'query') ?? $make();
         if ($f[1] !== $kept->app) { $kept->query->text = $f[1]; $kept->query->setCursor(strlen($f[1])); } // set by the app
         if ($c->shortcut('f', \MyPHP\UI\Key::COMMAND)) { $f[0] = true; }

@@ -63,7 +63,7 @@ final class Table extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $wrap = $c->column(0, 0); // its state kept by a node of its own, apart from what the table keeps by its (its column drags)
-        $kept = $c->runtime?->local($wrap->id, fn() => new TableKept(), TableKept::class) ?? new TableKept();
+        $kept = $c->runtime?->local($wrap->id, static fn() => new TableKept(), TableKept::class) ?? new TableKept();
         $state = $kept->state;
         foreach ($this->columns as $i => $col) { // the engine's columns kept, the widths the user gave them with them
             $title = Localized::string($col->title, $env);

@@ -38,7 +38,7 @@ final class ScrollView extends View
             return $only->scrolled($c, $env, $this->bottom);
         }
         if ($this->axis === \Axis::horizontal) { // as SwiftUI's: across the room it is given, as high as what it shows
-            $state = $c->runtime?->local($c->upcomingId(), fn() => new ScrollState(), ScrollState::class) ?? new ScrollState(); // of its type: another view built here before (an if's other branch) kept other state
+            $state = $c->runtime?->local($c->upcomingId(), static fn() => new ScrollState(), ScrollState::class) ?? new ScrollState(); // of its type: another view built here before (an if's other branch) kept other state
             $n = $c->row(0, 8)->alignItems(Node::CENTER)->scroll($state, horizontal: true, vertical: false);
               View::renderAll($c, $env->along(Node::ROW), $this->content);
             $c->end();
@@ -70,7 +70,7 @@ final class ScrollView extends View
         if ($env->refresh !== null) {
             $id = $c->upcomingId();
             $kept = $rt === null ? (object)['scroll' => new ScrollState(), 'refreshing' => false]
-                : $rt->local($id, fn() => (object)['scroll' => $large ?? new ScrollState(), 'refreshing' => false], \stdClass::class, 'refreshing');
+                : $rt->local($id, static fn() => (object)['scroll' => $large ?? new ScrollState(), 'refreshing' => false], \stdClass::class, 'refreshing');
             $was = $kept->refreshing;
             $n = $c->refreshable($large ?? $kept->scroll, $kept->refreshing, $content);
             if ($kept->refreshing && !$was) { // pulled: the action in a fiber, the spinner until it ends

@@ -93,7 +93,7 @@ final class LazyVGrid extends View
         $count = count($items);
         $idOf = fn(int $i) => $each->idOf($items[$i], $keys[$i]);
         $wrap = $c->column(0, 0); // its state kept by a node of its own, apart from the grid's
-        $kept = $c->runtime?->local($wrap->id, fn() => new GridKept($min), GridKept::class) ?? new GridKept($min);
+        $kept = $c->runtime?->local($wrap->id, static fn() => new GridKept($min), GridKept::class) ?? new GridKept($min);
         $g = $kept->grid;
         $g->selects = true;
         $g->key = $idOf;

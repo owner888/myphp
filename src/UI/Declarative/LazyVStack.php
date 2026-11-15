@@ -36,7 +36,7 @@ final class LazyVStack extends View
     public function scrolled(Context $c, Env $env, bool $bottom): Node
     {
         $rt = $c->runtime;
-        $state = $rt === null ? new ListState() : $rt->local($c->upcomingId(), fn() => new ListState(), ListState::class);
+        $state = $rt === null ? new ListState() : $rt->local($c->upcomingId(), static fn() => new ListState(), ListState::class);
         $state->followEnd = $bottom;
         $state->followAnimation = $bottom ? ($env->animation ?? Transaction::current($c)) : null;
         $views = ListView::flat($this->content);

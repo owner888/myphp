@@ -48,7 +48,7 @@ final class NavigationStack extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $rt = $c->runtime;
-        $this->router = $this->path ?? ($rt === null ? new Router('/') : $rt->local($c->upcomingId(), fn() => new Router('/'), Router::class));
+        $this->router = $this->path ?? ($rt === null ? new Router('/') : $rt->local($c->upcomingId(), static fn() => new Router('/'), Router::class));
         $entry = $this->router->entry();
         $large = $entry->largeTitle ?? null;
         $n = $c->column(0, 0, 1)->alignSelf(Node::STRETCH);

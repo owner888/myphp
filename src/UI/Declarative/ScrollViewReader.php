@@ -19,7 +19,7 @@ final class ScrollViewReader extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $id = $c->upcomingId();
-        $proxy = $c->runtime?->local($id, fn() => new ScrollViewProxy()) ?? new ScrollViewProxy();
+        $proxy = $c->runtime?->local($id, static fn() => new ScrollViewProxy()) ?? new ScrollViewProxy();
         $n = $c->column(0, 0);
           View::renderAll($c, $env->along(Node::COLUMN)->with(['scrollProxy' => $proxy]), ($this->content)($proxy));
         $c->end();
