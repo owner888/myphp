@@ -39,7 +39,10 @@ myphp ffigen -class AudioFfi -namespace App\\Native -lib libaudio.dylib -out src
 
 `myphp ffigen` extracts `#define` constants, `enum` values, `struct`
 definitions, and function prototypes into a ready-to-call PHP class with full
-IDE autocomplete.
+IDE autocomplete. On Windows headers (`.h` for `.dll` / Win32 APIs), it
+automatically strips `__declspec(dllexport|dllimport)`, `WINAPI`, `__stdcall`,
+and SAL annotations (`_In_`, `_Out_opt_`), and injects standard Win32 typedefs
+(`HWND`, `HANDLE`, `DWORD`, `LPCWSTR`, `HRESULT`).
 
 ---
 

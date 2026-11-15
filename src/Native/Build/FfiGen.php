@@ -47,9 +47,13 @@ final class FfiGen
             if ($trimmed === '' || str_starts_with($trimmed, '#')) {
                 continue;
             }
-            $cdefLines[] = $line;
+            $cdefLines[] = self::normalizeWin32Annotations($line);
         }
         $cdefSource = trim(implode("\n", $cdefLines));
+
+        // Prepend standard Win32 typedefs if the header uses Win32 types (HANDLE, HWND, DWORD, BOOL, LPCWSTR, etc.)
+        $win32Typedefs = self::win32PreambleFor($cdefSource);
+        $fullCdefSource = $win32Typedefs !== '' ? ($win32Typedefs . "\n" . $cdefSource) : $cdefSource;
 
         // Extract enum constants: enum Foo { A = 1, B = 2 };
         if (preg_match_all('/enum\s+\w*\s*\{([^}]+)\}/s', $cdefSource, $em)) {
@@ -73,7 +77,7 @@ final class FfiGen
         $functions = self::parseCFunctions($cdefSource);
 
         $libExpr = $library !== null ? var_export($library, true) : 'null';
-        $cdefExport = var_export($cdefSource, true);
+        $cdefExport = var_export($fullCdefSource, true);
 
         $out = [];
         $out[] = '<?php';
@@ -440,16 +444,81 @@ final class FfiGen
         if (str_contains($t, '*')) {
             return ['mixed', 'CData|null'];
         }
-        if (in_array($t, ['bool', '_Bool'], true)) {
-            return ['bool', ''];
+        if (in_array($t, ['bool', '_Bool', 'BOOL', 'BOOLEAN'], true)) {
+            return ['bool|int', ''];
         }
-        if (in_array($t, ['float', 'double'], true)) {
+        if (in_array($t, ['float', 'double', 'FLOAT'], true)) {
             return ['float', ''];
         }
-        if (preg_match('/^(?:u?int\d+_t|unsigned|signed|int|long|short|size_t|ssize_t|char)\b/', $t)) {
+        if (preg_match('/^(?:u?int\d+_t|unsigned|signed|int|long|short|size_t|ssize_t|char|DWORD|WORD|BYTE|LONG|ULONG|UINT|INT|WPARAM|LPARAM|LRESULT|HRESULT|ATOM)\b/', $t)) {
             return ['int', ''];
         }
+        if (preg_match('/^(?:HANDLE|HWND|HINSTANCE|HMODULE|HDC|HICON|HCURSOR|HBRUSH|HFONT|HMENU|LPVOID|LPCVOID|LPSTR|LPCSTR|LPWSTR|LPCWSTR|PVOID)\b/', $t)) {
+            return ['mixed', 'CData|string|null'];
+        }
         return ['mixed', ''];
+    }
+
+    /**
+     * Strips Windows SAL annotations (`_In_`, `_Out_opt_`, `IN`, `OUT`), calling conventions
+     * (`WINAPI`, `APIENTRY`, `CALLBACK`, `__stdcall`, `__cdecl`), and `__declspec(dllexport|dllimport)`
+     * so PHP `FFI::cdef()` can parse Win32 / DLL headers directly.
+     */
+    public static function normalizeWin32Annotations(string $line): string
+    {
+        $line = (string)preg_replace('/__declspec\s*\(\s*(?:dllexport|dllimport)\s*\)/i', '', $line);
+        $line = (string)preg_replace('/\b(?:WINAPI|APIENTRY|CALLBACK|WINBASEAPI|WINUSERAPI|__stdcall|__cdecl|__fastcall)\b/', '', $line);
+        $line = (string)preg_replace('/\b_(?:In|Out|Inout|Reserved)(?:_opt|_z|_reads|_writes|_bytes|_count|[A-Za-z0-9_])*\s*(?:\([^)]*\))?/', '', $line);
+        $line = (string)preg_replace('/\b(?:IN|OUT|OPTIONAL)\b(?=\s+[A-Za-z_])/', '', $line);
+        return (string)preg_replace('/[ \t]{2,}/', ' ', $line);
+    }
+
+    /**
+     * Returns minimal C typedefs for any Win32 types referenced in $cdefSource.
+     */
+    private static function win32PreambleFor(string $cdefSource): string
+    {
+        $map = [
+            'BOOL'      => 'typedef int BOOL;',
+            'BOOLEAN'   => 'typedef unsigned char BOOLEAN;',
+            'BYTE'      => 'typedef unsigned char BYTE;',
+            'WORD'      => 'typedef unsigned short WORD;',
+            'DWORD'     => 'typedef unsigned int DWORD;',
+            'UINT'      => 'typedef unsigned int UINT;',
+            'INT'       => 'typedef int INT;',
+            'LONG'      => 'typedef long LONG;',
+            'ULONG'     => 'typedef unsigned long ULONG;',
+            'LONGLONG'  => 'typedef long long LONGLONG;',
+            'ULONGLONG' => 'typedef unsigned long long ULONGLONG;',
+            'HRESULT'   => 'typedef int HRESULT;',
+            'WPARAM'    => 'typedef uintptr_t WPARAM;',
+            'LPARAM'    => 'typedef intptr_t LPARAM;',
+            'LRESULT'   => 'typedef intptr_t LRESULT;',
+            'HANDLE'    => 'typedef void* HANDLE;',
+            'HWND'      => 'typedef void* HWND;',
+            'HINSTANCE' => 'typedef void* HINSTANCE;',
+            'HMODULE'   => 'typedef void* HMODULE;',
+            'HDC'       => 'typedef void* HDC;',
+            'HICON'     => 'typedef void* HICON;',
+            'HCURSOR'   => 'typedef void* HCURSOR;',
+            'HBRUSH'    => 'typedef void* HBRUSH;',
+            'HFONT'     => 'typedef void* HFONT;',
+            'HMENU'     => 'typedef void* HMENU;',
+            'LPVOID'    => 'typedef void* LPVOID;',
+            'LPCVOID'   => 'typedef const void* LPCVOID;',
+            'PVOID'     => 'typedef void* PVOID;',
+            'LPSTR'     => 'typedef char* LPSTR;',
+            'LPCSTR'    => 'typedef const char* LPCSTR;',
+            'LPWSTR'    => 'typedef uint16_t* LPWSTR;',
+            'LPCWSTR'   => 'typedef const uint16_t* LPCWSTR;',
+        ];
+        $needed = [];
+        foreach ($map as $type => $def) {
+            if (preg_match('/\b' . $type . '\b/', $cdefSource) && !preg_match('/typedef\b[^;]*\b' . $type . '\s*;/', $cdefSource)) {
+                $needed[] = $def;
+            }
+        }
+        return implode("\n", $needed);
     }
 
     /**

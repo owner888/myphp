@@ -87,3 +87,22 @@ check(str_contains($jniPhp, "public function getIntProperty(int \$arg0): int"), 
 check(str_contains($jniPhp, "public static function extraName(int \$arg0): ?string"), 'JniGen maps static (I)Ljava/lang/String; to ?string');
 eval('?>' . $jniPhp);
 same('android/os/BatteryManager', \MyPHP\Tests\Generated\BatteryManager::JAVA_CLASS, 'Generated JNI wrapper class constant');
+
+// 4. Windows Win32 / DLL Header FfiGen test (__declspec, WINAPI, SAL annotations, Win32 typedefs)
+$winHeader = <<<'C'
+#define MB_OK 0x00000000
+#define MB_ICONINFORMATION 0x00000040
+
+WINUSERAPI int WINAPI MessageBoxW(_In_opt_ HWND hWnd, _In_opt_ LPCWSTR lpText, _In_opt_ LPCWSTR lpCaption, _In_ UINT uType);
+__declspec(dllexport) BOOL __stdcall SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
+DWORD WINAPI GetCurrentProcessId(void);
+C;
+
+$winPhp = FfiGen::fromCHeader($winHeader, 'User32Ffi', 'MyPHP\\Tests\\Generated', 'user32.dll');
+check(str_contains($winPhp, 'typedef void* HWND;') && str_contains($winPhp, 'typedef unsigned int DWORD;'), 'FfiGen injects required Win32 typedefs into CDEF');
+check(!str_contains($winPhp, 'WINAPI') && !str_contains($winPhp, '_In_opt_') && !str_contains($winPhp, '__declspec'), 'FfiGen strips Win32 SAL annotations and calling convention macros');
+check(str_contains($winPhp, 'public static function MessageBoxW(mixed $hWnd, mixed $lpText, mixed $lpCaption, int $uType): int'), 'FfiGen parses Win32 MessageBoxW signature');
+check(str_contains($winPhp, 'public static function GetCurrentProcessId(): int'), 'FfiGen maps DWORD return to int');
+eval('?>' . $winPhp);
+same(0x40, \MyPHP\Tests\Generated\User32Ffi::MB_ICONINFORMATION, 'Generated Win32 wrapper constant');
+
