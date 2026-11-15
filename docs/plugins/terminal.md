@@ -1,17 +1,11 @@
 # Terminal
 
-In a view, `Representable` puts a terminal among the declarative views:
+In a view, `TerminalView($this->term)` puts a terminal among the declarative views (`examples/terminal/view.php`):
 
 <!-- no-test -->
 ```php
-use MyPHP\Plugins\Terminal\{Options, Terminal};
-
-$view = fn() => Representable(fn(Context $c) => Terminal::view($c, $this->term)->autoFocus(), fills: true);
+return fn() => TerminalView($this)->defaultFocus();
 ```
-
-> The rest of this page is about the engine under the views: its builder,
-> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
-> $c) => …)` ([custom widgets](../ui/custom-widgets.md)).
 
 The terminal plugin is a terminal for apps of [native UI](../ui/README.md):
 a view that runs the user's shell, or any program, in a pseudo-terminal,
@@ -22,13 +16,13 @@ native library that the app loads at run time through FFI, and that
 
 ## Set up
 
-Make a terminal, which starts its program, and show it in a window:
+Make a terminal, which starts its program, and show it in a window with `Content::file`:
 
 <!-- no-test -->
 ```php
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Terminal\{Options, Terminal};
-use MyPHP\UI\{Content, Context};
+use MyPHP\UI\Content;
 
 App::whenReady(function () {
     $win = null;
@@ -37,7 +31,7 @@ App::whenReady(function () {
         onExit: function (int $code) use (&$win) { $win?->close(); },
     ));
     $win = new Window(new WindowOptions(title: 'Terminal', width: 760, height: 480,
-        content: Content::view(fn() => Representable(fn(Context $c) => Terminal::view($c, $term)->fill()->autoFocus(), fills: true))));
+        content: Content::file(__DIR__ . '/view.php', $term)));
     $win->on('closed', fn() => $term->close());
 });
 App::run();

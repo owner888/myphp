@@ -18,6 +18,7 @@ final class SceneState
         $this->scene = new Scene(new Camera3D(position: new Vec3(2.2, 2.0, 4.6)));
         $this->scene->shadowsEnabled = true;
         $this->scene->fogEnabled = true;
+        $this->scene->addSkyDome();
 
         $floor = new Entity(Mesh::plane(14.0, 14.0), new Material([0.16, 0.18, 0.22, 1.0]), position: new Vec3(0.0, -1.2, 0.0), name: 'Floor');
         $floor->pickable = false;
