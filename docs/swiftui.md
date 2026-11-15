@@ -364,4 +364,77 @@ $view = fn() => VStack()(
 | `WidgetKit`, `App Intents`, `Live Activities` | Out of scope (OS extensions) |
 | `tvOS`, `Android TV`, `visionOS`, `watchOS` | Not targeted (`macOS`, `Windows`, `Linux`, `Android` and `iOS`/`iPadOS` are supported; `Device::type()` reports `Desktop`, `Mobile`, `Pad`, `Tv`) |
 
+## Side-by-Side Comparison: Rust Macro UI vs. Go (`mygo`) vs. SwiftUI vs. MyPHP
+
+Building the exact same screen (a 32pt-padded, full-width vertical container with 16pt spacing, a title2 heading, a notifications switch, and a row with a primary button and click counter):
+
+### 1. Rust Immediate-Mode UI (custom `view!` proc-macro)
+```rust
+view! { ui,
+    Column(pad: 32., gap: 16., width: Size::FILL) {
+        Heading("Hello, CUI", 2);
+        Switch("Notifications" => notifications);
+        Row(gap: 8.) {
+            Button("Click me", variant: ButtonVariant::Primary) {
+                clicks += 1;
+            }
+            Text(format!("Clicked {clicks} times"));
+        }
+    }
+}
+```
+*Drawbacks*: Relies on non-standard proc-macro syntax (`=>`), opaque compiler errors when braces mismatch, long `cargo build` compile cycles, and `format!()` bakes the string before localization can see it.
+
+### 2. Go (`mygo` imperative `Begin`/`End` builder)
+```go
+c.Column(32, 16, 1).FillWidth()
+  c.Text("Hello, MyGo", 22).Bold()
+  c.Switch("Notifications", &s.notifications)
+  c.Row(0, 8)
+    if c.PrimaryButton("Click me").Clicked() {
+        s.clicks++
+    }
+    c.Text(fmt.Sprintf("Clicked %d times", s.clicks))
+  c.End()
+c.End()
+```
+*Drawbacks*: Positional magic numbers (`32, 16, 1`) because Go lacks named arguments, manual `c.End()` pairing that breaks the tree if one is missed, and desktop-only.
+
+### 3. Apple SwiftUI
+```swift
+VStack(alignment: .leading, spacing: 16) {
+    Text("Hello, SwiftUI").font(.title2).bold()
+    Toggle("Notifications", isOn: $notifications)
+    HStack(spacing: 8) {
+        Button("Click me") {
+            clicks += 1
+        }
+        .buttonStyle(.borderedProminent)
+        Text("Clicked \(clicks) times")
+    }
+}
+.padding(32)
+.frame(maxWidth: .infinity, alignment: .leading)
+```
+*Drawbacks*: Clean and expressive, but locked to Apple platforms (no Windows, Linux, or Android) and requires Xcode compilation.
+
+### 4. MyPHP (Pure PHP 8.5 + SwiftUI Declarative + 5 Platforms)
+```php
+$app = new class { public bool $notifications = true; public int $clicks = 0; };
+$view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 16)(
+    Text('Hello, MyPHP')->font(Font::title2)->bold(),
+    Toggle('Notifications', isOn: $app->notifications),
+    HStack(spacing: 8)(
+        Button('Click me', action: fn() => $app->clicks++)
+            ->buttonStyle(ButtonStyle::borderedProminent),
+        Text("Clicked {$app->clicks} times"),
+    ),
+)->padding(32)->frame(maxWidth: INF, alignment: Alignment::leading);
+```
+*Why MyPHP wins*:
+- **100% Standard PHP 8.5 (Zero Macros)**: Uses native PHP named arguments, `__invoke` double parentheses `VStack(...)(...)`, and pass-by-reference (`isOn: $app->notifications`) with full IDE autocomplete and static analysis.
+- **Zero-Wait Hot Reload & Reactive State**: Save `view.php` and the running window updates in `< 10 ms` without recompiling; mutating `$this->clicks++` inside async `App::go()` fibers or timers automatically redraws the window.
+- **Smart Localization on Interpolated Strings**: `Text("Clicked {$app->clicks} times")` automatically matches `"Clicked {clicks} times"` in `locales/*.json` and applies target-language ICU plural rules.
+- **Runs Everywhere**: One codebase renders natively on **macOS (Metal), Windows (Direct3D 11), Linux (OpenGL 3.3), iOS (Metal), and Android (GLES 3.0)**.
+
 For building apps with AI coding agents (skills, prompt templates, headless testing and visual screenshot verification), see [Building with AI Agents](agents.md).
