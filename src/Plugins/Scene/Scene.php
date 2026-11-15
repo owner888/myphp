@@ -255,16 +255,18 @@ final class Scene
     public function allEntities(): array
     {
         $out = [];
-        $walk = static function (array $list) use (&$walk, &$out): void {
-            foreach ($list as $e) {
-                $out[] = $e;
-                if ($e->children !== []) {
-                    $walk($e->children);
-                }
+        $stack = [];
+        for ($i = count($this->entities) - 1; $i >= 0; $i--) {
+            $stack[] = $this->entities[$i];
+        }
+        while ($stack !== []) {
+            $e = array_pop($stack);
+            $out[] = $e;
+            $kids = $e->children;
+            for ($i = count($kids) - 1; $i >= 0; $i--) {
+                $stack[] = $kids[$i];
             }
-        };
-        $walk($this->entities);
-        $walk = null;
+        }
         return $out;
     }
 

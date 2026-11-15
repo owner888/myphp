@@ -290,14 +290,29 @@ final class Entity
             return $this->cachedLocal;
         }
 
-        // T * Rz * Ry * Rx * S
-        $t = Mat4::translation($p->x, $p->y, $p->z);
-        $rx = Mat4::rotationX($r->x);
-        $ry = Mat4::rotationY($r->y);
-        $rz = Mat4::rotationZ($r->z);
-        $sc = Mat4::scaling($s->x, $s->y, $s->z);
+        // Direct analytic TRS matrix construction (T * Rz * Ry * Rx * S) with zero intermediate Mat4 allocations
+        $cx = cos($r->x); $sx = sin($r->x);
+        $cy = cos($r->y); $sy = sin($r->y);
+        $cz = cos($r->z); $sz = sin($r->z);
 
-        $this->cachedLocal = $t->multiply($rz)->multiply($ry)->multiply($rx)->multiply($sc);
+        $m00 = $cz * $cy * $s->x;
+        $m01 = $sz * $cy * $s->x;
+        $m02 = -$sy * $s->x;
+
+        $m10 = ($cz * $sy * $sx - $sz * $cx) * $s->y;
+        $m11 = ($sz * $sy * $sx + $cz * $cx) * $s->y;
+        $m12 = $cy * $sx * $s->y;
+
+        $m20 = ($cz * $sy * $cx + $sz * $sx) * $s->z;
+        $m21 = ($sz * $sy * $cx - $cz * $sx) * $s->z;
+        $m22 = $cy * $cx * $s->z;
+
+        $this->cachedLocal = new Mat4([
+            $m00, $m01, $m02, 0.0,
+            $m10, $m11, $m12, 0.0,
+            $m20, $m21, $m22, 0.0,
+            $p->x, $p->y, $p->z, 1.0,
+        ]);
 
         $this->lastPx = $p->x; $this->lastPy = $p->y; $this->lastPz = $p->z;
         $this->lastRx = $r->x; $this->lastRy = $r->y; $this->lastRz = $r->z;
