@@ -343,22 +343,29 @@ final class FfiGen
         // 1. Parse @property declarations -> getter + setter (unless readonly)
         if (preg_match_all('/@property\s*(?:\(([^)]*)\))?\s*([^;]+);/', $body, $pm, PREG_SET_ORDER)) {
             foreach ($pm as $p) {
-                $attrs = strtolower($p[1] ?? '');
+                $attrs = $p[1] ?? '';
+                $attrsLower = strtolower($attrs);
                 $decl  = trim($p[2]);
+                // Strip trailing API_AVAILABLE(...) / NS_AVAILABLE(...) / UIKIT_AVAILABLE(...) macros
+                $decl  = trim((string)preg_replace('/\b(?:NS_|API_|UIKIT_|__)\w+(?:\s*\([^)]*\))?.*$/', '', $decl));
                 if (preg_match('/^(.*?)(\*?\s*)([A-Za-z_]\w*)$/', $decl, $dm)) {
                     $propType = trim($dm[1] . $dm[2]);
                     $propName = $dm[3];
+                    $getterSel = $propName;
+                    if (preg_match('/\bgetter\s*=\s*([A-Za-z_]\w*)/', $attrs, $gm)) {
+                        $getterSel = $gm[1];
+                    }
                     $methods[] = [
-                        'isStatic' => str_contains($attrs, 'class'),
+                        'isStatic' => str_contains($attrsLower, 'class'),
                         'return'   => $propType,
-                        'selector' => $propName,
+                        'selector' => $getterSel,
                         'phpName'  => $propName,
                         'params'   => [],
                     ];
-                    if (!str_contains($attrs, 'readonly')) {
+                    if (!str_contains($attrsLower, 'readonly')) {
                         $setter = 'set' . ucfirst($propName) . ':';
                         $methods[] = [
-                            'isStatic' => str_contains($attrs, 'class'),
+                            'isStatic' => str_contains($attrsLower, 'class'),
                             'return'   => 'void',
                             'selector' => $setter,
                             'phpName'  => 'set' . ucfirst($propName),
@@ -456,7 +463,7 @@ final class FfiGen
             $t === 'BOOL' || $t === 'bool' => 'b',
             $t === 'double' || $t === 'CGFloat' || $t === 'NSTimeInterval' => 'd',
             $t === 'float' => 'f',
-            $t === 'NSInteger' || $t === 'long' || $t === 'int64_t' => 'l',
+            $t === 'NSInteger' || $t === 'long' || $t === 'int64_t' || str_ends_with($t, 'State') || str_ends_with($t, 'Orientation') || str_ends_with($t, 'Idiom') => 'l',
             $t === 'NSUInteger' || $t === 'unsigned long' || $t === 'uint64_t' => 'L',
             $t === 'int' || $t === 'int32_t' => 'i',
             $t === 'uint16_t' || $t === 'unichar' => 'S',

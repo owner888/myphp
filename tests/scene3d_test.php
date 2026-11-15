@@ -189,6 +189,8 @@ $behindPt = $projCam->worldToScreen(new Vec3(0.0, 0.0, 10.0), 800.0, 600.0);
 check($behindPt === null, 'Camera3D::worldToScreen returns null for points behind camera');
 $rimMat = new Material(wireframe: true, rimStrength: 1.2);
 check($rimMat->wireframe === true && abs($rimMat->rimStrength - 1.2) < 1e-4, 'Material supports wireframe and Fresnel rimStrength properties');
+$pbrMat = Material::pbr([1.0, 0.85, 0.3, 1.0], metallic: 0.85, roughness: 0.2);
+check($pbrMat->packedSpecularParam() < -80.0, 'Material::pbr encodes Cook-Torrance metallic & roughness into negative packedSpecularParam');
 
 // 5. Native GPU Off-screen RenderPass (macOS Metal & Windows Direct3D 11)
 if ((PHP_OS_FAMILY === 'Darwin' && php_uname('m') === 'arm64') || PHP_OS_FAMILY === 'Windows') {

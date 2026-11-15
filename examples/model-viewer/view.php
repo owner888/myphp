@@ -34,7 +34,15 @@ $controls = fn() => ScrollView(Axis::vertical)(
 
         Divider(),
 
-        Text('Lighting & Material')->font(Font::subheadline)->bold(),
+        Text('PBR Material & Lighting')->font(Font::subheadline)->bold(),
+        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+            Text('PBR Metallic')->font(Font::caption),
+            Slider(value: $this->metallic, in: [0.0, 1.0]),
+        ),
+        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+            Text('PBR Roughness')->font(Font::caption),
+            Slider(value: $this->roughness, in: [0.05, 0.99]),
+        ),
         VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
             Text('Fresnel Hologram Rim')->font(Font::caption),
             Slider(value: $this->rimStrength, in: [0.0, 2.5]),
@@ -46,10 +54,6 @@ $controls = fn() => ScrollView(Axis::vertical)(
         VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
             Text('Point Light Intensity')->font(Font::caption),
             Slider(value: $this->pointIntensity, in: [0.0, 5.0]),
-        ),
-        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
-            Text('Specular Shininess')->font(Font::caption),
-            Slider(value: $this->shininess, in: [4.0, 128.0]),
         ),
 
         Divider(),

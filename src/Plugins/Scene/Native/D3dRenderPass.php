@@ -138,9 +138,32 @@ final class D3dRenderPass
 
         float3 ambient  = ambientColor.rgb * baseColor.rgb;
         float  diff     = max(dot(N, L), 0.0);
-        float3 diffuse  = diff * lightColor.rgb * baseColor.rgb;
-        float  spec     = pow(max(dot(N, H), 0.0), max(cameraPos.w, 1.0));
-        float3 specular = spec * lightColor.rgb * 0.35;
+        float3 diffuse;
+        float3 specular;
+        if (cameraPos.w < 0.0) {
+            float enc = -cameraPos.w - 1.0;
+            float metallic = saturate(floor(enc) * 0.01);
+            float roughness = clamp(enc - floor(enc), 0.04, 1.0);
+            float a = roughness * roughness;
+            float a2 = a * a;
+            float NdotH = max(dot(N, H), 0.0);
+            float NdotV = max(dot(N, V), 1e-4);
+            float NdotL = max(diff, 1e-4);
+            float denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+            float D = a2 / max(3.14159265 * denom * denom, 1e-4);
+            float k = ((roughness + 1.0) * (roughness + 1.0)) * 0.125;
+            float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+            float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor.rgb, metallic);
+            float3 F = F0 + (1.0 - F0) * pow(1.0 - max(dot(H, V), 0.0), 5.0);
+            float3 kD = (1.0 - F) * (1.0 - metallic);
+            diffuse = (kD * baseColor.rgb / 3.14159265) * lightColor.rgb * diff * 2.4;
+            specular = ((D * G * F) / max(4.0 * NdotV * NdotL, 1e-4)) * lightColor.rgb * diff;
+            ambient *= lerp(1.0, 0.45, metallic);
+        } else {
+            diffuse  = diff * lightColor.rgb * baseColor.rgb;
+            float spec = pow(max(dot(N, H), 0.0), max(cameraPos.w, 1.0));
+            specular = spec * lightColor.rgb * 0.35;
+        }
 
         float3 finalColor = ambient + diffuse + specular;
 
@@ -493,7 +516,7 @@ final class D3dRenderPass
                 . pack('f4', $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0)
                 . pack('f4', $ac[0], $ac[1], $ac[2], $mat->rimStrength)
                 . pack('f4', ...$mat->color)
-                . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->shininess)
+                . pack('f4', $camPos->x, $camPos->y, $camPos->z, $mat->packedSpecularParam())
                 . $lightingExt;
 
             Com::check(($c->v->Map)($c, $this->constantBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($mapped)), 'Map (3D constants)');

@@ -935,11 +935,13 @@ final class Mesh
             $pbr = $mDef['pbrMetallicRoughness'] ?? [];
             $bcf = $pbr['baseColorFactor'] ?? [1.0, 1.0, 1.0, 1.0];
             $color = [(float)$bcf[0], (float)$bcf[1], (float)$bcf[2], (float)($bcf[3] ?? 1.0)];
+            $metallic = isset($pbr['metallicFactor']) ? (float)$pbr['metallicFactor'] : 0.0;
+            $roughness = isset($pbr['roughnessFactor']) ? (float)$pbr['roughnessFactor'] : 0.5;
             $tex = null;
             if (isset($pbr['baseColorTexture']['index'])) {
                 $tex = $getImage((int)$pbr['baseColorTexture']['index']);
             }
-            $parsedMaterials[$mIdx] = new Material(color: $color, texture: $tex);
+            $parsedMaterials[$mIdx] = new Material(color: $color, texture: $tex, metallic: $metallic, roughness: $roughness);
         }
 
         $readAccessor = static function (int $accIdx) use ($accessors, $bufferViews, $binChunk): array {

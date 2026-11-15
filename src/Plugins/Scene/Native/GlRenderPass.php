@@ -155,9 +155,32 @@ final class GlRenderPass
 
         vec3 ambient  = uAmbientColor.rgb * baseColor.rgb;
         float diff    = max(dot(N, L), 0.0);
-        vec3 diffuse  = diff * uLightColor.rgb * baseColor.rgb;
-        float spec    = pow(max(dot(N, H), 0.0), max(uCameraPos.w, 1.0));
-        vec3 specular = spec * uLightColor.rgb * 0.35;
+        vec3 diffuse;
+        vec3 specular;
+        if (uCameraPos.w < 0.0) {
+            float enc = -uCameraPos.w - 1.0;
+            float metallic = clamp(floor(enc) * 0.01, 0.0, 1.0);
+            float roughness = clamp(enc - floor(enc), 0.04, 1.0);
+            float a = roughness * roughness;
+            float a2 = a * a;
+            float NdotH = max(dot(N, H), 0.0);
+            float NdotV = max(dot(N, V), 1e-4);
+            float NdotL = max(diff, 1e-4);
+            float denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+            float D = a2 / max(3.14159265 * denom * denom, 1e-4);
+            float k = ((roughness + 1.0) * (roughness + 1.0)) * 0.125;
+            float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+            vec3 F0 = mix(vec3(0.04), baseColor.rgb, metallic);
+            vec3 F = F0 + (1.0 - F0) * pow(1.0 - max(dot(H, V), 0.0), 5.0);
+            vec3 kD = (1.0 - F) * (1.0 - metallic);
+            diffuse = (kD * baseColor.rgb / 3.14159265) * uLightColor.rgb * diff * 2.4;
+            specular = ((D * G * F) / max(4.0 * NdotV * NdotL, 1e-4)) * uLightColor.rgb * diff;
+            ambient *= mix(1.0, 0.45, metallic);
+        } else {
+            diffuse  = diff * uLightColor.rgb * baseColor.rgb;
+            float spec = pow(max(dot(N, H), 0.0), max(uCameraPos.w, 1.0));
+            specular = spec * uLightColor.rgb * 0.35;
+        }
 
         vec3 finalColor = ambient + diffuse + specular;
 
@@ -433,7 +456,7 @@ final class GlRenderPass
             ($g->epoxy_glUniform4f)($this->u['uLightDir'], $lDir->x, $lDir->y, $lDir->z, $mat->rimStrength);
             ($g->epoxy_glUniform4f)($this->u['uLightColor'], $lc[0], $lc[1], $lc[2], $isInstanced ? 1.0 : 0.0);
             ($g->epoxy_glUniform4f)($this->u['uMaterialColor'], $mat->color[0], $mat->color[1], $mat->color[2], $mat->color[3]);
-            ($g->epoxy_glUniform4f)($this->u['uCameraPos'], $camPos->x, $camPos->y, $camPos->z, $mat->shininess);
+            ($g->epoxy_glUniform4f)($this->u['uCameraPos'], $camPos->x, $camPos->y, $camPos->z, $mat->packedSpecularParam());
 
             // Bind Mesh VBO & EBO
             ($g->epoxy_glBindBuffer)(self::ARRAY_BUFFER, (int)$mesh->nativeVertexBuffer);

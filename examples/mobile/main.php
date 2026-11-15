@@ -15,6 +15,7 @@ use MyPHP\UI\{Content, Image, SVG};
 // MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
 class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 require_once __DIR__ . '/src/BatteryManager.php';
+require_once __DIR__ . '/src/UIDevice.php';
 
 final class Mobile
 {
@@ -103,10 +104,13 @@ final class Mobile
             $this->nativeBattery = "JNIgen 直通：{$pct}% ({$charging})";
             \MyPHP\Logger::debug("JNIgen BatteryManager: {$this->nativeBattery}", 'jni');
         } elseif (App::isIOS()) {
-            $dev = ObjC::msg('p:', ObjC::cls('UIDevice'), 'currentDevice');
-            ObjC::msg('v:b', $dev, 'setBatteryMonitoringEnabled:', true);
-            $lvl = round(ObjC::msg('f:', $dev, 'batteryLevel') * 100);
-            $this->nativeBattery = "FFIgen/ObjC 直通：{$lvl}%";
+            $dev = \MyPHP\Examples\Mobile\UIDevice::currentDevice();
+            $dev->setBatteryMonitoringEnabled(true);
+            $raw = $dev->batteryLevel();
+            $pct = $raw < 0.0 ? 100 : (int)round($raw * 100);
+            $sys = $dev->systemName() . ' ' . $dev->systemVersion();
+            $this->nativeBattery = "FFIgen UIDevice：{$pct}% ({$sys})";
+            \MyPHP\Logger::debug("FFIgen UIDevice: {$this->nativeBattery}", 'ffi');
         } else {
             $lvl = \MyPHP\Power::batteryLevel();
             $this->nativeBattery = $lvl !== null ? sprintf('桌面电源：%.0f%%', $lvl * 100) : '桌面交流供电';

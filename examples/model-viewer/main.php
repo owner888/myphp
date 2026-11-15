@@ -50,6 +50,8 @@ final class ModelViewerApp
     public bool $shadows = true;
     public bool $fog = true;
     public float $shininess = 64.0;
+    public float $metallic = 0.25;
+    public float $roughness = 0.28;
     public float $rimStrength = 0.65;
     public float $lightAngle = 0.8;
     public float $pointIntensity = 2.0;
@@ -214,6 +216,8 @@ final class ModelViewerApp
         $this->scene->shadowsEnabled = $this->shadows;
         $this->scene->fogEnabled = $this->fog;
         $this->modelEntity->material->shininess = $this->shininess;
+        $this->modelEntity->material->metallic = $this->metallic;
+        $this->modelEntity->material->roughness = $this->roughness;
         $this->modelEntity->material->wireframe = $this->wireframe;
         $this->modelEntity->material->rimStrength = $this->rimStrength;
         $this->keyLight->intensity = $this->pointIntensity;
