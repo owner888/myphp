@@ -218,7 +218,13 @@ final class Layout
             $n->colFit = null;
             $fit();
         }
-        [$pw, $ph] = $n->padSums(); $n->padW = $pw; $n->padH = $ph;
+        if ($n->pads === null && !$n->bordered && $n->borders === [0.0, 0.0, 0.0, 0.0]) {
+            $pw = $n->padW = 2.0 * ($n->padX ?? $n->pad);
+            $ph = $n->padH = 2.0 * ($n->padY ?? $n->pad);
+        } else {
+            [$pw, $ph] = $n->padSums();
+            $n->padW = $pw; $n->padH = $ph;
+        }
         self::measureBox($n);
         if ($n->mw < $pw) { $n->mw = $pw; } // no smaller than its padding and border, whatever its size says, as in CSS
         if ($n->mh < $ph) { $n->mh = $ph; }
@@ -230,13 +236,13 @@ final class Layout
             $n->mw = max(min($n->mw, $n->maxW), $n->minW, $pw); $n->mh = max(min($n->mh, $n->maxH), $n->minH, $ph);
             $n->minMw = min($n->minMw, $n->mw);
         }
-        [$mt, $mr, $mb, $ml] = $n->margins;
-        if ($mt != 0 || $mr != 0 || $mb != 0 || $ml != 0) { // an automatic margin asks for none
+        if ($n->margins === [0.0, 0.0, 0.0, 0.0]) {
+            $n->marW = $n->marH = 0.0;
+        } else {
+            [$mt, $mr, $mb, $ml] = $n->margins;
             $mx = $n->marW = (is_finite($ml) ? $ml : 0.0) + (is_finite($mr) ? $mr : 0.0);
             $n->mw += $mx; $n->minMw += $mx;
             $n->mh += $n->marH = (is_finite($mt) ? $mt : 0.0) + (is_finite($mb) ? $mb : 0.0);
-        } else {
-            $n->marW = $n->marH = 0.0;
         }
     }
 
@@ -401,8 +407,8 @@ final class Layout
      */
     public static function arrange(Node $n, float $x, float $y, float $w, float $h): void
     {
-        [$mt, $mr, $mb, $ml] = $n->margins;
-        if ($mt != 0 || $mr != 0 || $mb != 0 || $ml != 0) {
+        if ($n->margins !== [0.0, 0.0, 0.0, 0.0]) {
+            [$mt, $mr, $mb, $ml] = $n->margins;
             [$x, $w] = self::inMargins($x, $w, $ml, $mr, $n->mw);
             [$y, $h] = self::inMargins($y, $h, $mt, $mb, $n->mh);
         }
@@ -440,7 +446,9 @@ final class Layout
             }
         }
         $cnt = count($kids);
-        $px = $n->padL(); $py = $n->padT(); $pw = $px + $n->padR(); $ph = $py + $n->padB(); // the content's left and top, and the room the edges take
+        $px = $n->pads === null && !$n->bordered && $n->borders === [0.0, 0.0, 0.0, 0.0] ? ($n->padX ?? $n->pad) : $n->padL();
+        $py = $n->pads === null && !$n->bordered && $n->borders === [0.0, 0.0, 0.0, 0.0] ? ($n->padY ?? $n->pad) : $n->padT();
+        $pw = $n->padW; $ph = $n->padH; // the content's left and top, and the room the edges take
         $cw = $w - $pw; $ch = $h - $ph;
         if ($cnt === 0) {
             if ($n->scroll instanceof ScrollState) { // nothing to scroll: at the start (mygo's TrackScroll keeps the offset within the content)
@@ -539,7 +547,9 @@ final class Layout
         $cnt = count($kids);
         $row = $n->dir === Node::ROW;
         $gap = $n->mainGap();
-        $px = $n->padL(); $py = $n->padT(); $pw = $px + $n->padR(); $ph = $py + $n->padB();
+        $px = $n->pads === null && !$n->bordered && $n->borders === [0.0, 0.0, 0.0, 0.0] ? ($n->padX ?? $n->pad) : $n->padL();
+        $py = $n->pads === null && !$n->bordered && $n->borders === [0.0, 0.0, 0.0, 0.0] ? ($n->padY ?? $n->pad) : $n->padT();
+        $pw = $n->padW; $ph = $n->padH;
         $cw = $w - $pw; $ch = $h - $ph;
         $viewW = $cw; // the box a right-to-left node mirrors its children in
         $wide = $n->scroll instanceof ListState && $n->rowMinW > 0;

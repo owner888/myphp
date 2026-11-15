@@ -108,6 +108,12 @@ final class Runtime
     public Cursor $cursor = Cursor::Default;
     /** The roles of what is clicked, where the cursor of what is around it stops. */
     private const CLICKABLE_ROLES = [Role::BUTTON, Role::LINK, Role::CHECK_BOX, Role::RADIO, Role::SWITCH, Role::POP_UP_BUTTON, Role::MENU_BUTTON, Role::TOGGLE_BUTTON, Role::TAB, Role::DISCLOSURE, Role::COLOR_WELL, Role::MENU_ITEM, Role::MENU_ITEM_CHECK_BOX, Role::MENU_ITEM_RADIO];
+    private const CLICKABLE_ROLES_MAP = [
+        Role::BUTTON => true, Role::LINK => true, Role::CHECK_BOX => true, Role::RADIO => true, Role::SWITCH => true,
+        Role::POP_UP_BUTTON => true, Role::MENU_BUTTON => true, Role::TOGGLE_BUTTON => true, Role::TAB => true,
+        Role::DISCLOSURE => true, Role::COLOR_WELL => true, Role::MENU_ITEM => true, Role::MENU_ITEM_CHECK_BOX => true, Role::MENU_ITEM_RADIO => true,
+    ];
+    private ?Transform $transformIdentity = null;
     private bool $animating = false;
     /** The time of frames for tests (mygo's clock): nanoseconds, hrtime's when null. */
     public ?Closure $clock = null;
@@ -2170,17 +2176,25 @@ final class Runtime
                 }
             }
         }
-        $n->world = $parent === null ? $n->transformAt() : $parent->world->mul($n->transformAt()); // its transform after its ancestors' (mygo's world)
+        $tId = $this->transformIdentity ??= Transform::identity();
+        $tAt = ($n->pose === null && !$n->poseM->set && $n->transform === $tId) ? $n->poseM : $n->transformAt();
+        $n->world = $parent === null ? $tAt : ($parent->world->set ? $parent->world->mul($tAt) : $tAt); // its transform after its ancestors' (mygo's world)
         if ($n->world->set) {
             $this->worlds[$n->id] = $n->world;
+            [$bx, $by, $bw, $bh] = $n->world->bounds($n->x, $n->y, $n->w, $n->h); // as it shows in the window
+        } else {
+            $bx = $n->x; $by = $n->y; $bw = $n->w; $bh = $n->h;
         }
-        [$bx, $by, $bw, $bh] = $n->world->bounds($n->x, $n->y, $n->w, $n->h); // as it shows in the window
         $clip ??= [$n->x, $n->y, $n->x + $n->w, $n->y + $n->h]; // the root: the window
-        if (min($bx + $bw, $clip[2]) > max($bx, $clip[0]) && min($by + $bh, $clip[3]) > max($by, $clip[1]) && !($n->backface && $n->transform->facesAway()) && !$hidden) {
+        $bx1 = $bx + $bw; $by1 = $by + $bh;
+        $vx = $bx > $clip[0] ? $bx : $clip[0];
+        $vy = $by > $clip[1] ? $by : $clip[1];
+        $vx1 = $bx1 < $clip[2] ? $bx1 : $clip[2];
+        $vy1 = $by1 < $clip[3] ? $by1 : $clip[3];
+        if ($vx1 > $vx && $vy1 > $vy && !($n->backface && $n->transform->facesAway()) && !$hidden) {
             $this->shown[$n->id] = true;
         }
-        $vx = max($bx, $clip[0]); $vy = max($by, $clip[1]);
-        $this->visible[$n->id] = [$vx, $vy, max(0.0, min($bx + $bw, $clip[2]) - $vx), max(0.0, min($by + $bh, $clip[3]) - $vy)]; // as it shows, clipped (mygo's vx, vy, vw, vh)
+        $this->visible[$n->id] = [$vx, $vy, $vx1 > $vx ? $vx1 - $vx : 0.0, $vy1 > $vy ? $vy1 - $vy : 0.0]; // as it shows, clipped (mygo's vx, vy, vw, vh)
         if ($clipper !== 0) { $this->clippedBy[$n->id] = $clipper; }
         $axes = ($n->scroll !== null ? Node::CLIP_X | Node::CLIP_Y : 0) | $n->clip;
         if ($axes !== 0 && $parent !== null) { // what is inside it takes the pointer only within it, in its own layout (mygo's clip chain)
@@ -2188,10 +2202,12 @@ final class Runtime
             $clipper = $n->id;
         }
         if ($n->scroll !== null || ($n->clip & Node::CLIP_X) !== 0) {
-            $clip[0] = max($clip[0], $bx); $clip[2] = min($clip[2], $bx + $bw);
+            if ($bx > $clip[0]) { $clip[0] = $bx; }
+            if ($bx1 < $clip[2]) { $clip[2] = $bx1; }
         }
         if ($n->scroll !== null || ($n->clip & Node::CLIP_Y) !== 0) {
-            $clip[1] = max($clip[1], $by); $clip[3] = min($clip[3], $by + $bh);
+            if ($by > $clip[1]) { $clip[1] = $by; }
+            if ($by1 < $clip[3]) { $clip[3] = $by1; }
         }
         $this->order[$n->id] = ++$this->counter;
         $this->recordSelectable($n, $parent);
@@ -2215,7 +2231,7 @@ final class Runtime
         }
         if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->isDisabled() && !$n->ignoresInput()) {
             $this->focusables[] = $n->id;
-            if (in_array($n->role, [Role::CHECK_BOX, Role::RADIO, Role::SWITCH], true)) { $this->toggles[$n->id] = true; }
+            if ($n->role === Role::CHECK_BOX || $n->role === Role::RADIO || $n->role === Role::SWITCH) { $this->toggles[$n->id] = true; }
             if ($group !== 0) {
                 $this->memberOf[$n->id] = $group;
                 if ($n->on && $this->groups[$group]['on'] === null) { $this->groups[$group]['on'] = $n->id; }
@@ -2235,7 +2251,7 @@ final class Runtime
         }
         if ($n->url !== null) { $this->links[] = $n->id; }
         $field = $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA;
-        if (($n->url !== null || $field || $n->cursor !== null || isset($this->clickable[$n->id]) || in_array($n->role, self::CLICKABLE_ROLES, true)) && $this->hovered($n->id)) {
+        if (($n->url !== null || $field || $n->cursor !== null || isset($this->clickable[$n->id]) || isset(self::CLICKABLE_ROLES_MAP[$n->role])) && $this->hovered($n->id)) {
             $this->cursor = match (true) {
                 $n->url !== null => Cursor::Pointer,
                 $field => Cursor::Text,
@@ -2317,17 +2333,26 @@ final class Runtime
      */
     private function setInk(Node $n): void
     {
-        $m = $n->inkMargin();
-        [$x, $y, $w, $h] = $n->world->bounds($n->x - $m, $n->y - $m, $n->w + 2 * $m, $n->h + 2 * $m);
-        $ink = [$x, $y, $x + $w, $y + $h];
+        $m = $n->shadows === [] ? 4.0 : $n->inkMargin();
+        if ($n->world->set) {
+            [$x, $y, $w, $h] = $n->world->bounds($n->x - $m, $n->y - $m, $n->w + 2 * $m, $n->h + 2 * $m);
+            $x0 = $x; $y0 = $y; $x1 = $x + $w; $y1 = $y + $h;
+        } else {
+            $x0 = $n->x - $m; $y0 = $n->y - $m; $x1 = $n->x + $n->w + $m; $y1 = $n->y + $n->h + $m;
+        }
         $no = $n->frags !== [] || ($n->kind === Node::TEXT && $n->kids !== []) || $n->effect !== null || $n->blur > 0 || $n->dividers !== null || $n->debug
             || $n->ghosts !== [] || $n->leaving !== 0 || $n->draw !== null || $n->drawOver !== null || $n->drawObjects !== null;
         foreach ($n->kids as $k) {
-            if ($k->ink === null) { $no = true; continue; }
-            $ink = [min($ink[0], $k->ink[0]), min($ink[1], $k->ink[1]), max($ink[2], $k->ink[2]), max($ink[3], $k->ink[3])];
+            $ki = $k->ink;
+            if ($ki === null) { $no = true; continue; }
+            if ($ki[0] < $x0) { $x0 = $ki[0]; }
+            if ($ki[1] < $y0) { $y0 = $ki[1]; }
+            if ($ki[2] > $x1) { $x1 = $ki[2]; }
+            if ($ki[3] > $y1) { $y1 = $ki[3]; }
             $no = $no || $k->noCull;
         }
-        [$n->ink, $n->noCull] = [$ink, $no];
+        $n->ink = [$x0, $y0, $x1, $y1];
+        $n->noCull = $no;
     }
 
     /** The window's point (x, y) in last frame's layout of node $id, from its top left, through its transform (mygo's WindowToLocal); null for a singular transform. @return ?array{0: float, 1: float} */

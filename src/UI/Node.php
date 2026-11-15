@@ -1393,7 +1393,11 @@ final class Node
         if (($this->kind !== self::TEXT && $this->kind !== self::RICH) || $this->single || $this->noWrap || $this->inline || $this->metrics === null || $this->wrapLast || ($this->wrapWidth !== null && !$this->autoWrap)) {
             return false;
         }
-        return $this->breaks ??= preg_match('/[\s\x80-\xff]/', $this->kind === self::TEXT ? (string)$this->text : $this->plainText()) === 1; // a space, or text past ASCII (Chinese breaks between its characters): a line may break in it; asked a few times a layout
+        if ($this->breaks !== null) {
+            return $this->breaks;
+        }
+        $s = $this->kind === self::TEXT ? (string)$this->text : $this->plainText();
+        return $this->breaks = (strpbrk($s, " \t\n\r") !== false || !mb_check_encoding($s, 'ASCII'));
     }
 
     /** Whether a line may break in the node's text, once known (wrapsAtWidth). */
