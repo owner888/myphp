@@ -81,7 +81,6 @@ final class Http
                 $r['body'] = $out;
             }
             $r['lines'] = lines($r);
-            $this->window->invalidate();
         });
     }
 }

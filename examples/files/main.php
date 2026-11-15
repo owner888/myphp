@@ -131,7 +131,7 @@ final class Files
         if ($one === null) { return; }
         App::go(function () use ($one) {
             $img = Image::fromFile($one, 2048);
-            if ($this->previewing && ($this->chosenEntries()[0]['path'] ?? null) === $one) { $this->preview = $img; $this->window?->invalidate(); }
+            if ($this->previewing && ($this->chosenEntries()[0]['path'] ?? null) === $one) { $this->preview = $img; }
         });
     }
 
@@ -155,7 +155,7 @@ final class Files
         $this->decoding = true;
         App::go(function () { // off the main thread, one after the other
             while (($p = array_shift($this->wanted)) !== null) {
-                if (!isset($this->thumbs[$p])) { $this->thumbs[$p] = Image::fromFile($p, 128); $this->window?->invalidate(); }
+                if (!isset($this->thumbs[$p])) { $this->thumbs[$p] = Image::fromFile($p, 128); }
             }
             $this->decoding = false;
         });
@@ -173,8 +173,8 @@ $files = new Files($argv[1] ?? (getenv('HOME') ?: '/'));
 App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),
     new MenuItem('File', submenu: [
-        new MenuItem('Enclosing Folder', function () use ($files) { $files->open(dirname($files->path)); $files->window?->invalidate(); }, 'CmdOrCtrl+Up'),
-        new MenuItem('Find', function () use ($files) { $files->finding = true; $files->window?->invalidate(); }, 'CmdOrCtrl+F'),
+        new MenuItem('Enclosing Folder', function () use ($files) { $files->open(dirname($files->path)); }, 'CmdOrCtrl+Up'),
+        new MenuItem('Find', function () use ($files) { $files->finding = true; }, 'CmdOrCtrl+F'),
         MenuItem::separator(), new MenuItem(role: 'close'),
     ]),
     new MenuItem('Edit', submenu: [new MenuItem(role: 'selectAll')]),

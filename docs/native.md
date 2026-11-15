@@ -271,10 +271,8 @@ stdout, stderr and the exit code once it ends.
 ```php
 use MyPHP\Process;
 
-$p = Process::run(['git', 'log', '--oneline', '-20'], '', function (string $out, string $err, int $code) use ($app, $win) {
-    $win->update(function () use ($app, $out, $err, $code) {
-        $app->log = $code === 0 ? explode("\n", trim($out)) : ["git failed: $err"];
-    });
+$p = Process::run(['git', 'log', '--oneline', '-20'], '', function (string $out, string $err, int $code) use ($app) {
+    $app->log = $code === 0 ? explode("\n", trim($out)) : ["git failed: $err"];
 });
 // later, to stop it: $done is then not called
 $p->kill();

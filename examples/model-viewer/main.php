@@ -296,7 +296,6 @@ App::whenReady(function () use ($app) {
     $app->window->on('fileDrop', function (FileDropEvent $ev) use ($app): void {
         if ($ev->paths !== []) {
             $app->loadDroppedFile($ev->paths[0]);
-            $app->window?->invalidate();
         }
     });
 });

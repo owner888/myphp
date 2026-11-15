@@ -105,7 +105,6 @@ final class Photos
                 while (count($this->thumbs) > self::KEEP) {
                     unset($this->thumbs[array_key_first($this->thumbs)]);
                 }
-                $this->window->invalidate();
             }
             $this->decoding = false;
         });
@@ -134,7 +133,6 @@ final class Photos
                 if (in_array($f, $this->files, true)) { // still of the folder open
                     $this->full[$f] = $img;
                     $this->trimFull();
-                    $this->window->invalidate();
                 }
             });
         }

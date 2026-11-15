@@ -131,7 +131,7 @@ final class Notes
     {
         if ($this->open === null || $this->text === $this->saved) { return; }
         $n = ++$this->edit;
-        App::after(0.5, function () use ($n) { if ($n === $this->edit) { $this->save(); $this->window?->invalidate(); } });
+        App::after(0.5, function () use ($n) { if ($n === $this->edit) { $this->save(); } });
     }
 }
 
@@ -139,13 +139,13 @@ App::setName('Notes'); // before App::path(), which is named after the app
 $notes = new Notes($argv[1] ?? App::path(PathName::UserData) . '/notes');
 
 $confirmDelete = function () use ($notes) { // the same modal the toolbar's Delete… opens
-    if ($notes->open !== null) { $notes->asking = true; $notes->window?->invalidate(); }
+    if ($notes->open !== null) { $notes->asking = true; }
 };
 App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),
     new MenuItem('File', submenu: [
-        new MenuItem('New Note', function () use ($notes) { $notes->create(); $notes->window?->invalidate(); }, 'CmdOrCtrl+N'),
-        new MenuItem('Save', function () use ($notes) { $notes->save(); $notes->window?->invalidate(); }, 'CmdOrCtrl+S'),
+        new MenuItem('New Note', function () use ($notes) { $notes->create(); }, 'CmdOrCtrl+N'),
+        new MenuItem('Save', function () use ($notes) { $notes->save(); }, 'CmdOrCtrl+S'),
         new MenuItem('Delete Note', $confirmDelete, 'CmdOrCtrl+Backspace'),
         MenuItem::separator(), new MenuItem(role: 'close'),
     ]),

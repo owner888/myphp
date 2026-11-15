@@ -476,6 +476,7 @@ final class Window
             $fn($e);
         }
         $this->page?->filesDropped($paths, $x, $y);
+        self::checkObservedStates();
     }
 
     /** @internal asks the 'close' listeners whether the window closes, as the user closing it */

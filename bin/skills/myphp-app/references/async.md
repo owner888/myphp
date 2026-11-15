@@ -37,8 +37,8 @@ $uploadReq = (new URLRequest('https://api.example.com/uploads', 'POST'))
     from: ['kind' => 'schedule', 'file' => $localFilePath],
 );
 
-// 4. Inside App::go() fiber with state update:
-App::go(function () use ($app, $win, $query, $seq) {
+// 4. Inside App::go() fiber with automatic state observation:
+App::go(function () use ($app, $query, $seq) {
     try {
         $req = new URLRequest(
             'https://api.github.com/search/repositories?q=' . rawurlencode($query),
@@ -50,10 +50,8 @@ App::go(function () use ($app, $win, $query, $seq) {
     } catch (\RuntimeException $e) { // no connection, DNS, timeout
         [$data, $error] = [null, $e->getMessage()];
     }
-    $win->update(function () use ($app, $data, $error, $seq) {
-        if ($seq !== $app->seq) { return; } // a newer query was sent: drop this answer
-        [$app->results, $app->error, $app->loading] = [$data['items'] ?? [], $error, false];
-    });
+    if ($seq !== $app->seq) { return; } // a newer query was sent: drop this answer
+    [$app->results, $app->error, $app->loading] = [$data['items'] ?? [], $error, false]; // auto-observed by Content::file!
 });
 ```
 
@@ -67,8 +65,7 @@ App::go(function () use ($app, $win, $query, $seq) {
 - For remote images (avatars, covers, photos), always use the declarative
   `AsyncImage($url, content: fn($img) => $img->resizable()->scaledToFill(), placeholder: fn() => ...)`
   view rather than manually downloading bytes into `Image::fromBytes()`.
-- Change state from a fiber only through `$window->update(fn() => ...)`,
-  which also draws the next frame.
+- State objects bound via `Content::file(__DIR__ . '/view.php', $app)` are automatically observed: mutating properties inside `App::go()` fibers or `App::after()` timers automatically schedules the next frame.
 
 ## Stale answers, debouncing, states
 

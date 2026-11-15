@@ -78,25 +78,27 @@ a closure of the item), and `->id($key)` gives any view one, as SwiftUI's
 
 PHP runs the app on one thread. Work that waits, as a download, runs in a
 fiber of its own with `App::go()`, which lets the app draw and take events
-while the fiber waits: an HTTP request with `MyPHP\Http` (see [from PHP or
-native UI](../plugins/fetch.md#from-php-or-native-ui)), `App::sleep()`,
-`App::wait()`. `->task(fn() => …)` starts one as a view appears, as
-SwiftUI's. `Window::update()` runs a function that changes the state and
-then draws a new frame:
+while the fiber waits: an HTTP request with `URLSession::shared()` (see
+[from PHP or native UI](../plugins/fetch.md#from-php-or-native-ui)),
+`App::sleep()`, `App::wait()`. `->task(fn() => …)` starts one as a view
+appears, as SwiftUI's.
+
+Any state object bound with `Content::file(__DIR__ . '/view.php', $app)` is
+**automatically observed** across fibers and timers (like SwiftUI's
+`@Observable`): simply assign to `$app`'s properties and the window redraws
+on the next frame automatically:
 
 <!-- no-test -->
 ```php
-$win = new Window(new WindowOptions(content: Content::file(__DIR__ . '/view.php', $app)));
-App::go(function () use ($win, $app) {
-    $items = Http::get('https://example.com/items.json')->json(); // waits in the fiber, the app going on
-    $win->update(function () use ($app, $items) { $app->items = $items; });
+new Window(new WindowOptions(content: Content::file(__DIR__ . '/view.php', $app)));
+App::go(function () use ($app) {
+    $app->items = URLSession::shared()->json('https://example.com/items.json'); // waits in the fiber; redraws automatically when assigned
 });
 ```
 
-`Window::invalidate()` only draws a new frame, for state changed some other
-way. `App::later()` and `App::after()` run a function on a later turn of
-the run loop. A SQLite query does not wait in a fiber: it is synchronous
-(see [SQLite](../plugins/sqlite.md#from-php-or-native-ui)).
+`App::later()` and `App::after()` run a function on a later turn of the run
+loop (and also auto-observe state changes). A SQLite query does not wait in
+a fiber: it is synchronous (see [SQLite](../plugins/sqlite.md#from-php-or-native-ui)).
 
 ## Something that changes with time
 

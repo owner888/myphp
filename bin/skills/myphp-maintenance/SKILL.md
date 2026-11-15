@@ -26,7 +26,7 @@ The native UI rules below apply where the app uses `MyPHP\UI`; preserve a web ap
 ## State, work and rendering
 
 - Trigger side effects from handled actions or explicit guarded jobs, never unconditionally from a view.
-- PHP runs the UI on one thread: keep slow I/O off it with the framework's non-blocking APIs (fetch, file watches, timers) and publish results with `$window->update($fn)`; `invalidate()` asks for a frame without changing state. Drop stale results after the source changed or the window closed.
+- PHP runs the UI on one thread: keep slow I/O off it with the framework's non-blocking APIs (`URLSession`, file watches, timers); state objects bound via `Content::file()` are auto-observed when fibers or timers mutate their properties. Drop stale results after the source changed or the window closed.
 - Keep `->draw()` callbacks to painting; they can run repeatedly. Prefer MyPHP's widgets to keep keyboard, focus, disabled and accessibility behavior, and the app's theme and sizes.
 
 ## Verification

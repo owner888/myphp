@@ -476,10 +476,8 @@ App::whenReady(function () use ($s) {
     $sample = function () use (&$x): float { $x += 0.35; return 0.5 + 0.35 * sin($x) + 0.1 * sin($x * 3.1); };
     for ($i = 0; $i < 60; $i++) { $s->samples[] = $sample(); }
     $tick = function () use (&$tick, $s, $sample): void {
-        $s->win?->update(function () use ($s, $sample): void {
-            $s->now = new DateTimeImmutable();
-            $s->samples = [...array_slice($s->samples, 1), $sample()];
-        });
+        $s->now = new DateTimeImmutable();
+        $s->samples = [...array_slice($s->samples, 1), $sample()];
         App::after(1 - fmod(microtime(true), 1), $tick);
     };
     App::after(1 - fmod(microtime(true), 1), $tick);

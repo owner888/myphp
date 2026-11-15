@@ -122,7 +122,7 @@ App::run();
 ## 3. Essential Rules (Avoid Common Bugs)
 
 1. **SwiftUI / Foundation APIs first**:
-   - **Networking**: Always use `URLSession::shared()->data(for: $req)`, `->json()`, `->decode()`, and `->upload(for: $req, from: ['file' => $path])` (native `multipart/form-data`, never base64-encode files into JSON) inside `App::go()` fibers, then update state via `$this->window->update(fn() => ...)`.
+   - **Networking & Auto-Observed State**: Always use `URLSession::shared()->data(for: $req)`, `->json()`, `->decode()`, and `->upload(for: $req, from: ['file' => $path])` (native `multipart/form-data`, never base64-encode files into JSON) inside `App::go()` fibers. State objects bound via `Content::file(__DIR__ . '/view.php', $app)` are **automatically observed** across fibers and timers — simply assign to `$this->...` directly (no manual `$this->window->update()` needed).
    - **Remote Images**: Always use `AsyncImage($url)` (built-in fiber download & memory cache), never manual `Image::fromBytes()` downloads.
    - **Custom SVGs**: `Image($svg)` without `->resizable()` renders as a monochrome template icon. For multi-color SVGs/illustrations, always call `Image(SVG::parse($xml))->resizable()->scaledToFit()->frame(width: 44, height: 44)`.
 2. **Adaptive Multi-Platform Navigation**:

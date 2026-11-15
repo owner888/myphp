@@ -165,25 +165,28 @@ require 'vendor/autoload.php'; // or the framework's src/autoload.php
 use MyPHP\{App, Http, Window, WindowOptions};
 use MyPHP\UI\Content;
 
-$repo = ['state' => 'loading', 'stars' => 0, 'error' => ''];
-App::whenReady(function () use (&$repo) {
-    $win = new Window(new WindowOptions(title: 'Stars', width: 360, height: 120,
-        content: Content::view(function () use (&$repo) {
-            return match ($repo['state']) {
-                'loading' => ProgressView(),
-                'done' => Text(verbatim: "owner888/myphp has {$repo['stars']} stars"),
-                'failed' => Text(verbatim: "Could not load it: {$repo['error']}"),
-            };
-        })));
-    App::go(function () use (&$repo, $win) {
+$app = new class {
+    public string $state = 'loading';
+    public int $stars = 0;
+    public string $error = '';
+};
+App::whenReady(function () use ($app) {
+    new Window(new WindowOptions(title: 'Stars', width: 360, height: 120,
+        content: Content::file(__DIR__ . '/view.php', $app)));
+    App::go(function () use ($app) {
         try {
             $r = Http::get('https://api.github.com/repos/owner888/myphp', ['Accept' => 'application/vnd.github+json']);
-            $next = $r->ok() ? ['state' => 'done', 'stars' => $r->json()['stargazers_count'], 'error' => '']
-                : ['state' => 'failed', 'stars' => 0, 'error' => "HTTP {$r->status}"];
+            if ($r->ok()) {
+                $app->stars = $r->json()['stargazers_count'];
+                $app->state = 'done';
+            } else {
+                $app->error = "HTTP {$r->status}";
+                $app->state = 'failed';
+            }
         } catch (RuntimeException $e) {
-            $next = ['state' => 'failed', 'stars' => 0, 'error' => $e->getMessage()];
+            $app->error = $e->getMessage();
+            $app->state = 'failed';
         }
-        $win->update(function () use (&$repo, $next) { $repo = $next; }); // changes the state, then draws
     });
 });
 App::run();

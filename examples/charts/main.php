@@ -95,7 +95,6 @@ App::whenReady(function () use ($charts): void {
     $charts->window = new Window(new WindowOptions(title: 'Charts', width: 1080, height: 760, content: Content::file(__DIR__ . '/view.php', $charts)));
     $tick = function () use (&$tick, $charts): void { // a sample a second
         $charts->sample();
-        $charts->window?->invalidate();
         App::after(1, $tick);
     };
     App::after(1, $tick);
