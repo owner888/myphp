@@ -1151,6 +1151,18 @@ void* myphp_jni_env(void) {
 }
 
 void* myphp_jni_activity(void) {
+    if (g_activity_obj) return (void*)g_activity_obj;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class) return NULL;
+    jfieldID fid = (*env)->GetStaticFieldID(env, g_activity_class, "sInstance", "Lcom/owner888/myphp/MyphpActivity;");
+    if ((*env)->ExceptionCheck(env) || !fid) {
+        (*env)->ExceptionClear(env);
+        return NULL;
+    }
+    jobject local = (*env)->GetStaticObjectField(env, g_activity_class, fid);
+    if (!local) return NULL;
+    g_activity_obj = (*env)->NewGlobalRef(env, local);
+    (*env)->DeleteLocalRef(env, local);
     return (void*)g_activity_obj;
 }
 

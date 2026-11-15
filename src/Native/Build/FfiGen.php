@@ -224,7 +224,7 @@ final class FfiGen
                 if (self::isNSString($pType)) {
                     $callArgs[] = "is_string(\$$safeName) ? ObjC::str(\$$safeName) : \$$safeName";
                 } elseif ($letter === 'p') {
-                    $callArgs[] = "\$$safeName instanceof self ? \$$safeName" . '->handle : (is_object($' . $safeName . ') && property_exists($' . $safeName . ", 'handle') ? \$$safeName" . "->handle : \$$safeName)";
+                    $callArgs[] = "\$$safeName instanceof self ? \$$safeName" . '->handle : (is_object($' . $safeName . ') && !$' . $safeName . ' instanceof CData && property_exists($' . $safeName . ", 'handle') ? \$$safeName" . "->handle : \$$safeName)";
                 } else {
                     $callArgs[] = "\$$safeName";
                 }

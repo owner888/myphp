@@ -41,6 +41,9 @@ $me = fn() => ListView()(
         Button('操作菜单 confirmationDialog', action: fn() => $this->actions = true),
         Button('确认弹窗 alert', action: fn() => $this->alert = true),
     ),
+    Section(header: '原生互操作 (JNIgen / FFIgen)', footer: $this->nativeBattery)(
+        Button('读取系统电池状态 (BatteryManager)', action: fn() => $this->queryNativeBattery()),
+    ),
     Section(header: '触感 Haptics', footer: 'iPhone 的 Taptic Engine、Android 的振动马达；Mac 的触控板要有手指放着。')(
         Each(['light', 'medium', 'heavy', 'soft', 'rigid'])(fn(string $style) => Button("impact $style", action: fn() => Haptics::impact($style))),
         Button('selection', action: fn() => Haptics::selection()),

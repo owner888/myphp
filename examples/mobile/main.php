@@ -9,10 +9,12 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileFilter, Haptics, Http, OpenDialogOptions, Window, WindowOptions};
+use MyPHP\Native\{Jni, ObjC};
 use MyPHP\UI\{Content, Image, SVG};
 
 // MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
 class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
+require_once __DIR__ . '/src/BatteryManager.php';
 
 final class Mobile
 {
@@ -28,6 +30,7 @@ final class Mobile
     public string $http = '';
     public bool $sheet = false, $actions = false, $alert = false;
     public string $lastAction = '';
+    public string $nativeBattery = '点击读取原生电量 (JNIgen / FFIgen)';
     public int $refreshes = 0;
     public SVG $homeIcon, $formIcon, $meIcon;
 
@@ -37,6 +40,9 @@ final class Mobile
         $this->homeIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10h-6v-6H9v6H3z"/></svg>');
         $this->formIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h10v4H4z"/></svg>');
         $this->meIcon = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0z"/></svg>');
+        if (App::isAndroid() || App::isIOS()) {
+            try { $this->queryNativeBattery(); } catch (\Throwable) {}
+        }
     }
 
     /** What a row's swipe action did, as a mail app would note it. */
@@ -84,11 +90,38 @@ final class Mobile
             }
         });
     }
+
+    /** Reads native device battery status directly via `myphp jnigen` (Android) or `ObjC` (iOS/macOS) without custom C glue. */
+    public function queryNativeBattery(): void
+    {
+        if (App::isAndroid()) {
+            $svc = Jni::call(Jni::activity(), 'android/app/Activity', 'getSystemService', '(Ljava/lang/String;)Ljava/lang/Object;', 'batterymanager');
+            $bm = new \MyPHP\Examples\Mobile\BatteryManager($svc);
+            $pct = $bm->getIntProperty(4); // BATTERY_PROPERTY_CAPACITY = 4
+            $charging = $bm->isCharging() ? '充电中 ⚡' : '放电中 🔋';
+            $bm->release();
+            $this->nativeBattery = "JNIgen 直通：{$pct}% ({$charging})";
+            \MyPHP\Logger::debug("JNIgen BatteryManager: {$this->nativeBattery}", 'jni');
+        } elseif (App::isIOS()) {
+            $dev = ObjC::msg('p:', ObjC::cls('UIDevice'), 'currentDevice');
+            ObjC::msg('v:b', $dev, 'setBatteryMonitoringEnabled:', true);
+            $lvl = round(ObjC::msg('f:', $dev, 'batteryLevel') * 100);
+            $this->nativeBattery = "FFIgen/ObjC 直通：{$lvl}%";
+        } else {
+            $lvl = \MyPHP\Power::batteryLevel();
+            $this->nativeBattery = $lvl !== null ? sprintf('桌面电源：%.0f%%', $lvl * 100) : '桌面交流供电';
+        }
+    }
 }
 
 $app = new Mobile;
 App::setName('Mobile');
 App::whenReady(function () use ($app): void {
+    if (App::isAndroid() || App::isIOS()) {
+        try { $app->queryNativeBattery(); } catch (\Throwable $e) {
+            \MyPHP\Logger::error('queryNativeBattery failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(), 'jni');
+        }
+    }
     new Window(new WindowOptions(title: 'Mobile', width: 900, height: 640, content: Content::file(__DIR__ . '/view.php', $app))); // the desktop: a sidebar; a phone fills its screen
 });
 App::run();

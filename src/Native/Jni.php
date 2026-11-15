@@ -51,7 +51,7 @@ final class Jni
 
     public static function ffi(): FFI
     {
-        return self::$ffi ??= FFI::cdef(self::CDEF);
+        return self::$ffi ??= FFI::cdef(self::CDEF, 'libmyphp.so');
     }
 
     /**
@@ -104,7 +104,7 @@ final class Jni
         $f = self::ffi();
         $cls = self::cls($className);
         $mid = self::methodId($className, '<init>', $ctorSig, false);
-        [$jargs, $tempRefs] = self::packArgs($f, $ctorSig, $args);
+        [$jargs, $tempRefs, $keepArr] = self::packArgs($f, $ctorSig, $args);
         try {
             return $f->myphp_jni_new_object($cls, $mid, $jargs);
         } finally {
@@ -129,7 +129,7 @@ final class Jni
      */
     public static function call(mixed $object, string $className, string $method, string $sig, mixed ...$args): mixed
     {
-        $handle = is_object($object) && property_exists($object, 'handle') ? $object->handle : $object;
+        $handle = (is_object($object) && !$object instanceof CData && property_exists($object, 'handle')) ? $object->handle : $object;
         $mid = self::methodId($className, $method, $sig, false);
         return self::invoke($handle, $mid, false, $sig, $args);
     }
@@ -171,17 +171,17 @@ final class Jni
         $retSpec = substr($sig, (int)strrpos($sig, ')') + 1);
         $retChar = $retSpec[0] ?? 'V';
 
-        [$jargs, $tempRefs] = self::packArgs($f, $sig, $args);
+        [$jargs, $tempRefs, $keepArr] = self::packArgs($f, $sig, $args);
         try {
             $staticFlag = $isStatic ? 1 : 0;
             return match ($retChar) {
                 'V' => (static function () use ($f, $target, $mid, $staticFlag, $jargs): null {
-                    $f->myphp_jni_call_long($target, $mid, $staticFlag, ord('V'), $jargs);
+                    $f->myphp_jni_call_long($target, $mid, $staticFlag, 'V', $jargs);
                     return null;
                 })(),
-                'Z' => $f->myphp_jni_call_long($target, $mid, $staticFlag, ord('Z'), $jargs) !== 0,
-                'B', 'S', 'I', 'J' => (int)$f->myphp_jni_call_long($target, $mid, $staticFlag, ord($retChar), $jargs),
-                'F', 'D' => (float)$f->myphp_jni_call_double($target, $mid, $staticFlag, ord($retChar), $jargs),
+                'Z' => $f->myphp_jni_call_long($target, $mid, $staticFlag, 'Z', $jargs) !== 0,
+                'B', 'S', 'I', 'J' => (int)$f->myphp_jni_call_long($target, $mid, $staticFlag, $retChar, $jargs),
+                'F', 'D' => (float)$f->myphp_jni_call_double($target, $mid, $staticFlag, $retChar, $jargs),
                 default => (static function () use ($f, $target, $mid, $staticFlag, $jargs, $retSpec): mixed {
                     $obj = $f->myphp_jni_call_object($target, $mid, $staticFlag, $jargs);
                     if ($retSpec === 'Ljava/lang/String;') {
@@ -217,46 +217,47 @@ final class Jni
         for ($i = 0; $i < $n; $i++) {
             $t = $types[$i];
             $val = $args[$i] ?? null;
+            $slot = $arr[$i];
             switch ($t[0]) {
                 case 'Z':
-                    $arr[$i]->z = $val ? 1 : 0;
+                    $slot->z = $val ? 1 : 0;
                     break;
                 case 'B':
-                    $arr[$i]->b = (int)$val;
+                    $slot->b = (int)$val;
                     break;
                 case 'C':
-                    $arr[$i]->c = (int)$val;
+                    $slot->c = (int)$val;
                     break;
                 case 'S':
-                    $arr[$i]->s = (int)$val;
+                    $slot->s = (int)$val;
                     break;
                 case 'I':
-                    $arr[$i]->i = (int)$val;
+                    $slot->i = (int)$val;
                     break;
                 case 'J':
-                    $arr[$i]->j = (int)$val;
+                    $slot->j = (int)$val;
                     break;
                 case 'F':
-                    $arr[$i]->f = (float)$val;
+                    $slot->f = (float)$val;
                     break;
                 case 'D':
-                    $arr[$i]->d = (float)$val;
+                    $slot->d = (float)$val;
                     break;
                 default:
                     if (is_string($val)) {
                         $jstr = $f->myphp_jni_new_string($val);
                         $tempRefs[] = $jstr;
-                        $arr[$i]->l = $jstr;
-                    } elseif (is_object($val) && property_exists($val, 'handle')) {
-                        $arr[$i]->l = $val->handle;
+                        $slot->l = $jstr;
+                    } elseif (is_object($val) && !$val instanceof CData && property_exists($val, 'handle')) {
+                        $slot->l = $val->handle;
                     } else {
-                        $arr[$i]->l = $val;
+                        $slot->l = $val;
                     }
                     break;
             }
         }
 
-        return [$arr, $tempRefs];
+        return [FFI::addr($arr[0]), $tempRefs, $arr];
     }
 
     /**
