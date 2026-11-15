@@ -153,6 +153,18 @@ final class GlRenderPass
         vec3 V = normalize(uCameraPos.xyz - vWorldPos);
         vec3 H = normalize(L + V);
 
+        if (uCameraPos.w <= -1000.0) {
+            float em = (-uCameraPos.w) - 1000.0;
+            vec3 lit = (uAmbientColor.rgb + max(dot(N, L), 0.0) * uLightColor.rgb) * baseColor.rgb;
+            vec3 finalEm = mix(lit, baseColor.rgb * max(1.0, em), clamp(em, 0.0, 1.0));
+            if (uLightDir.w > 0.01) {
+                float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * uLightDir.w;
+                finalEm += rim * vec3(0.35, 0.9, 1.0);
+            }
+            fragColor = vec4(finalEm, baseColor.a);
+            return;
+        }
+
         vec3 ambient  = uAmbientColor.rgb * baseColor.rgb;
         float diff    = max(dot(N, L), 0.0);
         vec3 diffuse;

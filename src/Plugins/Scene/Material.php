@@ -26,8 +26,20 @@ final class Material
         public float $rimStrength = 0.0,
         public array $rimColor = [0.35, 0.9, 1.0],
         public float $metallic = 0.0,
-        public float $roughness = 0.5
+        public float $roughness = 0.5,
+        public float $emissive = 0.0
     ) {}
+
+    /**
+     * Creates a self-illuminated / unlit material (for suns, sky domes, magic orbs, selection rings, glowing eyes)
+     * that shines independently of scene lighting and shadows.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $color
+     */
+    public static function unlit(array $color = [1.0, 1.0, 1.0, 1.0], ?Image $texture = null, float $emissive = 1.0): self
+    {
+        return new self(color: $color, texture: $texture, emissive: max(0.0, $emissive));
+    }
 
     public static function pbr(
         array $color = [1.0, 1.0, 1.0, 1.0],
@@ -48,8 +60,15 @@ final class Material
     /**
      * Packs shininess or negative encoded PBR (metallic, roughness) for the shader's cameraPos.w slot.
      */
+    /**
+     * Packs shininess (>0), PBR metallic/roughness (-1..-200), or emissive/unlit (<-1000)
+     * for the shader's cameraPos.w slot.
+     */
     public function packedSpecularParam(): float
     {
+        if ($this->emissive > 0.001) {
+            return -(1000.0 + min(10.0, $this->emissive));
+        }
         if ($this->metallic > 0.001 || abs($this->roughness - 0.5) > 0.001) {
             $m = (float)round(max(0.0, min(1.0, $this->metallic)) * 100.0);
             $r = max(0.04, min(0.99, $this->roughness));

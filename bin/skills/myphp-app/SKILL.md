@@ -134,7 +134,9 @@ App::run();
    - Always pass a stable key to `Each($items, id: 'id')` and `ListView($items, id: 'id')`.
    - Never mutate state or perform I/O inside `view.php` while building; only inside action/lifecycle closures (`action:`, `onSubmit`, `onAppear`, `task`, `onChange`).
 4. **3D Views & Native OS Interop (`SceneView`, `myphp ffigen`, `myphp jnigen`)**:
-   - **3D Scenes**: Use `SceneView($this->scene, orbitControls: true, onUpdate: ..., onPick: ...)` with `MyPHP\Plugins\Scene\{Scene, Entity, Mesh, Material, PointLight, ParticleEmitter3D, Tween3D, Collider3D}` for hardware-accelerated 3D across all 5 platforms.
+   - **3D Scenes & Game Toolkit**: Use `SceneView($this->scene, orbitControls: true, onUpdate: ..., onPick: ...)` or `SpriteView($this, overlay: fn() => ...)` with:
+     - `MyPHP\Plugins\Scene\{Scene, Entity, Mesh, Material, PointLight, ParticleEmitter3D, Tween3D, Animator3D, Collider3D}`: includes `Mesh::terrain()`, `$scene->addSkyDome()`, `Material::pbr()`, `Material::unlit(emissive: 1.0)`, `$scene->camera->shake()`, and `Animator3D` (`IDLE`, `WALK`, `LUNGE`, `HURT` + `addLimb()`).
+     - `MyPHP\Plugins\Game\{Game, Camera, VirtualPad, SpriteSheet, SpriteAnimation, GameAudio, ScreenTransition}`: includes `$this->hitStop(3)`, `$camera->shake()`, mobile touchscreen `VirtualPad` (auto-injects `Key::UP/DOWN/LEFT/RIGHT/SPACE/ESCAPE/TAB`), `GameAudio` (SFX pool + `registerTone` synth + BGM crossfade), and `ScreenTransition` (`FADE`, `SHUTTER`, `BATTLE_BLINDS`). Never re-implement these by hand!
    - **Native C / Apple ObjC / Android Java Interop**: When an app needs a native C library, an iOS/macOS Objective-C framework, or an Android Java SDK class not already in MyPHP, use `myphp ffigen` or `myphp jnigen` to generate a typed PHP wrapper class (never hand-write raw `ObjC::msg` type strings or C JNI glue):
      - C header: `myphp ffigen -class FooFfi -lib libfoo.dylib -out src/Native/FooFfi.php foo.h`
      - Apple ObjC: `myphp ffigen -objc AVAudioSession -framework AVFAudio -out src/Native/AVAudioSession.php AVAudioSession.h`

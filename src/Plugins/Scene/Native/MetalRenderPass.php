@@ -175,6 +175,18 @@ final class MetalRenderPass
         float3 V = normalize(u.cameraPos.xyz - in.worldPos);
         float3 H = normalize(L + V);
 
+        // Emissive / Unlit material (cameraPos.w <= -1000.0)
+        if (u.cameraPos.w <= -1000.0) {
+            float em = (-u.cameraPos.w) - 1000.0;
+            float3 lit = (u.ambientColor.rgb + max(dot(N, L), 0.0) * u.lightColor.rgb) * baseColor.rgb;
+            float3 finalColor = mix(lit, baseColor.rgb * max(1.0, em), clamp(em, 0.0, 1.0));
+            if (u.ambientColor.w > 0.01) {
+                float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * u.ambientColor.w;
+                finalColor += rim * float3(0.35, 0.9, 1.0);
+            }
+            return float4(finalColor, baseColor.a);
+        }
+
         // Ambient + Directional (Blinn-Phong or Cook-Torrance PBR when cameraPos.w < 0)
         float3 ambient = u.ambientColor.rgb * baseColor.rgb;
         float diff = max(dot(N, L), 0.0);

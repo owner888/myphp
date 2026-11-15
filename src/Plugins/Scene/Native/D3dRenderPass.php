@@ -136,6 +136,17 @@ final class D3dRenderPass
         float3 V = normalize(cameraPos.xyz - input.worldPos);
         float3 H = normalize(L + V);
 
+        if (cameraPos.w <= -1000.0) {
+            float em = (-cameraPos.w) - 1000.0;
+            float3 lit = (ambientColor.rgb + max(dot(N, L), 0.0) * lightColor.rgb) * baseColor.rgb;
+            float3 finalEm = lerp(lit, baseColor.rgb * max(1.0, em), saturate(em));
+            if (ambientColor.w > 0.01) {
+                float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * ambientColor.w;
+                finalEm += rim * float3(0.35, 0.9, 1.0);
+            }
+            return float4(finalEm, baseColor.a);
+        }
+
         float3 ambient  = ambientColor.rgb * baseColor.rgb;
         float  diff     = max(dot(N, L), 0.0);
         float3 diffuse;

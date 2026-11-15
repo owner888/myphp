@@ -261,4 +261,34 @@ $taken = \MyPHP\UI\CanvasAtlas::take();
 check(count($taken) > 0 && $taken[0]->scene === $sceneForView, 'CanvasAtlas::take() returns Scene::view 3D canvas for GPU rendering');
 check(function_exists('SceneView'), 'Declarative SceneView() helper is registered');
 
+// 21. Unity-style 3D features: Material::unlit (emissive), Mesh::terrain, Scene::addSkyDome, Animator3D
+$unlitMat = Material::unlit([1.0, 0.9, 0.2, 1.0], emissive: 1.5);
+check($unlitMat->packedSpecularParam() <= -1001.0, 'Material::unlit packs negative emissive sentinel <= -1001.0');
+
+$terrainMesh = Mesh::terrain(width: 20.0, depth: 20.0, subdivisionsX: 16, subdivisionsZ: 16);
+same(17 * 17, $terrainMesh->vertexCount, 'Mesh::terrain vertex count for 16x16 grid');
+same(16 * 16 * 6, $terrainMesh->indexCount, 'Mesh::terrain index count for 16x16 grid');
+
+$skyScene = new Scene();
+$skyScene->camera->position = new Vec3(4.0, 8.0, 12.0);
+$dome = $skyScene->addSkyDome();
+check(!$dome->castShadow && !$dome->pickable, 'SkyDome disables shadows and raycast picking');
+$skyScene->camera->position = new Vec3(10.0, 5.0, -3.0);
+$skyScene->step(0.016);
+same([10.0, 5.0, -3.0], [$dome->position->x, $dome->position->y, $dome->position->z], 'SkyDome follows camera position on Scene::step');
+
+$beastRoot = new Entity(Mesh::sphere(0.5), position: new Vec3(0.0, 0.5, 0.0));
+$beastWing = new Entity(Mesh::cube(0.2), position: new Vec3(0.4, 0.1, 0.0));
+$beastRoot->addChild($beastWing);
+$skyScene->add($beastRoot);
+$anim = $skyScene->addAnimator(new \MyPHP\Plugins\Scene\Animator3D($beastRoot));
+$anim->addLimb($beastWing, axis: 'z', amplitude: 0.35, frequency: 4.0);
+$anim->play(\MyPHP\Plugins\Scene\Animator3D::LUNGE, duration: 0.3, direction: new Vec3(0.0, 0.0, -1.0));
+$skyScene->step(0.12);
+check($beastRoot->position->z < 0.0, 'Animator3D LUNGE moves root forward along attack direction');
+check($beastWing->rotation->z != 0.0, 'Animator3D oscillates registered child limb');
+$skyScene->step(0.25);
+same(\MyPHP\Plugins\Scene\Animator3D::IDLE, $anim->state, 'Animator3D returns to IDLE after one-shot LUNGE completes');
+
+
 

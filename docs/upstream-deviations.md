@@ -3097,7 +3097,8 @@ mobile backends. The sizes are UIKit's, the one design on every platform.
 - **3D Scene and RenderPass** (v1.179)
   - mygo: purely 2D UI and 2D canvas drawing; no native 3D render pass.
   - myphp: `Plugins\Scene` (`Scene`, `Entity`, `Mesh`, `Material`, `Camera3D`,
-    `PointLight`, `ParticleEmitter3D`, `Tween3D`, `Collider3D`, and declarative
+    `PointLight`, `ParticleEmitter3D`, `Tween3D`, `Animator3D`, `Collider3D`,
+    `Mesh::terrain`, `Scene::addSkyDome`, `Material::unlit`, and declarative
     `SceneView`) provides a 5-platform native 3D RenderPass (Metal on macOS/iOS,
     Direct3D 11 on Windows, OpenGL 3.3 Core on Linux, OpenGL ES 3.0 on Android)
     with GPU-resident mesh and hardware-instancing buffers, hardware depth

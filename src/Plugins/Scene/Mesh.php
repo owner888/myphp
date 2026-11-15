@@ -572,6 +572,179 @@ final class Mesh
     }
 
     /**
+     * Creates a 3D heightfield Terrain mesh (like Unity's Terrain) over the XZ plane,
+     * centered at (0, 0), with central-difference smooth normals and altitude/slope vertex coloring.
+     *
+     * @param ?\Closure(float $x, float $z): float $heightFn Returns elevation Y at world (x, z); defaults to procedural mountain ridges
+     * @param ?\Closure(float $y, float $ny, float $x, float $z): array{0: float, 1: float, 2: float, 3: float} $colorFn Optional vertex color callback
+     */
+    public static function terrain(
+        float $width = 24.0,
+        float $depth = 24.0,
+        int $subdivisionsX = 32,
+        int $subdivisionsZ = 32,
+        ?\Closure $heightFn = null,
+        ?\Closure $colorFn = null,
+        float $uvRepeat = 4.0
+    ): self {
+        $subX = max(2, $subdivisionsX);
+        $subZ = max(2, $subdivisionsZ);
+        $hw = $width * 0.5;
+        $hd = $depth * 0.5;
+        $dx = $width / $subX;
+        $dz = $depth / $subZ;
+
+        $hFn = $heightFn ?? static function (float $x, float $z): float {
+            return sin($x * 0.45) * cos($z * 0.45) * 1.2 + sin($x * 1.1 + $z * 0.9) * 0.35;
+        };
+
+        // Precompute heights on grid
+        $heights = [];
+        for ($iz = 0; $iz <= $subZ; $iz++) {
+            $z = -$hd + $iz * $dz;
+            for ($ix = 0; $ix <= $subX; $ix++) {
+                $x = -$hw + $ix * $dx;
+                $heights[$iz][$ix] = (float)$hFn($x, $z);
+            }
+        }
+
+        $vFloats = [];
+        $indices = [];
+        $stride = $subX + 1;
+
+        for ($iz = 0; $iz <= $subZ; $iz++) {
+            $z = -$hd + $iz * $dz;
+            $v = ($iz / $subZ) * $uvRepeat;
+            for ($ix = 0; $ix <= $subX; $ix++) {
+                $x = -$hw + $ix * $dx;
+                $u = ($ix / $subX) * $uvRepeat;
+                $y = $heights[$iz][$ix];
+
+                // Central difference normal
+                $hL = $heights[$iz][max(0, $ix - 1)];
+                $hR = $heights[$iz][min($subX, $ix + 1)];
+                $hD = $heights[max(0, $iz - 1)][$ix];
+                $hU = $heights[min($subZ, $iz + 1)][$ix];
+
+                $nx = ($hL - $hR) / (2.0 * $dx);
+                $ny = 1.0;
+                $nz = ($hD - $hU) / (2.0 * $dz);
+                $nLen = sqrt($nx * $nx + $ny * $ny + $nz * $nz);
+                if ($nLen > 1e-6) {
+                    $nx /= $nLen;
+                    $ny /= $nLen;
+                    $nz /= $nLen;
+                }
+
+                if ($colorFn !== null) {
+                    [$r, $g, $b, $a] = $colorFn($y, $ny, $x, $z);
+                } else {
+                    // Default natural biome gradient: valley green -> rock brown -> snow peak
+                    if ($y > 1.15) {
+                        [$r, $g, $b, $a] = [0.92, 0.95, 0.98, 1.0];
+                    } elseif ($ny < 0.76 || $y > 0.55) {
+                        [$r, $g, $b, $a] = [0.52, 0.46, 0.40, 1.0];
+                    } else {
+                        [$r, $g, $b, $a] = [0.34, 0.58, 0.32, 1.0];
+                    }
+                }
+
+                array_push($vFloats, $x, $y, $z, $nx, $ny, $nz, $u, $v, $r, $g, $b, $a);
+            }
+        }
+
+        for ($iz = 0; $iz < $subZ; $iz++) {
+            for ($ix = 0; $ix < $subX; $ix++) {
+                $r0 = $iz * $stride + $ix;
+                $r1 = ($iz + 1) * $stride + $ix;
+                // CCW front face when viewed from Y+
+                array_push($indices,
+                    $r0, $r1, $r0 + 1,
+                    $r1, $r1 + 1, $r0 + 1
+                );
+            }
+        }
+
+        $vCount = ($subX + 1) * ($subZ + 1);
+        return new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices));
+    }
+
+    /**
+     * Creates an inverted hemisphere/sphere Sky Dome mesh with a smooth vertical gradient
+     * from $groundColor -> $horizonColor -> $zenithColor (like Unity's Procedural Skybox).
+     * Triangles are wound inward so the inside of the dome is visible from the camera.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $zenithColor  Top sky color
+     * @param array{0: float, 1: float, 2: float, 3: float} $horizonColor Horizon haze color
+     * @param array{0: float, 1: float, 2: float, 3: float} $groundColor  Nadir / below-horizon color
+     */
+    public static function skyDome(
+        float $radius = 450.0,
+        array $zenithColor = [0.16, 0.36, 0.68, 1.0],
+        array $horizonColor = [0.68, 0.82, 0.94, 1.0],
+        array $groundColor = [0.22, 0.25, 0.28, 1.0],
+        int $segments = 28,
+        int $rings = 16
+    ): self {
+        $segments = max(6, $segments);
+        $rings = max(4, $rings);
+        $vFloats = [];
+        $indices = [];
+
+        for ($ring = 0; $ring <= $rings; $ring++) {
+            $theta = $ring * M_PI / $rings;
+            $sinTheta = sin($theta);
+            $cosTheta = cos($theta); // +1 at zenith, 0 at horizon, -1 at nadir
+
+            if ($cosTheta >= 0.0) {
+                $t = pow($cosTheta, 0.65);
+                $r = $horizonColor[0] + ($zenithColor[0] - $horizonColor[0]) * $t;
+                $g = $horizonColor[1] + ($zenithColor[1] - $horizonColor[1]) * $t;
+                $b = $horizonColor[2] + ($zenithColor[2] - $horizonColor[2]) * $t;
+                $a = 1.0;
+            } else {
+                $t = min(1.0, -$cosTheta * 2.5);
+                $r = $horizonColor[0] + ($groundColor[0] - $horizonColor[0]) * $t;
+                $g = $horizonColor[1] + ($groundColor[1] - $horizonColor[1]) * $t;
+                $b = $horizonColor[2] + ($groundColor[2] - $horizonColor[2]) * $t;
+                $a = 1.0;
+            }
+
+            for ($seg = 0; $seg <= $segments; $seg++) {
+                $phi = $seg * 2.0 * M_PI / $segments;
+                $nx = cos($phi) * $sinTheta;
+                $ny = $cosTheta;
+                $nz = sin($phi) * $sinTheta;
+
+                $u = $seg / $segments;
+                $v = $ring / $rings;
+
+                array_push($vFloats,
+                    $radius * $nx, $radius * $ny, $radius * $nz,
+                    -$nx, -$ny, -$nz, // inward normal
+                    $u, $v,
+                    $r, $g, $b, $a
+                );
+            }
+        }
+
+        // Inward-facing CCW winding (reversed from outward sphere)
+        for ($ring = 0; $ring < $rings; $ring++) {
+            for ($seg = 0; $seg < $segments; $seg++) {
+                $first = $ring * ($segments + 1) + $seg;
+                $second = $first + $segments + 1;
+                array_push($indices,
+                    $first, $second, $first + 1,
+                    $second, $second + 1, $first + 1
+                );
+            }
+        }
+
+        $vCount = ($rings + 1) * ($segments + 1);
+        return new self(pack('f*', ...$vFloats), pack('V*', ...$indices), $vCount, count($indices), $radius);
+    }
+
+    /**
      * Loads a 3D mesh from a Wavefront .obj file.
      *
      * @param array{0: float, 1: float, 2: float, 3: float} $color

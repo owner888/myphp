@@ -39,24 +39,27 @@ particles and billboards, and 3D raycast picking via `onPick:`.
 `Mesh` stores 48-byte GPU-aligned vertices (`position`, `normal`, `uv`,
 `color`) and uploads them to VRAM once on first draw:
 
-- **Procedural primitives**: `Mesh::cube($size)`, `Mesh::sphere($radius, $sectors, $rings)`,
+- **Procedural primitives & Terrain**: `Mesh::cube($size)`, `Mesh::sphere($radius, $sectors, $rings)`,
   `Mesh::plane($width, $depth, $uvRepeat)`, `Mesh::cylinder($topRadius, $bottomRadius, $height)`,
   `Mesh::cone($radius, $height)`, `Mesh::torus($majorRadius, $minorRadius)`,
-  and `Mesh::capsule($radius, $cylinderHeight)`.
+  `Mesh::capsule($radius, $cylinderHeight)`, `Mesh::terrain($width, $depth, $subX, $subZ, $heightFn, $colorFn)`,
+  and `Mesh::skyDome($radius, $zenithColor, $horizonColor, $groundColor)`.
 - **Wavefront `.obj`**: `Mesh::fromObj($src)` or `Mesh::fromObjFile($path)`
   parses positions, UVs, normals, and triangulates n-gon faces.
 - **Binary glTF 2.0 (`.glb`)**: `Mesh::fromGlbFile($path)` loads a single
   mesh; `Mesh::sceneFromGlbFile($path)` parses a multi-mesh `.glb` hierarchy
   with PBR baseColorFactor materials and embedded PNG/JPEG textures into an
   `Entity` tree.
-- **Cook-Torrance PBR, Diffuse textures, Wireframe & Fresnel Rim**:
+- **Cook-Torrance PBR, Emissive/Unlit, Diffuse textures, Wireframe & Fresnel Rim**:
   `Material::pbr($color, metallic: 0.5, roughness: 0.25)` enables physically
   based GGX + Smith + Fresnel-Schlick metallic/roughness shading across all 5
   platforms (and `Mesh::sceneFromGlbFile()` extracts `metallicFactor` and
-  `roughnessFactor` automatically). `Material::textured($image, shininess: 32.0)`
-  binds any `MyPHP\UI\Image` as a 3D surface texture. Set
-  `$material->wireframe = true` for hardware triangle-line rendering, or
-  `$material->rimStrength = 1.0` for Fresnel hologram rim lighting.
+  `roughnessFactor` automatically). `Material::unlit($color, $texture, emissive: 1.0)`
+  (or `$material->emissive = 1.0`) creates self-illuminated surfaces (suns, magic
+  orbs, selection rings, glowing eyes, sky domes) that bypass diffuse shadow darkening.
+  `Material::textured($image, shininess: 32.0)` binds any `MyPHP\UI\Image` as a
+  3D surface texture. Set `$material->wireframe = true` for hardware triangle-line
+  rendering, or `$material->rimStrength = 1.0` for Fresnel hologram rim lighting.
 
 ```php
 use MyPHP\Plugins\Scene\{Entity, Material, Mesh, Scene};
@@ -185,3 +188,47 @@ For 3D collision detection and solid push-out resolution during
 `Collider3D::box($halfExtents)` to `$entity->collider`, and call
 `$scene->addGridHelper($size, $divisions)` to add a hardware-instanced 3D
 reference grid with color-coded XYZ axes.
+
+## Unity-style Sky Dome, 3D Terrain, Camera Shake and Hierarchical `Animator3D`
+
+To build rich outdoor 3D worlds and animated creatures without hand-rolling vertex math or procedural animation loops:
+
+- **Procedural Sky Dome (`$scene->addSkyDome`)**: Adds an unlit, non-pickable atmospheric sky sphere that smoothly blends from `$groundColor` through `$horizonColor` to `$zenithColor` and automatically centers on `$scene->camera->position` during `Scene::step($dt)`.
+- **3D Heightfield Terrain (`Mesh::terrain`)**: Samples `$heightFn($x, $z)` across a grid, computes smooth central-difference normals for accurate directional/PCF shadows, and colors vertices by altitude and slope (valley grass → rocky slope → snow peak, or via custom `$colorFn($y, $ny, $x, $z)`).
+- **3D Camera Shake (`$scene->camera->shake`)**: `$scene->camera->shake(intensity: 0.2, duration: 0.25)` applies a damped 3D vibration to the camera's eye and target during `Scene::step($dt)`.
+- **Hierarchical Creature Animator (`Animator3D`)**: Drives organic root states (`Animator3D::IDLE` chest breathing, `WALK` bobbing/sway, `LUNGE` forward strike with wind-up and return, `HURT` recoil shake, `SPIN`) plus synchronized child limb oscillations (`addLimb($wingOrHead, axis: 'z', amplitude: 0.3, frequency: 4.0)`):
+
+```php
+use MyPHP\Plugins\Scene\{Animator3D, Entity, Material, Mesh, Scene};
+use MyPHP\Plugins\Scene\Math\Vec3;
+
+$scene = new Scene();
+$scene->addSkyDome(
+    zenithColor:  [0.14, 0.34, 0.68, 1.0],
+    horizonColor: [0.72, 0.85, 0.96, 1.0],
+    groundColor:  [0.24, 0.28, 0.22, 1.0],
+);
+
+// 1. Procedural Mountain Terrain
+$mountains = new Entity(
+    Mesh::terrain(32.0, 32.0, 32, 32, fn(float $x, float $z) => sin($x * 0.3) * cos($z * 0.3) * 1.8),
+    new Material([1.0, 1.0, 1.0, 1.0], shininess: 8.0),
+    position: new Vec3(0.0, -1.5, 0.0),
+);
+$mountains->pickable = false;
+$scene->add($mountains);
+
+// 2. Multi-part Creature with Animator3D (body + oscillating wings + glowing eyes)
+$beast = new Entity(Mesh::sphere(0.5, 20, 14, [0.3, 0.65, 0.35, 1.0]), position: new Vec3(0.0, 0.5, 0.0));
+$leftWing = new Entity(Mesh::cube(0.25, [0.4, 0.8, 0.45, 1.0]), position: new Vec3(-0.55, 0.1, 0.0));
+$eye = new Entity(Mesh::sphere(0.08), Material::unlit([1.0, 0.9, 0.2, 1.0], emissive: 1.5), position: new Vec3(0.18, 0.2, 0.42));
+$beast->addChild($leftWing);
+$beast->addChild($eye);
+$scene->add($beast);
+
+$anim = $scene->addAnimator(new Animator3D($beast));
+$anim->addLimb($leftWing, axis: 'z', amplitude: 0.4, frequency: 5.0);
+$anim->play(Animator3D::IDLE);
+
+$view = fn() => SceneView($scene);
+```

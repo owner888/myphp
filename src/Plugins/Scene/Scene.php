@@ -50,6 +50,12 @@ final class Scene
     /** @var list<Tween3D> Active 3D transform tweens */
     public array $tweens = [];
 
+    /** @var list<Animator3D> Active hierarchical 3D animators */
+    public array $animators = [];
+
+    /** Optional Sky Dome entity that automatically centers on the camera */
+    public ?Entity $skyDome = null;
+
     public function __construct(?Camera3D $camera = null)
     {
         $this->camera = $camera ?? new Camera3D();
@@ -83,12 +89,54 @@ final class Scene
         return $tween;
     }
 
+    public function addAnimator(Animator3D $animator): Animator3D
+    {
+        $this->animators[] = $animator;
+        return $animator;
+    }
+
     /**
-     * Steps all active 3D tweens, particle emitters, and updates billboard orientations.
+     * Adds an atmospheric procedural Sky Dome (zenith -> horizon -> ground gradient)
+     * that automatically follows the camera position and is unlit / non-pickable.
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float} $zenithColor
+     * @param array{0: float, 1: float, 2: float, 3: float} $horizonColor
+     * @param array{0: float, 1: float, 2: float, 3: float} $groundColor
+     */
+    public function addSkyDome(
+        array $zenithColor = [0.16, 0.36, 0.68, 1.0],
+        array $horizonColor = [0.68, 0.82, 0.94, 1.0],
+        array $groundColor = [0.22, 0.25, 0.28, 1.0],
+        float $radius = 450.0
+    ): Entity {
+        if ($this->skyDome !== null) {
+            $this->remove($this->skyDome);
+        }
+        $dome = new Entity(
+            Mesh::skyDome($radius, $zenithColor, $horizonColor, $groundColor),
+            Material::unlit([1.0, 1.0, 1.0, 1.0]),
+            position: clone $this->camera->position,
+            name: 'SkyDome'
+        );
+        $dome->castShadow = false;
+        $dome->pickable = false;
+        $this->skyDome = $dome;
+        array_unshift($this->entities, $dome);
+        return $dome;
+    }
+
+    /**
+     * Steps all active 3D tweens, animators, particle emitters, sky dome, and updates billboard orientations.
      */
     public function step(float $dt): void
     {
         $this->camera->step($dt);
+        if ($this->skyDome !== null) {
+            $this->skyDome->position = clone $this->camera->position;
+        }
+        foreach ($this->animators as $animator) {
+            $animator->step($dt);
+        }
         foreach ($this->tweens as $k => $tween) {
             if ($tween->step($dt)) {
                 unset($this->tweens[$k]);
