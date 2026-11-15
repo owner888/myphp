@@ -49,9 +49,12 @@ particles and billboards, and 3D raycast picking via `onPick:`.
   mesh; `Mesh::sceneFromGlbFile($path)` parses a multi-mesh `.glb` hierarchy
   with PBR baseColorFactor materials and embedded PNG/JPEG textures into an
   `Entity` tree.
-- **Diffuse textures, Wireframe & Fresnel Rim**: `Material::textured($image, shininess: 32.0)`
-  binds any `MyPHP\UI\Image` as a 3D surface texture (respecting
-  `$image->pixelated()` for crisp nearest-neighbor voxel/retro art). Set
+- **Cook-Torrance PBR, Diffuse textures, Wireframe & Fresnel Rim**:
+  `Material::pbr($color, metallic: 0.5, roughness: 0.25)` enables physically
+  based GGX + Smith + Fresnel-Schlick metallic/roughness shading across all 5
+  platforms (and `Mesh::sceneFromGlbFile()` extracts `metallicFactor` and
+  `roughnessFactor` automatically). `Material::textured($image, shininess: 32.0)`
+  binds any `MyPHP\UI\Image` as a 3D surface texture. Set
   `$material->wireframe = true` for hardware triangle-line rendering, or
   `$material->rimStrength = 1.0` for Fresnel hologram rim lighting.
 

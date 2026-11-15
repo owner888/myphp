@@ -1,0 +1,5 @@
+/build/
+/dist/
+/.myphp/
+/vendor/
+.DS_Store

@@ -61,7 +61,7 @@ the development app to `.myphp/`; `.gitignore` leaves them out. See
 
 ### Native UI
 
-`myphp init my-app` (or `-template native`) creates an app whose window
+`myphp init my-app` (or `-template native`; use `-template 3d` for a 3D `SceneView` project) creates an app whose window
 shows [native UI](ui/README.md): PHP alone, with no frontend and no Bun.
 
 ```

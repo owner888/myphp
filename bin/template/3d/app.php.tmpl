@@ -1,0 +1,23 @@
+<?php
+declare(strict_types=1);
+
+use MyPHP\{App, Device, Window, WindowOptions};
+use MyPHP\UI\Content;
+
+require __DIR__ . '/boot.php';
+require __DIR__ . '/src/SceneState.php';
+
+$state = new SceneState();
+
+App::setName({{php:name}});
+App::whenReady(function () use ($state) {
+    [$w, $h] = Device::isDesktop() ? [960, 660] : [402, 874];
+    new Window(new WindowOptions(
+        title: {{php:name}},
+        width: $w,
+        height: $h,
+        stateKey: 'main',
+        content: Content::file(__DIR__ . '/view.php', $state)
+    ));
+});
+App::run();

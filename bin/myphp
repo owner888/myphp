@@ -475,8 +475,8 @@ its scripts, bun run dev and bun run build. Both get the app's icon,
 resources/icon.png, and the bundled agent skills.
 
 Flags:
-  -name name            application name (default: directory name)
-  -template native|web  the project (default native)
+  -name name               application name (default: directory name)
+  -template native|3d|web  the project (default native)
 TXT;
 
 function init(array $args): void
@@ -485,7 +485,7 @@ function init(array $args): void
     $template = option($args, 'template', 'native');
     $name = option($args, 'name', '');
     count($args) <= 1 || fail("too many arguments\n\nUsage: myphp " . INIT_USAGE);
-    in_array($template, ['native', 'web'], true) || fail("unknown template \"$template\": native or web");
+    in_array($template, ['native', '3d', 'web'], true) || fail("unknown template \"$template\": native, 3d or web");
     ensurePhpEnvironment(false);
     $dir = $args[0] ?? '.';
     !is_dir($dir) || count(scandir($dir)) === 2 || fail("$dir is not empty");
@@ -502,7 +502,7 @@ function init(array $args): void
     $cwd = realpath((string)getcwd()) ?: (string)getcwd();
     $rel = $dir === $cwd ? '' : (str_starts_with($dir, $cwd . '/') ? substr($dir, strlen($cwd) + 1) : $dir);
     $cdLine = $rel !== '' ? "  cd $rel\n" : '';
-    if ($template === 'native') {
+    if ($template === 'native' || $template === '3d') {
         echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  php -d ffi.enable=1 tests/ui_test.php  # test the view headless\n  myphp build                          # package the app\n\n";
         return;
     }

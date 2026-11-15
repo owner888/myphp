@@ -25,20 +25,21 @@ later with `ext-ffi`, and the system's libraries.
 
 ```sh
 myphp init my-app                  # native UI
+myphp init -template 3d my-3d-app  # 5-platform 3D scene (SceneView + PBR + particles)
 myphp init -template web my-app    # a TypeScript frontend built with Vite
 ```
 
-Creates a new project. The native template shows a user interface MyPHP
-draws itself, written in PHP with `MyPHP\UI`: `app.php` and `myphp.json`.
-The web template has a TypeScript frontend built with Vite: Bun installs
-its dependencies, `myphp-cli` and `myphp-runtime` among them, and runs its
-scripts, `bun run dev` and `bun run build`. Both get the app's icon,
-`resources/icon.png`, and the bundled agent skills.
+Creates a new project. The `native` template shows a 2D declarative user
+interface MyPHP draws on the GPU; the `3d` template scaffolds a 5-platform
+3D scene (`SceneView` with Cook-Torrance PBR material, PCF soft shadows,
+orbit controls and 3D particles); the `web` template has a TypeScript
+frontend built with Vite. All templates get `resources/icon.png` and the
+bundled agent skills.
 
 | Flag | |
 |---|---|
 | `-name name` | the application name (default: the directory's name) |
-| `-template native\|web` | the project (default native) |
+| `-template native\|3d\|web` | the project template (default `native`) |
 
 ## myphp install-skills
 

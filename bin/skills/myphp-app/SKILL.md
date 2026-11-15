@@ -38,7 +38,7 @@ MyPHP draws SwiftUI-style declarative views directly on the GPU (Metal on macOS/
 
 ## 2. Project & Code Architecture
 
-Start a project with `myphp init -template native <dir>`. Keep state & actions in `src/`, and pure closures in `view.php` and `pages/*.php` for instant hot reload (`Content::file()` binds `$this` to your state object):
+Start a project with `myphp init -template native <dir>` (or `myphp init -template 3d <dir>` for a 3D `SceneView` app). Keep state & actions in `src/`, and pure closures in `view.php` and `pages/*.php` for instant hot reload (`Content::file()` binds `$this` to your state object):
 
 ```
 my-app/
