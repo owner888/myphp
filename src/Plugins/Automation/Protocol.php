@@ -139,8 +139,8 @@ final class Protocol
                 return ['windows' => $d->windows()];
             case 'tree':
                 $p = self::fields("params of $method", $params, ['window' => 'int']);
-                [$w, $t, $keys] = $d->tree($p['window']);
-                return self::treeJSON($w, $t, $keys);
+                $res = $d->tree($p['window']);
+                return self::treeJSON($res[0], $res[1], $res[2], $res[3] ?? []);
             case 'act':
                 return self::act($d, self::fields("params of $method", $params, [
                     'window' => 'int', 'id' => 'id', 'key' => 'json', 'action' => 'string', 'text' => 'string', 'from' => 'int', 'to' => 'int',
@@ -325,7 +325,8 @@ final class Protocol
      * in tree order, a parent before its children.
      * @param array<int, string|int> $keys
      */
-    public static function treeJSON(int $window, AccessTree $t, array $keys): array
+    /** @param list<string> $warnings */
+    public static function treeJSON(int $window, AccessTree $t, array $keys, array $warnings = []): array
     {
         $r = ['window' => $window];
         if ($t->focus !== 0) {
@@ -364,6 +365,9 @@ final class Protocol
         $r['nodes'] = $nodes;
         if ($t->announcements !== []) {
             $r['announcements'] = $t->announcements;
+        }
+        if ($warnings !== []) {
+            $r['warnings'] = $warnings;
         }
         return $r;
     }

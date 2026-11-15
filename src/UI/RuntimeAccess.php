@@ -89,15 +89,16 @@ trait RuntimeAccess
     public function automationTree(): array
     {
         if ($this->root === null) {
-            return [new AccessTree, []];
+            return [new AccessTree, [], []];
         }
         $keys = [];
-        $walk = function (Node $n) use (&$walk, &$keys): void {
+        $stack = [$this->root];
+        while ($stack !== []) {
+            $n = array_pop($stack);
             if ($n->key !== null) { $keys[$n->id] = $n->key; }
-            foreach ($n->kids as $k) { $walk($k); }
-        };
-        $walk($this->root);
-        return [$this->accessTreeOf($this->root), $keys];
+            foreach ($n->kids as $k) { $stack[] = $k; }
+        }
+        return [$this->accessTreeOf($this->root), $keys, $this->warnings];
     }
 
     /** Describes the last frame, while assistive technology reads the window; its announcements go, read or not. */

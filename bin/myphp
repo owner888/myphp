@@ -2767,7 +2767,14 @@ function treeSummary(array $tree): string
         $lines[] = str_repeat('  ', $d + 1) . $what;
     }
     $more = count($lines) - 60;
-    return "Elements:\n" . implode("\n", array_slice($lines, 0, 60)) . "\n" . ($more > 0 ? "  … and $more more (-tree writes them all)\n" : '');
+    $out = "Elements:\n" . implode("\n", array_slice($lines, 0, 60)) . "\n" . ($more > 0 ? "  … and $more more (-tree writes them all)\n" : '');
+    if (!empty($tree['warnings'])) {
+        $out .= "\nWarnings (" . count($tree['warnings']) . "):\n";
+        foreach ($tree['warnings'] as $w) {
+            $out .= "  ! $w\n";
+        }
+    }
+    return $out;
 }
 
 /**
