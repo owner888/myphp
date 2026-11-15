@@ -25,7 +25,7 @@ struct Counter: View {
 ```php
 $app = new class { public int $n = 0; };
 $view = fn() => VStack(spacing: 12)(
-    Text("{$app->n}")->font(Font::largeTitle)->bold(),
+    Text(verbatim: (string)$app->n)->font(Font::largeTitle)->bold(),
     Button('Increment', action: fn() => $app->n++),
 );
 ```

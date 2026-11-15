@@ -33,7 +33,7 @@ $app = new class { public int $n = 0; };
 App::whenReady(function () use ($app) {
     new Window(new WindowOptions(title: 'Counter', width: 320, height: 200,
         content: Content::view(fn() => VStack(spacing: 12)(
-            Text("Count: {$app->n}")->font(Font::title),
+            Text('Count: {n}', n: $app->n)->font(Font::title),
             Button('Increment', action: fn() => $app->n++),
         ))));
 });
@@ -419,7 +419,7 @@ $app = new class { public int $n = 0; };
 App::whenReady(function () use ($app) {
     new Window(new WindowOptions(title: 'Counter', width: 320, height: 200,
         content: Content::view(fn() => VStack(spacing: 12)(
-            Text("Count: {$app->n}")->font(Font::title),
+            Text('Count: {n}', n: $app->n)->font(Font::title),
             Button('Increment', action: fn() => $app->n++),
         ))));
 });

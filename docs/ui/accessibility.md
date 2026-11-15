@@ -12,7 +12,7 @@ them and act on them as the keyboard and the pointer would.
 $app = new class { public int $n = 0; };
 $view = fn() => HStack()(
     Button(action: fn() => $app->n++, label: Image(systemName: 'plus'))->accessibilityLabel('Add')->help('Add an item'),
-    Text("{$app->n} items"),
+    Text('{n} items', n: $app->n),
 )->padding();
 ```
 

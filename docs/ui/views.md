@@ -15,7 +15,7 @@ $app = new class {
 };
 $view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
     Each($app->todos, id: 'id')(fn(array $t, int $i) => Toggle($t['title'], isOn: $app->todos[$i]['done'])),
-    Text("{$app->left()} left")->foregroundStyle(Color::secondary),
+    Text('{n} left', n: $app->left())->foregroundStyle(Color::secondary),
 )->padding();
 ```
 

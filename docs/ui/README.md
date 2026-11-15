@@ -41,7 +41,7 @@ App::run();
 declare(strict_types=1);
 
 return fn() => VStack(spacing: 12)(
-    Text("{$this->n}")->font(Font::largeTitle)->bold(),
+    Text(verbatim: (string)$this->n)->font(Font::largeTitle)->bold(),
     Button('Increment', action: fn() => $this->n++)->buttonStyle(ButtonStyle::borderedProminent),
 );
 ```

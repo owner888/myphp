@@ -10,7 +10,7 @@ assertions, and so do the examples of these pages.
 ```php
 $app = new class { public int $n = 0; };
 $view = fn() => VStack()(
-    Text("{$app->n}"),
+    Text(verbatim: (string)$app->n),
     Button('Increment', action: fn() => $app->n++),
 );
 $h = new Headless($view, 320, 240);
