@@ -444,16 +444,16 @@ final class FfiGen
         if (str_contains($t, '*')) {
             return ['mixed', 'CData|null'];
         }
-        if (in_array($t, ['bool', '_Bool', 'BOOL', 'BOOLEAN'], true)) {
+        if (in_array($t, ['bool', '_Bool', 'BOOL', 'BOOLEAN', 'gboolean'], true)) {
             return ['bool|int', ''];
         }
-        if (in_array($t, ['float', 'double', 'FLOAT'], true)) {
+        if (in_array($t, ['float', 'double', 'FLOAT', 'gfloat', 'gdouble'], true)) {
             return ['float', ''];
         }
-        if (preg_match('/^(?:u?int\d+_t|unsigned|signed|int|long|short|size_t|ssize_t|char|DWORD|WORD|BYTE|LONG|ULONG|UINT|INT|WPARAM|LPARAM|LRESULT|HRESULT|ATOM)\b/', $t)) {
+        if (preg_match('/^(?:u?int\d+_t|unsigned|signed|int|long|short|size_t|ssize_t|char|DWORD|WORD|BYTE|LONG|ULONG|UINT|INT|WPARAM|LPARAM|LRESULT|HRESULT|ATOM|gint|guint|glong|gulong|gshort|gushort|gint8|guint8|gint16|guint16|gint32|guint32|gint64|guint64|gsize|gssize|GType|GQuark)\b/', $t)) {
             return ['int', ''];
         }
-        if (preg_match('/^(?:HANDLE|HWND|HINSTANCE|HMODULE|HDC|HICON|HCURSOR|HBRUSH|HFONT|HMENU|LPVOID|LPCVOID|LPSTR|LPCSTR|LPWSTR|LPCWSTR|PVOID)\b/', $t)) {
+        if (preg_match('/^(?:HANDLE|HWND|HINSTANCE|HMODULE|HDC|HICON|HCURSOR|HBRUSH|HFONT|HMENU|LPVOID|LPCVOID|LPSTR|LPCSTR|LPWSTR|LPCWSTR|PVOID|gpointer|gconstpointer|GtkWidget|GdkWindow|GObject|GError)\b/', $t)) {
             return ['mixed', 'CData|string|null'];
         }
         return ['mixed', ''];
@@ -461,24 +461,35 @@ final class FfiGen
 
     /**
      * Strips Windows SAL annotations (`_In_`, `_Out_opt_`, `IN`, `OUT`), calling conventions
-     * (`WINAPI`, `APIENTRY`, `CALLBACK`, `__stdcall`, `__cdecl`), and `__declspec(dllexport|dllimport)`
-     * so PHP `FFI::cdef()` can parse Win32 / DLL headers directly.
+     * (`WINAPI`, `APIENTRY`, `CALLBACK`, `__stdcall`, `__cdecl`), `__declspec(dllexport|dllimport)`,
+     * and Linux / GCC / GLib / GTK visibility & attribute macros (`GDK_AVAILABLE_IN_ALL`,
+     * `GLIB_AVAILABLE_IN_ALL`, `G_GNUC_*`, `__attribute__((...))`, `__THROW`, `__nonnull`)
+     * so PHP `FFI::cdef()` can parse Windows and Linux system headers directly.
      */
     public static function normalizeWin32Annotations(string $line): string
     {
+        // Windows macros
         $line = (string)preg_replace('/__declspec\s*\(\s*(?:dllexport|dllimport)\s*\)/i', '', $line);
         $line = (string)preg_replace('/\b(?:WINAPI|APIENTRY|CALLBACK|WINBASEAPI|WINUSERAPI|__stdcall|__cdecl|__fastcall)\b/', '', $line);
         $line = (string)preg_replace('/\b_(?:In|Out|Inout|Reserved)(?:_opt|_z|_reads|_writes|_bytes|_count|[A-Za-z0-9_])*\s*(?:\([^)]*\))?/', '', $line);
         $line = (string)preg_replace('/\b(?:IN|OUT|OPTIONAL)\b(?=\s+[A-Za-z_])/', '', $line);
+
+        // Linux / GCC / glibc / GLib / GTK macros
+        $line = (string)preg_replace('/__attribute__\s*\(\s*\([^)]*\)\s*\)/', '', $line);
+        $line = (string)preg_replace('/\b(?:G_GNUC_[A-Z0-9_]+|__nonnull|__wur)\s*(?:\([^)]*\))?/', '', $line);
+        $line = (string)preg_replace('/\b(?:GDK|GTK|GLIB|GIO|PANGO|CAIRO)_(?:AVAILABLE|DEPRECATED)[A-Z0-9_]*\b/', '', $line);
+        $line = (string)preg_replace('/\b(?:G_BEGIN_DECLS|G_END_DECLS|__THROW|__NTH|__restrict|__extension__)\b/', '', $line);
+
         return (string)preg_replace('/[ \t]{2,}/', ' ', $line);
     }
 
     /**
-     * Returns minimal C typedefs for any Win32 types referenced in $cdefSource.
+     * Returns minimal C typedefs for any Win32 or Linux GLib/GTK types referenced in $cdefSource.
      */
     private static function win32PreambleFor(string $cdefSource): string
     {
         $map = [
+            // Win32 types
             'BOOL'      => 'typedef int BOOL;',
             'BOOLEAN'   => 'typedef unsigned char BOOLEAN;',
             'BYTE'      => 'typedef unsigned char BYTE;',
@@ -511,6 +522,37 @@ final class FfiGen
             'LPCSTR'    => 'typedef const char* LPCSTR;',
             'LPWSTR'    => 'typedef uint16_t* LPWSTR;',
             'LPCWSTR'   => 'typedef const uint16_t* LPCWSTR;',
+            // Linux GLib / GTK / X11 types
+            'gboolean'      => 'typedef int gboolean;',
+            'gchar'         => 'typedef char gchar;',
+            'guchar'        => 'typedef unsigned char guchar;',
+            'gint'          => 'typedef int gint;',
+            'guint'         => 'typedef unsigned int guint;',
+            'gshort'        => 'typedef short gshort;',
+            'gushort'       => 'typedef unsigned short gushort;',
+            'glong'         => 'typedef long glong;',
+            'gulong'        => 'typedef unsigned long gulong;',
+            'gint8'         => 'typedef int8_t gint8;',
+            'guint8'        => 'typedef uint8_t guint8;',
+            'gint16'        => 'typedef int16_t gint16;',
+            'guint16'       => 'typedef uint16_t guint16;',
+            'gint32'        => 'typedef int32_t gint32;',
+            'guint32'       => 'typedef uint32_t guint32;',
+            'gint64'        => 'typedef int64_t gint64;',
+            'guint64'       => 'typedef uint64_t guint64;',
+            'gfloat'        => 'typedef float gfloat;',
+            'gdouble'       => 'typedef double gdouble;',
+            'gsize'         => 'typedef size_t gsize;',
+            'gssize'        => 'typedef ssize_t gssize;',
+            'gpointer'      => 'typedef void* gpointer;',
+            'gconstpointer' => 'typedef const void* gconstpointer;',
+            'GType'         => 'typedef size_t GType;',
+            'GQuark'        => 'typedef uint32_t GQuark;',
+            'GtkWidget'     => 'typedef struct _GtkWidget GtkWidget;',
+            'GtkWindow'     => 'typedef struct _GtkWindow GtkWindow;',
+            'GdkWindow'     => 'typedef struct _GdkWindow GdkWindow;',
+            'GObject'       => 'typedef struct _GObject GObject;',
+            'GError'        => 'typedef struct _GError GError;',
         ];
         $needed = [];
         foreach ($map as $type => $def) {

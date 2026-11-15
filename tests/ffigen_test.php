@@ -106,3 +106,23 @@ check(str_contains($winPhp, 'public static function GetCurrentProcessId(): int')
 eval('?>' . $winPhp);
 same(0x40, \MyPHP\Tests\Generated\User32Ffi::MB_ICONINFORMATION, 'Generated Win32 wrapper constant');
 
+// 5. Linux GTK / GLib Header FfiGen test (GDK_AVAILABLE_IN_ALL, __attribute__, gboolean, gint, GtkWidget*)
+$gtkHeader = <<<'C'
+G_BEGIN_DECLS
+#define GTK_WINDOW_TOPLEVEL 0
+
+GDK_AVAILABLE_IN_ALL GtkWidget* gtk_window_new(gint type) G_GNUC_CONST;
+GDK_AVAILABLE_IN_3_10 void gtk_window_set_title(GtkWidget *window, const gchar *title) __attribute__((visibility("default")));
+GLIB_AVAILABLE_IN_ALL gboolean g_file_test(const gchar *filename, gint test) __THROW;
+G_END_DECLS
+C;
+
+$gtkPhp = FfiGen::fromCHeader($gtkHeader, 'Gtk3Ffi', 'MyPHP\\Tests\\Generated', 'libgtk-3.so.0');
+check(str_contains($gtkPhp, 'typedef int gboolean;') && str_contains($gtkPhp, 'typedef struct _GtkWidget GtkWidget;'), 'FfiGen injects required Linux GLib/GTK typedefs into CDEF');
+check(!str_contains($gtkPhp, 'GDK_AVAILABLE_IN_ALL') && !str_contains($gtkPhp, '__attribute__') && !str_contains($gtkPhp, 'G_BEGIN_DECLS'), 'FfiGen strips Linux GLib/GTK/GCC macros');
+check(str_contains($gtkPhp, 'public static function gtk_window_new(int $type): mixed'), 'FfiGen parses Linux gtk_window_new signature');
+check(str_contains($gtkPhp, 'public static function g_file_test(mixed $filename, int $test): bool|int'), 'FfiGen maps gboolean return to bool|int');
+eval('?>' . $gtkPhp);
+same(0, \MyPHP\Tests\Generated\Gtk3Ffi::GTK_WINDOW_TOPLEVEL, 'Generated Linux GTK wrapper constant');
+
+
