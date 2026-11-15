@@ -49,19 +49,19 @@ if (is_dir($sbDocs)) {
     }
     same([], $outOfSync, 'All docs/*.md files are synced with smart-book/app/Views/myphp/docs/');
 
-    // Verify core Chinese docs exist under smart-book/app/Views/myphp/docs/zh-cn/
-    $requiredZh = [
-        'index.md', 'getting-started.md', 'swiftui.md', 'windows.md', 'app.md',
-        'menus.md', 'documents.md', 'i18n.md', 'native.md', 'data-transfer.md',
-        'audio.md', 'mobile.md', 'android.md', 'ios.md', 'frontend.md',
-        'bindings.md', 'distribution.md', 'interop.md', 'cli.md', 'architecture.md',
-        'ui/README.md', 'ui/scene3d.md', 'plugins/game.md',
-    ];
+    // Verify every user-facing doc (excluding internal manual-checks & upstream-deviations) has a Chinese translation under zh-cn/
     $missingZh = [];
-    foreach ($requiredZh as $rel) {
+    foreach ($it as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'md') {
+            continue;
+        }
+        $rel = substr($file->getPathname(), strlen($docsDir) + 1);
+        if ($rel === 'manual-checks.md' || $rel === 'upstream-deviations.md') {
+            continue;
+        }
         if (!is_file("$sbDocs/zh-cn/$rel")) {
             $missingZh[] = $rel;
         }
     }
-    same([], $missingZh, 'Core Chinese docs exist in smart-book/app/Views/myphp/docs/zh-cn/');
+    same([], $missingZh, 'Every user-facing doc in docs/ has a matching Chinese translation in smart-book/app/Views/myphp/docs/zh-cn/');
 }

@@ -894,8 +894,9 @@ function dev(array $args): void
         ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("-lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
         $env['MYPHP_LOCALE'] = $tag;
     }
-    // The accessors of the catalogs and the TypeScript client come first: the app and the frontend import them.
+    // The accessors of the catalogs, native ffigen/jnigen bindings, and the TypeScript client come first: the app and the frontend import them.
     generateI18n($dir, $c);
+    generateNativeInterop($dir, $c);
     generateBindings($dir, $c);
     $server = null;
     if (($c['devCommand'] ?? '') !== '' && !$skipDevCommand) {
@@ -2463,13 +2464,65 @@ function writeLocalizations(string $dir, array $c, string $resources): array
     return ['CFBundleDevelopmentRegion' => lprojName($langs[0][0]), 'CFBundleLocalizations' => $names];
 }
 
-/** Writes the TypeScript client and the accessors of the catalogs (mygo generate). */
+/** Writes the TypeScript client, native ffigen/jnigen bindings, and the accessors of the catalogs (mygo generate). */
 function generate(array $args): void
 {
-    help($args, "generate [dir]\n\nWrites the typed TypeScript client for bound PHP services (bindings in\nmyphp.json), and the accessors of the app's catalogs of messages.");
+    help($args, "generate [dir]\n\nWrites the typed TypeScript client for bound PHP services (bindings in\nmyphp.json), native C/ObjC/JNI wrappers (ffigen and jnigen in myphp.json),\nand the accessors of the app's catalogs of messages.");
     ['dir' => $dir, 'config' => $c] = project($args);
     generateI18n($dir, $c);
+    generateNativeInterop($dir, $c);
     generateBindings($dir, $c);
+}
+
+/**
+ * Generates PHP bindings configured in `myphp.json` under `"ffigen"` and `"jnigen"`.
+ */
+function generateNativeInterop(string $dir, array $c): void
+{
+    foreach ($c['ffigen'] ?? [] as $item) {
+        if (!is_array($item) || empty($item['header']) || empty($item['out'])) {
+            continue;
+        }
+        $hdrPath = path($dir, (string)$item['header']);
+        is_file($hdrPath) || fail("ffigen: cannot read header {$item['header']}");
+        $src = (string)file_get_contents($hdrPath);
+        $ns  = (string)($item['namespace'] ?? 'App\\Native');
+        if (!empty($item['objc'])) {
+            $fws = is_array($item['framework'] ?? null)
+                ? $item['framework']
+                : array_values(array_filter(array_map('trim', explode(',', (string)($item['framework'] ?? 'Foundation')))));
+            $code = FfiGen::fromObjCHeader($src, (string)$item['objc'], $ns, $fws);
+        } else {
+            $cls = (string)($item['class'] ?? (ucfirst(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($hdrPath, PATHINFO_FILENAME))) . 'Ffi'));
+            $lib = isset($item['lib']) ? (string)$item['lib'] : null;
+            $code = FfiGen::fromCHeader($src, $cls, $ns, $lib);
+        }
+        $outPath = path($dir, (string)$item['out']);
+        if (!is_file($outPath) || file_get_contents($outPath) !== $code) {
+            is_dir(dirname($outPath)) || mkdir(dirname($outPath), 0755, true);
+            file_put_contents($outPath, $code) !== false || fail("ffigen: cannot write $outPath");
+            logf('wrote ' . $item['out']);
+        }
+    }
+
+    foreach ($c['jnigen'] ?? [] as $item) {
+        if (!is_array($item) || empty($item['class']) || empty($item['out'])) {
+            continue;
+        }
+        $ns = (string)($item['namespace'] ?? 'App\\Native\\Android');
+        $cp = isset($item['cp']) ? path($dir, (string)$item['cp']) : null;
+        try {
+            $code = JniGen::fromJavaClass((string)$item['class'], $ns, $cp);
+        } catch (RuntimeException $e) {
+            fail("jnigen: {$e->getMessage()}");
+        }
+        $outPath = path($dir, (string)$item['out']);
+        if (!is_file($outPath) || file_get_contents($outPath) !== $code) {
+            is_dir(dirname($outPath)) || mkdir(dirname($outPath), 0755, true);
+            file_put_contents($outPath, $code) !== false || fail("jnigen: cannot write $outPath");
+            logf('wrote ' . $item['out']);
+        }
+    }
 }
 
 // ---- updates ------------------------------------------------------------

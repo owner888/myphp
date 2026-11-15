@@ -95,3 +95,32 @@ $bm = new BatteryManager($serviceHandle);
 $charging = $bm->isCharging(); // bool, synchronous JNI call
 $bm->release();               // release JNI global reference when done
 ```
+
+---
+
+## 4. Config-Driven Batch Generation (`myphp.json` + `myphp generate`)
+
+You can also declare `ffigen` and `jnigen` targets in `myphp.json` so
+`myphp generate` and `myphp dev` keep them up to date automatically:
+
+```json
+{
+  "name": "MyApp",
+  "ffigen": [
+    {
+      "header": "ios/UIDevice.h",
+      "objc": "UIDevice",
+      "framework": "UIKit",
+      "namespace": "App\\Native",
+      "out": "src/Native/UIDevice.php"
+    }
+  ],
+  "jnigen": [
+    {
+      "class": "android.os.BatteryManager",
+      "namespace": "App\\Native",
+      "out": "src/Native/BatteryManager.php"
+    }
+  ]
+}
+```
