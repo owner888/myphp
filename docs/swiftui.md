@@ -364,21 +364,4 @@ $view = fn() => VStack()(
 | `WidgetKit`, `App Intents`, `Live Activities` | Out of scope (OS extensions) |
 | `tvOS`, `Android TV`, `visionOS`, `watchOS` | Not targeted (`macOS`, `Windows`, `Linux`, `Android` and `iOS`/`iPadOS` are supported; `Device::type()` reports `Desktop`, `Mobile`, `Pad`, `Tv`) |
 
-## Checklist for an agent writing a myphp view
-
-1. State is a class made once; the view is `view.php`, returning `fn() =>
-   …`, `$this` the state (`Content::file()`). No named class or function
-   in `view.php`.
-2. Write SwiftUI's views and modifiers with SwiftUI's names and labels;
-   the second parentheses hold the children, commas between them, `null`
-   for no view.
-3. Controls bind to the property itself (`isOn: $this->wifi`); actions
-   change the state through its methods.
-4. What repeats gets an id: `Each($items, id: 'id')`, `ListView($items,
-   id: 'id')`.
-5. Colors are the named ones (`Color::secondary`,
-   `Color::secondarySystemBackground`); a literal only for data.
-6. Before a view you have not seen, `grep -n "function Name("
-   src/UI/Declarative/functions.php`; what is not there does not exist.
-7. For native OS or C/ObjC/Android Java APIs not yet wrapped by MyPHP, run `myphp ffigen` or `myphp jnigen` to generate a typed PHP wrapper class rather than hand-writing raw `ObjC::msg` signatures or C JNI code.
-8. Run on a device with the CLI only: `myphp run -d macos|windows|linux|ios|android <app>`.
+For building apps with AI coding agents (skills, prompt templates, headless testing and visual screenshot verification), see [Building with AI Agents](agents.md).
