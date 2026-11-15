@@ -1227,12 +1227,20 @@ $g->update(new \MyPHP\Plugins\Game\Input());
 same(1, $g->score, 'game3d: collecting crystal gem increments score');
 check($g->particles->activeCount() > 0, 'game3d: collecting crystal gem bursts emerald 3D particles');
 
-// model-viewer: preset switching, wireframe toggle, Fresnel rim slider, and particle burst button.
+// model-viewer: preset switching, Terrain & Creature Animator3D, wireframe toggle, and particle burst button.
 [$view, $m] = Headless::load('model-viewer', 'App::whenReady');
 $t = new Headless($view, 1080, 740);
 $t->frame(2);
 $t->clickText('Capsule'); $t->frame(2);
 same('Capsule', $m->preset, 'model-viewer: Capsule preset selected');
+$t->clickText('Terrain'); $t->frame(2);
+same('Terrain', $m->preset, 'model-viewer: Terrain preset selected');
+check($m->vertexCount === 33 * 33, 'model-viewer: Terrain preset builds 33x33 heightfield vertices');
+$t->clickText('Creature'); $t->frame(2);
+same('Creature', $m->preset, 'model-viewer: Creature preset selected');
+check($m->animator !== null, 'model-viewer: Creature preset attaches Animator3D');
+$t->clickText('Lunge'); $t->frame(2);
+same(\MyPHP\Plugins\Scene\Animator3D::LUNGE, $m->animator->state, 'model-viewer: Lunge button triggers Animator3D::LUNGE');
 $t->clickText('Hardware Wireframe Mode'); $t->frame(2);
 check($m->wireframe, 'model-viewer: Hardware Wireframe Mode toggled on');
 $t->clickText('Spark Burst'); $t->frame(2);

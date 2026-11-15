@@ -5,22 +5,37 @@ use MyPHP\Device;
 use MyPHP\Plugins\Scene\Math\Vec3;
 use MyPHP\UI\Painter;
 
-$presets = ['Torus', 'Capsule', 'Cylinder', 'Cone', 'Sphere', 'Cube', 'Crystal'];
+$presets = ['Torus', 'Capsule', 'Cylinder', 'Cone', 'Sphere', 'Cube', 'Crystal', 'Terrain', 'Creature'];
 
 $controls = fn() => ScrollView(Axis::vertical)(
-    VStack(alignment: HorizontalAlignment::leading, spacing: 11)(
-        Text('3D Model Studio')->font(Font::title3)->bold(),
+    VStack(alignment: HorizontalAlignment::leading, spacing: 9)(
+        HStack(spacing: 8)(
+            Text('3D Model Studio')->font(Font::title3)->bold(),
+            Spacer(),
+            Button('Spark Burst', action: fn() => $this->burstParticles())->buttonStyle(ButtonStyle::borderedProminent),
+        ),
         Text(verbatim: $this->statusMessage)->font(Font::caption)->foregroundStyle(Color::secondary),
 
         Divider(),
 
         Text('Preset Geometry')->font(Font::subheadline)->bold(),
-        FlowLayout(spacing: 6)(
+        FlowLayout(spacing: 5)(
             Each($presets, id: fn(string $p) => $p)(fn(string $p) =>
                 Button($p, action: fn() => $this->selectPreset($p))
                     ->buttonStyle($this->preset === $p ? ButtonStyle::borderedProminent : ButtonStyle::bordered)
             ),
         ),
+        $this->animator !== null ? HStack(spacing: 6)(
+            Button('Walk', action: fn() => $this->animator?->play(\MyPHP\Plugins\Scene\Animator3D::WALK))->buttonStyle(ButtonStyle::bordered),
+            Button('Lunge', action: function (): void {
+                $this->animator?->play(\MyPHP\Plugins\Scene\Animator3D::LUNGE, duration: 0.42, direction: new Vec3(0.0, 0.0, 1.0));
+                $this->scene->camera->shake(0.16, 0.22);
+            })->buttonStyle(ButtonStyle::borderedProminent),
+            Button('Hurt', action: function (): void {
+                $this->animator?->play(\MyPHP\Plugins\Scene\Animator3D::HURT, duration: 0.35);
+                $this->scene->camera->shake(0.22, 0.25);
+            })->buttonStyle(ButtonStyle::bordered),
+        ) : null,
 
         Divider(),
 
@@ -28,6 +43,7 @@ $controls = fn() => ScrollView(Axis::vertical)(
         Toggle('Auto-Rotate Model', isOn: $this->autoRotate),
         Toggle('Hardware Wireframe Mode', isOn: $this->wireframe),
         Toggle('3D Reference Grid & XYZ Gizmo', isOn: $this->showGrid),
+        Toggle('Atmospheric Sky Dome', isOn: $this->skyDome),
         Toggle('Shadow-Receiving Floor', isOn: $this->showFloor),
         Toggle('1024×1024 PCF Soft Shadows', isOn: $this->shadows),
         Toggle('Exponential Distance Fog', isOn: $this->fog),
@@ -35,23 +51,23 @@ $controls = fn() => ScrollView(Axis::vertical)(
         Divider(),
 
         Text('PBR Material & Lighting')->font(Font::subheadline)->bold(),
-        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
             Text('PBR Metallic')->font(Font::caption),
             Slider(value: $this->metallic, in: [0.0, 1.0]),
         ),
-        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
             Text('PBR Roughness')->font(Font::caption),
             Slider(value: $this->roughness, in: [0.05, 0.99]),
         ),
-        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
             Text('Fresnel Hologram Rim')->font(Font::caption),
             Slider(value: $this->rimStrength, in: [0.0, 2.5]),
         ),
-        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
             Text('Sun Direction Angle')->font(Font::caption),
             Slider(value: $this->lightAngle, in: [0.0, 6.28]),
         ),
-        VStack(alignment: HorizontalAlignment::leading, spacing: 3)(
+        VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
             Text('Point Light Intensity')->font(Font::caption),
             Slider(value: $this->pointIntensity, in: [0.0, 5.0]),
         ),
@@ -59,17 +75,11 @@ $controls = fn() => ScrollView(Axis::vertical)(
         Divider(),
 
         HStack(spacing: 8)(
-            Button('Spark Burst', action: fn() => $this->burstParticles())->buttonStyle(ButtonStyle::borderedProminent),
             Button('Export PNG', action: fn() => $this->exportSnapshot())->buttonStyle(ButtonStyle::bordered),
-        ),
-
-        VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
-            Text('Vertices: {v}  ·  Triangles: {t}', v: $this->vertexCount, t: $this->triangleCount)
+            Text('Vertices: {v} · Tris: {t}', v: $this->vertexCount, t: $this->triangleCount)
                 ->font(Font::caption)->foregroundStyle(Color::secondary),
-            Text('Tip: Drag to orbit, scroll/pinch to zoom, tap model to spark')
-                ->font(Font::caption2)->foregroundStyle(Color::secondary),
         ),
-    )->padding(14),
+    )->padding(12),
 );
 
 $viewport = fn() => SceneView(

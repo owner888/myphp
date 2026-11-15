@@ -10,7 +10,7 @@ declare(strict_types=1);
 // Run: myphp run -d macos|windows|linux|ios|android examples/game3d
 
 use MyPHP\{App, Device, Window, WindowOptions};
-use MyPHP\Plugins\Game\{Game, Input};
+use MyPHP\Plugins\Game\{Game, GameAudio, Input, ScreenTransition, VirtualPad};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
 use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
 use MyPHP\Plugins\Scene\Math\{Mat4, Vec3};
@@ -71,6 +71,9 @@ final class CrystalRunner3D extends Game
     public PointLight $gemLight;
     public PointLight $playerLight;
     public ParticleEmitter3D $particles;
+    public VirtualPad $pad;
+    public GameAudio $audio;
+    public ScreenTransition $transition;
 
     public float $px = 0.0, $pz = 2.5;
     public float $py = 0.0, $vy = 0.0;
@@ -79,19 +82,18 @@ final class CrystalRunner3D extends Game
     public float $time = 0.0;
     public float $flashTimer = 0.0;
 
-    /** Mobile Virtual Joystick & Jump Button state */
-    public bool $joyActive = false;
-    public float $joyBaseX = 95.0, $joyBaseY = 0.0;
-    public float $joyDx = 0.0, $joyDz = 0.0;
-    public bool $jumpPressed = false;
-    private float $lastViewW = 860.0, $lastViewH = 620.0;
-
     private State $lastPad;
 
     public function __construct()
     {
         $this->lastPad = new State();
         $this->viewport = new Canvas(800, 600);
+        $this->pad = new VirtualPad(enabled: !Device::isDesktop(), labelA: 'JUMP', labelB: '', labelStart: '');
+        $this->audio = new GameAudio();
+        $this->audio->registerTone('gem', startFreq: 523.25, endFreq: 1046.5, duration: 0.14, square: false, gain: 0.28);
+        $this->audio->registerTone('jump', startFreq: 260.0, endFreq: 480.0, duration: 0.10, square: false, gain: 0.20);
+        $this->audio->registerTone('hit', startFreq: 240.0, endFreq: 85.0, duration: 0.22, square: true, gain: 0.30);
+        $this->transition = new ScreenTransition();
 
         $this->scene = new Scene(new Camera3D(
             position: new Vec3(0.0, 7.2, 9.625),
@@ -103,6 +105,11 @@ final class CrystalRunner3D extends Game
         $this->scene->shadowBounds = 10.0;
         $this->scene->fogEnabled = true;
         $this->scene->fogDensity = 0.035;
+        $this->scene->addSkyDome(
+            zenithColor:  [0.05, 0.10, 0.24, 1.0],
+            horizonColor: [0.16, 0.28, 0.46, 1.0],
+            groundColor:  [0.04, 0.05, 0.08, 1.0],
+        );
 
         $this->particles = $this->scene->addEmitter(new ParticleEmitter3D(Mesh::cube(1.0), maxParticles: 320));
 
@@ -139,7 +146,7 @@ final class CrystalRunner3D extends Game
         );
         $this->playerHalo = new Entity(
             Mesh::cube(0.22, [1.0, 0.95, 0.4, 1.0]),
-            new Material([1.0, 0.95, 0.4, 1.0], shininess: 96.0),
+            Material::unlit([1.0, 0.95, 0.4, 1.0], emissive: 1.5),
             position: new Vec3(0.0, 0.85, 0.0)
         );
         $this->player->addChild($this->playerHalo);
@@ -192,50 +199,18 @@ final class CrystalRunner3D extends Game
 
     public function update(Input $in): void
     {
-        $this->time += 1.0 / 60.0;
+        $dt = 1.0 / 60.0;
+        $this->time += $dt;
         if ($this->flashTimer > 0.0) {
-            $this->flashTimer = max(0.0, $this->flashTimer - 1.0 / 60.0);
+            $this->flashTimer = max(0.0, $this->flashTimer - $dt);
         }
+        $this->pad->step($in);
+        $this->audio->step($dt);
+        $this->transition->step($dt);
 
-        $dx = ($in->down(Key::D) || $in->down(Key::RIGHT) ? 1.0 : 0.0) - ($in->down(Key::A) || $in->down(Key::LEFT) ? 1.0 : 0.0);
-        $dz = ($in->down(Key::S) || $in->down(Key::DOWN) ? 1.0 : 0.0) - ($in->down(Key::W) || $in->down(Key::UP) ? 1.0 : 0.0);
+        $dx = ($in->down(Key::D) || $in->down(Key::RIGHT) ? 1.0 : 0.0) - ($in->down(Key::A) || $in->down(Key::LEFT) ? 1.0 : 0.0) + $this->pad->axisX;
+        $dz = ($in->down(Key::S) || $in->down(Key::DOWN) ? 1.0 : 0.0) - ($in->down(Key::W) || $in->down(Key::UP) ? 1.0 : 0.0) + $this->pad->axisY;
         $jump = $in->pressed(Key::SPACE);
-
-        // Mobile / Pointer Virtual Joystick & Jump button
-        [$mx, $my] = $in->pointer();
-        $vw = max(200.0, $this->lastViewW);
-        $vh = max(200.0, $this->lastViewH);
-        $this->joyBaseX = 90.0;
-        $this->joyBaseY = $vh - 95.0;
-        $jumpBtnX = $vw - 90.0;
-        $jumpBtnY = $vh - 95.0;
-
-        if ($in->pointerPressed(0)) {
-            if (hypot($mx - $jumpBtnX, $my - $jumpBtnY) <= 52.0) {
-                $jump = true;
-                $this->jumpPressed = true;
-            } elseif ($mx < $vw * 0.5 && $my > $vh * 0.45) {
-                $this->joyActive = true;
-            }
-        }
-        if ($in->pointerDown(0) && $this->joyActive) {
-            $jdx = $mx - $this->joyBaseX;
-            $jdy = $my - $this->joyBaseY;
-            $jlen = hypot($jdx, $jdy);
-            $maxR = 46.0;
-            if ($jlen > 1e-4) {
-                $clamped = min($jlen, $maxR) / $maxR;
-                $this->joyDx = ($jdx / $jlen) * $clamped;
-                $this->joyDz = ($jdy / $jlen) * $clamped;
-                $dx += $this->joyDx;
-                $dz += $this->joyDz;
-            }
-        } else {
-            $this->joyActive = false;
-            $this->joyDx = 0.0;
-            $this->joyDz = 0.0;
-            $this->jumpPressed = false;
-        }
 
         foreach (array_slice(Gamepad::pads(), 0, 1) as $pad) {
             $s = $pad->state();
@@ -266,6 +241,7 @@ final class CrystalRunner3D extends Game
         // Jump physics
         if ($jump && $this->py <= 0.001) {
             $this->vy = 0.18;
+            $this->audio->playSfx('jump', pitchVariance: 0.05);
         }
         $this->py = max(0.0, $this->py + $this->vy);
         $this->vy = $this->py > 0.0 ? $this->vy - 0.01 : 0.0;
@@ -288,6 +264,8 @@ final class CrystalRunner3D extends Game
                 $this->highScore = $this->score;
             }
             $this->flashTimer = 0.35;
+            $this->audio->playSfx('gem', pitchVariance: 0.06);
+            $this->scene->camera->shake(0.12, 0.18);
             // Burst 48 emerald 3D sparks at gem location!
             $this->particles->burst($this->gem->position, count: 48, color: [0.2, 1.0, 0.6, 1.0]);
             $this->respawnGem();
@@ -297,7 +275,12 @@ final class CrystalRunner3D extends Game
             );
         }
 
-        $this->scene->step(1.0 / 60.0);
+        // Smooth camera follow (before Scene::step so camera->step applies damped shake on top!)
+        $camTarget = new Vec3($this->px * 0.35, 0.0, $this->pz * 0.35);
+        $this->scene->camera->target = $camTarget;
+        $this->scene->camera->position = new Vec3($this->px * 0.45, 7.2, $this->pz * 0.45 + 8.5);
+
+        $this->scene->step($dt);
 
         // Update patrolling sentinels
         foreach ($this->sentinels as $i => $s) {
@@ -311,21 +294,20 @@ final class CrystalRunner3D extends Game
 
             // Check collision with player (can jump over sentinels!)
             if (hypot($this->px - $sx, $this->pz - $sz) < 0.82 && $this->py < 0.65) {
+                $this->hitStop(4);
+                $this->scene->camera->shake(0.32, 0.30);
+                $this->audio->playSfx('hit');
+                $this->particles->burst($this->player->position, count: 36, color: [1.0, 0.25, 0.3, 1.0]);
+                $this->transition->start(ScreenTransition::FADE, duration: 0.32);
                 $this->score = 0;
                 $this->px = 0.0;
                 $this->pz = 3.5;
             }
         }
-
-        // Smooth camera follow
-        $camTarget = new Vec3($this->px * 0.35, 0.0, $this->pz * 0.35);
-        $this->scene->camera->target = $camTarget;
-        $this->scene->camera->position = new Vec3($this->px * 0.45, 7.2, $this->pz * 0.45 + 8.5);
     }
 
     public function draw(Painter $p, array $r, float $alpha): void
     {
-        [$this->lastViewW, $this->lastViewH] = [$r[2], $r[3]];
         $this->scene->camera->aspect = $r[2] / max(1.0, $r[3]);
         $this->viewport->renderScene($this->scene);
 
@@ -335,23 +317,10 @@ final class CrystalRunner3D extends Game
         $p->fill([$r[0] + 16, $r[1] + 16, 355, 86], 0x000000, 8.0, 0.68);
         $p->text($r[0] + 28, $r[1] + 28, 'Crystal Runner 3D (MyPHP Native 3D Game)', 15, 0xffffff);
         $p->text($r[0] + 28, $r[1] + 50, sprintf('Score: %d   |   Best: %d', $this->score, $this->highScore), 14, $this->flashTimer > 0 ? 0x00e676 : 0xffd54f);
-        $p->text($r[0] + 28, $r[1] + 72, 'WASD / Touch Joystick: Move | Space / JUMP: Jump', 11, 0xbbbbbb);
+        $p->text($r[0] + 28, $r[1] + 72, 'WASD / VirtualPad: Move | Space / JUMP: Jump', 11, 0xbbbbbb);
 
-        // On-screen Virtual Joystick (bottom-left) & Jump Button (bottom-right) for touch / mobile play
-        if (!Device::isDesktop() || $this->joyActive || $this->jumpPressed) {
-            $jx = $r[0] + 90.0;
-            $jy = $r[1] + $r[3] - 95.0;
-            $p->fill([$jx - 50, $jy - 50, 100, 100], 0xffffff, 50.0, 0.14);
-            $p->stroke([$jx - 50, $jy - 50, 100, 100], 0x4dd0e1, 50.0, 2.0, 0.45);
-            $kx = $jx + $this->joyDx * 36.0;
-            $ky = $jy + $this->joyDz * 36.0;
-            $p->fill([$kx - 22, $ky - 22, 44, 44], 0x4dd0e1, 22.0, 0.78);
-
-            $bx = $r[0] + $r[2] - 90.0;
-            $by = $r[1] + $r[3] - 95.0;
-            $p->fill([$bx - 44, $by - 44, 88, 88], $this->jumpPressed ? 0x00e676 : 0xffb300, 44.0, 0.72);
-            $p->text($bx - 21, $by - 8, 'JUMP', 14, 0x111111);
-        }
+        $this->pad->draw($p, $r);
+        $this->transition->draw($p, $r);
     }
 }
 

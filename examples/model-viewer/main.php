@@ -9,7 +9,7 @@ declare(strict_types=1);
 // Run: myphp run -d macos|windows|linux|ios|android examples/model-viewer
 
 use MyPHP\{App, FileDropEvent, Window, WindowOptions};
-use MyPHP\Plugins\Scene\{Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
+use MyPHP\Plugins\Scene\{Animator3D, Camera3D, Entity, Material, Mesh, ParticleEmitter3D, PointLight, Scene, Tween3D};
 use MyPHP\Plugins\Scene\Math\Vec3;
 use MyPHP\UI\Content;
 
@@ -41,12 +41,14 @@ final class ModelViewerApp
     public Entity $floorEntity;
     public PointLight $keyLight;
     public ParticleEmitter3D $emitter;
+    public ?Animator3D $animator = null;
 
     public string $preset = 'Torus';
     public bool $autoRotate = true;
     public bool $wireframe = false;
     public bool $showGrid = true;
     public bool $showFloor = true;
+    public bool $skyDome = true;
     public bool $shadows = true;
     public bool $fog = true;
     public float $shininess = 64.0;
@@ -71,6 +73,11 @@ final class ModelViewerApp
         $this->scene->shadowsEnabled = true;
         $this->scene->fogEnabled = true;
         $this->scene->fogDensity = 0.035;
+        $this->scene->addSkyDome(
+            zenithColor:  [0.10, 0.22, 0.44, 1.0],
+            horizonColor: [0.32, 0.48, 0.68, 1.0],
+            groundColor:  [0.09, 0.11, 0.15, 1.0],
+        );
 
         // 1. Floor (for receiving PCF shadows)
         $this->floorEntity = new Entity(
@@ -102,32 +109,70 @@ final class ModelViewerApp
     public function selectPreset(string $name): void
     {
         $this->preset = $name;
-        $mesh = match ($name) {
-            'Torus'    => Mesh::torus(1.0, 0.38, 36, 20),
-            'Capsule'  => Mesh::capsule(0.55, 1.1, 28, 16),
-            'Cylinder' => Mesh::cylinder(0.8, 0.8, 1.8, 28),
-            'Cone'     => Mesh::cone(0.95, 1.9, 28),
-            'Sphere'   => Mesh::sphere(1.1, 32, 20),
-            'Cube'     => Mesh::cube(1.5),
-            'Crystal'  => Mesh::fromObj(STUDIO_CRYSTAL_OBJ),
-            default    => Mesh::torus(1.0, 0.38, 36, 20),
-        };
-        $color = match ($name) {
-            'Torus'    => [0.35, 0.78, 1.0, 1.0],
-            'Capsule'  => [0.35, 0.95, 0.62, 1.0],
-            'Cylinder' => [0.95, 0.65, 0.32, 1.0],
-            'Cone'     => [0.98, 0.42, 0.48, 1.0],
-            'Sphere'   => [0.75, 0.52, 1.0, 1.0],
-            'Cube'     => [0.92, 0.85, 0.40, 1.0],
-            'Crystal'  => [0.25, 0.92, 0.95, 1.0],
-            default    => [0.8, 0.8, 0.9, 1.0],
-        };
-
+        $this->scene->animators = [];
+        $this->animator = null;
         $this->modelEntity->children = [];
-        $this->modelEntity->mesh = $mesh;
-        $this->modelEntity->material = new Material($color, shininess: $this->shininess);
-        $this->modelEntity->rotation = Vec3::zero();
-        $this->modelEntity->name = $name;
+        $this->modelEntity->position = Vec3::zero();
+        $this->modelEntity->scale = new Vec3(1.0, 1.0, 1.0);
+
+        if ($name === 'Terrain') {
+            $this->modelEntity->mesh = Mesh::terrain(4.2, 4.2, 32, 32, static fn(float $x, float $z): float => sin($x * 1.6) * cos($z * 1.6) * 0.65 + cos(hypot($x, $z) * 2.4) * 0.25);
+            $this->modelEntity->material = new Material([1.0, 1.0, 1.0, 1.0], shininess: 16.0);
+            $this->modelEntity->rotation = Vec3::zero();
+            $this->modelEntity->name = 'Terrain';
+        } elseif ($name === 'Creature') {
+            $bodyCol = [0.28, 0.72, 0.48, 1.0];
+            $wingCol = [0.38, 0.88, 0.62, 1.0];
+            $this->modelEntity->mesh = Mesh::sphere(0.65, 24, 16, $bodyCol);
+            $this->modelEntity->material = new Material($bodyCol, shininess: 48.0);
+            $this->modelEntity->rotation = Vec3::zero();
+            $this->modelEntity->name = 'Creature';
+
+            $head = new Entity(Mesh::sphere(0.38, 18, 12, $bodyCol), new Material($bodyCol, shininess: 48.0), position: new Vec3(0.0, 0.52, 0.42));
+            // Self-illuminated glowing golden eyes (Material::unlit)
+            $eyeL = new Entity(Mesh::sphere(0.08, 10, 8), Material::unlit([1.0, 0.92, 0.25, 1.0], emissive: 1.5), position: new Vec3(-0.16, 0.08, 0.33));
+            $eyeR = new Entity(Mesh::sphere(0.08, 10, 8), Material::unlit([1.0, 0.92, 0.25, 1.0], emissive: 1.5), position: new Vec3(0.16, 0.08, 0.33));
+            $head->addChild($eyeL);
+            $head->addChild($eyeR);
+
+            $wingL = new Entity(Mesh::cube(1.0, $wingCol), new Material($wingCol), position: new Vec3(-0.72, 0.15, -0.05), scale: new Vec3(0.75, 0.08, 0.42));
+            $wingR = new Entity(Mesh::cube(1.0, $wingCol), new Material($wingCol), position: new Vec3(0.72, 0.15, -0.05), scale: new Vec3(0.75, 0.08, 0.42));
+            $this->modelEntity->addChild($head);
+            $this->modelEntity->addChild($wingL);
+            $this->modelEntity->addChild($wingR);
+
+            $this->animator = $this->scene->addAnimator(new Animator3D($this->modelEntity));
+            $this->animator->addLimb($wingL, axis: 'z', amplitude: 0.42, frequency: 6.0);
+            $this->animator->addLimb($wingR, axis: 'z', amplitude: -0.42, frequency: 6.0);
+            $this->animator->addLimb($head, axis: 'x', amplitude: 0.12, frequency: 3.0);
+            $this->animator->play(Animator3D::IDLE);
+        } else {
+            $mesh = match ($name) {
+                'Torus'    => Mesh::torus(1.0, 0.38, 36, 20),
+                'Capsule'  => Mesh::capsule(0.55, 1.1, 28, 16),
+                'Cylinder' => Mesh::cylinder(0.8, 0.8, 1.8, 28),
+                'Cone'     => Mesh::cone(0.95, 1.9, 28),
+                'Sphere'   => Mesh::sphere(1.1, 32, 20),
+                'Cube'     => Mesh::cube(1.5),
+                'Crystal'  => Mesh::fromObj(STUDIO_CRYSTAL_OBJ),
+                default    => Mesh::torus(1.0, 0.38, 36, 20),
+            };
+            $color = match ($name) {
+                'Torus'    => [0.35, 0.78, 1.0, 1.0],
+                'Capsule'  => [0.35, 0.95, 0.62, 1.0],
+                'Cylinder' => [0.95, 0.65, 0.32, 1.0],
+                'Cone'     => [0.98, 0.42, 0.48, 1.0],
+                'Sphere'   => [0.75, 0.52, 1.0, 1.0],
+                'Cube'     => [0.92, 0.85, 0.40, 1.0],
+                'Crystal'  => [0.25, 0.92, 0.95, 1.0],
+                default    => [0.8, 0.8, 0.9, 1.0],
+            };
+
+            $this->modelEntity->mesh = $mesh;
+            $this->modelEntity->material = new Material($color, shininess: $this->shininess);
+            $this->modelEntity->rotation = Vec3::zero();
+            $this->modelEntity->name = $name;
+        }
 
         $this->scene->addTween(
             (new Tween3D($this->modelEntity, duration: 0.25, easing: Tween3D::EASE_OUT_CUBIC))
@@ -222,9 +267,12 @@ final class ModelViewerApp
         $this->modelEntity->material->rimStrength = $this->rimStrength;
         $this->keyLight->intensity = $this->pointIntensity;
 
-        // Toggle Grid & Floor visibility
+        // Toggle Grid, Floor & SkyDome visibility
         $this->gridHelper->instanceCount = $this->showGrid ? 27 : 0;
         $this->floorEntity->scale = $this->showFloor ? new Vec3(1.0, 1.0, 1.0) : new Vec3(0.0, 0.0, 0.0);
+        if ($this->scene->skyDome !== null) {
+            $this->scene->skyDome->scale = $this->skyDome ? new Vec3(1.0, 1.0, 1.0) : new Vec3(0.0, 0.0, 0.0);
+        }
 
         // Rotate directional sun light from slider
         $this->scene->lightDirection = new Vec3(-cos($this->lightAngle), -1.0, -sin($this->lightAngle));
