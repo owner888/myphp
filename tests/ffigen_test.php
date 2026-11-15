@@ -6,6 +6,17 @@ namespace MyPHP\Tests;
 use MyPHP\Native\Build\{FfiGen, JniGen};
 use MyPHP\Native\Jni;
 
+function loadGeneratedPhp(string $code, string $tag): void
+{
+    $tmp = sys_get_temp_dir() . "/myphp_ffigen_{$tag}_" . getmypid() . '.php';
+    file_put_contents($tmp, $code);
+    try {
+        require_once $tmp;
+    } finally {
+        @unlink($tmp);
+    }
+}
+
 // 1. C Header FfiGen test
 $cHeader = <<<'C'
 #define AUDIO_SAMPLE_RATE 44100
@@ -36,7 +47,7 @@ check(str_contains($cPhp, 'public static function audio_get_latency(mixed $handl
 check(str_contains($cPhp, 'public static function audio_shutdown(): void'), 'FfiGen::fromCHeader maps void return');
 
 // Verify generated C wrapper parses cleanly in PHP
-eval('?>' . $cPhp);
+loadGeneratedPhp($cPhp, 'c');
 same(44100, \MyPHP\Tests\Generated\AudioFfi::AUDIO_SAMPLE_RATE, 'Generated C wrapper constant value');
 same(4, \MyPHP\Tests\Generated\AudioFfi::AUDIO_PAUSED, 'Generated C wrapper enum constant value');
 
@@ -56,7 +67,7 @@ check(str_contains($objcPhp, "ObjC::msg('p:', self::cls(), 'sharedInstance')"), 
 check(str_contains($objcPhp, "ObjC::msg('b:bp', \$this->handle, 'setActive:error:'"), 'FfiGen::fromObjCHeader maps multi-part selector and types');
 check(str_contains($objcPhp, "public function category(): string"), 'FfiGen::fromObjCHeader maps NSString* readonly property');
 check(str_contains($objcPhp, "public function setPreferredIOBufferDuration(float \$value): void"), 'FfiGen::fromObjCHeader generates property setter');
-eval('?>' . $objcPhp);
+loadGeneratedPhp($objcPhp, 'objc');
 check(class_exists(\MyPHP\Tests\Generated\AVAudioSession::class), 'Generated Objective-C wrapper class loads cleanly');
 
 // 3. JNI Signature Parser & JniGen test
@@ -85,7 +96,7 @@ check(str_contains($jniPhp, "public static function create(): self"), 'JniGen ge
 check(str_contains($jniPhp, "public function isCharging(): bool"), 'JniGen maps ()Z to bool');
 check(str_contains($jniPhp, "public function getIntProperty(int \$arg0): int"), 'JniGen maps (I)I to int');
 check(str_contains($jniPhp, "public static function extraName(int \$arg0): ?string"), 'JniGen maps static (I)Ljava/lang/String; to ?string');
-eval('?>' . $jniPhp);
+loadGeneratedPhp($jniPhp, 'jni');
 same('android/os/BatteryManager', \MyPHP\Tests\Generated\BatteryManager::JAVA_CLASS, 'Generated JNI wrapper class constant');
 
 // 4. Windows Win32 / DLL Header FfiGen test (__declspec, WINAPI, SAL annotations, Win32 typedefs)
@@ -103,7 +114,7 @@ check(str_contains($winPhp, 'typedef void* HWND;') && str_contains($winPhp, 'typ
 check(!str_contains($winPhp, 'WINAPI') && !str_contains($winPhp, '_In_opt_') && !str_contains($winPhp, '__declspec'), 'FfiGen strips Win32 SAL annotations and calling convention macros');
 check(str_contains($winPhp, 'public static function MessageBoxW(mixed $hWnd, mixed $lpText, mixed $lpCaption, int $uType): int'), 'FfiGen parses Win32 MessageBoxW signature');
 check(str_contains($winPhp, 'public static function GetCurrentProcessId(): int'), 'FfiGen maps DWORD return to int');
-eval('?>' . $winPhp);
+loadGeneratedPhp($winPhp, 'win');
 same(0x40, \MyPHP\Tests\Generated\User32Ffi::MB_ICONINFORMATION, 'Generated Win32 wrapper constant');
 
 // 5. Linux GTK / GLib Header FfiGen test (GDK_AVAILABLE_IN_ALL, __attribute__, gboolean, gint, GtkWidget*)
@@ -122,7 +133,7 @@ check(str_contains($gtkPhp, 'typedef int gboolean;') && str_contains($gtkPhp, 't
 check(!str_contains($gtkPhp, 'GDK_AVAILABLE_IN_ALL') && !str_contains($gtkPhp, '__attribute__') && !str_contains($gtkPhp, 'G_BEGIN_DECLS'), 'FfiGen strips Linux GLib/GTK/GCC macros');
 check(str_contains($gtkPhp, 'public static function gtk_window_new(int $type): mixed'), 'FfiGen parses Linux gtk_window_new signature');
 check(str_contains($gtkPhp, 'public static function g_file_test(mixed $filename, int $test): bool|int'), 'FfiGen maps gboolean return to bool|int');
-eval('?>' . $gtkPhp);
+loadGeneratedPhp($gtkPhp, 'gtk');
 same(0, \MyPHP\Tests\Generated\Gtk3Ffi::GTK_WINDOW_TOPLEVEL, 'Generated Linux GTK wrapper constant');
 
 
