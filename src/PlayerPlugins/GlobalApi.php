@@ -65,7 +65,7 @@ final class GlobalApi extends Api
             default => array_filter(Plugins::players(), fn(MediaPlayerState $s) => ($s->managedLabel ?? $s->logName()) === $target), // the label its messages came with
         };
         foreach ($players as $s) {
-            $child = $s->pluginInstance($this->instance->plugin)?->iina->global;
+            $child = $s->pluginInstance($this->instance->plugin)?->context->global;
             if ($child instanceof GlobalChildApi) { $child->hub->call($name, $data); }
         }
     }

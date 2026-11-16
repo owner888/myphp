@@ -14,7 +14,7 @@ namespace MyPHP\Tests;
 
 use MyPHP\Media\{Player, PlayerSettings};
 use MyPHP\MenuItem;
-use MyPHP\PlayerPlugins\{HttpError, Iina, Plugin, PluginError, Plugins, XmlRpc};
+use MyPHP\PlayerPlugins\{HttpError, PlayerContext, Plugin, PluginError, Plugins, XmlRpc};
 use MyPHP\UI\{Context, MediaPlayerMenus, MediaPlayerSettings, MediaPlayerState};
 
 $root = sys_get_temp_dir() . '/myphp-plugins-' . getmypid();
@@ -38,10 +38,10 @@ $find = function (array $items, string $id) use (&$find): ?MenuItem {
 };
 
 // Info.json, as IINA reads it: its keys, an identifier of reverse domain, its files within its folder.
-same(null, Plugin::load($plugin('x.iinaplugin', ['identifier' => 'io.x', 'entry' => '../main.php'])), 'an entry outside its folder: none');
-same(null, Plugin::load($plugin('y.iinaplugin', ['identifier' => 'not an id'])), 'an identifier not of reverse domain: none');
-@unlink("$dir/x.iinaplugin/Info.json"); @rmdir("$dir/x.iinaplugin"); array_map('unlink', glob("$dir/{x,y}.iinaplugin/*", GLOB_BRACE)); @rmdir("$dir/x.iinaplugin"); @rmdir("$dir/y.iinaplugin");
-$a = Plugin::load($plugin('io.test.a.iinaplugin', ['identifier' => 'io.test.a', 'name' => 'Alpha', 'description' => 'The first', 'permissions' => ['show-osd', 'file-system', 'network-request', 'no-such'],
+same(null, Plugin::load($plugin('x.myphpplugin', ['identifier' => 'io.x', 'entry' => '../main.php'])), 'an entry outside its folder: none');
+same(null, Plugin::load($plugin('y.myphpplugin', ['identifier' => 'not an id'])), 'an identifier not of reverse domain: none');
+@unlink("$dir/x.myphpplugin/Info.json"); @rmdir("$dir/x.myphpplugin"); array_map('unlink', glob("$dir/{x,y}.myphpplugin/*", GLOB_BRACE)); @rmdir("$dir/x.myphpplugin"); @rmdir("$dir/y.myphpplugin");
+$a = Plugin::load($plugin('io.test.a.myphpplugin', ['identifier' => 'io.test.a', 'name' => 'Alpha', 'description' => 'The first', 'permissions' => ['show-osd', 'file-system', 'network-request', 'no-such'],
     'allowedDomains' => ['example.com', '*.example.org'], 'subtitleProviders' => [['id' => 'subs', 'name' => 'Subs']], 'preferenceDefaults' => ['color' => 'red'], 'ghRepo' => 'me/alpha', 'ghVersion' => 3,
     'localized' => ['zz' => ['name' => 'Zeta']]]));
 same(['io.test.a', 'Alpha', 'The first', ['show-osd', 'file-system', 'network-request'], 'https://github.com/me/alpha', 3], [$a->identifier, $a->name, $a->desc, $a->permissions, $a->githubURL(), $a->githubVersion], 'its fields; a permission unknown left out');
@@ -51,7 +51,7 @@ check(str_contains($a->localizedPermissions()[1]['desc'], "- example.com\n- *.ex
 
 // The folder: those of it, in the order kept; none on before it is turned on; a duplicate identifier made another.
 Plugins::configure($dir, $settings);
-$plugin('io.test.b.iinaplugin', ['identifier' => 'io.test.b', 'name' => 'Beta']);
+$plugin('io.test.b.myphpplugin', ['identifier' => 'io.test.b', 'name' => 'Beta']);
 $settings->set('pluginOrder', ['io.test.b', 'io.test.a']);
 Plugins::configure($dir, $settings);
 same(['io.test.b', 'io.test.a'], array_map(fn(Plugin $p) => $p->identifier, Plugins::all()), 'in the order kept');
@@ -62,8 +62,8 @@ same(['io.test.a', 'io.test.b'], $settings->get('pluginOrder'), 'one dragged bef
 // A player's instance: its entry run with its Iina, console and preferences; one that throws logged under its subsystem.
 $main = <<<'PHP'
 <?php
-use MyPHP\PlayerPlugins\Iina;
-return function (Iina $iina) {
+use MyPHP\PlayerPlugins\PlayerContext;
+return function (PlayerContext $iina) {
     $iina->console->log('hello', ['a' => 1]);
     $GLOBALS['pluginRan'][] = [$iina->preferences->get('color'), $iina->global === null, $iina->core !== null];
     $iina->preferences->set('color', 'blue');
@@ -83,8 +83,8 @@ return function (Iina $iina) {
     $GLOBALS['pluginIina'] = $iina;
 };
 PHP;
-file_put_contents("$dir/io.test.a.iinaplugin/main.php", $main);
-file_put_contents("$dir/io.test.b.iinaplugin/main.php", '<?php return function ($iina) { throw new RuntimeException("broken"); };');
+file_put_contents("$dir/io.test.a.myphpplugin/main.php", $main);
+file_put_contents("$dir/io.test.b.myphpplugin/main.php", '<?php return function ($iina) { throw new RuntimeException("broken"); };');
 Plugins::configure($dir, $settings);
 [$pa, $pb] = Plugins::all();
 Plugins::setEnabled($pa, true);
@@ -96,7 +96,7 @@ same([['red', true, true]], $GLOBALS['pluginRan'], 'its entry run: the preferenc
 same(['blue', '{"color":"blue"}'], [$pa->preference('color'), file_get_contents("$dir/.preferences/io.test.a.json")], 'a preference set and synced');
 same(2, count($s->plugins()), 'an instance of each plugin on');
 check(array_filter(\MyPHP\Logger::entries(), fn(array $e) => str_contains($e['subsystem'], ' - Beta') && str_contains($e['message'] ?? '', 'broken')) !== [], 'what one throws logged under its subsystem');
-/** @var Iina $iina */
+/** @var PlayerContext $iina */
 $iina = $GLOBALS['pluginIina'];
 
 // The Plugin menu: Manage Plugins…, under the plugin's name its first five items and More…, Developer Tool, Reload All Plugins.
@@ -314,7 +314,7 @@ $s->events()->emit('iina.file-loaded', 'file:///y.mkv');
 same($n, count($GLOBALS['pluginEvents']), 'its listeners gone');
 
 // The global instance: its players made, messages both ways.
-$plugin('io.test.g.iinaplugin', ['identifier' => 'io.test.g', 'name' => 'Gamma', 'globalEntry' => 'global.php'], <<<'PHP'
+$plugin('io.test.g.myphpplugin', ['identifier' => 'io.test.g', 'name' => 'Gamma', 'globalEntry' => 'global.php'], <<<'PHP'
 <?php
 return function ($iina) {
     $iina->global->onMessage('hi', function ($data) use ($iina) { $GLOBALS['childGot'][] = [$data, $iina->global->getLabel()]; $iina->global->postMessage('back', $data . '!'); });
@@ -350,7 +350,7 @@ $asked = [];
 $agree = function (Plugin $p) use (&$asked): bool { $asked[] = $p->permissions; return true; };
 same('installed', Plugins::install(Plugins::unpack("$root/delta.iinaplgz"), $agree, fn() => false), 'installed');
 $d = Plugins::byId('io.test.d');
-same([[['show-alert']], Plugin::normalize("$dir/io.test.d.iinaplugin"), true], [$asked, Plugin::normalize($d->root), $d->enabled()], 'its permissions agreed to, in its folder, on');
+same([[['show-alert']], Plugin::normalize("$dir/io.test.d.myphpplugin"), true], [$asked, Plugin::normalize($d->root), $d->enabled()], 'its permissions agreed to, in its folder, on');
 same('cancelled', Plugins::install(Plugins::unpack("$root/delta.iinaplgz"), $agree, fn() => false), 'again, not replaced');
 same('reinstalled', Plugins::install(Plugins::unpack("$root/delta.iinaplgz"), $agree, fn() => true), 'replaced');
 same([1, []], [count(array_filter(Plugins::all(), fn(Plugin $p) => $p->identifier === 'io.test.d')), glob("$dir/.temp.*")], 'once, no temporary folder left');
@@ -366,7 +366,7 @@ check(!Plugins::replace($old, Plugins::unpack("$root/delta3.iinaplgz"), function
 same([[['3.0', '2.0']], '2.0', []], [$offered, Plugins::byId('io.test.d')->version, glob("$dir/.temp.*")], 'asked of the new and the old; the old kept, the new gone');
 check(Plugins::replace($old, Plugins::unpack("$root/delta3.iinaplgz"), fn() => true), 'agreed: updated');
 $new = Plugins::byId('io.test.d');
-same(['3.0', $at, true, "$dir/io.test.d.iinaplugin"], [$new->version, array_search($new, Plugins::all(), true), $new->enabled(), $new->root], 'in its place, on, in its folder');
+same(['3.0', $at, true, "$dir/io.test.d.myphpplugin"], [$new->version, array_search($new, Plugins::all(), true), $new->enabled(), $new->root], 'in its place, on, in its folder');
 // GitHub: "owner/repo" or its URL; nothing else.
 same(['https://github.com/iina/plugin-x', 'https://github.com/iina/plugin-x'], [Plugins::githubURL('iina/plugin-x'), Plugins::githubURL('https://github.com/iina/plugin-x/')], 'a repository\'s URL');
 $threw = '';
@@ -375,10 +375,10 @@ same('The URL is invalid.', $threw, 'another: IINA\'s error');
 same(null, Plugins::newVersion($new), 'one not of GitHub: no newer version looked for');
 same(['Updated 3 days ago', 'Updated 1 hour ago', 'Updated on Jan 2, 2026'], [\MyPHP\UI\MediaPlayerPluginStore::updated(1000000, 1000000 + 3 * 86400 + 5), \MyPHP\UI\MediaPlayerPluginStore::updated(1000000, 1003600), \MyPHP\UI\MediaPlayerPluginStore::updated(gmmktime(12, 0, 0, 1, 2, 2026), gmmktime(12, 0, 0, 3, 2, 2026))], 'the store: when a repository was pushed to, as IINA tells it');
 // IINA's plugins of JavaScript: not loaded.
-same(null, Plugin::load($plugin('io.test.js.iinaplugin', ['identifier' => 'io.test.js', 'entry' => 'main.js'], '', ['main.js' => 'iina.console.log(1);'])), 'an entry of JavaScript: none');
-array_map('unlink', glob("$dir/io.test.js.iinaplugin/*")); @rmdir("$dir/io.test.js.iinaplugin");
+same(null, Plugin::load($plugin('io.test.js.myphpplugin', ['identifier' => 'io.test.js', 'entry' => 'main.js'], '', ['main.js' => 'iina.console.log(1);'])), 'an entry of JavaScript: none');
+array_map('unlink', glob("$dir/io.test.js.myphpplugin/*")); @rmdir("$dir/io.test.js.myphpplugin");
 Plugins::remove(Plugins::byId('io.test.d'));
-check(Plugins::byId('io.test.d') === null && !is_dir("$dir/io.test.d.iinaplugin"), 'uninstalled: gone from the list and the disk');
+check(Plugins::byId('io.test.d') === null && !is_dir("$dir/io.test.d.myphpplugin"), 'uninstalled: gone from the list and the disk');
 
 if (PHP_OS_FAMILY === 'Darwin') {
     // Settings > Plugins: the plugins' rows, a switch turning one off.
@@ -413,7 +413,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
 // A plugin's own messages (Info.json's i18n, myphp's): its code says them with $iina->strings in the app's language,
 // plural forms and all, a key without a message as it is; its pages with iina.strings, of the same messages, and their
 // elements of data-l10n said in it.
-$pd = $plugin('io.test.l.iinaplugin', ['identifier' => 'io.test.l', 'name' => 'Lingo'], '<?php return function ($iina) {};', [
+$pd = $plugin('io.test.l.myphpplugin', ['identifier' => 'io.test.l', 'name' => 'Lingo'], '<?php return function ($iina) {};', [
     'locales/en.json' => json_encode(['Opening media…' => 'Opening media…', 'files' => '{n, plural, one {# file} other {# files}}', 'hi' => "Hi, {name}! It's '{'ok'}'"]),
     'locales/zh-Hans.json' => json_encode(['Opening media…' => '正在打开媒体…', 'files' => '{n, plural, other {# 个文件}}', 'hi' => '你好，{name}！'], JSON_UNESCAPED_UNICODE),
 ]);

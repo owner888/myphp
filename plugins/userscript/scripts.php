@@ -2,12 +2,12 @@
 namespace MyPHPPlugins\UserScript;
 
 // The list of the user's scripts (IINA's plugin-userscript utils.js): @data/script-list.json, made where it is none, kept aside and made anew where it does not read.
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 
 const SCRIPT_LIST_PATH = '@data/script-list.json';
 
 /** @return list<array{id: string, name: string}> */
-function load(Iina $iina): array
+function load(PlayerContext $iina): array
 {
     if (!$iina->file->exists(SCRIPT_LIST_PATH)) { $iina->file->write(SCRIPT_LIST_PATH, '[]'); }
     $content = (string)$iina->file->read(SCRIPT_LIST_PATH);
@@ -23,7 +23,7 @@ function load(Iina $iina): array
 }
 
 /** @param list<array<string, mixed>> $scripts */
-function save(Iina $iina, array $scripts): void
+function save(PlayerContext $iina, array $scripts): void
 {
     $iina->file->write(SCRIPT_LIST_PATH, json_encode(array_values($scripts), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 }

@@ -140,7 +140,7 @@ cp -R "${ROOT_DIR}/src" "${APP_DIR}/src"
 ENTRY_DIR="$(dirname "${ENTRY}")"
 if [ "${ENTRY_DIR}" != "${ROOT_DIR}" ]; then
     [ -f "${ENTRY_DIR}/myphp.json" ] && cp "${ENTRY_DIR}/myphp.json" "${APP_DIR}/myphp.json"
-    (cd "${ENTRY_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/*' -not -path './node_modules/*' -not -path './tests/*' -not -path './test/*' -not -name '*.local.php' -not -path './.*') | while read -r rel; do
+    (cd "${ENTRY_DIR}" && find . -name '*.php' -not -path './dist/*' -not -path './build/*' -not -path './vendor/owner888/myphp/*' -not -path './node_modules/*' -not -path './tests/*' -not -path './test/*' -not -name '*.local.php' -not -path './.*') | while read -r rel; do
         rel="${rel#./}"
         [ "${ENTRY_DIR}/$rel" = "${ENTRY}" ] && continue
         if [ -n "${MYPHP_EXCLUDE:-}" ]; then

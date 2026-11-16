@@ -91,7 +91,7 @@ final class InputApi extends Api
     {
         $found = [];
         foreach ($s->plugins() as $i) {
-            $l = $i->iina->input?->listeners[$input][$event] ?? null;
+            $l = $i->context->input?->listeners[$input][$event] ?? null;
             if ($l !== null) { $found[] = [$i, $l[0], $l[1]]; }
         }
         usort($found, fn(array $a, array $b) => $b[2] <=> $a[2]);
@@ -109,7 +109,7 @@ final class InputApi extends Api
     public static function listened(MediaPlayerState $s, string $input, int $event): bool
     {
         foreach ($s->plugins() as $i) {
-            if (isset($i->iina->input?->listeners[$input][$event])) { return true; }
+            if (isset($i->context->input?->listeners[$input][$event])) { return true; }
         }
         return false;
     }

@@ -1,11 +1,11 @@
 <?php
 // The app's instance (IINA's plugin-userscript global.js): Manage User Scripts… opens the window of the scripts (standalone/index.html), whose messages keep the list and the scripts' code.
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 use function MyPHPPlugins\UserScript\{load, save};
 
 require_once __DIR__ . '/scripts.php';
 
-return function (Iina $iina) {
+return function (PlayerContext $iina) {
     $window = $iina->standaloneWindow;
     $file = $iina->file;
 

@@ -54,13 +54,13 @@ final class DevTool
         $this->counter++;
         $this->add(['kind' => 'prompt', 'text' => $source]);
         if ($source === '$global') {
-            $this->add(['kind' => 'result', 'value' => ['iina' => $this->instance->iina] + $this->vars]);
+            $this->add(['kind' => 'result', 'value' => ['iina' => $this->instance->context] + $this->vars]);
             return;
         }
         App::go(function () use ($source): void {
             try {
                 $fn = self::compile($source);
-                $value = $fn($this->vars, $this->instance->iina);
+                $value = $fn($this->vars, $this->instance->context);
                 $this->add(['kind' => 'result', 'value' => $value]);
             } catch (Throwable $e) {
                 $this->add(['kind' => 'exception', 'message' => $e->getMessage(), 'stack' => self::stack($e)]);

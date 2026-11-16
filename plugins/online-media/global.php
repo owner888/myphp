@@ -1,12 +1,12 @@
 <?php
 // The app's instance (IINA's plugin-online-media global.ts and download.ts): Manage yt-dlp and Downloads… opens the window
 // (downloads.html) of the yt-dlp used (downloaded, updated, checked) and of the videos downloaded, which a player's instance asks for.
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 use function MyPHPPlugins\OnlineMedia\{downloadDeno, downloadYTDLP, findBinary, formatFileSize, formatSeconds};
 
 require_once __DIR__ . '/lib.php';
 
-return function (Iina $iina) {
+return function (PlayerContext $iina) {
     $console = $iina->console; $global = $iina->global; $menu = $iina->menu; $window = $iina->standaloneWindow; $file = $iina->file; $utils = $iina->utils;
     $downloads = (object)['tasks' => [], 'statusNeedUpdate' => false];
 

@@ -2,7 +2,7 @@
 // What the Online Media plugin's instances share (IINA's plugin-online-media options.ts, utils.ts and binary.ts).
 namespace MyPHPPlugins\OnlineMedia;
 
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 
 const YTDLP_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos.zip';
 const DENO_URL = 'https://github.com/denoland/deno/releases/latest/download/';
@@ -11,7 +11,7 @@ const JS_RUNTIMES = ['deno', 'node', 'quickjs', 'bun'];
 const SAFE_PROTOS = ['http', 'https', 'ftp', 'ftps', 'rtmp', 'rtmps', 'rtmpe', 'rtmpt', 'rtmpts', 'rtmpte', 'data'];
 
 /** The format to ask yt-dlp for, as the preferences say (IINA's opt.format). */
-function format(Iina $iina): string
+function format(PlayerContext $iina): string
 {
     $p = $iina->preferences;
     switch ($p->get('video_quality')) {
@@ -26,7 +26,7 @@ function format(Iina $iina): string
 }
 
 /** Whether $url is of the excluded (the preference's, "|" between them, each a regular expression of what follows "https://"). */
-function isBlacklisted(Iina $iina, string $url): bool
+function isBlacklisted(PlayerContext $iina, string $url): bool
 {
     $exclude = (string)$iina->preferences->get('excluded_urls');
     if ($exclude === '') { return false; }
@@ -54,18 +54,18 @@ function ytdlCodecToMpvCodec(string $codec): ?string
     };
 }
 
-function optionWasSet(Iina $iina, string $name): bool
+function optionWasSet(PlayerContext $iina, string $name): bool
 {
     return $iina->mpv->getFlag("\"option-info/$name/set-from-commandline\"");
 }
 
-function optionWasSetLocally(Iina $iina, string $name): bool
+function optionWasSetLocally(PlayerContext $iina, string $name): bool
 {
     return $iina->mpv->getFlag("\"option-info/$name/set-locally\"");
 }
 
 /** @param ?array<string, string> $headers */
-function setHTTPHeaders(Iina $iina, ?array $headers): void
+function setHTTPHeaders(PlayerContext $iina, ?array $headers): void
 {
     if (!$headers) { return; }
     $ua = $headers['User-Agent'] ?? null;
@@ -82,7 +82,7 @@ function edlEscape(string $url): string
     return '%' . strlen($url) . "%$url";
 }
 
-function isSafeURL(Iina $iina, mixed $url): bool
+function isSafeURL(PlayerContext $iina, mixed $url): bool
 {
     if (!is_string($url)) { return false; }
     if (preg_match('~^(.+?)://~', $url, $m) === 1 && in_array($m[1], SAFE_PROTOS, true)) { return true; }
@@ -91,7 +91,7 @@ function isSafeURL(Iina $iina, mixed $url): bool
 }
 
 /** @param array<string, mixed> $json */
-function getIndexFromYouTubePlaylist(Iina $iina, string $url, array $json): ?int
+function getIndexFromYouTubePlaylist(PlayerContext $iina, string $url, array $json): ?int
 {
     if (($json['extractor'] ?? null) !== 'youtube:playlist') { return null; }
     $q = strpos($url, '?');
@@ -125,7 +125,7 @@ function joinURL(?string $base, array $fragment): string
 }
 
 /** An EDL of $fragments, null for none or one unsafe (mpv's ytdl_hook's edl_track_joined). @param ?list<array<string, mixed>> $fragments */
-function edlTrackJoined(Iina $iina, ?array $fragments, ?string $protocol = null, ?bool $isLive = null, ?string $base = null): ?string
+function edlTrackJoined(PlayerContext $iina, ?array $fragments, ?string $protocol = null, ?bool $isLive = null, ?string $base = null): ?string
 {
     if (!$fragments) {
         $iina->console->log('No fragments to join into EDL');
@@ -169,7 +169,7 @@ function formatSeconds(?float $sec): string
 }
 
 /** The yt-dlp to run, and the JavaScript runtime for it ('' for none): the preferences', the plugin's own, the system's (IINA's findBinary). @return array{path: string, jsRuntime: string} */
-function findBinary(Iina $iina): array
+function findBinary(PlayerContext $iina): array
 {
     $path = 'youtube-dl';
     foreach ([$iina->preferences->get('ytdl_path'), '@data/yt-dlp/yt-dlp_macos', 'yt-dlp', 'youtube-dl'] as $item) {
@@ -198,7 +198,7 @@ function jsRuntimeOption(string $runtimePath): ?string
 }
 
 /** Downloads Deno into @data/deno: null, else why it failed. */
-function downloadDeno(Iina $iina): ?string
+function downloadDeno(PlayerContext $iina): ?string
 {
     $res = $iina->utils->exec('/bin/bash', ['-c', 'uname -m']);
     if (($res['status'] ?? 1) !== 0) { return 'Failed to get system architecture: ' . ($res['stderr'] ?? ''); }
@@ -222,7 +222,7 @@ function downloadDeno(Iina $iina): ?string
 }
 
 /** Downloads the latest yt-dlp into @data/yt-dlp: null, else why it failed. */
-function downloadYTDLP(Iina $iina): ?string
+function downloadYTDLP(PlayerContext $iina): ?string
 {
     $id = (int)(microtime(true) * 1000);
     $zip = $iina->utils->resolvePath("@data/yt-dlp_$id.zip");

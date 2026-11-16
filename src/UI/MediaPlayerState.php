@@ -1315,7 +1315,7 @@ final class MediaPlayerState
                 if (str_starts_with($this->onlineSource, 'plugin:')) {
                     [$instance, $id] = $this->pluginProvider($this->onlineSource) ?? throw new RuntimeException("Cannot find a plugin with id \"{$this->onlineSource}\"");
                     try {
-                        foreach ($instance->iina->subtitle->download($id, $found[$i]['item']) as $path) { $this->loadSubtitles($path); $names[] = basename($path); }
+                        foreach ($instance->context->subtitle->download($id, $found[$i]['item']) as $path) { $this->loadSubtitles($path); $names[] = basename($path); }
                     } catch (\Throwable $e) {
                         throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
                     }
@@ -1510,7 +1510,7 @@ final class MediaPlayerState
     {
         [$instance, $id] = $this->pluginProvider($provider) ?? throw new RuntimeException("Cannot find a plugin with id \"$provider\"");
         try {
-            $items = $instance->iina->subtitle->search($id);
+            $items = $instance->context->subtitle->search($id);
         } catch (\Throwable $e) {
             throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
         }

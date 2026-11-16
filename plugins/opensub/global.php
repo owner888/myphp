@@ -1,7 +1,7 @@
 <?php
 // The app's instance (IINA's plugin-opensub global.js).
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 
-return function (Iina $iina) {
+return function (PlayerContext $iina) {
     $iina->console->log('Plugin is running');
 };

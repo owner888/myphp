@@ -6,14 +6,14 @@ namespace MyPHP\PlayerPlugins;
 use Closure;
 
 /**
- * What a plugin's entry is given, IINA's global `iina`: its APIs, those of
+ * What a player plugin's entry is given (originally inspired by IINA's plugin API): its APIs, those of
  * a player (core, mpv, event, playlist, subtitle, overlay, sidebar, input) only in a player's
  * instance, null in the global one's; and IINA's timers (setTimeout,
  * setInterval and their clearing, JavaScript's in IINA). What IINA's
  * promise gives, these return, waiting meanwhile (in a fiber of the
  * plugin's: the app goes on); what it rejects, they throw.
  */
-final class Iina
+final class PlayerContext
 {
     public readonly ConsoleApi $console;
     public readonly PreferencesApi $preferences;

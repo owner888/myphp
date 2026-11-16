@@ -1403,7 +1403,7 @@ final class MediaPlayer
     private static function pluginOverlays(Context $c, MediaPlayerState $s): void
     {
         foreach ($s->plugins() as $i) {
-            $o = $i->iina->overlay;
+            $o = $i->context->overlay;
             if ($o === null || $o->pane === null || !$o->shown) { continue; }
             $c->key('plugin overlay ' . $i->plugin->identifier)->webView($o->pane->view)->absolute()->left(0)->top(0)->right(0)->bottom(0)->hitAreas($o->clickable ? $o->pane->clickable : []);
         }
@@ -1439,7 +1439,7 @@ final class MediaPlayer
           $c->end();
           if ($c->clicked($hide)) { $s->sidebar = null; }
           $c->column()->absolute()->top(53)->left(0)->right(0)->bottom(0);
-            $pane = $current?->iina->sidebar?->pane;
+            $pane = $current?->context->sidebar?->pane;
             if ($pane !== null) {
                 $c->key('plugin sidebar ' . $current->plugin->identifier)->webView($pane->view)->grow(1);
             } else {
@@ -1621,7 +1621,7 @@ final class MediaPlayer
         $m->separator();
         $plugins = [];
         foreach ($s->plugins() as $instance) {
-            $builder = $instance->iina->playlist?->menuItemBuilder;
+            $builder = $instance->context->playlist?->menuItemBuilder;
             $items = $builder === null ? null : $instance->callNow($builder, [$i]);
             if (is_array($items) && $items !== []) { $plugins[] = [$instance, array_values(array_filter($items, fn($it) => $it instanceof \MyPHP\PlayerPlugins\PluginMenuItem))]; }
         }

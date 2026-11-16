@@ -19,7 +19,7 @@ use Throwable;
  */
 final class Instance
 {
-    public readonly Iina $iina;
+    public readonly PlayerContext $context;
     public readonly bool $isGlobal;
     public readonly string $subsystem;
     /** @var list<PluginMenuItem> the items of its menu (IINA's menuItems) */
@@ -38,7 +38,7 @@ final class Instance
     {
         $this->isGlobal = $player === null;
         $this->subsystem = ($player === null ? 'global' : $player->logName()) . " - {$plugin->name}";
-        $this->iina = new Iina($this);
+        $this->context = new PlayerContext($this);
         $this->evaluate($player === null ? (string)$plugin->globalEntryURL : $plugin->entryURL);
     }
 
@@ -48,9 +48,9 @@ final class Instance
         $this->call(function () use ($file): void {
             $fn = (static fn(string $f): mixed => include $f)($file);
             if (!$fn instanceof Closure) {
-                throw new PluginError("The entry file " . basename($file) . " should return a function of an Iina");
+                throw new PluginError("The entry file " . basename($file) . " should return a function of a PlayerContext");
             }
-            $fn($this->iina);
+            $fn($this->context);
         });
     }
 

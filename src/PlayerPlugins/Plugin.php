@@ -8,8 +8,8 @@ use RuntimeException;
 
 /**
  * A plugin of the player, as IINA's JavascriptPlugin, of PHP: a folder
- * "<id>.iinaplugin" in the plugins' folder (Plugins::dir), or a link
- * "<name>.iinaplugin-dev" to one elsewhere (a plugin being written, IINA's
+ * "<id>.myphpplugin" in the plugins' folder (Plugins::dir), or a link
+ * "<name>.myphpplugin-dev" to one elsewhere (a plugin being written, inspired by IINA's
  * external one), its Info.json IINA's: name, author {name, email, url},
  * identifier (reverse domain), version, entry (a PHP file returning a
  * function of an Iina, run for each player's window), globalEntry (one run

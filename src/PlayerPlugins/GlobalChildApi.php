@@ -28,7 +28,7 @@ final class GlobalChildApi extends Api
 
     public function postMessage(string $name, mixed $data = null): void
     {
-        $parent = $this->instance->plugin->globalInstance?->iina->global;
+        $parent = $this->instance->plugin->globalInstance?->context->global;
         if ($parent instanceof GlobalApi) { $parent->hub->call($name, $data, $this->player()->managedLabel ?? $this->player()->logName()); }
     }
 

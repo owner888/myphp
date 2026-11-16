@@ -3,12 +3,12 @@
 // opens (on_load for ytdl://, then once the player could not open it, or first where the preferences say), what yt-dlp found
 // given the player in its place (its video, its audio apart, title, headers, subtitles, chapters; a playlist's entries), its
 // formats offered in the Plugin menu, the video downloaded by the app's instance.
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 use function MyPHPPlugins\OnlineMedia\{edlEscape, edlTrackJoined, findBinary, format, getIndexFromYouTubePlaylist, isBlacklisted, isSafeURL, jsRuntimeOption, optionWasSet, optionWasSetLocally, setHTTPHeaders, ytdlCodecToMpvCodec};
 
 require_once __DIR__ . '/lib.php';
 
-return function (Iina $iina) {
+return function (PlayerContext $iina) {
     $core = $iina->core; $console = $iina->console; $mpv = $iina->mpv; $menu = $iina->menu; $utils = $iina->utils;
     $state = (object)['chapterList' => [], 'isSwitchingFormat' => false, 'currentVideoFormat' => null, 'currentAudioFormat' => null, 'currentURL' => ''];
 

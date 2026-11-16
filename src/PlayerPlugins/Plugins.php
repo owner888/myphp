@@ -117,8 +117,8 @@ final class Plugins
         foreach (scandir(self::dir()) ?: [] as $f) {
             if ($f[0] === '.') { continue; }
             $path = self::dir() . "/$f";
-            $dev = str_ends_with($f, '.iinaplugin-dev');
-            if (!$dev && !(str_ends_with($f, '.iinaplugin') && is_dir($path))) { continue; }
+            $dev = str_ends_with($f, '.myphpplugin-dev');
+            if (!$dev && !(str_ends_with($f, '.myphpplugin') && is_dir($path))) { continue; }
             $p = Plugin::load($dev ? (string)realpath($path) : $path, $dev);
             if ($p === null) { continue; }
             if (isset($ids[$p->identifier])) {
@@ -519,8 +519,8 @@ final class Plugins
     /** Moves $p's folder to "<id>.iinaplugin", "<id>-2.iinaplugin" where that is taken (IINA's normalizePath). */
     private static function normalizePath(Plugin $p): void
     {
-        $dest = self::dir() . "/{$p->identifier}.iinaplugin";
-        for ($i = 2; file_exists($dest); $i++) { $dest = self::dir() . "/{$p->identifier}-$i.iinaplugin"; }
+        $dest = self::dir() . "/{$p->identifier}.myphpplugin";
+        for ($i = 2; file_exists($dest); $i++) { $dest = self::dir() . "/{$p->identifier}-$i.myphpplugin"; }
         if (!rename($p->root, $dest)) { throw new PluginInstallError("cannot move {$p->root} to $dest"); }
         $old = Plugin::normalize($p->root); // as its files' paths are written (a drive's slashes forward on Windows)
         $p->root = $dest;
@@ -540,7 +540,7 @@ final class Plugins
         self::saveOrder(self::$plugins);
         if ($p->isExternal) {
             foreach (scandir(self::dir()) ?: [] as $f) {
-                if (str_ends_with($f, '.iinaplugin-dev') && realpath(self::dir() . "/$f") === $p->root) { @unlink(self::dir() . "/$f"); }
+                if (str_ends_with($f, '.myphpplugin-dev') && realpath(self::dir() . "/$f") === $p->root) { @unlink(self::dir() . "/$f"); }
             }
         } else {
             self::removeTree($p->root);

@@ -2,9 +2,9 @@
 // Each player's instance (IINA's plugin-opensub index.js, message.js and sub-provider.js): the sidebar
 // (sidebar/index.html) searches opensubtitles.com and logs in; what it asks of the player is called
 // by its messages ("#call.$name", answered "#on.$name"), as IINA's rpcClient.
-use MyPHP\PlayerPlugins\{Iina, SubtitleApi};
+use MyPHP\PlayerPlugins\{PlayerContext, SubtitleApi};
 
-return function (Iina $iina) {
+return function (PlayerContext $iina) {
     $core = $iina->core;
     $sidebar = $iina->sidebar;
     $console = $iina->console;

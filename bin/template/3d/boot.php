@@ -11,3 +11,6 @@ $framework = is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp'
     : (is_dir(__DIR__ . '/src') && is_file(__DIR__ . '/src/autoload.php') ? __DIR__
     : (getenv('MYPHP_HOME') ?: (is_file(__DIR__ . '/myphp.json') ? json_decode((string)file_get_contents(__DIR__ . '/myphp.json'), true)['framework'] : __DIR__)));
 require $framework . '/src/autoload.php';
+if (is_file(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}

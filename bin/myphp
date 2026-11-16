@@ -1313,7 +1313,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         logf("Making darwin/$arch");
         // The app's files and the framework's src, as the bundle's Resources/app; its resources, its build output and its hidden files (.git, .agents, .myphp) stay out.
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : []; // in Resources/frontend
-        copyTree($dir, "$contents/Resources/app", [basename($out), 'vendor', 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
+        copyTree($dir, "$contents/Resources/app", [basename($out), 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$contents/Resources/app/myphp/src", []);
         copyTree("$framework/plugins", "$contents/Resources/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
         // The frontend, served at myphp://localhost/ (mygo's embedded frontendDist).
@@ -1388,7 +1388,7 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
         logf("Making linux/$arch");
         // The app's files and the framework's src, as app/; its resources, its build output and its hidden files stay out, as in the .app.
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
-        copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
+        copyTree($dir, "$stage/app", [basename($out), 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$stage/app/myphp/src", []);
         copyTree("$framework/plugins", "$stage/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
         if (($c['frontendDist'] ?? '') !== '') {
@@ -1490,7 +1490,7 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
         }
         logf("Making windows/$arch");
         $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
-        copyTree($dir, "$app/app", [basename($out), 'vendor', 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
+        copyTree($dir, "$app/app", [basename($out), 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$app/app/myphp/src", []);
         copyTree("$framework/plugins", "$app/app/myphp/plugins", ['.DS_Store']);
         if (($c['frontendDist'] ?? '') !== '') {
@@ -3277,7 +3277,7 @@ function phoneFiles(string $dir, string $platform, string $mainPhp, array $exclu
     if (realpath($project) !== realpath(FRAMEWORK)) { // its folders too (view files, pages/), as the packaging scripts copy them, src over the framework's
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($project, FilesystemIterator::SKIP_DOTS)) as $f) {
             $rel = substr($f->getPathname(), strlen($project) + 1);
-            if ($f->getExtension() !== 'php' || preg_match('~^(dist|build|vendor|node_modules|tests|test|\.)~', $rel) || str_ends_with($rel, '.local.php')) { continue; }
+            if ($f->getExtension() !== 'php' || preg_match('~^(dist|build|vendor/owner888/myphp|node_modules|tests|test|\.)~', $rel) || str_ends_with($rel, '.local.php')) { continue; }
             $skip = false;
             foreach ($exclude as $pat) {
                 if ($rel === $pat || basename($rel) === $pat || fnmatch($pat, $rel) || fnmatch($pat, basename($rel))) { $skip = true; break; }

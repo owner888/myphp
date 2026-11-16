@@ -1,11 +1,11 @@
 <?php
 // Each player runs the user's scripts (IINA's plugin-userscript index.js): a script is PHP code run with $iina, the plugin's Iina.
-use MyPHP\PlayerPlugins\Iina;
+use MyPHP\PlayerPlugins\PlayerContext;
 use function MyPHPPlugins\UserScript\load;
 
 require_once __DIR__ . '/scripts.php';
 
-return function (Iina $iina) {
+return function (PlayerContext $iina) {
     $scripts = load($iina);
     foreach ($scripts as ['id' => $id, 'name' => $name]) {
         $iina->console->log("Running script \"$name\", id=$id");
@@ -16,7 +16,7 @@ return function (Iina $iina) {
         }
         $content = (string)$iina->file->read($path);
         try {
-            (static function (Iina $iina) use ($content): void { eval($content); })($iina);
+            (static function (PlayerContext $iina) use ($content): void { eval($content); })($iina);
         } catch (\Throwable $e) {
             $iina->console->error("Error running script \"$name\", id=$id: {$e->getMessage()}");
         }

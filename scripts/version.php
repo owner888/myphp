@@ -1,29 +1,17 @@
 <?php
-// Sets or checks the version MyPHP is released with, which the CLI
-// (bin/myphp's VERSION) and the npm packages share, as mygo's
-// scripts/version.ts:
+// Sets or checks the version MyPHP is released with in bin/myphp:
 //
-//   php scripts/version.php 1.29.0           # set it everywhere
-//   php scripts/version.php --check v1.29.0  # check that everything has it (the release workflow)
+//   php scripts/version.php 1.193.0           # set it
+//   php scripts/version.php --check v1.193.0  # check that bin/myphp has it (the release workflow)
 declare(strict_types=1);
 
 const ROOT = __DIR__ . '/..';
 
-/** The npm packages, by their directories: the runtime, the CLI and the official plugins' page sides, whose peer myphp-runtime is. */
-const PACKAGES = ['packages/runtime', 'packages/cli', 'src/Plugins/Fetch/client', 'src/Plugins/Sqlite/client', 'src/Plugins/Watch/client', 'src/Plugins/WebSocket/client'];
-
 /** Where each file declares the version: a pattern whose group 1 is it. @return array<string, string> */
 function places(): array
 {
-    $out = ['bin/myphp' => "/^const VERSION = '([^']*)';$/m"];
-    foreach (PACKAGES as $dir) {
-        $out["$dir/package.json"] = '/^  "version": "([^"]*)",$/m';
-    }
-    return $out;
+    return ['bin/myphp' => "/^const VERSION = '([^']*)';$/m"];
 }
-
-/** The plugins' peer range of myphp-runtime: group 1 is the version after the caret. */
-const PEER = '/"myphp-runtime": "\^([^"]*)"/';
 
 function read(string $path): string
 {
@@ -39,9 +27,6 @@ function mismatches(string $version): array
         $s = read($path);
         if (preg_match($re, $s, $m) !== 1) { $bad[] = "$path: no version"; continue; }
         if ($m[1] !== $version) { $bad[] = "$path: {$m[1]}"; }
-        if (preg_match_all(PEER, $s, $peers) > 0) {
-            foreach ($peers[1] as $p) { if ($p !== $version) { $bad[] = "$path: myphp-runtime ^$p"; } }
-        }
     }
     return $bad;
 }
@@ -53,7 +38,6 @@ function set(string $version): void
         $n = 0;
         $s = preg_replace_callback($re, fn(array $m) => str_replace($m[1], $version, $m[0]), $s, 1, $n);
         if ($n !== 1) { throw new RuntimeException("$path: no version to set"); }
-        $s = preg_replace(PEER, '"myphp-runtime": "^' . $version . '"', $s);
         file_put_contents(ROOT . "/$path", $s);
     }
 }
@@ -79,5 +63,5 @@ if ($check) {
     echo "everything is at $version\n";
 } else {
     set($version);
-    echo "set $version in bin/myphp and " . count(PACKAGES) . " npm packages\n";
+    echo "set $version in bin/myphp\n";
 }

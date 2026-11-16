@@ -15,7 +15,7 @@ $root = sys_get_temp_dir() . '/myphp-official-' . getmypid();
 $dir = "$root/plugins";
 @mkdir($dir, 0777, true);
 foreach (['online-media' => 'io.myphp.ytdl', 'userscript' => 'io.myphp.user-script', 'opensub' => 'io.myphp.opensub'] as $folder => $id) {
-    copyDir(__DIR__ . "/../plugins/$folder", "$dir/$id.iinaplugin");
+    copyDir(__DIR__ . "/../plugins/$folder", "$dir/$id.myphpplugin");
 }
 $settings = new PlayerSettings("$root/settings.json");
 Plugins::configure($dir, $settings);
@@ -77,7 +77,7 @@ same(true, $GLOBALS['userScriptRan'] ?? null, 'a user script: run in the player\
 // OpenSubtitles: its provider; Show Sidebar as the Plugin menu opens (iina.menu-update).
 $os = $s2->pluginInstance(Plugins::byId('io.myphp.opensub'));
 $threw = '';
-try { $os->iina->subtitle->search('open-sub'); } catch (\MyPHP\PlayerPlugins\PluginError $e) { $threw = $e->getMessage(); }
+try { $os->context->subtitle->search('open-sub'); } catch (\MyPHP\PlayerPlugins\PluginError $e) { $threw = $e->getMessage(); }
 check(str_contains($threw, 'window is not available'), 'its provider: the sidebar searches, once the window is there');
 $s2->emitForPlugins('iina.menu-update');
 same(['Show Sidebar'], array_map(fn($i) => $i->title, $os->menuItems), 'Show Sidebar, as the menu opens');
@@ -123,7 +123,7 @@ same(['io.myphp.ytdl', 'io.myphp.user-script', 'io.myphp.opensub'], array_column
 check(array_filter(Plugins::official(), fn(array $p) => $p['name'] === '' || $p['url'] !== '' || !$p['builtIn']) === [], 'each named, no repository');
 same('installed', Plugins::install(Plugins::fromBuiltIn('io.myphp.opensub'), fn() => true, fn() => false), 'installed from the app\'s copy');
 $shipped = json_decode((string)file_get_contents(__DIR__ . '/../plugins/opensub/Info.json'), true)['version'];
-$installed = "$bdir/io.myphp.opensub.iinaplugin";
+$installed = "$bdir/io.myphp.opensub.myphpplugin";
 same([$shipped], [Plugins::byId('io.myphp.opensub')?->version], 'its version the app\'s');
 $info = json_decode((string)file_get_contents("$installed/Info.json"), true);
 file_put_contents("$installed/Info.json", json_encode(['version' => '0.0.1'] + $info));
