@@ -907,6 +907,7 @@ final class Context
         }
         $count = count($top->kids); $depth = count($this->stack);
         $before = get_object_vars($this);
+        unset($before['root'], $before['stack'], $before['nextKey'], $before['keyed'], $before['rootCount'], $before['overlayCount'], $before['row'], $before['base']);
         $rt?->memoBegin();
         $this->key($key);
         $build();
@@ -964,6 +965,7 @@ final class Context
         }
         $count = count($top->kids); $depth = count($this->stack);
         $before = get_object_vars($this);
+        unset($before['root'], $before['stack'], $before['nextKey'], $before['keyed'], $before['rootCount'], $before['overlayCount'], $before['row'], $before['base']);
         $rt?->memoBegin();
         $this->key($key);
         if ($scope !== null) {
@@ -1574,7 +1576,7 @@ final class Context
     {
         $t = $this->theme; $rt = $this->runtime;
         $box = $this->row()->alignItems(Node::CENTER)->minWidth(0)->minHeight(0);
-        $make = fn() => (object)['editing' => false, 'fresh' => false, 'seen' => false, 'draft' => new TextState(''), 'after' => 0, 'input' => new Handle, 'back' => new Handle];
+        $make = static fn() => new class { public bool $editing = false, $fresh = false, $seen = false; public TextState $draft; public int $after = 0; public Handle $input, $back; public function __construct() { $this->draft = new TextState(''); $this->input = new Handle(); $this->back = new Handle(); } };
         $st = $rt?->local($box->id, $make) ?? $make();
         $start = false;
         if ($this->listRow !== null) {
@@ -2063,8 +2065,9 @@ final class Context
     {
         $t = $this->theme;
         $n = $this->column(0, 0, 0, $t->background)->radius($t->radius)->border();
-        $local = $this->runtime?->local($n->id, fn() => (object)['heads' => [], 'open' => []], \stdClass::class, 'heads') ?? (object)['heads' => [], 'open' => []]; // the headers of last frame, which the arrows move between
-        $this->accordions[] = (object)['heads' => [], 'last' => $local->heads];
+        $makeAcc = static fn() => new class { public array $heads = [], $open = []; };
+        $local = $this->runtime?->local($n->id, $makeAcc, null, 'heads') ?? $makeAcc(); // the headers of last frame, which the arrows move between
+        $this->accordions[] = new class($local->heads) { public array $heads = []; public function __construct(public array $last) {} };
           $fn();
         $local->heads = array_pop($this->accordions)->heads;
         $this->end();
@@ -2181,7 +2184,7 @@ final class Context
             $to = $snap(max($from, min($until, $to)));
             if ($to != ($which === 'low' ? $low : $high)) { if ($which === 'low') { $low = $to; } else { $high = $to; } $n->changed = true; }
         };
-        $local = $rt?->local($n->id, fn() => (object)['dragging' => null]);
+        $local = $rt?->local($n->id, static fn() => new class { public ?string $dragging = null; });
         $r = $rt?->rectOf($n->id);
         $knobs = [];
           foreach (['low', 'high'] as $k => $which) { // the knobs: focusable, placed over the track; the arrows move the one focused
@@ -2244,7 +2247,7 @@ final class Context
     public function tree(Closure $fn): Node
     {
         $n = $this->column(0, 0)->role(Role::TREE);
-        $local = $this->runtime?->local($n->id, fn() => (object)['items' => [], 'parents' => []]);
+        $local = $this->runtime?->local($n->id, static fn() => new class { public array $items = [], $parents = []; });
         $this->trees[] = ['local' => $local, 'items' => [], 'parents' => [], 'open' => []];
           $fn();
         $built = array_pop($this->trees);
@@ -2428,7 +2431,7 @@ final class Context
         $n = $this->column($t->space(2.5), $t->space(0.5), 0, $t->surface)->size($width)->focusable()->role(Role::TREE);
         $n->choosesItems = true; // whose sections hold their items
         if ($rt !== null) {
-            $local = $rt->local($n->id, fn() => (object)['scroll' => new ScrollState, 'items' => [], 'labels' => [], 'typed' => '', 'typedAt' => 0.0]);
+            $local = $rt->local($n->id, static fn() => new class { public ScrollState $scroll; public array $items = [], $labels = []; public string $typed = ''; public float $typedAt = 0.0; public function __construct() { $this->scroll = new ScrollState(); } });
             $n->scroll($local->scroll);
             // The keys choose among last frame's items, in their order.
             $items = $local->items; $at = array_search($selected, $items, true); $to = null;
@@ -2603,7 +2606,7 @@ final class Context
         $rt = $this->runtime;
         $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->radius($t->radius)->border()->alignItems(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
-        $make = fn() => (object)['text' => new TextState($selected), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'shown' => null, 'pointer' => [0.0, 0.0]];
+        $make = static fn() => new class($selected) { public TextState $text; public bool $open = false, $typed = false; public int $highlight = -1; public array $values = [], $pointer = [0.0, 0.0]; public ?string $seen = null, $shown = null; public ScrollState $scroll; public function __construct(string $s) { $this->text = new TextState($s); $this->scroll = new ScrollState(); } };
         $local = $rt?->local($f->id, $make) ?? $make();
         $state = $local->text;
           [, $h] = $this->metrics->measure('X', $t->fontSize);
@@ -2650,7 +2653,7 @@ final class Context
     {
         $rt = $this->runtime;
         $in = $this->input($state, $placeholder, $width)->role(Role::COMBO_BOX);
-        $make = fn() => (object)['open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'shown' => null, 'pointer' => [0.0, 0.0], 'was' => $state->text];
+        $make = static fn() => new class($state->text) { public bool $open = false, $typed = false; public int $highlight = -1; public array $values = [], $pointer = [0.0, 0.0]; public ?string $seen = null, $shown = null; public ScrollState $scroll; public function __construct(public string $was) { $this->scroll = new ScrollState(); } };
         $local = $rt?->local($in->id, $make) ?? $make();
         $shown = [];
         if (($q = trim($state->text)) !== '') {
@@ -2683,7 +2686,7 @@ final class Context
         $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->radius($t->radius)->border()->alignItems(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
         $f->wrap($rt?->rectOf($f->id)[2] ?? 0.0);
-        $make = fn() => (object)['text' => new TextState(''), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'shown' => null, 'pointer' => [0.0, 0.0]];
+        $make = static fn() => new class { public TextState $text; public bool $open = false, $typed = false; public int $highlight = -1; public array $values = [], $pointer = [0.0, 0.0]; public ?string $seen = null, $shown = null; public ScrollState $scroll; public function __construct() { $this->text = new TextState(''); $this->scroll = new ScrollState(); } };
         $local = $rt?->local($f->id, $make) ?? $make();
         $state = $local->text; $state->leaveEmptyBackspace = true;
         $changed = false;
@@ -2751,7 +2754,7 @@ final class Context
               $p->fill([$x + 1, $y + 5, $w - 2, 1.2], $muted);
           });
         $this->end();
-        $make = fn() => (object)['open' => false, 'cursor' => $date];
+        $make = static fn() => new class($date) { public bool $open = false; public function __construct(public \DateTimeImmutable $cursor) {} };
         $local = $rt?->local($b->id, $make) ?? $make();
         if ($this->clicked($b)) { $local->open = !$local->open; $local->cursor = $date; }
         $this->popoverBase($b, $local->open, function (Node $panel) use (&$date, $local, $b, $rt) { // not popover(), whose panel is as wide as the field at least: the calendar keeps its own width
@@ -2789,7 +2792,8 @@ final class Context
         $changed = false;
         $g = $this->calendarBox();
         // Input reaches the calendar as it is built, before this build's browse(): it follows the build before, which the user saw (mygo's b7e6bdd).
-        $set = $this->runtime?->local($g->id, fn() => (object)['now' => false, 'shown' => false, 'cursor' => $date, 'date' => $date]) ?? (object)['now' => false, 'shown' => false, 'cursor' => $date, 'date' => $date];
+        $makeCal = static fn() => new class($date) { public bool $now = false, $shown = false; public \DateTimeImmutable $cursor, $date; public function __construct(\DateTimeImmutable $d) { $this->cursor = $this->date = $d; } };
+        $set = $this->runtime?->local($g->id, $makeCal) ?? $makeCal();
         [$set->shown, $set->now] = [$set->now, false];
         if (!$set->shown || $set->date->format('Y-m-d') !== $date->format('Y-m-d')) { $set->cursor = $date; } // the cursor follows the date the app sets
         $set->date = $date;
@@ -2960,7 +2964,7 @@ final class Context
           }
         $this->end();
         if (in_array(true, $focused, true)) { $f->borderColor = $t->accent; }
-        $make = fn() => (object)['typed' => '']; // the digits typed at the segment focused, until they set it or the focus leaves
+        $make = static fn() => new class { public string $typed = ''; }; // the digits typed at the segment focused, until they set it or the focus leaves
         $local = $rt?->local($f->id, $make) ?? $make();
         if (!in_array(true, $focused, true)) { $local->typed = ''; }
         foreach ($order as $i => $k) {
@@ -3056,7 +3060,7 @@ final class Context
         $t = $this->theme;
         $rt = $this->runtime;
         $panel = $this->column(0, $t->space(2.5))->size($t->space(60), 0);
-        $make = fn() => (object)['hsv' => self::toHSV($rgb), 'last' => [$rgb, $alpha], 'hex' => new TextState(self::hexOf($rgb, $alpha)), 'hue' => 0.0, 'opacity' => 0.0];
+        $make = static fn() => new class(self::toHSV($rgb), [$rgb, $alpha], new TextState(self::hexOf($rgb, $alpha))) { public float $hue = 0.0, $opacity = 0.0; public function __construct(public array $hsv, public array $last, public TextState $hex) {} };
         $st = $rt?->local($panel->id, $make) ?? $make();
         if ($st->last !== [$rgb, $alpha]) { // the app set another color
             $st->hsv = self::toHSV($rgb); $st->last = [$rgb, $alpha]; $st->hex->text = self::hexOf($rgb, $alpha);
@@ -3199,7 +3203,7 @@ final class Context
               });
           });
         $this->end();
-        $make = fn() => (object)['open' => false];
+        $make = static fn() => new class { public bool $open = false; };
         $local = $rt?->local($b->id, $make) ?? $make();
         if ($this->clicked($b)) { $local->open = !$local->open; }
         $b->expanded($local->open);
@@ -3339,7 +3343,7 @@ final class Context
         $rt = $this->runtime;
         $this->key('alert'); // keyed: it comes and goes, and its state must not be another node's
         if (!$open) { // closed, by a button, Escape or the app: the next opening focuses the default again
-            $local = $rt?->local($this->nextId(), fn() => (object)['opening' => true]);
+            $local = $rt?->local($this->nextId(), static fn() => new class { public bool $opening = true; });
             if ($local !== null) { $local->opening = true; }
             $this->nextKey = null;
             return -1;
@@ -3356,7 +3360,7 @@ final class Context
                 $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
                 if ($message !== '') { $this->text($message, $t->fontSize, $t->textMuted); }
                 $this->row(0, $t->space(2))->justify(Node::END)->margin($t->space(2), 0, 0, 0);
-                  $make = fn() => (object)['opening' => true];
+                  $make = static fn() => new class { public bool $opening = true; };
                   $local = $rt?->local($back->id, $make) ?? $make();
                   foreach ($buttons as $i => $label) {
                       $b = $i === count($buttons) - 1 ? $this->primaryButton($label) : $this->button($label);
@@ -3730,7 +3734,7 @@ final class Context
         $t = $this->theme;
         $rt = $this->runtime;
         $bar = $this->key('find bar')->row(0, $t->space(2), 0, $t->surface)->padding($t->space(1.5), $t->space(3))->alignItems(Node::CENTER)->role(Role::TOOLBAR)->label($this->texts()->get('find'));
-        $make = fn() => (object)['opening' => true]; // its state goes as it closes: true in the frame it opens
+        $make = static fn() => new class { public bool $opening = true; }; // its state goes as it closes: true in the frame it opens
         $local = $rt?->local($bar->id, $make) ?? $make();
         if (!$open) { // nothing: an empty box out of the flow, keeping the bar's key for its state to start over as it opens
             $local->opening = true;
@@ -3787,7 +3791,7 @@ final class Context
     public function form(Closure $fn): Node
     {
         $f = $this->column(0, $this->theme->space(3));
-        $saved = $this->form; $this->form = (object)['labels' => [], 'width' => 0.0];
+        $saved = $this->form; $this->form = new class { public array $labels = []; public float $width = 0.0; };
           $fn();
           foreach ($this->form->labels as $box) { $box->size($this->form->width, 0); } // as wide as the widest, measured as they were built
         $this->form = $saved;
@@ -3821,7 +3825,7 @@ final class Context
               $l = $this->text($label, $t->fontSize, $t->text)->fontWeight(500);
           }
           $content = $this->column(0, $t->space(1.5), $inForm ? 1 : 0); // in a form: the rest of the row
-            $saved = $this->field; $this->field = (object)['errors' => []];
+            $saved = $this->field; $this->field = new class { public array $errors = []; };
               $fn();
               foreach ($this->field->errors as $msg) { $this->text($msg, $t->fontSize - 1, $t->danger); } // those of the controls inside, below the control (mygo's fieldError)
             $this->field = $saved;

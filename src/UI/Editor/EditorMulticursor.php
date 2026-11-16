@@ -36,8 +36,7 @@ trait EditorMulticursor
 
     public function selected(int $a, int $b): bool
     {
-        foreach ($this->sels as $s) { if ($s->start() < $b && $s->end() > $a) { return true; } }
-        return false;
+        return array_any($this->sels, static fn(Sel $s): bool => $s->start() < $b && $s->end() > $a);
     }
 
     /** Selects every occurrence of the newest selection's text, or of the word at the caret. */

@@ -141,8 +141,7 @@ trait EditorFold
     /** Whether a fold starts at $line. */
     public function isFolded(int $line): bool
     {
-        foreach ($this->folds as $f) { if ($f[0] === $line) { return true; } }
-        return false;
+        return array_any($this->folds, static fn(array $f): bool => $f[0] === $line);
     }
 
     /** Folds the innermost fold holding the line of $off. */

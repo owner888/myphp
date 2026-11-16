@@ -516,7 +516,6 @@ trait EditorEdit
     /** Whether the editor closed the bracket $close at $off, as it was opened. */
     public function autoclosedAt(int $off, string $close): bool
     {
-        foreach ($this->autoclosed as $a) { if ($a['at'] === $off && $a['close'] === $close) { return true; } }
-        return false;
+        return array_any($this->autoclosed, static fn(array $a): bool => $a['at'] === $off && $a['close'] === $close);
     }
 }

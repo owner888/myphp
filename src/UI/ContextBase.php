@@ -179,7 +179,8 @@ trait ContextBase
         $rt = $this->runtime;
         $b = $this->buttonBase()->role(Role::POP_UP_BUTTON);
         $b->description = is_scalar($selected) ? (string)$selected : '';
-        $local = $rt?->local($b->id, fn() => (object)['open' => false, 'highlight' => -1, 'values' => [], 'pointer' => [0.0, 0.0], 'shown' => null]) ?? (object)['open' => false, 'highlight' => -1, 'values' => [], 'pointer' => [0.0, 0.0], 'shown' => null];
+        $makeSel = static fn() => new class { public bool $open = false; public int $highlight = -1; public array $values = [], $pointer = [0.0, 0.0]; public mixed $shown = null; };
+        $local = $rt?->local($b->id, $makeSel) ?? $makeSel();
         $parts = new SelectParts($b, $this, $selected, $local);
         $n = count($local->values);
         $open = function (bool $o) use ($local, $rt): void {
@@ -213,7 +214,7 @@ trait ContextBase
     {
         $rt = $this->runtime;
         $in = $this->textInputBase($text)->role(Role::COMBO_BOX);
-        $make = fn() => (object)['open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'pointer' => [0.0, 0.0], 'shown' => null, 'seen' => $text->text];
+        $make = static fn() => new class($text->text) { public bool $open = false, $typed = false; public int $highlight = -1; public array $values = [], $pointer = [0.0, 0.0]; public mixed $shown = null; public function __construct(public string $seen) {} };
         $local = $rt?->local($in->id, $make) ?? $make();
         $parts = new ComboboxParts($in, $this, $text, $local);
         $focused = $rt !== null && $rt->focus === $in->id;
@@ -286,7 +287,7 @@ trait ContextBase
     protected function bufferControl(TextBuffer $buffer, \Closure $control, int $kind): Node
     {
         $id = $this->nextId($kind);
-        $make = fn() => (object)['state' => new TextState($buffer->string()), 'version' => $buffer->version()];
+        $make = static fn() => new class(new TextState($buffer->string()), $buffer->version()) { public function __construct(public TextState $state, public int $version) {} };
         $local = $this->runtime?->local($id, $make) ?? $make();
         $s = $local->state;
         if ($local->version !== $buffer->version()) { // the program changed the buffer: the input shows it

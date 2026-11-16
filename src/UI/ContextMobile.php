@@ -58,7 +58,8 @@ trait ContextMobile
             $bottom = $this->safeArea[2];
             $inset = $this->tabBarInset();
             $n = $this->column(0, 0, 1)->fill();
-              $small = $this->runtime?->local($n->id, fn() => (object)['y' => null, 'small' => false, 'tab' => $index, 'hidden' => false], \stdClass::class, 'tab') ?? (object)['y' => null, 'small' => false, 'tab' => $index, 'hidden' => false];
+              $makeSmall = static fn() => new class($index) { public ?float $y = null; public bool $small = false, $hidden = false; public function __construct(public int $tab) {} };
+              $small = $this->runtime?->local($n->id, $makeSmall, null, 'tab') ?? $makeSmall();
               $wasHidden = $small->hidden ?? false;
               $this->safeArea[2] = $wasHidden ? $bottom : 0.0; // the tabBar takes the bottom safe area, unless the page hid it
               $was = $this->bottomInset;
@@ -350,7 +351,8 @@ trait ContextMobile
                   sort($heights);
                   $top = array_last($heights);
                   $panel->minHeight($top)->maxHeight($top);
-                  $kept = $rt?->local($back->id, fn() => (object)['offset' => [0.0, $top - $heights[0]]], \stdClass::class, 'offset') ?? (object)['offset' => [0.0, $top - $heights[0]]];
+                  $makeOffset = static fn() => new class([0.0, $top - $heights[0]]) { public function __construct(public array $offset) {} };
+                  $kept = $rt?->local($back->id, $makeOffset, null, 'offset') ?? $makeOffset();
                   $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);
                   if (!$dismissDisabled) { $stops[] = [0.0, $top]; } // below the window: gone
                   $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
@@ -748,7 +750,8 @@ trait ContextMobile
         $this->swipedRow = $n;
         $width = max($rt?->rectOf($n->id)[2] ?? $this->width, $total + 48); // the row's, last laid out
         $full = max($total + 48, $width * 0.5); // let go past this, the first action is performed
-        $kept = $rt?->local($n->id, fn() => (object)['past' => false], \stdClass::class, 'past') ?? (object)['past' => false]; // whether the finger last held it past $full
+        $makePast = static fn() => new class { public bool $past = false; };
+        $kept = $rt?->local($n->id, $makePast, null, 'past') ?? $makePast(); // whether the finger last held it past $full
           $inner = $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->alignItems(Node::START)->focusable()->role(Role::LIST_ITEM); // the press target, so the drag is its; its content at the start, as a row's
             $content();
           $this->end();

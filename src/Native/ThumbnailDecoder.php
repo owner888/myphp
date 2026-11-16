@@ -32,7 +32,7 @@ final class ThumbnailDecoder implements \MyPHP\Platform\Thumbnails
     /** The callback's record and its holder, kept for the session. */
     private CData $record, $holder;
     /** What the callback gave: its status and the frame, retained, until taken (an object of its own: the callback holds no cycle to this). */
-    private \stdClass $out;
+    private object $out;
 
     /** libdav1d's, for a track decoded in software (SoftVideo::wanted): a keyframe in, its picture out. */
     private ?Dav1d $dav1d = null;
@@ -47,7 +47,7 @@ final class ThumbnailDecoder implements \MyPHP\Platform\Thumbnails
             return;
         }
         $vt = self::vt();
-        $out = $this->out = (object)['status' => 0, 'image' => null];
+        $out = $this->out = new class { public int $status = 0; public mixed $image = null; };
         $this->holder = $vt->new('struct { void (*fn)(void*, void*, int, unsigned int, void*); }');
         // On VideoToolbox's thread, the main one waiting: the frame kept, nothing more.
         $this->holder->fn = static function ($ref, $frameRef, int $status, int $flags, $image) use ($vt, $out): void {

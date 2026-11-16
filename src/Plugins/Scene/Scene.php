@@ -432,31 +432,18 @@ final class Scene
         $e->focusable()->autoFocus();
 
         $rt = $c->runtime;
-        $state = $rt?->local($e->id, static fn() => (object)[
-            'canvas'   => new Canvas($canvasWidth, $canvasHeight),
-            'yaw'      => atan2($scene->camera->position->x - $scene->camera->target->x, $scene->camera->position->z - $scene->camera->target->z),
-            'pitch'    => asin(max(-1.0, min(1.0, ($scene->camera->position->y - $scene->camera->target->y) / max(0.001, $scene->camera->position->sub($scene->camera->target)->length())))),
-            'dist'     => max(0.5, $scene->camera->position->sub($scene->camera->target)->length()),
-            'dragging' => false,
-            'downX'    => 0.0,
-            'downY'    => 0.0,
-            'lastX'    => 0.0,
-            'lastY'    => 0.0,
-            'lastTime' => hrtime(true) / 1e9,
-            'rect'     => [0.0, 0.0, (float)$canvasWidth, (float)$canvasHeight],
-        ]) ?? (object)[
-            'canvas'   => new Canvas($canvasWidth, $canvasHeight),
-            'yaw'      => 0.0,
-            'pitch'    => 0.2,
-            'dist'     => 6.0,
-            'dragging' => false,
-            'downX'    => 0.0,
-            'downY'    => 0.0,
-            'lastX'    => 0.0,
-            'lastY'    => 0.0,
-            'lastTime' => hrtime(true) / 1e9,
-            'rect'     => [0.0, 0.0, (float)$canvasWidth, (float)$canvasHeight],
-        ];
+        $makeState = static fn() => new class(
+            new Canvas($canvasWidth, $canvasHeight),
+            atan2($scene->camera->position->x - $scene->camera->target->x, $scene->camera->position->z - $scene->camera->target->z),
+            asin(max(-1.0, min(1.0, ($scene->camera->position->y - $scene->camera->target->y) / max(0.001, $scene->camera->position->sub($scene->camera->target)->length())))),
+            max(0.5, $scene->camera->position->sub($scene->camera->target)->length()),
+            [0.0, 0.0, (float)$canvasWidth, (float)$canvasHeight],
+        ) {
+            public bool $dragging = false;
+            public float $downX = 0.0, $downY = 0.0, $lastX = 0.0, $lastY = 0.0, $lastTime;
+            public function __construct(public Canvas $canvas, public float $yaw, public float $pitch, public float $dist, public array $rect) { $this->lastTime = hrtime(true) / 1e9; }
+        };
+        $state = $rt?->local($e->id, $makeState) ?? $makeState();
 
         $e->handleInput(static function (InputEvent $ev) use ($scene, $state, $orbitControls, $onPick): bool {
             if ($ev->kind === InputEvent::POINTER_DOWN) {

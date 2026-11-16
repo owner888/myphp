@@ -209,8 +209,7 @@ final class Atlas
     /** Whether the shelf at $y has a gap $w wide. */
     private function gapAt(int $y, int $w): bool
     {
-        foreach ($this->shelves[$this->at[$y] ?? -1]['gaps'] ?? [] as [, $gw]) { if ($gw >= $w) { return true; } }
-        return false;
+        return array_any($this->shelves[$this->at[$y] ?? -1]['gaps'] ?? [], static fn(array $g): bool => $g[1] >= $w);
     }
 
     /** The shelves' indexes by their y, made again. */

@@ -143,7 +143,7 @@ final class Http
         }
         $f = Curl::ffi();
         $h = $f->curl_easy_init();
-        $state = (object)['status' => 0, 'body' => '', 'headers' => []];
+        $state = new class { public int $status = 0; public string $body = ''; public array $headers = []; };
         $cbs = $f->new('myphp_curl_callbacks');
         $cbs->header = function ($ptr, $size, $n, $user) use ($state): int {
             $line = FFI::string($ptr, $size * $n);

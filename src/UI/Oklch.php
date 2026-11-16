@@ -78,8 +78,7 @@ final class Oklch
 
     private static function within(float $r, float $g, float $b): bool
     {
-        foreach ([$r, $g, $b] as $v) { if ($v < -self::IN_GAMUT || $v > 1 + self::IN_GAMUT) { return false; } }
-        return true;
+        return array_all([$r, $g, $b], static fn(float $v): bool => $v >= -self::IN_GAMUT && $v <= 1 + self::IN_GAMUT);
     }
 
     /** The Oklch color as linear RGB inside the gamut, its chroma reduced until clipping what is left out changes it imperceptibly (CSS Color 4's gamut mapping, mygo's gamut.Map). @return array{0: float, 1: float, 2: float} */

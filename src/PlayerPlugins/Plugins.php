@@ -325,8 +325,7 @@ final class Plugins
     /** Whether the Online Media plugin is on (IINA's hasYTDL): pages are then the plugin's to read, not yt-dlp's of the player. */
     public static function hasYTDL(): bool
     {
-        foreach (self::$plugins ?? [] as $p) { if ($p->identifier === 'io.myphp.ytdl' && $p->enabled()) { return true; } }
-        return false;
+        return array_any(self::$plugins ?? [], static fn(Plugin $p): bool => $p->identifier === 'io.myphp.ytdl' && $p->enabled());
     }
 
     /** The community's plugins the store lists (IINA's plugins.json of its repository), myphp's repository's. */

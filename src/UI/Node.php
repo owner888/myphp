@@ -1678,7 +1678,10 @@ final class Node
     /** The text style the node's text takes: its own over what it inherited. */
     public function textStyle(): TextStyle
     {
-        return ($this->ts ?? new TextStyle())->over($this->inherit);
+        if ($this->ts === null) {
+            return $this->inherit !== null ? clone $this->inherit : new TextStyle();
+        }
+        return $this->ts->over($this->inherit);
     }
 
     /**

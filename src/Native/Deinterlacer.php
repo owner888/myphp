@@ -32,14 +32,14 @@ final class Deinterlacer
     /** The size of the pool's pixel buffers. */
     private string $poolOf = '';
     private CData $record, $holder;
-    private \stdClass $out;
+    private object $out;
     /** @var list<array{0: float, 1: float, 2: CData}> the frames held: their time, duration and pixel buffer (owned) */
     private array $held = [];
 
     public function __construct()
     {
         $vt = self::vt();
-        $out = $this->out = (object)['status' => 0, 'image' => null];
+        $out = $this->out = new class { public int $status = 0; public mixed $image = null; };
         $this->holder = $vt->new('struct { void (*fn)(void*, void*, int, unsigned int, void*); }');
         // On VideoToolbox's thread, the main one waiting in the decode: the frame kept, nothing more.
         $this->holder->fn = static function ($ref, $frameRef, int $status, int $flags, $image) use ($vt, $out): void {

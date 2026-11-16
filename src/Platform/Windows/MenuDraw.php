@@ -664,7 +664,7 @@ final class MenuDraw
             for ($i = 0, $n = $w * $h * 4; $i < $n; $i += 4) {
                 $px[] = ((int)round($f[$i + 3]) << 24) | ((int)round($f[$i]) << 16) | ((int)round($f[$i + 1]) << 8) | (int)round($f[$i + 2]);
             }
-            return (object)['w' => $w, 'h' => $h, 'px' => $px, 'sized' => []];
+            return new class($w, $h, $px) { public array $sized = []; public function __construct(public int $w, public int $h, public array $px) {} };
         });
         if ($p === null || $box <= 0 || $p->w === 0 || $p->h === 0) {
             return null;

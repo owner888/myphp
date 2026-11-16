@@ -2542,8 +2542,7 @@ final class Runtime
     /** Whether a press at a point leaves the focus where it is, being on a node that keeps it (Node::keepFocus). */
     private function keepsFocus(float $x, float $y): bool
     {
-        foreach ($this->keepers as $id => $_) { if ($this->under($id, $x, $y)) { return true; } }
-        return false;
+        return array_any(array_keys($this->keepers), fn(int $id): bool => $this->under($id, $x, $y));
     }
 
     /**
@@ -3441,14 +3440,12 @@ final class Runtime
     /** Whether a press at (x, y) is a drag handle's: on one, and on no focusable, slider, scroll or link inside it (those keep their presses, as mygo's interactive flags). */
     private function onHandle(float $x, float $y): bool
     {
-        $on = false;
-        foreach ($this->handles as $id => $r) { if ($this->under($id, $x, $y)) { $on = true; break; } }
-        if (!$on) { return false; }
-        foreach ($this->focusables as $id) { if ($this->under($id, $x, $y)) { return false; } }
-        foreach ($this->sliders as $id => $r) { if ($this->under($id, $x, $y)) { return false; } }
-        foreach ($this->scrolls as $id => $st) { if ($this->under($id, $x, $y)) { return false; } }
-        foreach ($this->links as $id) { if ($this->under($id, $x, $y)) { return false; } }
-        return true;
+        $under = fn(int $id): bool => $this->under($id, $x, $y);
+        return array_any(array_keys($this->handles), $under)
+            && !array_any($this->focusables, $under)
+            && !array_any(array_keys($this->sliders), $under)
+            && !array_any(array_keys($this->scrolls), $under)
+            && !array_any($this->links, $under);
     }
 
     /** Whether (x, y) is on the node this id had last frame: in its rect, reachable, and not under an overlay built after it. */

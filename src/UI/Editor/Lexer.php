@@ -306,15 +306,13 @@ class Lexer implements Tokenizer
 
     private function prefixes(): bool
     {
-        foreach ($this->strings as $s) { if ($s->prefix !== '') { return true; } }
-        return false;
+        return array_any($this->strings, static fn(LexString $s): bool => $s->prefix !== '');
     }
 
     private function startsComment(string $line, int $at): bool
     {
-        foreach ($this->lineComments as $p) { if (self::startsWith($line, $at, $p)) { return true; } }
-        foreach ($this->blockComments as $b) { if (self::startsWith($line, $at, $b[0])) { return true; } }
-        return false;
+        return array_any($this->lineComments, static fn(string $p): bool => self::startsWith($line, $at, $p))
+            || array_any($this->blockComments, static fn(array $b): bool => self::startsWith($line, $at, $b[0]));
     }
 
     /** Starts a string at $i, after $prefix, which it colors as the string; where it ends, or null for none. */

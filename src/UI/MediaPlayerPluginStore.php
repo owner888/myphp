@@ -61,8 +61,7 @@ final class MediaPlayerPluginStore
     /** Whether the plugin of identifier $id is installed. */
     private static function installed(string $id): bool
     {
-        foreach (Plugins::all() as $p) { if ($p->identifier === $id) { return true; } }
-        return false;
+        return array_any(Plugins::all(), static fn(object $p): bool => $p->identifier === $id);
     }
 
     /** $s ("owner/repo" or an https URL) as the URL to install from, '' for one neither (IINA's PluginStorePanel.install). */

@@ -189,7 +189,7 @@ final class Chart
     {
         $area->focusable();
         $rt = $c->runtime;
-        $fresh = fn() => (object)['hovering' => false, 'x' => 0.0, 'last' => -1, 'focused' => false];
+        $fresh = static fn() => new class { public bool $hovering = false, $focused = false; public float $x = 0.0; public int $last = -1; };
         $st = $rt?->local($area->id, $fresh) ?? $fresh();
         $old = $index;
         $n = count($xs);

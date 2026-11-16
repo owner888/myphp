@@ -298,8 +298,7 @@ final class MediaPlayerState
     /** Whether a plugin hooks $name. */
     private function hooked(string $name): bool
     {
-        foreach ($this->hooks as $h) { if ($h['name'] === $name) { return true; } }
-        return false;
+        return array_any($this->hooks, static fn(array $h): bool => $h['name'] === $name);
     }
 
     /**

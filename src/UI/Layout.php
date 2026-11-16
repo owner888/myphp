@@ -1258,9 +1258,7 @@ final class Layout
     /** Whether a container aligning by $align, or one of $kids, asks for baselines: those that do not skip the work. @param array<int, Node> $kids */
     private static function asksBaseline(int $align, array $kids): bool
     {
-        if ($align === Node::BASELINE) { return true; }
-        foreach ($kids as $k) { if ($k->self === Node::BASELINE) { return true; } }
-        return false;
+        return $align === Node::BASELINE || array_any($kids, static fn(Node $k): bool => $k->self === Node::BASELINE);
     }
 
     /**

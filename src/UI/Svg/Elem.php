@@ -113,7 +113,7 @@ final class Elem
         if (($s['tag'] !== '' && $s['tag'] !== $e->name) || ($s['id'] !== '' && ($e->attrs['id'] ?? '') !== $s['id'])) { return false; }
         if ($s['classes'] !== []) {
             $have = preg_split('/\s+/', trim($e->attrs['class'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
-            foreach ($s['classes'] as $c) { if (!in_array($c, $have, true)) { return false; } }
+            if (!array_all($s['classes'], static fn(string $c): bool => in_array($c, $have, true))) { return false; }
         }
         return true;
     }

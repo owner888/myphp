@@ -54,12 +54,30 @@ final class TextStyle
             return $this;
         }
         $s = clone $base;
-        foreach (get_object_vars($this) as $k => $v) {
-            if ($v !== null && $k !== 'fixedLine') {
-                $s->$k = $v;
-                if ($k === 'lineHeight') { $s->fixedLine = $this->fixedLine; }
-            }
-        }
+        if ($this->family !== null) { $s->family = $this->family; }
+        if ($this->size !== null) { $s->size = $this->size; }
+        if ($this->weight !== null) { $s->weight = $this->weight; }
+        if ($this->italic !== null) { $s->italic = $this->italic; }
+        if ($this->color !== null) { $s->color = $this->color; }
+        if ($this->alpha !== null) { $s->alpha = $this->alpha; }
+        if ($this->lineHeight !== null) { $s->lineHeight = $this->lineHeight; $s->fixedLine = $this->fixedLine; }
+        if ($this->align !== null) { $s->align = $this->align; }
+        if ($this->underline !== null) { $s->underline = $this->underline; }
+        if ($this->wavy !== null) { $s->wavy = $this->wavy; }
+        if ($this->dotted !== null) { $s->dotted = $this->dotted; }
+        if ($this->strike !== null) { $s->strike = $this->strike; }
+        if ($this->spacing !== null) { $s->spacing = $this->spacing; }
+        if ($this->features !== null) { $s->features = $this->features; }
+        if ($this->lang !== null) { $s->lang = $this->lang; }
+        if ($this->decoColor !== null) { $s->decoColor = $this->decoColor; }
+        if ($this->decoThick !== null) { $s->decoThick = $this->decoThick; }
+        if ($this->background !== null) { $s->background = $this->background; }
+        if ($this->selection !== null) { $s->selection = $this->selection; }
+        if ($this->selectionAlpha !== null) { $s->selectionAlpha = $this->selectionAlpha; }
+        if ($this->outline !== null) { $s->outline = $this->outline; }
+        if ($this->textShadow !== null) { $s->textShadow = $this->textShadow; }
+        if ($this->blur !== null) { $s->blur = $this->blur; }
+        if ($this->cutOut !== null) { $s->cutOut = $this->cutOut; }
         return $s;
     }
 

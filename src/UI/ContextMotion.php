@@ -192,7 +192,10 @@ trait ContextMotion
         $now = $rt->now;
         $m = $rt->colorMotions[$n->id][$key] ?? null;
         if ($m === null) {
-            $rt->colorMotions[$n->id][$key] = (object)['from' => $target, 'to' => $target, 'shown' => $target, 'k' => new MotionChannel(1.0, $now)];
+            $rt->colorMotions[$n->id][$key] = new class($target, new MotionChannel(1.0, $now)) {
+                public array $from, $to, $shown;
+                public function __construct(array $t, public MotionChannel $k) { $this->from = $this->to = $this->shown = $t; }
+            };
             return $target;
         }
         $moving = $m->k->moving || $m->k->pending;
