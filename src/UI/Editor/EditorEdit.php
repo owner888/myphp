@@ -165,8 +165,7 @@ trait EditorEdit
             $this->reveal = max($this->reveal, self::REVEAL_FIT);
             return true;
         }
-        $pair = null;
-        foreach ($l->autoClose as $p) { if ($p->open === $t) { $pair = $p; break; } }
+        $pair = array_find($l->autoClose, static fn(object $p): bool => $p->open === $t);
         if ($pair === null) { return false; }
         // Selections are wrapped in the pair, when there are only selections.
         $anySel = false; $anyCaret = false;

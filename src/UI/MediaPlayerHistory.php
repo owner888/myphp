@@ -39,7 +39,7 @@ final class MediaPlayerHistory
     {
         $t = $c->theme;
         $root = $c->column(0, 0, 1)->background(MediaPlayerSettings::colors($t)['page']);
-        $make = fn() => (object)['byFolder' => false, 'closed' => [], 'chosen' => [], 'search' => new TextState(), 'inPath' => true, 'anchor' => null];
+        $make = static fn() => new class { public bool $byFolder = false, $inPath = true; public array $closed = [], $chosen = []; public TextState $search; public ?string $anchor = null; public function __construct() { $this->search = new TextState(); } };
         $v = $c->runtime?->local($root->id, $make) ?? $make();
         $history = PlaybackHistory::default();
         $positions = PlaybackPositions::default();

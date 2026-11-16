@@ -200,7 +200,7 @@ trait EditorFold
         $r = $this->view->text;
         $stack = []; $folds = []; $depths = [];
         for ($line = 0; $line < $r->lineCount() - 1; $line++) {
-            while ($stack !== [] && $stack[count($stack) - 1][1] < $line) { array_pop($stack); }
+            while ($stack !== [] && array_last($stack)[1] < $line) { array_pop($stack); }
             if (!$this->foldable($line) && $this->trailingOpener($line, $r->line($line)) === null) { continue; }
             if (($end = $this->foldEnd($line)) !== null) {
                 $f = [$line, $end];

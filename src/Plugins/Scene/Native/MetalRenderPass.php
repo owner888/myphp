@@ -45,6 +45,7 @@ final class MetalRenderPass
     private mixed $depthStencilState = null;
     private mixed $whiteTexture = null;
     private mixed $shadowMapTexture = null;
+    private ?\FFI\CData $clearColor = null, $region = null;
     /** @var array<string, mixed> Cached depth textures by "widthxheight" */
     private array $depthTextures = [];
     /** @var WeakMap<Image, array{0: mixed, 1: int}> Cached GPU textures by Image instance and version */
@@ -409,7 +410,8 @@ final class MetalRenderPass
         $newTex = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
             ?? throw new RuntimeException('Scene: failed to allocate 3D texture');
 
-        $region = ObjC::$c->new('MTLRegion');
+        $region = $this->region ??= ObjC::$c->new('MTLRegion');
+        $region->x = $region->y = $region->z = 0;
         $region->w = $img->w; $region->h = $img->h; $region->d = 1;
         ObjC::msg('v:RLpL', $newTex, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:',
             $region, 0, ObjC::$c->cast('void*', $img->address()), $img->w * 4);
@@ -523,7 +525,7 @@ final class MetalRenderPass
         ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
         ObjC::msg('v:L', $ca, 'setStoreAction:', self::STORE_STORE);
 
-        $clr = ObjC::$c->new('MTLClearColor');
+        $clr = $this->clearColor ??= ObjC::$c->new('MTLClearColor');
         [$clr->r, $clr->g, $clr->b, $clr->a] = $scene->clearColor;
         ObjC::msg('v:k', $ca, 'setClearColor:', $clr);
 

@@ -67,6 +67,7 @@ final class GlRenderPass
     private int $program = 0;
     private int $vao = 0;
     private int $whiteTexture = 0;
+    private ?\FFI\CData $matBuf = null;
     /** @var array<string, int> Uniform locations */
     private array $u = [];
     /** @var array<string, int> Cached depth renderbuffers by "widthxheight" */
@@ -444,7 +445,7 @@ final class GlRenderPass
             ($g->epoxy_glUniform4f)($this->u['uPointCol1'], $pl1->color[0], $pl1->color[1], $pl1->color[2], $pl1->intensity);
         }
 
-        $matBuf = $g->new('float[16]');
+        $matBuf = $this->matBuf ??= $g->new('float[16]');
 
         foreach ($scene->visibleEntities($viewProj) as $entity) {
             $mesh = $entity->mesh;

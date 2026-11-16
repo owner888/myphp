@@ -144,7 +144,7 @@ final class Layout
      */
     private static function reveal(array $chain): void
     {
-        while (count($chain) > 1 && $chain[count($chain) - 1]->inline) {
+        while (count($chain) > 1 && array_last($chain)->inline) {
             array_pop($chain);
         }
         $e = array_last($chain);

@@ -29,7 +29,7 @@ final class MediaPlayerDevTool
         $key = spl_object_id($instance);
         if (($w = self::$windows[$key] ?? null) !== null && !$w->isDestroyed()) { $w->show(); $w->focus(); return; }
         $tool = DevTool::for($instance);
-        $st = (object)['input' => new TextState(''), 'list' => new ListState(), 'recall' => null, 'expanded' => []];
+        $st = new class { public TextState $input; public ListState $list; public ?int $recall = null; public array $expanded = []; public function __construct() { $this->input = new TextState(''); $this->list = new ListState(); } };
         $st->list->followEnd = true;
         $w = null;
         $w = self::$windows[$key] = new Window(new WindowOptions(title: "DevTool: $title", width: 500, height: 400,

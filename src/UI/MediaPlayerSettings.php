@@ -51,7 +51,7 @@ final class MediaPlayerSettings
     /** What one window's settings view keeps between frames: the page, the search, the pages' scrolls, the section in view, the rows open, the fields' texts. */
     private static function local(Context $c, Node $root): object
     {
-        $make = fn() => (object)['page' => 'general', 'search' => new TextState(), 'open' => false, 'scroll' => [], 'section' => '', 'ring' => null, 'jump' => null, 'pinned' => null, 'toolbarChosen' => null, 'audioDevices' => null, 'assSecondary' => false, 'thumbBytes' => null, 'kbSearch' => null, 'kbChosen' => null, 'expanded' => [], 'fields' => [], 'heights' => []];
+        $make = static fn() => new class { public string $page = 'general', $section = ''; public TextState $search; public bool $open = false, $assSecondary = false; public array $scroll = [], $expanded = [], $fields = [], $heights = []; public mixed $ring = null, $jump = null, $pinned = null, $toolbarChosen = null, $audioDevices = null, $thumbBytes = null, $kbSearch = null, $kbChosen = null; public function __construct() { $this->search = new TextState(); } };
         return $c->runtime?->local($root->id, $make) ?? $make();
     }
 
@@ -257,7 +257,8 @@ final class MediaPlayerSettings
         $b = $c->key('info')->column()->size(36, 36)->radius(18)->center()->role(Role::BUTTON)->label($c->texts()->get('settingsMoreInfo'))->systemMaterial('glass');
           self::sf($c, 'info.circle', 16, $t->text);
         $c->end();
-        $open = $c->runtime?->local($b->id, fn() => (object)['open' => false]) ?? (object)['open' => false];
+        $makeOpen = static fn() => new class { public bool $open = false; };
+        $open = $c->runtime?->local($b->id, $makeOpen) ?? $makeOpen();
         if ($c->clicked($b)) { $open->open = !$open->open; }
         $panel = $c->popover($b, $open->open, function () use ($c, $t, $help): void {
             $c->column()->width(300)->padding(16);

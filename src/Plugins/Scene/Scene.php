@@ -546,15 +546,16 @@ final class Scene
         $bytesPerRow = $width * 4;
         $totalBytes = $bytesPerRow * $height;
         $buf = Mem::alloc($totalBytes);
-
-        $region = ObjC::$c->new('MTLRegion');
-        $region->w = $width; $region->h = $height; $region->d = 1;
-
-        ObjC::msg('v:pLRL', $colorTex, 'getBytes:bytesPerRow:fromRegion:mipmapLevel:', $buf, $bytesPerRow, $region, 0);
-
-        $rawRgba = \FFI::string($buf, $totalBytes);
-        ObjC::msg('v:', $colorTex, 'release');
-        ObjC::msg('v:', $queue, 'release');
+        try {
+            $region = ObjC::$c->new('MTLRegion');
+            $region->w = $width; $region->h = $height; $region->d = 1;
+            ObjC::msg('v:pLRL', $colorTex, 'getBytes:bytesPerRow:fromRegion:mipmapLevel:', $buf, $bytesPerRow, $region, 0);
+            $rawRgba = \FFI::string($buf, $totalBytes);
+        } finally {
+            Mem::free($buf);
+            ObjC::msg('v:', $colorTex, 'release');
+            ObjC::msg('v:', $queue, 'release');
+        }
 
         return Image::fromPixels($width, $height, $rawRgba);
     }

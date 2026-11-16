@@ -150,8 +150,7 @@ final class DrawnMenu
             $panel->label($anchor->label ?? '');
         }
         if ($this->levels[$level]['hi'] < 0) {
-            $this->levels[$level]['hi'] = 0;
-            foreach ($items as $it) { if (self::choosable($it)) { $this->levels[$level]['hi'] = (int)$it->id; break; } }
+            $this->levels[$level]['hi'] = (int)(array_find($items, self::choosable(...))?->id ?? 0);
         }
         $marks = array_filter($items, fn(NativeItem $it) => $it->type === NativeItem::CHECKBOX || $it->type === NativeItem::RADIO) !== [];
         $size = count(array_filter($items, fn(NativeItem $it) => !$it->hidden && $it->type !== NativeItem::SEPARATOR && $it->type !== NativeItem::HEADER));

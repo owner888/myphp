@@ -78,7 +78,7 @@ final class MediaPlayerInspector
     {
         $root = $c->themed(Theme::dark(), 0, 0, 1);
         $root->color = null; // the HUD's material, the window's
-        $make = fn() => (object)['tab' => 0, 'track' => 0, 'chosen' => -1, 'watch' => new ListState()];
+        $make = static fn() => new class { public int $tab = 0, $track = 0, $chosen = -1; public ListState $watch; public function __construct() { $this->watch = new ListState(); } };
         $v = $c->runtime?->local($root->id, $make) ?? $make();
         $p = $s?->player;
         $c->runtime?->askWindow('title', self::t('iinaInspectorWindowTitle'));

@@ -939,9 +939,7 @@ final class Runtime
         }
         unset($moving);
         if ($this->focus !== null && !$this->reachable($this->focus)) { // the focus was behind what now blocks it: into its first control, or none (mygo's Modal)
-            $into = null;
-            foreach ($this->focusables as $id) { if ($this->reachable($id)) { $into = $id; break; } }
-            $this->focus = $into;
+            $this->focus = array_find($this->focusables, $this->reachable(...));
         }
         $this->needsFrame = $this->needsFrame || $this->zoom !== $this->frameZoom // zoomed in the last pass: built at the new size in the next frame
             || $keyScrolled || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping

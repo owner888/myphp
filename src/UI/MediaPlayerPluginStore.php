@@ -29,7 +29,7 @@ final class MediaPlayerPluginStore
     public static function show(?Window $parent, Closure $closed): void
     {
         $sheet = null;
-        $st = (object)['url' => new TextState(''), 'installing' => false, 'selected' => null, 'list' => null, 'error' => null, 'detailInstalling' => false, 'repos' => []];
+        $st = new class { public TextState $url; public bool $installing = false, $detailInstalling = false; public ?int $selected = null; public ?array $list = null; public ?string $error = null; public array $repos = []; public function __construct() { $this->url = new TextState(''); } };
         $close = function () use (&$sheet, $closed): void { App::later(function () use (&$sheet, $closed): void { $sheet?->close(); $closed(); }); };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: 600, height: 500,
             content: Content::view(function (Context $c) use ($st, $close, &$sheet): void { self::view($c, $st, $close, $sheet); })));

@@ -70,7 +70,7 @@ final class MediaPlayerAlert
      */
     public static function prompt(Context $c, string $key, string $value, Closure $validate, Closure $done): void
     {
-        $s = (object)['text' => new TextState($value)];
+        $s = new class(new TextState($value)) { public function __construct(public TextState $text) {} };
         self::open(MediaPlayerSettings::iina($c, "alert.$key.title"), MediaPlayerSettings::iina($c, "alert.$key.message"), $s,
             function (Context $c, object $s) use ($validate): void {
                 $k = MediaPlayerSettings::colors($c->theme);

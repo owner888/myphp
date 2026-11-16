@@ -158,8 +158,7 @@ final class Atlas
             return [];
         }
         $gone = [];
-        $tall = false; // whether a shelf as high as it holds bitmaps, whose leaving can make a gap for it
-        foreach ($this->shelves as $shelf) { if ($shelf['n'] > 0 && $shelf['h'] >= $h) { $tall = true; break; } }
+        $tall = array_any($this->shelves, static fn(array $shelf): bool => $shelf['n'] > 0 && $shelf['h'] >= $h);
         if ($tall) { // the least recent first, a few: those of a shelf high enough freed, the shelf looked at
             foreach ($this->used as $k => $f) {
                 if ($f >= $this->frame || count($gone) >= self::FEW) { break; }

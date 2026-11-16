@@ -24,7 +24,7 @@ final class MediaPlayerFontSheet
     public static function open(string $font, Closure $done): void
     {
         $parent = Window::focused();
-        $state = (object)['name' => new TextState($font === 'sans-serif' ? '' : $font), 'filter' => new TextState(), 'list' => new ListState(), 'families' => null];
+        $state = new class($font === 'sans-serif' ? '' : $font) { public TextState $name, $filter; public ListState $list; public ?array $families = null; public function __construct(string $n) { $this->name = new TextState($n); $this->filter = new TextState(); $this->list = new ListState(); } };
         $sheet = null;
         $close = function () use (&$sheet, $parent): void {
             \MyPHP\App::later(function () use (&$sheet, $parent): void {

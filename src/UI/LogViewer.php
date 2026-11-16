@@ -48,7 +48,7 @@ final class LogViewer
         $t = $c->theme;
         $k = MediaPlayerSettings::colors($t);
         $root = $c->column(0, 0, 1)->background($k['page']);
-        $make = fn() => (object)['level' => Logger::level(), 'subsystems' => [], 'filter' => new TextState(), 'list' => self::listState(), 'chosen' => [], 'anchor' => null];
+        $make = static fn() => new class(Logger::level(), self::listState()) { public array $subsystems = [], $chosen = []; public TextState $filter; public ?int $anchor = null; public function __construct(public int $level, public ListState $list) { $this->filter = new TextState(); } };
         $v = $c->runtime?->local($root->id, $make) ?? $make();
         $q = mb_strtolower(trim($v->filter->text));
         $all = Logger::entries();

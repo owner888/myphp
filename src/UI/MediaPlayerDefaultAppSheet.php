@@ -25,7 +25,7 @@ final class MediaPlayerDefaultAppSheet
     public static function open(): void
     {
         $parent = Window::focused();
-        $state = (object)['video' => true, 'audio' => true, 'playlist' => true];
+        $state = new class { public bool $video = true, $audio = true, $playlist = true; };
         $sheet = null;
         $close = function () use (&$sheet): void { \MyPHP\App::later(function () use (&$sheet): void { $sheet?->close(); }); };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: self::WIDTH, height: self::HEIGHT, disableResize: true,

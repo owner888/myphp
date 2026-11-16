@@ -49,7 +49,8 @@ final class MediaPlayerMusic
         if ($o->keys) { MediaPlayer::keys($c, $s, $p); }
 
         $root = $c->key('music mode')->column(0, 0, 1)->background(0x000000);
-        $v = $c->runtime?->local($root->id, fn() => (object)['volume' => false]) ?? (object)['volume' => false];
+        $makeVol = static fn() => new class { public bool $volume = false; };
+        $v = $c->runtime?->local($root->id, $makeVol) ?? $makeVol();
         $top = $c->column()->fillWidth()->height($normal)->dragWindow(); // where the pointer shows the controls: the picture and the controls
           if ($art) {
               $c->column()->fillWidth()->height($artH)->clip();

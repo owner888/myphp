@@ -373,7 +373,7 @@ JS;
     public static function details(Plugin $p, ?Window $parent): void
     {
         $sheet = null;
-        $st = (object)['tab' => 0, 'web' => null, 'shown' => -1, 'failed' => false, 'loading' => false];
+        $st = new class { public int $tab = 0, $shown = -1; public ?\MyPHP\WebView $web = null; public bool $failed = false, $loading = false; };
         $close = function () use (&$sheet, $p, $st): void { $p->syncPreferences(); App::later(function () use (&$sheet, $st): void { $st->web?->destroy(); $sheet?->close(); }); };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: 600, height: 450,
             content: Content::view(function (Context $c) use ($p, $close, $st): void { self::detailsView($c, $p, $close, $st); })));

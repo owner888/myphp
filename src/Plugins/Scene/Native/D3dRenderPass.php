@@ -52,6 +52,7 @@ final class D3dRenderPass
     private CData $constantBuffer;
     private CData $whiteTexture;
     private CData $whiteSrv;
+    private ?CData $rtvs = null, $vp = null, $clearRgba = null, $samplers = null, $cbs = null, $vbs = null, $strides = null, $offsets = null, $srvs = null, $mapped = null;
 
     /** @var array<string, array{0: CData, 1: CData}> Cached [texture, dsv] by "widthxheight" */
     private array $depthTargets = [];
@@ -449,12 +450,12 @@ final class D3dRenderPass
         $dsv = $this->depthTarget($width, $height);
 
         // Bind RenderTarget + DepthStencil
-        $rtvs = $f->new('void *[1]');
+        $rtvs = $this->rtvs ??= $f->new('void *[1]');
         $rtvs[0] = $targetRtv;
         ($c->v->OMSetRenderTargets)($c, 1, $rtvs, $dsv);
 
         // Viewport
-        $vp = $f->new('D3D11_VIEWPORT');
+        $vp = $this->vp ??= $f->new('D3D11_VIEWPORT');
         $vp->Width = (float)$width;
         $vp->Height = (float)$height;
         $vp->MinDepth = 0.0;
@@ -462,7 +463,7 @@ final class D3dRenderPass
         ($c->v->RSSetViewports)($c, 1, FFI::addr($vp));
 
         // Clear Color & Depth
-        $clearRgba = $f->new('float[4]');
+        $clearRgba = $this->clearRgba ??= $f->new('float[4]');
         [$clearRgba[0], $clearRgba[1], $clearRgba[2], $clearRgba[3]] = $scene->clearColor;
         ($c->v->ClearRenderTargetView)($c, $targetRtv, $clearRgba);
         ($c->v->ClearDepthStencilView)($c, $dsv, self::CLEAR_DEPTH, 1.0, 0);
@@ -477,13 +478,13 @@ final class D3dRenderPass
         ($c->v->OMSetBlendState)($c, null, null, 0xFFFFFFFF);
 
         // Samplers (s0 = linear, s1 = point)
-        $samplers = $f->new('void *[2]');
+        $samplers = $this->samplers ??= $f->new('void *[2]');
         $samplers[0] = $this->linearSampler;
         $samplers[1] = $this->pointSampler;
         ($c->v->PSSetSamplers)($c, 0, 2, $samplers);
 
         // Constant Buffer (b0)
-        $cbs = $f->new('void *[1]');
+        $cbs = $this->cbs ??= $f->new('void *[1]');
         $cbs[0] = $this->constantBuffer;
         ($c->v->VSSetConstantBuffers)($c, 0, 1, $cbs);
         ($c->v->PSSetConstantBuffers)($c, 0, 1, $cbs);
@@ -497,13 +498,13 @@ final class D3dRenderPass
         $lDir = $scene->lightDirection->normalize();
         $lightingExt = $scene->packLightingExtension();
 
-        $vbs = $f->new('void *[1]');
-        $strides = $f->new('uint32_t[1]');
+        $vbs = $this->vbs ??= $f->new('void *[1]');
+        $strides = $this->strides ??= $f->new('uint32_t[1]');
         $strides[0] = Mesh::VERTEX_STRIDE;
-        $offsets = $f->new('uint32_t[1]');
+        $offsets = $this->offsets ??= $f->new('uint32_t[1]');
         $offsets[0] = 0;
-        $srvs = $f->new('void *[1]');
-        $mapped = $f->new('D3D11_MAPPED_SUBRESOURCE');
+        $srvs = $this->srvs ??= $f->new('void *[1]');
+        $mapped = $this->mapped ??= $f->new('D3D11_MAPPED_SUBRESOURCE');
 
         foreach ($scene->visibleEntities($viewProj) as $entity) {
             $mesh = $entity->mesh;

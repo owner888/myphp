@@ -65,9 +65,7 @@ final class MediaPlayerFilters
     /** A window's state, of the video's filters or the audio's. @internal tests */
     public static function view(bool $video): object
     {
-        return (object)['video' => $video, 'chosen' => -1, 'editing' => -1, 'edit' => new TextState(''), 'fields' => [],
-            'sheet' => null, 'sheetWindow' => null, 'preset' => array_key_first(FilterPresets::all($video)), 'values' => [], 'filter' => null,
-            'name' => new TextState(''), 'string' => new TextState(''), 'key' => '', 'mods' => '', 'saved' => -1, 'alert' => null];
+        return new class($video, array_key_first(FilterPresets::all($video))) { public int $chosen = -1, $editing = -1, $saved = -1; public TextState $edit, $name, $string; public array $fields = [], $values = []; public mixed $sheet = null, $sheetWindow = null, $filter = null, $alert = null; public string $key = '', $mods = ''; public function __construct(public bool $video, public ?string $preset) { $this->edit = new TextState(''); $this->name = new TextState(''); $this->string = new TextState(''); } };
     }
 
     /** The window's view of player $s's filters. @internal tests */

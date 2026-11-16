@@ -407,10 +407,8 @@ trait EditorPaint
         $s = $l->text;
         // The row's text alone, and in Selection mode only rows a selection meets.
         $a = $l->fromDisp($row['from']); $b = $l->fromDisp($row['to']);
-        if ($mode === Whitespace::WhitespaceSelection) {
-            $meets = false;
-            foreach ($this->sels as $sel) { if (!$sel->empty() && $sel->start() < $l->start + $b && $sel->end() > $l->start + $a) { $meets = true; break; } }
-            if (!$meets) { return; }
+        if ($mode === Whitespace::WhitespaceSelection && !array_any($this->sels, static fn(Sel $sel): bool => !$sel->empty() && $sel->start() < $l->start + $b && $sel->end() > $l->start + $a)) {
+            return;
         }
         $trailFrom = 0;
         if ($mode === Whitespace::WhitespaceTrailing) {

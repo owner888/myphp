@@ -40,7 +40,7 @@ final class KeyframeSequence
         if ($this->options->alternate && $this->plays() % 2 === 0) {
             return $this->frames[0][1];
         }
-        return $this->frames[count($this->frames) - 1][1];
+        return array_last($this->frames)[1];
     }
 
     /** The value at $now and whether the sequence is done. @return array{0: float, 1: bool} */
@@ -53,7 +53,7 @@ final class KeyframeSequence
         if ($elapsed < 0) {
             return [$this->from, false]; // delayed
         }
-        $d = $this->frames[count($this->frames) - 1][0];
+        $d = array_last($this->frames)[0];
         [$at, $iteration, $done] = Motion::playhead($elapsed, $d, $this->options->repeat, $this->options->alternate, Motion::ns($this->options->repeatDelay));
         if ($done) {
             return [$this->final(), true];

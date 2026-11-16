@@ -36,7 +36,8 @@ final class MediaPlayerWelcome
             $steps = 24;
             for ($i = 0; $i < $steps; $i++) { $p->fill([$r[0], $r[1] + $r[3] * $i / $steps, $r[2], $r[3] / $steps + 1], 0x000000, 0, $a + ($b - $a) * $i / $steps); }
         });
-        $v = $c->runtime?->local($root->id, fn() => (object)['chosen' => -1]) ?? (object)['chosen' => -1];
+        $makeWel = static fn() => new class { public int $chosen = -1; };
+        $v = $c->runtime?->local($root->id, $makeWel) ?? $makeWel();
         $set = PlayerSettings::default();
         $last = null;
         if ($set->get('recordRecentFiles') && $set->get('resumeLastPosition')) {

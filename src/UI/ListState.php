@@ -177,8 +177,7 @@ final class ListState implements Scrollable
             $this->sort = new SortOrder($id, $this->sort !== null && $this->sort->column === $id && !$this->sort->descending);
         } else {
             $by = $this->sortBy;
-            $i = null;
-            foreach ($by as $k => $o) { if ($o->column === $id) { $i = $k; break; } }
+            $i = array_find_key($by, static fn(SortOrder $o): bool => $o->column === $id);
             if (!$add) {
                 $by = [new SortOrder($id, $i === 0 && !$by[0]->descending)];
             } elseif ($i === null) {

@@ -130,8 +130,7 @@ trait RuntimeAccess
             // A combobox has the focus for the option its arrows are on.
             if ($focused?->activeDescendant !== null) { $focus = $focused->activeDescendant->id; }
             foreach ([$focus, $this->focus] as $id) {
-                if ($t->focus !== 0) { break; }
-                foreach ($t->nodes as $n) { if ($n->id === $id) { $t->focus = $id; break; } }
+                if ($id !== null && array_any($t->nodes, static fn(AccessNode $n): bool => $n->id === $id)) { $t->focus = $id; break; }
             }
         }
         $t->announcements = $this->announcements;

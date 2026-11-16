@@ -115,7 +115,7 @@ final class SubtitleMatcher
     private static function info(string $path): object
     {
         $name = pathinfo($path, PATHINFO_FILENAME);
-        return (object)['path' => $path, 'filename' => $name, 'chars' => mb_str_split($name, 1, 'UTF-8'), 'prefix' => '', 'suffix' => $name, 'nameInSeries' => null, 'matched' => false, 'dist' => [], 'minDist' => []];
+        return new class($path, $name, mb_str_split($name, 1, 'UTF-8')) { public string $prefix = '', $suffix; public ?string $nameInSeries = null; public bool $matched = false; public array $dist = [], $minDist = []; public function __construct(public string $path, public string $filename, public array $chars) { $this->suffix = $filename; } };
     }
 
     /** FileInfo's prefix set: the rest its suffix, its number in the series from it ("ch01_x" → "ch01"); one as long as its name none. */

@@ -28,7 +28,7 @@ final class MediaPlayerKeyRecord
     /** @param Closure(string, string): void $done told the key and the action with OK */
     public static function open(Context $c, string $key, string $action, Closure $done): void
     {
-        $s = (object)['key' => $key, 'action' => new TextState($action), 'path' => [], 'values' => [], 'recording' => false];
+        $s = new class($key, new TextState($action)) { public array $path = [], $values = []; public bool $recording = false; public function __construct(public string $key, public TextState $action) {} };
         MediaPlayerAlert::open(MediaPlayerSettings::iina($c, 'keymapping.title'), MediaPlayerSettings::iina($c, 'keymapping.message'), $s,
             fn(Context $c, object $s) => self::view($c, $s), fn(object $s) => trim($s->key) !== '' && trim($s->action->text) !== '',
             fn(object $s) => $done(trim($s->key), trim($s->action->text)), 480, 330);

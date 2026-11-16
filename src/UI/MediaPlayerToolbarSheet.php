@@ -25,7 +25,7 @@ final class MediaPlayerToolbarSheet
     public static function open(Context $c, array $buttons, Closure $done): void
     {
         $parent = Window::focused();
-        $state = (object)['buttons' => $buttons];
+        $state = new class($buttons) { public function __construct(public array $buttons) {} };
         $sheet = null;
         $close = function () use (&$sheet, $parent): void {
             \MyPHP\App::later(function () use (&$sheet, $parent): void {

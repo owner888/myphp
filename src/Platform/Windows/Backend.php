@@ -25,7 +25,7 @@ final class Backend implements Platform\Backend
     public const WM_APP_TRAY = Win32::WM_APP + 3;
 
     /** The app's hidden window, null before init. */
-    private ?CData $hwnd = null;
+    private ?CData $hwnd = null, $stepMsg = null;
     private bool $running = false;
     private bool $signaled = false;
     /** @var list<Closure> what runs next from the queue (WM_APP_RUN) */
@@ -221,7 +221,7 @@ final class Backend implements Platform\Backend
         $this->start();
         $u = Win32::user32();
         $u->MsgWaitForMultipleObjectsEx(0, null, 50, 0x04FF /* QS_ALLINPUT */, 0x0004 /* MWMO_INPUTAVAILABLE */);
-        $m = $u->new('MSG');
+        $m = $this->stepMsg ??= $u->new('MSG');
         while ($u->PeekMessageW(\FFI::addr($m), null, 0, 0, 1 /* PM_REMOVE */) !== 0) {
             if ($m->message === Win32::WM_QUIT) {
                 $u->PostQuitMessage((int)$m->wParam);
