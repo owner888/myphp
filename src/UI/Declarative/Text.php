@@ -21,15 +21,48 @@ final class Text extends View
     protected function build(Context $c, Env $env): ?Node
     {
         if ($this->parts !== []) {
-            $n = $c->richText($this->spans($env), wrap: true);
+            $n = self::makeRich($c, $this->spans($env));
             self::style($n, $env);
             return $n;
         }
         $text = $this->verbatim ? $this->text : Localized::string($this->text, $env, $this->args);
         $spans = $this->verbatim ? null : self::markdown($text);
-        $n = $spans === null ? $c->text($text) : $c->richText($spans, wrap: true);
+        $n = $spans === null ? self::makeText($c, $text) : self::makeRich($c, $spans);
         self::style($n, $env);
         self::onAccent($c, $n, $env);
+        return $n;
+    }
+
+    private static function makeText(Context $c, string $s): Node
+    {
+        $in = $c->inheritedText();
+        $size = $in->size;
+        $style = (($in->weight ?? 0) >= 600 ? Font::BOLD : 0) | ($in->italic ? Font::ITALIC : 0) | ($in->family !== null && str_starts_with($in->family, 'monospace') ? Font::MONO : 0);
+        $metrics = $c->metrics();
+        [$w, $h] = $metrics->measure($s, $size, $style);
+        $n = $c->attach(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $in->color));
+        $n->style = $style;
+        $n->inherit = $in;
+        $n->metrics = $metrics;
+        if ($in->needsLayout()) {
+            $n->toRich();
+            $n->fw = $n->fh = 0.0;
+        }
+        return $n;
+    }
+
+    /** @param list<Span> $spans */
+    private static function makeRich(Context $c, array $spans): Node
+    {
+        $in = $c->inheritedText();
+        $parent = $c->currentParent();
+        $pw = $c->runtime?->widthOf($parent->id);
+        $n = $c->attach(new Node(Node::RICH, 0, 0, 0, 0, 0, 0, null, null, $in->size, $in->color));
+        $n->wrapLast = true;
+        $n->wrapWidth = $pw === null ? $c->width : max(1.0, $pw - 2 * $parent->padX());
+        $n->spans = $spans;
+        $n->inherit = $in;
+        $n->metrics = $c->metrics();
         return $n;
     }
 

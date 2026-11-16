@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Declarative;
 
 use Closure;
-use MyPHP\UI\{Context, Node};
+use MyPHP\UI\{Context, Node, Role};
 
 /**
  * Button, as SwiftUI's: a title, or a label view (Label, Image…), and the
@@ -35,7 +35,7 @@ final class Button extends View
         if ($this->label !== null) {
             $t = $env->theme;
             $prominent = $style === \ButtonStyle::borderedProminent;
-            $n = $c->buttonBase()->alignItems(Node::CENTER);
+            $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->alignItems(Node::CENTER);
             if ($style !== \ButtonStyle::borderless && $style !== \ButtonStyle::plain) { // the face of a button() around the label: padded, its surface and border, or the accent
                 $n->padding($t->space(1.5), $t->space(3.5))->radius($t->radius);
                 $n->color = $prominent ? $t->accent : ($c->hovered($n) ? $t->surfaceHover : $t->surface);
@@ -57,7 +57,7 @@ final class Button extends View
             View::takeRoom($n, $env->axis, $flex); // a label with frame(maxWidth: INF) stretches the button too
         } else {
             $title = Localized::string($this->title, $env);
-            $n = $style === \ButtonStyle::borderedProminent ? $c->primaryButton($title) : $c->button($title);
+            $n = self::makeButtonNode($c, $env, $title, $style === \ButtonStyle::borderedProminent);
             // Its title in the environment's weight, slant and lines, as a SwiftUI button's Text: Button('B')->bold()
             if ($env->weight !== null && $env->weight !== \Weight::regular) { $n->fontWeight($env->weight->value); }
             if ($env->italic) { $n->italic(); }
@@ -76,6 +76,38 @@ final class Button extends View
         if ($env->disabled) { $n->disabled(); }
         if ($this->label === null) { $n->label(Localized::string($this->title, $env)); }
         if ($c->clicked($n) && $this->action !== null) { ($this->action)(); }
+        return $n;
+    }
+
+    private static function makeButtonNode(Context $c, Env $env, string $s, bool $primary): Node
+    {
+        $t = $env->theme;
+        $size = $t->fontSize;
+        $metrics = $c->metrics();
+        [$w, $h] = $metrics->measure($s, $size);
+        $h = max($h, $metrics->measure('X', $size)[1]);
+        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
+        $bordered = !$primary;
+        $edge = $bordered ? 2.0 : 0.0;
+        [$py, $px] = [$t->space(1.5), $t->space(3.5)];
+        if ($t->controlHeight > 0) {
+            $py = max($py, ($t->controlHeight - $h - $edge) / 2);
+            $px = 20.0;
+        }
+        $n = $c->attach(new Node(Node::BUTTON, 0, 0, 0, $w + 2 * $px + $edge, $h + 2 * $py + $edge, 0, $s, $base, $size, $fg));
+        if ($t->controlHeight > 0) { $n->radius($n->fh / 2); }
+        $n->madePad = [[$py, $px, $py, $px], [$n->fw, $n->fh]];
+        $n->bordered = $bordered;
+        $n->metrics = $metrics;
+        $n->focused = $c->runtime?->focused($n->id) ?? false;
+        if ($c->runtime?->isTouchFlashing($n->id) ?? false) {
+            $n->color = $primary ? 0x1d4ed8 : $t->accent;
+            $n->fg = $t->accentText;
+            $n->bordered = true;
+            $n->borderColor = $t->focus;
+        } elseif ($c->runtime?->hovered($n->id) ?? false) {
+            $n->color = $c->runtime->input->mouseDown ? $pressed : $hover;
+        }
         return $n;
     }
 

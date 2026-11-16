@@ -64,7 +64,7 @@ final class TabView extends View
             $minimize = match ($this->minimize) { \TabBarMinimizeBehavior::onScrollDown => 1, \TabBarMinimizeBehavior::onScrollUp => -1, default => 0 };
             $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {
                 $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
-                $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
+                $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
                   View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [self::stacked($this->tabs[$i]->content)]);
                 $c->end();
             }, $minimize, $backdrop);
@@ -114,16 +114,16 @@ final class TabView extends View
         $accent = $env->tint?->rgb($env) ?? $env->theme->accent;
         $muted = $env->theme->border;
 
-        $n = $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->alignItems(Node::STRETCH);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->alignItems(Node::STRETCH);
           $c->key('page' . $index);
-          $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
+          $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
             View::renderAll($c, $env->along(Node::COLUMN), $this->tabs[$index]->content ?? []);
           $c->end();
           if ($showDots) {
-              $dots = $c->row(8, 8)->alignSelf(Node::CENTER)->alignItems(Node::CENTER)->justify(Node::CENTER);
+              $c->open(new Node(Node::CONTAINER, Node::ROW, 8, 8))->alignSelf(Node::CENTER)->alignItems(Node::CENTER)->justify(Node::CENTER);
               for ($i = 0; $i < $count; $i++) {
                   $active = $i === $index;
-                  $dot = $c->box($active ? 8 : 7, $active ? 8 : 7, $active ? $accent : $muted)->radius(4)->cursor(\MyPHP\UI\Cursor::Pointer);
+                  $dot = $c->attach(new Node(Node::BOX, 0, 0, 0, $active ? 8 : 7, $active ? 8 : 7, 0, null, $active ? $accent : $muted))->radius(4)->cursor(\MyPHP\UI\Cursor::Pointer);
                   if ($c->clicked($dot)) {
                       $index = $i;
                   }
@@ -156,10 +156,10 @@ final class TabView extends View
     /** The tabs across the top, as a Mac's TabView: the chosen one's content under them. */
     private function desktop(Context $c, Env $env, int $index): Node
     {
-        $n = $c->column(0, 8)->alignItems(Node::STRETCH);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 8))->alignItems(Node::STRETCH);
           $c->tabs(array_map(fn(Tab $t) => Localized::string($t->title, $env), $this->tabs), $index);
           $c->key('tab' . $index); // each tab its own nodes, which keep their state by it
-          $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
+          $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
             View::renderAll($c, $env->along(Node::COLUMN), $this->tabs[$index]->content ?? []);
           $c->end();
         $c->end();

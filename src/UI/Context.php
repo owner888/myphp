@@ -391,6 +391,12 @@ final class Context
         return $this->add($n);
     }
 
+    /** @internal The container on top of the stack that newly attached nodes go into. */
+    public function currentParent(): Node
+    {
+        return array_last($this->stack);
+    }
+
     /** @internal Attaches container $n and pushes it onto the container stack; close with end(). */
     public function open(Node $n): Node
     {

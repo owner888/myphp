@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
-use MyPHP\UI\{Context, Image, Node};
+use MyPHP\UI\{Context, Image, Node, Role};
 
 /**
  * NavigationSplitView, as SwiftUI's: a sidebar beside the detail. The
@@ -42,16 +42,16 @@ final class NavigationSplitView extends View
         // The sidebar's button, a circle as macOS 26's: at the sidebar's end as it shows, after the window controls as it hides, gliding between.
         $button = 36.0;
         [$open, $closed] = [$width - 10 - $button, $bar['left'] + 16];
-        $n = $c->row(0, 0)->alignItems(Node::STRETCH);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->alignItems(Node::STRETCH);
           $visible = !$this->hasVisibility || $this->visibility !== \NavigationSplitViewVisibility::detailOnly;
           $shown = $c->animate($n, 'sidebar', $visible ? 1 : 0, 0.25);
           $w = $width * $shown; // it slides out to the left as it hides
-          $c->row()->size($w, 0)->shrink(0)->alignItems(Node::STRETCH)->clip();
-            $side = $c->column()->size($width, 0)->shrink(0)->margin(0, 0, 0, $w - $width);
+          $c->open(new Node(Node::CONTAINER, Node::ROW))->size($w, 0)->shrink(0)->alignItems(Node::STRETCH)->clip();
+            $side = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->size($width, 0)->shrink(0)->margin(0, 0, 0, $w - $width);
             if (!$vibrant) { $side->background($t->surface); }
-              if ($inset) { $c->box(0, $barH, 0)->fillWidth()->shrink(0)->dragWindow()->color = null; } // under the window controls: the window moves by it
+              if ($inset) { $c->attach(new Node(Node::BOX, 0, 0, 0, 0, $barH))->fillWidth()->shrink(0)->dragWindow(); } // under the window controls: the window moves by it
               if ($asList) { // a list of the app's data, or one with modifiers (searchable, contextMenu): the ListView itself in the sidebar, as SwiftUI's
-                  $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
+                  $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
                     $list = $this->sidebar->render($c, $env->along(Node::COLUMN));
                   $c->end();
                   if ($list !== null && $vibrant) { $list->color = null; }
@@ -62,8 +62,8 @@ final class NavigationSplitView extends View
             $c->end();
           $c->end();
           if (!$asList && $chosen !== (string)($selection ?? '')) { $selection = self::tagOf($this->sidebar->content(), $chosen) ?? $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar, the tag itself (an int id stays an int, as SwiftUI's Hashable): before the detail, whose actions may choose too
-          if ($w > 0) { $c->box(1, 0, $t->border); }
-          $detail = $c->column(0, 0, 1)->minWidth(0)->minHeight(0)->alignSelf(Node::STRETCH);
+          if ($w > 0) { $c->attach(new Node(Node::BOX, 0, 0, 0, 1, 0, 0, null, $t->border)); }
+          $detail = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->minWidth(0)->minHeight(0)->alignSelf(Node::STRETCH);
             $views = is_array($this->detail) ? $this->detail : [$this->detail];
             $title = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['title'] ?? null) : null;
             $toolbar = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['toolbar'] ?? null) : null; // the detail's toolbar, at the end of the window's toolbar, as SwiftUI's on a Mac
@@ -73,24 +73,25 @@ final class NavigationSplitView extends View
             if (count($views) === 1 && $views[0] instanceof View) { foreach ($views[0]->mods as [$name, $m]) { if ($name === 'background') { $bg = $m[0]; } } }
             if ($bg !== null && $bg->alpha > 0) { $detail->background($bg->rgb($env), $bg->alpha); }
             if ($inset) { // the title bar's room: the detail's navigationTitle, left of the window controls when the sidebar hides
-                $c->row()->size(0, $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, $bar['right'] + 20, 0, 20 + (1 - $shown) * ($this->hasVisibility ? $closed + $button + 12 - 20 : $bar['left'])) // right of the button as the sidebar hides
+                $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, $bar['right'] + 20, 0, 20 + (1 - $shown) * ($this->hasVisibility ? $closed + $button + 12 - 20 : $bar['left'])) // right of the button as the sidebar hides
                   ->dragWindow();
-                  if ($title !== null) { $c->text(Localized::string($title, $env), $env->theme->fontSize)->preferredFont(\MyPHP\UI\Font::TITLE3)->fontWeight(700)->singleLine(); } // a toolbar's title, 15 bold on the Mac
-                  if ($items !== null) { $c->spacer(); $c->toolbar($items); }
+                  if ($title !== null) { (new Text($title))->font(\Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); } // a toolbar's title, 15 bold on the Mac
+                  if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
                 $c->end();
-                $c->divider();
+                $c->attach(new Node(Node::BOX, 0, 0, 0, 0, 1, 0, null, $t->border));
             } elseif ($items !== null) { // a title bar of the system's: the toolbar a row under it
-                $c->row()->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(6, 12);
-                  $c->spacer(); $c->toolbar($items);
+                $c->open(new Node(Node::CONTAINER, Node::ROW))->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(6, 12);
+                  $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items);
                 $c->end();
-                $c->divider();
+                $c->attach(new Node(Node::BOX, 0, 0, 0, 0, 1, 0, null, $t->border));
             }
             View::renderAll($c, $env->along(Node::COLUMN)->with(['toolbarTaken' => $toolbar !== null]), $views);
           $c->end();
         $c->end();
         if ($this->hasVisibility && $inset) { // the sidebar's button, next to the window controls whether it shows or not
             $label = Localized::string($visible ? 'Hide Sidebar' : 'Show Sidebar', $env);
-            $toggle = $c->key('sidebar toggle')->buttonBase()->absolute()->left($closed + ($open - $closed) * $shown)->top(($barH - $button) / 2)->size($button, $button)->radius($button / 2)
+            $c->key('sidebar toggle');
+            $toggle = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->absolute()->left($closed + ($open - $closed) * $shown)->top(($barH - $button) / 2)->size($button, $button)->radius($button / 2)
                 ->label($label)->tooltip($label)->center()
                 ->material(new \MyPHP\Plugins\Glass\Glass(tint: $t->surface, tintAlpha: 0.6, interactive: true)); // Liquid Glass, the Glass plugin's, tinted as the surface: under a vibrant sidebar nothing myphp painted shows through to frost (the developer asked for it less clear); it grows as pressed and lights up under the pointer
               $c->image(Image::symbol('sidebar.left', 18, $t->text), 18, 18);

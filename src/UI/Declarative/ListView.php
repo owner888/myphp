@@ -210,13 +210,13 @@ final class ListView extends View
             if ($n !== null && $c->clicked($n)) { $v->run(); }
             if ($v->role !== \ButtonRole::destructive) { $n->kids[0]?->textColor($env->tint?->rgb($env) ?? $env->theme->accent); } else { $n->kids[0]?->textColor($env->theme->danger); }
         } elseif ($env->listStyle === \ListStyle::plain && !($c->runtime?->touch ?? false)) { // a macOS list's row: its content's height, rounded (a phone's plain list's rows are UIKit's cells, as a grouped one's)
-            $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->padding(6, 10)->radius(8)->alignItems(Node::CENTER);
+            $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignSelf(Node::STRETCH)->padding(6, 10)->radius(8)->alignItems(Node::CENTER);
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false]), is_array($v) ? $v : [$v]);
             $c->end();
         } else {
-            $n = $c->row(0, 8)->alignSelf(Node::STRETCH)->minHeight($env->theme->rowHeight)->padding(11, 16)->alignItems(Node::CENTER);
+            $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignSelf(Node::STRETCH)->minHeight($env->theme->rowHeight)->padding(11, 16)->alignItems(Node::CENTER);
               View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true]), is_array($v) ? $v : [$v]);
-              if ($v instanceof View && $v->badgeValue !== null) { $c->spacer(); $c->text((string)$v->badgeValue, color: $env->theme->textMuted); }
+              if ($v instanceof View && $v->badgeValue !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); (new Text((string)$v->badgeValue, true))->foregroundStyle(\Color::secondary)->render($c, $env->along(Node::ROW)); }
             $c->end();
             foreach ($n->kids as $k) { // a switch (31 high) or segments (32) centered in a row 44 high, as UIKit's cells, not padded 11 as a line of text
                 if ($k->kind === Node::SWITCH || $k->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(6, 16); break; }
@@ -281,7 +281,7 @@ final class ListView extends View
         if ($loose !== []) { $sections[] = Section()(...$loose); }
         $n = ScrollView::scroller($c, $env, function (Env $e) use ($c, $sections): void {
             foreach ($sections as $s) { $s->render($c, $e->along(Node::COLUMN)); }
-            $c->column()->size(0, 24); $c->end(); // room under the last section
+            $c->attach(new Node(Node::CONTAINER, Node::COLUMN))->size(0, 24); // room under the last section
         }, false, 0, $t->groupBackground ?? $t->background);
         return $n;
     }
