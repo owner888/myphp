@@ -49,9 +49,9 @@ return function () use ($grid, $table) {
                 Button('Delete…', action: fn() => $this->asking = true)->keyboardShortcut(KeyEquivalent::delete)->disabled($chosen === []),
             )->padding(8),
             Divider(),
-            $this->view === 0 ? $grid() : $table(),
+            fn() => $this->view === 0 ? $grid() : $table(),
             Divider(),
-            Text(verbatim: $this->status !== '' ? $this->status : ($chosen !== [] ? count($chosen) . ' of ' . count($this->entries) . ' chosen' : count($this->entries) . ' items'))
+            fn() => Text(verbatim: $this->status !== '' ? $this->status : (($c = $this->chosenEntries()) !== [] ? count($c) . ' of ' . count($this->entries) . ' chosen' : count($this->entries) . ' items'))
                 ->font(Font::caption)->foregroundStyle(Color::secondary)->padding(10)->frame(maxWidth: INF, alignment: Alignment::leading),
         )
             // The find bar, over the folder, filtering its entries as the query changes.

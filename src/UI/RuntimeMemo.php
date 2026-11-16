@@ -37,6 +37,8 @@ trait RuntimeMemo
     private ?array $memoPointer = null;
     /** Whether what is being built read the keys of the frame (shortcut(), takeKeys(), submitMods()). */
     private bool $readsKeys = false;
+    /** Whether what is being built queried rectOf() for a node not yet laid out. */
+    private bool $unmeasuredRect = false;
     /** The runtime's state that a memo's build changes, as it was before it, while one is built: [values, its own flags]. */
     private array $memoMarks = [];
     /** The window's root reactive scope, tracking State and PHP 8.4 Property Hook reads outside Computed subtrees. */
@@ -136,8 +138,8 @@ trait RuntimeMemo
     /** Before memo $id is built: what the runtime holds, to tell what its build changes. */
     public function memoBegin(): void
     {
-        $this->memoMarks[] = [get_object_vars($this), $this->readsKeys, $this->animating, $this->wakeAt];
-        $this->readsKeys = false; $this->animating = false; $this->wakeAt = null;
+        $this->memoMarks[] = [get_object_vars($this), $this->readsKeys, $this->animating, $this->wakeAt, $this->unmeasuredRect];
+        $this->readsKeys = false; $this->animating = false; $this->wakeAt = null; $this->unmeasuredRect = false;
     }
 
     /**
@@ -147,12 +149,12 @@ trait RuntimeMemo
      */
     public function memoEnd(int $id, array $deps, array $ctx, TextStyle $style, Node $n, bool $clean): bool
     {
-        [$before, $keys, $animating, $wake] = array_pop($this->memoMarks);
+        [$before, $keys, $animating, $wake, $unmeasured] = array_pop($this->memoMarks);
         $asked = $this->animating || $this->wakeAt !== null;
         $readKeys = $this->readsKeys;
-        $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating;
+        $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
-        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt']) : null;
+        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect']) : null;
         $n->memo = 1;
         if ($adds === null) {
             if (($old = $this->memos[$id]['node'] ?? null) !== null && $old !== $n && $old->placed === $this->frameNumber) { self::detach($old, -1); }
@@ -218,13 +220,13 @@ trait RuntimeMemo
     /** Stores the retained Node subtree built by a reactive Computed scope. */
     public function reactiveMemoEnd(int $id, int $version, array $ctx, TextStyle $style, Node $n, bool $clean): bool
     {
-        [$before, $keys, $animating, $wake] = array_pop($this->memoMarks);
-        $asked = $this->animating || $this->wakeAt !== null;
+        [$before, $keys, $animating, $wake, $unmeasured] = array_pop($this->memoMarks);
+        $asked = $this->animating || $this->wakeAt !== null || $this->unmeasuredRect;
         $readKeys = $this->readsKeys;
-        $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating;
+        $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
         $adds = $clean && !$asked && !$this->consumed
-            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'scopes', 'rootScope', 'reactivePoints'])
+            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints'])
             : null;
         $n->memo = 1;
         if ($adds === null) {
@@ -236,7 +238,8 @@ trait RuntimeMemo
         if ($old !== null && $old['node'] !== $n && $old['node']->placed === $this->frameNumber) {
             self::detach($old['node'], -1);
         }
-        $interactive = isset($adds['clickable']) || isset($adds['tips']) || isset($adds['sliders']) || isset($adds['steppers'])
+        $interactive = isset($adds['clickable']) || isset($adds['focusables']) || isset($adds['scrolls']) || isset($adds['listRows'])
+            || isset($adds['tips']) || isset($adds['sliders']) || isset($adds['steppers'])
             || isset($adds['fields']) || isset($adds['draggables']) || isset($adds['menuNodes']) || isset($adds['toggles']);
         $this->memos[$id] = [
             'deps' => [$version], 'ctx' => $ctx, 'style' => $style, 'node' => $n, 'adds' => $adds,
@@ -286,6 +289,9 @@ trait RuntimeMemo
             if (isset($this->scrolls[$id])) { $states[] = $this->scrolls[$id]; }
             if (isset($this->fields[$id])) { $states[] = $this->fields[$id][0]; }
             if (isset($this->areas[$id])) { $states[] = $this->areas[$id]; }
+            if (!($m['interactive'] ?? false) && (isset($this->clickable[$id]) || isset($this->lists[$id]) || isset($this->listRows[$id]) || isset($this->scrolls[$id]) || isset($this->fields[$id]) || isset($this->areas[$id]))) {
+                $m['interactive'] = true;
+            }
         }
         $area = $x0 === INF ? null : [$x0, $y0, $x1, $y1];
         if ($n->memo === 2 && $area !== null && $this->memoPointer !== null && ($m['area'] === null || !self::inArea($m['area'], $this->memoPointer)) && self::inArea($area, $this->memoPointer)) {

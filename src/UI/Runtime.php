@@ -3204,6 +3204,9 @@ final class Runtime
     /** The rect this node had last frame: x, y, w, h. */
     public function rectOf(int $id): ?array
     {
+        if ($this->building && !isset($this->rects[$id])) {
+            $this->unmeasuredRect = true;
+        }
         return $this->rects[$id] ?? null;
     }
 

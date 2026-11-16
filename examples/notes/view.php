@@ -57,9 +57,9 @@ return function () use ($toolbar, $row) {
             : ListView($shown, id: 'id', selection: $this->selected)($row)
         )->searchable(text: $this->query),
         detail: VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
-            $toolbar($doc),
+            fn() => $toolbar($doc),
             TextEditor(document: $doc, options: new EditorOptions(label: 'Note', placeholder: 'Title', onLinkCommand: fn() => $this->openLink($doc)))->id($n->id),
-            Text(verbatim: sprintf('%d words · edited %s', $words, $n->updated->format('M j, H:i')))->font(Font::caption)->foregroundStyle(Color::secondary),
+            fn() => Text(verbatim: sprintf('%d words · edited %s', $words, $n->updated->format('M j, H:i')))->font(Font::caption)->foregroundStyle(Color::secondary),
         )->padding(Edge::vertical, 12)->padding(Edge::horizontal, 20)
             ->toolbar(
                 Button('Copy Markdown', systemImage: 'doc.on.doc', action: fn() => Clipboard::writeText($doc->text()->markdown())),

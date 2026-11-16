@@ -60,17 +60,17 @@ $editorPane = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 1
         VStack(alignment: HorizontalAlignment::leading, spacing: 4)(Text('Body')->font(Font::caption)->foregroundStyle(Color::secondary), TextField('sent with POST, PUT, PATCH', text: $this->body, axis: Axis::vertical)->lineLimit(3, reservesSpace: true)->monospaced()),
     ),
     Divider(),
-    $response($this->shown()),
+    fn() => $response($this->shown()),
 )->padding(16)->frame(maxWidth: INF, maxHeight: INF);
 
 return fn() => Device::isDesktop()
     ? HStack(spacing: 0)(
-        $historyPane()->frame(width: 320),
+        fn() => $historyPane()->frame(width: 320),
         Divider(),
-        $editorPane(),
+        $editorPane,
     )
     : VStack(spacing: 0)(
-        $editorPane(),
+        $editorPane,
         Divider(),
-        $historyPane()->frame(height: 220),
+        fn() => $historyPane()->frame(height: 220),
     );

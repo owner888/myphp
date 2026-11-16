@@ -271,6 +271,29 @@ final class Observer
             }
             return;
         }
+        $targets = [];
+        $seen = [];
+        $visitedClosures = [];
+        self::collectClosureTargets($scope, $fn, $targets, $seen, $visitedClosures);
+        $scope->setTargets($key, $targets);
+    }
+
+    /**
+     * @param list<array{0: WeakReference<object>, 1: string}> $targets
+     * @param array<string, true> $seen
+     * @param array<int, true> $visitedClosures
+     */
+    private static function collectClosureTargets(Scope $scope, Closure $fn, array &$targets, array &$seen, array &$visitedClosures): void
+    {
+        $cid = spl_object_id($fn);
+        if (isset($visitedClosures[$cid])) {
+            return;
+        }
+        $visitedClosures[$cid] = true;
+        $rf = new ReflectionFunction($fn);
+        $file = (string)$rf->getFileName();
+        $start = (int)$rf->getStartLine();
+        $end = (int)$rf->getEndLine();
         $thisObj = $rf->getClosureThis();
         $used = $rf->getClosureUsedVariables();
         $vars = $used;
@@ -278,8 +301,6 @@ final class Observer
             $vars['this'] = $thisObj;
         }
         $accesses = self::parseClosureAt($file, $start, $end);
-        $targets = [];
-        $seen = [];
         $explicitVars = [];
         if ($accesses !== null) {
             foreach ($accesses['props'] as [$varName, $prop]) {
@@ -302,22 +323,26 @@ final class Observer
             }
             foreach ($accesses['bare'] as $varName => $_) {
                 $v = substr($varName, 1);
-                if (!isset($explicitVars[$v]) && isset($vars[$v]) && is_object($vars[$v]) && !self::isEngineObject($vars[$v])) {
-                    foreach (array_keys(get_object_vars($vars[$v])) as $prop) {
-                        self::addTarget($scope, $targets, $seen, $vars[$v], (string)$prop);
+                $val = $vars[$v] ?? null;
+                if ($val instanceof Closure) {
+                    self::collectClosureTargets($scope, $val, $targets, $seen, $visitedClosures);
+                } elseif (!isset($explicitVars[$v]) && is_object($val) && !self::isEngineObject($val)) {
+                    foreach (array_keys(get_object_vars($val)) as $prop) {
+                        self::addTarget($scope, $targets, $seen, $val, (string)$prop);
                     }
                 }
             }
         } else {
             foreach ($vars as $obj) {
-                if (is_object($obj) && !self::isEngineObject($obj)) {
+                if ($obj instanceof Closure) {
+                    self::collectClosureTargets($scope, $obj, $targets, $seen, $visitedClosures);
+                } elseif (is_object($obj) && !self::isEngineObject($obj)) {
                     foreach (array_keys(get_object_vars($obj)) as $prop) {
                         self::addTarget($scope, $targets, $seen, $obj, (string)$prop);
                     }
                 }
             }
         }
-        $scope->setTargets($key, $targets);
     }
 
     /**
