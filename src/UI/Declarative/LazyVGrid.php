@@ -40,7 +40,7 @@ final class LazyVGrid extends View
         if ($selects) { if ($selection instanceof Binding) { $this->binding = $selection; $this->selection = $selection->get(); } else { $this->selection = &$selection; } $this->selects = true; } // a variable, or a Binding(get:set:)
     }
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

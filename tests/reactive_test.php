@@ -162,7 +162,33 @@ $hb->frame(1);
 same(2, $batchRuns, 'Observer::batch coalesced two State writes into a single rebuild');
 check($hb->byText('Sum: 30') !== null, 'Sum updated to 30');
 
-// 4. Zero reference cycles across 50 frames with State, Observer and Computed
+// 4. Implicit Computed: any Closure passed into a container (VStack, HStack, Group, ZStack) is automatically a fine-grained reactive scope
+$impA = State(100);
+$impB = State(200);
+$impBuildsA = 0;
+$impBuildsB = 0;
+$hi = new Headless(function (Context $c) use ($impA, $impB, &$impBuildsA, &$impBuildsB) {
+    Content::render(function () use ($impA, $impB, &$impBuildsA, &$impBuildsB) {
+        return VStack(spacing: 8)(
+            function () use ($impA, &$impBuildsA) {
+                $impBuildsA++;
+                return Text("Implicit A: {$impA}");
+            },
+            function () use ($impB, &$impBuildsB) {
+                $impBuildsB++;
+                return Text("Implicit B: {$impB}");
+            },
+        );
+    }, $c);
+}, 300, 200);
+$hi->frame(1);
+same([1, 1], [$impBuildsA, $impBuildsB], 'implicit closure children build once initially');
+$impA->value = 101;
+$hi->frame(1);
+same([2, 1], [$impBuildsA, $impBuildsB], 'mutating $impA only rebuilds the first closure child; second closure child has 0 rebuilds');
+check($hi->byText('Implicit A: 101') !== null && $hi->byText('Implicit B: 200') !== null, 'implicit closure children render updated text');
+
+// 5. Zero reference cycles across 50 frames with State, Observer and Computed
 gc_collect_cycles();
 gc_disable();
 for ($i = 0; $i < 25; $i++) {

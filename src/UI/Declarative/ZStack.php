@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node, Track};
 
 /** ZStack, as SwiftUI's: the views given one over the other, the first at the back, placed in the stack by $alignment. */
@@ -13,7 +14,7 @@ final class ZStack extends View
 
     public function __construct(public readonly \Alignment $alignment) {}
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;
@@ -45,7 +46,8 @@ final class ZStack extends View
     {
         $out = [];
         foreach ($content as $v) {
-            if ($v instanceof View) { $out[] = $v; } elseif (is_array($v)) { array_push($out, ...self::flat($v)); }
+            if ($v instanceof Closure) { $out[] = new Computed($v); }
+            elseif ($v instanceof View) { $out[] = $v; } elseif (is_array($v)) { array_push($out, ...self::flat($v)); }
         }
         return $out;
     }

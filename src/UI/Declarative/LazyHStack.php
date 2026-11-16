@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node};
 
 /** LazyHStack, as SwiftUI's: views laid out horizontally in a ScrollView(Axis::horizontal). */
@@ -16,7 +17,7 @@ final class LazyHStack extends View
         public readonly float $spacing = 8,
     ) {}
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

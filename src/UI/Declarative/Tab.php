@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node, SVG};
 
 /**
@@ -35,7 +36,7 @@ final class Tab extends View
         return $name === null ? null : static fn(int $rgb) => \MyPHP\UI\Image::symbol($name, $size, $rgb);
     }
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

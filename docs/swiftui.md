@@ -71,7 +71,7 @@ the framework): no `use` line, as SwiftUI needs no import beyond
 |---|---|
 | `@State var on = false` | `$on = State(false)` or a PHP 8.4 hooked property (`Observer::get` / `Observer::set`), or `public bool $on = false;` |
 | `@Binding var on: Bool`, passed as `$on` | The property or `State` itself: `Toggle('Wi-Fi', isOn: $app->on)`; `Binding::of($app, 'on')` or `Binding(get:, set:)` |
-| `@StateObject`, `@Observable` | PHP 8.4 Property Hooks (`Observer::get` / `Observer::set`) + `Computed(fn() => …)` for fine-grained retained subtrees |
+| `@StateObject`, `@Observable` | PHP 8.4 Property Hooks (`Observer::get` / `Observer::set`) + `fn() => …` child closures (or `Computed(fn() => …)`) for fine-grained retained subtrees |
 | `@Environment(\.colorScheme)` | `->preferredColorScheme()` to set it; the theme follows the system |
 | `@FocusState` | `->focused($app->editing)`, `->defaultFocus()` |
 | `onChange(of: value) { }` | `->onChange(of: $app->value, action: fn() => …)` |
@@ -88,7 +88,7 @@ $app = new class {
     public int $changes = 0;
 };
 $view = fn() => Form()(
-    Computed(fn() => Text(verbatim: "Count: {$app->count}")),
+    fn() => Text(verbatim: "Count: {$app->count}"),
     Toggle('Wi-Fi', isOn: $app->wifi),
     $app->wifi ? Slider(value: $app->volume, in: [0, 1])->onChange(of: $app->volume, action: fn() => $app->changes++) : null,
 );

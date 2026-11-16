@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node};
 
 /**
@@ -22,7 +23,7 @@ final class ContentUnavailableView extends View
         public readonly string $description = '',
     ) {}
 
-    public function __invoke(View|array|null ...$actions): static
+    public function __invoke(View|Closure|array|null ...$actions): static
     {
         $this->actions = $actions;
         return $this;

@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 return fn() => VStack(spacing: 12)(
-    Text('Count: {count}', count: $this->count)->font(Font::title),
+    fn() => Text('Count: {count}', count: $this->count)->font(Font::title),
     HStack(spacing: 8)(
         Button('Increment', action: $this->increment(...))->buttonStyle(ButtonStyle::borderedProminent),
         Button('Reset', action: $this->reset(...))->disabled($this->count === 0),

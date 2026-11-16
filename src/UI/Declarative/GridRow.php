@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node};
 
 /** A row of a 2D Grid, as SwiftUI's GridRow. */
@@ -13,7 +14,7 @@ final class GridRow extends View
 
     public function __construct(public readonly ?\VerticalAlignment $alignment = null) {}
 
-    public function __invoke(View|array|null ...$cells): static
+    public function __invoke(View|Closure|array|null ...$cells): static
     {
         $this->cells = $cells;
         return $this;

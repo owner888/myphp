@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node};
 
 /** Section, as SwiftUI's in a List or Form: its rows in a rounded group, its header above in small capitals, its footer below. */
@@ -13,7 +14,7 @@ final class Section extends View
 
     public function __construct(public readonly string $header = '', public readonly string $footer = '') {}
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

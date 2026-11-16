@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\App;
 use MyPHP\UI\{Context, Node, ScrollState};
 
@@ -20,7 +21,7 @@ final class ScrollView extends View
 
     public function __construct(public readonly \Axis $axis = \Axis::vertical) {}
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

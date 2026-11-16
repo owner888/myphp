@@ -28,7 +28,7 @@ final class NavigationStack extends View
     public function __construct(public readonly ?Router $path = null) {}
 
     /** The root view. */
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

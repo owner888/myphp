@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node};
 
 /** DisclosureGroup, as SwiftUI's: $title, and its content shown while expanded: $isExpanded when bound, else kept by the group itself. */
@@ -18,7 +19,7 @@ final class DisclosureGroup extends View
     }
 
     /** The content. */
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

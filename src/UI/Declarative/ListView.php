@@ -292,6 +292,7 @@ final class ListView extends View
         $out = [];
         foreach ($content as $v) {
             if ($v instanceof Each) { array_push($out, ...$v->views()); } // each item a row
+            elseif ($v instanceof Closure) { $out[] = new Computed($v); }
             elseif ($v instanceof View) { $out[] = $v; } elseif (is_array($v)) { array_push($out, ...self::flat($v)); }
         }
         return $out;

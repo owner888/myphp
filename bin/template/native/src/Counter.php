@@ -5,7 +5,10 @@ declare(strict_types=1);
 
 final class Counter
 {
-    public int $count = 0;
+    public int $count = 0 {
+        get => Observer::get($this, 'count', $this->count);
+        set => Observer::set($this, 'count', $this->count, $value);
+    }
 
     public function increment(): void
     {

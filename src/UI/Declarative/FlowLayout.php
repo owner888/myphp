@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
+use Closure;
 use MyPHP\UI\{Context, Node};
 
 /**
@@ -21,7 +22,7 @@ final class FlowLayout extends View
         public readonly \HorizontalAlignment $alignment = \HorizontalAlignment::leading,
     ) {}
 
-    public function __invoke(View|array|null ...$content): static
+    public function __invoke(View|Closure|array|null ...$content): static
     {
         $this->content = $content;
         return $this;

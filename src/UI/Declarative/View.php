@@ -1192,15 +1192,17 @@ abstract class View
     /** What the view's keyboardShortcut does: a button's action. */
     protected function shortcut(): void {}
 
-    /** Renders $content, views, arrays of them and nulls, into $c. @param iterable<View|array|null>|View|null $content */
-    public static function renderAll(Context $c, Env $env, iterable|View|null $content): void
+    /** Renders $content, views, reactive closures, arrays of them and nulls, into $c. @param iterable<View|Closure|array|null>|View|Closure|null $content */
+    public static function renderAll(Context $c, Env $env, iterable|View|Closure|null $content): void
     {
         if ($content === null) { return; }
+        if ($content instanceof Closure) { (new Computed($content))->render($c, $env); return; }
         if ($content instanceof View) { $content->render($c, $env); return; }
         foreach ($content as $v) {
             if ($v === null || $v === false) { continue; }
+            if ($v instanceof Closure) { (new Computed($v))->render($c, $env); continue; }
             if (is_array($v) || $v instanceof \Traversable) { self::renderAll($c, $env, $v); continue; }
-            if (!$v instanceof View) { throw new \TypeError('a view\'s content holds views, arrays of them and null, not ' . get_debug_type($v)); }
+            if (!$v instanceof View) { throw new \TypeError('a view\'s content holds views, closures, arrays of them and null, not ' . get_debug_type($v)); }
             $v->render($c, $env);
         }
     }
