@@ -206,23 +206,7 @@ check(!$s->dialog && $t->byText('A sheet over the page') === null, 'Done closes 
 \MyPHP\App::setFrontend(null);
 }
 
-// todo: the store, and its event in the TypeScript client.
-Headless::load('todo', 'function openWindow');
-$path = sys_get_temp_dir() . '/myphp-todo-' . getmypid() . '.json';
-if (is_file($path)) { unlink($path); } // left by a run that stopped early, under a process id used again
-\MyPHP\Examples\Todo\Todos::$changed = new \MyPHP\Event('todos:changed', \MyPHP\Examples\Todo\Stats::class);
-$store = new \MyPHP\Examples\Todo\Todos($path);
-$a = $store->add(' Milk '); $store->add('Bread');
-$store->toggle($a->id);
-same([['Bread', 'Milk'], ['Bread'], 2, 1], [array_map(fn($t) => $t->title, $store->list(\MyPHP\Examples\Todo\Filter::All)), array_map(fn($t) => $t->title, $store->list(\MyPHP\Examples\Todo\Filter::Active)), $store->stats()->total, $store->stats()->active], 'newest first, filtered, counted');
-same(1, $store->clearDone(), 'the done one cleared');
-same(['Bread'], array_map(fn($t) => $t->title, (new \MyPHP\Examples\Todo\Todos($path))->list(\MyPHP\Examples\Todo\Filter::All)), 'kept on disk');
-try { $store->add('  '); check(false, 'an empty todo'); } catch (\InvalidArgumentException) { check(true, 'a todo needs a title'); }
-unlink($path);
-\MyPHP\Ipc::bind($store);
-$ts = \MyPHP\TypeScript::generate();
-check(str_contains($ts, '  todosChanged: event<Stats>("todos:changed"),'), 'the event\'s key is its name camel-cased, as mygo\'s');
-check(str_contains($ts, 'export type Filter = "all" | "active" | "done";') && str_contains($ts, 'list(filter: Filter): Promise<Todo[]>'), 'the filter, an enum, is the union of its values');
+
 
 // confetti: a demo throws its pieces, which head off in the next frame and go once they faded; the stage throws a burst of its own from the pointer.
 [$view, $s] = Headless::load('confetti');

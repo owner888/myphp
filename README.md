@@ -68,7 +68,7 @@ What works today, macOS first (the rows name the version that brought them):
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | Packaging as mygo's (v1.12): `-platform darwin/arm64,darwin/amd64,darwin/universal`, the resources directory and its platform directories (universal binaries combined), the icon from a PNG or an asset catalog, code signing inside out, the .dmg with its window laid out, notarization, `-upload` to GitHub releases or S3; `myphp doctor`, `install-skills`, `version`, `help` | works (signing, the .dmg and notarizing need the developer's Mac) |
-| Development as mygo's (v1.13): `myphp dev` runs "<name> Dev", a bundle with the app's icon and resources, built again on changes, `r`/`c`/`q`/`h` on the terminal; SIGINT and SIGTERM quit the app as Quit; `myphp.config.ts`; the pages' packages `myphp-runtime` (`packages/runtime`, which the generated client and the plugins import) and `myphp-cli` (`packages/cli`); the web template with Vite and TypeScript | works (the development app needs the developer's Mac) |
+| Development (v1.13): `myphp dev` runs "<name> Dev", a bundle with the app's icon and resources, hot reloaded on changes, `r`/`c`/`q`/`h` on the terminal; SIGINT and SIGTERM quit the app as Quit | works (the development app needs the developer's Mac) |
 | Widgets and keys as mygo's (v1.14): password fields; a dialog keeps the window's shortcuts; lists whose place, choice and rows' state follow their items' keys, and scroll by the step into rows never measured; the keys scroll what the pointer is over, Page Up/Down in a list scroll as AppKit's; stepper Left/Right, slider Page Up/Down; tooltips for the keyboard focus, hidden by a press or Escape; Control-K in text fields; JPEG photos upright; a sidebar's typeahead; shortcuts by the key's place on other layouts; `MYPHP_FRAME_STATS` | works (decoding photos, the frame statistics and other layouts' keys need the developer's Mac) |
 | Lists as mygo's tests have them (v1.15): rows of any height without gaps, a step of the wheel or a key moving them by the step, `scrollTo` at the top, middle or bottom as measured, the end followed as rows come or grow (gliding with a FollowAnimation), the focused row kept out of view, Tab showing the next row, the scroll bar's thumb as far through the rows as along its track, rows under a pinned header, a list as high as its rows in a scrolling container | works |
 | Text fields and toasts as mygo's tests have them (v1.16): undo step by step (a caret move ends a step), the app's changes undone with the typing, the view kept where the wheel put it as the app adds text, fields showing their start without the focus and aligned with `textAlign()`, text input clients unmarked as the focus leaves them, toasts' time stopping under the pointer and in the background, Escape closing the toast the focus is in | works |
@@ -83,7 +83,7 @@ What works today, macOS first (the rows name the version that brought them):
 | Wide colors, as mygo's (v1.25): `Oklch::rgb` outside sRGB keeps its Display P3 color, drawn on a P3 screen in float16 drawables for fills, shadows, text and decorations, its nearest sRGB color elsewhere; `WideColor::srgb` for the sRGB twin | works (`examples/gallery`, Wide colors) |
 | Go's random numbers (v1.27): `Random\Rand::pcg($a, $b)` draws what Go's `rand.New(rand.NewPCG(a, b))` draws (IntN, Float64, Shuffle, Perm, NormFloat64…), so seeded examples match mygo's; mygo's `native`, `notes` and `drag-drop` examples; text drawn with font smoothing (bolder the lighter it is, as AppKit's); borders taking room in layout; a button's label in its own style; dates in the system's time zone whatever php.ini names | works (`examples/farm`, `notes`, `native`, `drag-drop`) |
 | Clicking through the examples on the Mac (v1.28): a tray stays in the menu bar; a drag's image shows the element's colors; a popover keeps the ids of what is built after it, so the notes' link field takes the typing; Go's generators (v1.27) taken out again, the examples drawing from PHP's engines; `-launcher micro` apps signable again (the phar inside the executable's `__LINKEDIT`) and with intl, xmlreader, curl, sockets and filter, which the framework calls (`myphp micro` rebuilds micro.sfx once), its catalogs found in its phar; an out inside frontendDist refused, the todo example built to `build` as mygo's; the first sound no longer crashes (a queue's address by `ObjC::addr`); a static app's terminal and frontend run from its phar; the 14 examples compared with mygo's side by side: fields as high as mygo's and taking `fontSize()`, their typing reported by `changed()`, a select's least width, a web view inside its box's border, a disabled button's border, a list's rows at its end with `justify(END)`; the flyout example now mygo's | works (`examples/native`, `drag-drop`, `notes`; `myphp build -launcher micro`) |
-| Releasing as mygo does (v1.29): CI runs the PHP and Bun tests on every push (`.github/workflows/ci.yml`); a tag `v<version>` checks that bin/myphp and the npm packages have it (`php scripts/version.php`, which sets it), publishes myphp-runtime, myphp-cli and the plugins' `@myphp-plugins/*` with npm's trusted publishing, and makes the GitHub release (`release.yml`); myphp-cli installed from npm runs the project's Composer-installed MyPHP (`vendor/owner888/myphp/bin/myphp`); the packages leave their tests out | works (the first publish of the plugins and npm's trusted publishers are the developer's, on npmjs.com) |
+| Automated CI and Releasing (v1.29): CI runs the headless PHP and Windows Direct3D 11 tests on every push (`.github/workflows/ci.yml`); a tag `v<version>` checks `bin/myphp` (`php scripts/version.php`) and creates the GitHub release (`release.yml`) | works |
 | A frame's layout as fast as before text wrapping (v1.30): a text in a row too narrow for it keeps its widest word whole (its min-content width was one glyph's, laid out a line a glyph); a text's min-content width, which layout asks of every text that may wrap, taken from the line that measured it instead of laid out each frame: 2000 texts lay out in 4 ms instead of 14, a million-row list in 0.12 ms instead of 0.35; the tree a frame replaces freed at once instead of by PHP's collector, whose runs dropped frames while a list scrolled; frames paced by the view's display link, as mygo's, instead of drawn as soon as asked | works (`tests/wrap_test.php`, `tests/lists_test.php`) |
 | Images decoded off the main thread (v1.31): `Image::fromBytes` and `fromFile` decode through CoreImage on an NSOperationQueue's thread, the main thread spending about 0.2 ms an image (a HEIC took over 200 ms there); in a fiber (`App::go`) they wait while the app draws, outside one they block as before; HEIC photos come upright as their orientation says (a portrait one showed sideways); the photos and files examples and the Markdown view load images in fibers, the Markdown view showing the description until then, as mygo's | works (`tests/image_test.php`, `tests/markdown_view_test.php`) |
 | Underlines skipping ink (v1.32): as AppKit's and mygo's, an underline breaks where g, y, p and the like cross it, a line's thickness clear on either side; Han, Kana, Hangul and spaces do not break it; the glyphs' outlines come from CoreText (`CTFontCreatePathForGlyph`), kept by font and glyph | works (`tests/text_test.php`) |
@@ -222,10 +222,10 @@ What works today, macOS first (the rows name the version that brought them):
 | `Audio\Audio` (mygo's package audio): sounds decoded into memory that play over themselves, streams decoded a second ahead, `Decoder`s an app writes (a synthesizer); players with volume, pan, speed, loops and loop ranges without a gap, seeking, 5 ms ramps; mixed in PHP into an Audio Queue; WAV and Ogg Vorbis decoded in PHP, MP3, AAC, ALAC, FLAC, AIFF and CAF by the system; see docs/audio.md | works (`examples/piano`) |
 | Plugins (mygo's Use), in PHP: `App::use(Plugin)` binds a plugin's service as `plugin:<name>`, its page side a TypeScript client of its own; a `CallContext` parameter tells the calling page and ends as it goes; `App::onQuit` | works |
 | File watches (mygo's WatchFiles): `App::watchFiles` on a file or a directory, recursive or not, `Ignore` leaving out what is never opened; batches of create, write, remove and rename once changes stop, a file saved as editors do a write, the end when the root goes away; FSEvents through FFI, or with `hintsOnly` only the directories where something changed | works |
-| watch (mygo's plugins/watch): pages watch the directories and files the app names (`src/Plugins/Watch/client/index.ts`, `@myphp-plugins/watch`), recursive only where the app allows, `Resolve` and `Allow`, quotas per page and in all, failures as codes that never say a path | works (`examples/watch`) |
-| WebSocket (mygo's plugins/websocket): pages open WebSocket connections from PHP with the browser's API (`src/Plugins/WebSocket/client/index.ts`, `@myphp-plugins/websocket`): any header in the handshake (Authorization, Cookie, Origin), subprotocols, text and binary messages in order, `bufferedAmount`, closing either way, connections ending with their page; libcurl, the system's, through FFI | works (`examples/websocket`) |
-| fetch (mygo's plugins/fetch): pages make HTTP requests from PHP with a standard `fetch` (`src/Plugins/Fetch/client/index.ts`): no CORS, any header (Origin, Cookie, Host…), the body streamed as it arrives, aborting stops the request; libcurl, the system's, through FFI | works |
-| SQLite (mygo's plugins/sqlite): mygo's build of SQLite 3.53.4 and its shim through FFI; `Sqlite::open`, one statement at a time checked whole before it runs, parameters, `RETURNING`, transactions rolled back on any error, read-only connections, busy timeouts, FTS5, R*Tree and JSON; for pages, `App::use(Sqlite::plugin())` and `src/Plugins/Sqlite/client/index.ts` (`@myphp-plugins/sqlite`), connections owned by their page | works |
+| watch (`Plugins\Watch`): watch configured directories and files, recursive only where the app allows, `Resolve` and `Allow`, quotas per page and in all | works (`examples/watch`) |
+| WebSocket (`Plugins\WebSocket`): open WebSocket connections from PHP with custom handshake headers (Authorization, Cookie, Origin), subprotocols, text and binary messages in order, driven by system libcurl through FFI | works (`examples/websocket`) |
+| fetch (`URLSession` & `Plugins\Fetch`): make non-blocking HTTP/HTTPS requests from PHP via system libcurl and fibers with no CORS restrictions and streaming bodies | works |
+| SQLite (`Plugins\Sqlite`): standard SQLite 3.53.4 C API through FFI; `Sqlite::open`, one statement at a time checked whole before it runs, parameters, `RETURNING`, atomic transactions, read-only connections, busy timeouts, FTS5, R*Tree and JSON | works |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | App services (mygo's): deep links (`App::onOpenURL`, `registerURLScheme`, myphp.json's `urlSchemes`) and files opened with the app (`onOpenFile`, `fileAssociations`), a single instance (`requestSingleInstanceLock`, `onSecondInstance`), recent documents, opening at login, `Network` (online, metered), `Clipboard` (data in several formats, files, flush), `Secrets` (the Keychain), `Cookies`; pages: find in page, print, print to PDF, permissions (camera, microphone), downloads | works (`examples/services`) |
@@ -260,10 +260,10 @@ scrolling; frames are only built when something changes.
 
 ### The command line
 
-`bin/myphp` is the CLI (`myphp-cli` on npm), with Flutter's shape: one way to a device on every platform.
+`bin/myphp` is the CLI, with Flutter's shape: one way to a device on every platform.
 
 ```sh
-myphp init my-app                  # a native-UI project (-template web for a page calling PHP)
+myphp init my-app                  # a 2D SwiftUI project (-template 3d for a 5-platform 3D SceneView project)
 myphp doctor                       # the toolchain: PHP, the NDK, Xcode, adb, the phone runtimes
 myphp devices                      # phones over adb, and the simulators
 myphp emulators --launch <id>      # starts an Android emulator or the iOS Simulator (--create makes one)
@@ -347,7 +347,6 @@ myphp run -d macos examples/menubar-flyout   # a tray icon's flyout in a system 
 myphp run -d macos examples/menubar-native   # a menu bar app: a window under its tray icon that hides as it loses the focus
 myphp run -d macos examples/launcher         # a launcher: a global shortcut, the installed apps ranked as you type, their icons
 myphp run -d macos examples/vibrancy         # a window of vibrancy: a sidebar of materials sliding out
-myphp dev examples/todo               # a todo list in a Vite page, its typed PHP service and events (needs bun)
 myphp run -d macos examples/confetti         # canvas-confetti's demos, every piece moved by poses that only paint
 myphp run -d macos examples/effort-slider    # an effort slider stepping into Galaxy, letters blurring as they change
 myphp run -d macos examples/farm             # a farming game: till, plant, water, harvest, day and night, music
@@ -453,7 +452,7 @@ App::run();
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
 | 与 mygo 一致的打包（v1.12）：`-platform darwin/arm64,darwin/amd64,darwin/universal`，resources 目录及按平台的子目录（通用二进制自动合并），PNG 或 asset catalog 生成图标，由内而外代码签名，排好窗口布局的 .dmg，公证，`-upload` 到 GitHub Releases 或 S3；`myphp doctor`、`install-skills`、`version`、`help` | 可用（签名、.dmg、公证要在开发者的 Mac 上跑） |
-| 与 mygo 一致的开发流程（v1.13）：`myphp dev` 运行 "<name> Dev"，一个带应用图标和资源的 bundle，改动后自动重建，终端里 `r`/`c`/`q`/`h`；SIGINT、SIGTERM 让应用像 Quit 一样退出；`myphp.config.ts`；页面用的包 `myphp-runtime`（`packages/runtime`，生成的 client 和插件都从这里 import）和 `myphp-cli`（`packages/cli`）；Vite + TypeScript 的 web 模板 | 可用（开发版应用要在开发者的 Mac 上跑） |
+| 实时热重载开发流程（v1.13）：`myphp dev` 运行 "<name> Dev"，带应用图标和资源的 bundle，改动后自动热重载，终端里 `r`/`c`/`q`/`h`；SIGINT、SIGTERM 让应用像 Quit 一样退出 | 可用 |
 | 与 mygo 一致的控件和按键（v1.14）：密码框；对话框打开时窗口快捷键不生效；列表按条目的 key 保持位置、选中项和行状态，滚进未测量的行时按步长精确滚动；按键滚动指针下的容器，列表里 Page Up/Down 像 AppKit 一样只滚动；步进器左右键、滑块 Page Up/Down；键盘焦点也显示提示，按下或 Esc 隐藏；文本框 Control-K；JPEG 照片按 EXIF 方向摆正；侧栏输入首字母选择；其他键盘布局下快捷键按键位匹配；`MYPHP_FRAME_STATS` | 可用（照片解码、帧统计和其他布局的按键要在开发者的 Mac 上验证） |
 | 按 mygo 测试补齐的列表（v1.15）：任意行高无缝隙，滚轮或按键按步长精确滚动，`scrollTo` 按实测高度对齐到顶部、居中或底部，跟随末尾（新行或行变高时，可配 FollowAnimation 平滑），焦点所在行滚出视野仍保留，Tab 会把下一行滚进来，滚动条拖动与行的位置一致，行停在吸顶分节标题之下，滚动容器里的列表高度等于所有行 | 可用 |
 | 按 mygo 测试补齐的文本框和 toast（v1.16）：逐步撤销（移动光标结束一步），撤销连同应用对输入的改写，应用追加文本时视图停在滚轮所在处，文本框失焦时显示开头、按 `textAlign()` 对齐，焦点离开时 text input client 取消标记，toast 在指针悬停和窗口转入后台时暂停计时，焦点在 toast 里时 Esc 关闭它 | 可用 |
@@ -468,7 +467,7 @@ App::run();
 | 广色域颜色，与 mygo 一致（v1.25）：超出 sRGB 的 `Oklch::rgb` 颜色保留 Display P3 色值，在 P3 屏幕上以 float16 绘制填充、阴影、文字和装饰线，其他情况绘制最接近的 sRGB 颜色；`WideColor::srgb` 取 sRGB 近似色 | 可用（`examples/gallery` 的 Wide colors） |
 | Go 的随机数（v1.27）：`Random\Rand::pcg($a, $b)` 与 Go 的 `rand.New(rand.NewPCG(a, b))` 产生相同序列（IntN、Float64、Shuffle、Perm、NormFloat64…），带种子的例子与 mygo 一致；移植 mygo 的 `native`、`notes`、`drag-drop` 例子；文字按字体平滑绘制（颜色越浅越粗，与 AppKit 一致）；边框在布局中占位；按钮文字可单独设样式；无论 php.ini 怎么设，日期都用系统时区 | 可用（`examples/farm`、`notes`、`native`、`drag-drop`） |
 | 在 Mac 上逐个点按例子（v1.28）：托盘图标留在菜单栏；拖动预览显示元素本来的颜色；弹出框不再打乱其后节点的 id，notes 的链接输入框能接收键入；去掉 v1.27 移植的 Go 随机数，例子改回 PHP 自带的引擎；`-launcher micro` 构建的 app 重新可以签名（phar 放进可执行文件的 `__LINKEDIT`），并带上框架用到的 intl、xmlreader、curl、sockets、filter（`myphp micro` 会重新编译一次 micro.sfx），phar 里的翻译目录也能读到；out 位于 frontendDist 内时拒绝构建，todo 例子与 mygo 一样输出到 `build`；第一次播放声音不再闪退（音频队列地址改用 `ObjC::addr`）；静态 app 的终端和前端页面能从 phar 里运行；14 个例子与 mygo 逐对比对：输入框高度与 mygo 一致且支持 `fontSize()`，打字后 `changed()` 能报告，select 有最小宽度，web view 不再盖住外框边框，禁用按钮的边框不再消失，列表可用 `justify(END)` 把行贴到底部；flyout 例子改为 mygo 的版本 | 可用（`examples/native`、`drag-drop`、`notes`；`myphp build -launcher micro`） |
-| 与 mygo 一样的发布流程（v1.29）：每次 push 由 CI 跑 PHP 和 Bun 测试（`.github/workflows/ci.yml`）；推 `v<版本>` tag 时检查 bin/myphp 和各 npm 包的版本一致（`php scripts/version.php` 负责设置），用 npm 的 Trusted Publishing 发布 myphp-runtime、myphp-cli 和插件的 `@myphp-plugins/*`，并创建 GitHub Release（`release.yml`）；从 npm 装的 myphp-cli 会运行项目里 Composer 装的 MyPHP（`vendor/owner888/myphp/bin/myphp`）；npm 包里不再带测试文件 | 可用（插件包的第一次发布和 npm 上的 Trusted Publisher 配置由开发者在 npmjs.com 完成） |
+| 自动化 CI 与发布流程（v1.29）：每次 push 由 CI 跑无头 PHP 测试与 Windows D3D11 测试（`.github/workflows/ci.yml`）；推 `v<版本>` tag 时检查 `bin/myphp` 版本一致（`php scripts/version.php`）并自动创建 GitHub Release（`release.yml`） | 可用 |
 | 布局速度找回文字折行之前的水平（v1.30）：放在太窄的行里的文字，最长的单词不再被拆开（之前最小内容宽度算成了一个字形的宽度，每个字形都排成一行）；每段可能折行的文字，其最小内容宽度直接取自测量它的那一行，不再每帧重新排版：2000 段文字的布局从 14 ms 降到 4 ms，百万行列表从 0.35 ms 降到 0.12 ms；每帧被替换掉的节点树立即释放，不再等 PHP 的垃圾回收（滚动列表时回收会造成掉帧）；改为按显示器刷新出帧（视图的 display link，与 mygo 一致），不再一有变化就立刻出帧 | 可用（`tests/wrap_test.php`、`tests/lists_test.php`） |
 | 图片解码挪出主线程（v1.31）：`Image::fromBytes` / `fromFile` 交给 CoreImage 在 NSOperationQueue 的线程上解码，主线程每张图只花约 0.2 ms（之前一张 HEIC 要 200 ms 以上）；在 fiber（`App::go`）里等待时 app 照常绘制，fiber 外照旧阻塞到解完；HEIC 照片按自身方向转正（之前竖拍的会横着显示）；photos、files 例子和 Markdown 视图都在 fiber 里加载图片，Markdown 在图片就绪前显示描述，与 mygo 一致 | 可用（`tests/image_test.php`、`tests/markdown_view_test.php`） |
 | 下划线避开字母下伸部分（v1.32）：与 AppKit、mygo 一样，下划线在 g、y、p 等字形穿过它的地方断开，两侧各留一个线宽；汉字、假名、谚文和空格不断开；字形轮廓来自 CoreText（`CTFontCreatePathForGlyph`），按字体、字形缓存 | 可用（`tests/text_test.php`） |
@@ -607,10 +606,10 @@ App::run();
 | `Audio\Audio`（mygo 的 audio 包）：解码进内存、可叠加播放的音效，提前一秒解码的流，应用自己写的 `Decoder`（合成器）；播放器支持音量、声像、速度、无缝循环和循环区间、跳转、5 ms 渐变；在 PHP 里混音后送进 Audio Queue；WAV 和 Ogg Vorbis 用 PHP 解码，MP3、AAC、ALAC、FLAC、AIFF、CAF 用系统解码器；见 docs/audio.md | 可用（`examples/piano`） |
 | 插件（mygo 的 Use），PHP 插件：`App::use(Plugin)` 把插件的服务绑定为 `plugin:<名字>`，网页侧是插件自带的 TypeScript 客户端；`CallContext` 参数告诉方法是哪个页面调用的，页面离开时结束；`App::onQuit` | 可用 |
 | 文件监视（mygo 的 WatchFiles）：`App::watchFiles` 监视文件或目录，可递归，`Ignore` 排除的目录从不打开；改动停下后成批给出 create、write、remove、rename，编辑器式保存算一次 write，根目录没了监视即结束；经 FFI 调用 FSEvents；`hintsOnly` 只报告发生变化的目录 | 可用 |
-| watch（mygo 的 plugins/watch）：网页按名字监视应用开放的目录和文件（`src/Plugins/Watch/client/index.ts`，`@myphp-plugins/watch`），只在应用允许处递归，`Resolve` 与 `Allow`，每页和总数配额，失败只给代码、从不暴露路径 | 可用（`examples/watch`） |
-| WebSocket（mygo 的 plugins/websocket）：网页用浏览器同款 API 从 PHP 建 WebSocket 连接（`src/Plugins/WebSocket/client/index.ts`，`@myphp-plugins/websocket`）：握手可带任意请求头（Authorization、Cookie、Origin），子协议，文本和二进制消息按序发送，`bufferedAmount`，双方都可关闭，连接随页面结束；用系统自带的 libcurl，经 FFI | 可用（`examples/websocket`） |
-| fetch（mygo 的 plugins/fetch）：网页用标准的 `fetch`（`src/Plugins/Fetch/client/index.ts`）从 PHP 发 HTTP 请求：没有 CORS 限制，任意请求头（Origin、Cookie、Host…），响应体边收边流给页面，abort 即停止请求；用系统自带的 libcurl，经 FFI | 可用 |
-| SQLite（mygo 的 plugins/sqlite）：mygo 编好的 SQLite 3.53.4 和它的 C shim，经 FFI 调用；`Sqlite::open`，每次一条语句、执行前整体校验，参数绑定，`RETURNING`，出错整体回滚的事务，只读连接，忙等超时，FTS5、R*Tree、JSON；网页用 `App::use(Sqlite::plugin())` 和 `src/Plugins/Sqlite/client/index.ts`（`@myphp-plugins/sqlite`），连接归调用它的页面 | 可用 |
+| watch（`Plugins\Watch`）：按名称监视应用开放的目录和文件，只在应用允许处递归，`Resolve` 与 `Allow`，配额控制 | 可用（`examples/watch`） |
+| WebSocket（`Plugins\WebSocket`）：从 PHP 建 WebSocket 连接，握手可带任意请求头（Authorization、Cookie、Origin），子协议，文本和二进制消息按序发送；用系统自带的 libcurl，经 FFI | 可用（`examples/websocket`） |
+| fetch（`URLSession` & `Plugins\Fetch`）：通过系统自带的 libcurl 与 Fiber 协程从 PHP 发起无阻塞 HTTP/HTTPS 请求，无 CORS 限制，支持流式响应与 multipart 上传 | 可用 |
+| SQLite（`Plugins\Sqlite`）：经 FFI 调用标准 SQLite 3.53.4 C API；`Sqlite::open`，每次一条语句、执行前整体校验，参数绑定，`RETURNING`，出错整体回滚的原子事务，只读连接，忙等超时，FTS5、R*Tree、JSON | 可用 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | App 服务（mygo 的）：深链接（`App::onOpenURL`、`registerURLScheme`、myphp.json 的 `urlSchemes`）与用本应用打开的文件（`onOpenFile`、`fileAssociations`）、单实例（`requestSingleInstanceLock`、`onSecondInstance`）、最近文档、登录时启动、`Network`（是否联网、是否按流量计费）、`Clipboard`（多格式数据、文件、flush）、`Secrets`（钥匙串）、`Cookies`；网页：页内查找、打印、打印为 PDF、权限（摄像头、麦克风）、下载 | 可用（`examples/services`） |
@@ -640,10 +639,10 @@ App::run();
 
 ### 命令行
 
-`bin/myphp` 是命令行工具（npm 上叫 `myphp-cli`），形态对齐 Flutter：任何平台都只有这一条路到设备。
+`bin/myphp` 是命令行工具，形态对齐 Flutter：任何平台都只有这一条路到设备。
 
 ```sh
-myphp init my-app                  # 原生 UI 项目（-template web 是调用 PHP 的网页项目）
+myphp init my-app                  # 2D SwiftUI 原生项目（-template 3d 创建 5 平台 3D SceneView 项目）
 myphp doctor                       # 检查工具链：PHP、NDK、Xcode、adb、手机运行时
 myphp devices                      # adb 连着的手机和模拟器
 myphp emulators --launch <id>      # 启动 Android 模拟器或 iOS 模拟器（--create 新建一个）
@@ -726,7 +725,6 @@ myphp run -d macos examples/menubar-flyout   # 托盘图标的 flyout，放在�
 myphp run -d macos examples/menubar-native   # 菜单栏应用：托盘图标下的窗口，失去焦点即隐藏
 myphp run -d macos examples/launcher         # 启动器：全局快捷键，边输边排序的已装应用及其图标
 myphp run -d macos examples/vibrancy         # vibrancy 窗口：材质侧栏滑出收起
-myphp dev examples/todo               # Vite 页面里的待办：带类型的 PHP 服务与事件（需要 bun）
 myphp run -d macos examples/confetti         # canvas-confetti 的演示，每片纸屑由只重绘的 pose 驱动
 myphp run -d macos examples/effort-slider    # 力度滑杆，越过 Max 进入 Galaxy，字母变化时模糊
 myphp run -d macos examples/farm             # 种田小游戏：翻地、播种、浇水、收获，昼夜与音乐

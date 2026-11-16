@@ -284,7 +284,7 @@ in `updates.publicKey`, and the private one stays secret, in
 ## myphp doctor
 
 Checks that the development environment is ready: PHP and its extensions,
-Bun for the web template, Xcode's tools on macOS, GTK and WebKitGTK on
+Xcode's tools on macOS, GTK and WebKitGTK on
 Linux. Failed checks exit with status 1.
 
 ## myphp version

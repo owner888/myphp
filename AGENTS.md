@@ -134,8 +134,7 @@ docs/              the guides (docs/ui/README.md: native UI, examples run by tes
   yield one run-loop turn apart (`App::later`). `myphp:window.*` calls are
   the page's window controls; `PageOptions::$preloadScript` runs before the page.
   `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client. Only trusted pages call (`Native\Frontend`).
-  PHP plugins (`App::use`): service "plugin:<name>", page side its client/ (`bun test`, real
-  bridge.js via Plugins/fake-myphp.ts); `CallContext` param = the page's life; `Channel::wait`; generators wait on flow control.
+  PHP plugins (`App::use`): service "plugin:<name>"; `CallContext` param = the page's life; `Channel::wait`; generators wait on flow control.
 - **FFI discipline**: one FFI instance per bridge (structs are not shared
   across instances; foreign pointers pass `ObjC::import`); `objc_msgSend`
   cast per "ret:args" signature (`ObjC::MAP`), never variadic; callbacks
@@ -150,7 +149,7 @@ Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in ~4–6
 ## Projects and bundles
 
 `bin/myphp` is mygo's CLI (`myphp help`; templates, skills in `bin/`);
-myphp.json or myphp.config.ts take mygo.json's fields. `build` makes
+myphp.json configures the project. `build` makes
 `<out>/darwin-<arch>/<name>.app` (a C launcher that execs this php, or
 `-launcher micro`: phpmicro from static-php-cli), signed, and a .dmg; on Linux
 `<out>/linux-<arch>`: the app, its .tar.gz, a .deb, a PKGBUILD (`Build\Linux`); `dev` runs "<name> Dev"
