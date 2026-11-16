@@ -47,8 +47,8 @@ final class Env
     public bool $toolbarTaken = false;
     public ?string $title = null;
     public ?\TitleDisplayMode $titleMode = null;
-    /** What the page's scroll is painted in, which the stack and tabs around it take behind their bars (iOS's bars, clear over the page): {color: ?int}. */
-    public ?\stdClass $backdrop = null;
+    /** What the page's scroll is painted in, which the stack and tabs around it take behind their bars (iOS's bars, clear over the page). */
+    public ?Backdrop $backdrop = null;
     /** @var list<mixed>|null */
     public ?array $toolbar = null;
     /** Whether the view is a row of a ListView, Section or Form, which draws NavigationLinks and Buttons as cells. */

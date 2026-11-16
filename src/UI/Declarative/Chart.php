@@ -116,8 +116,7 @@ final class Chart extends View
           if ($this->legend && count($series) > 0 && array_filter(array_keys($series), fn($s) => $s !== '') !== []) {
               $c->row(0, 14)->wrap(INF);
                 foreach ($series as $name => $_) {
-                    $sample = null;
-                    foreach ($marks as $m) { if (self::seriesOf($m) === $name) { $sample = $m; break; } }
+                    $sample = array_find($marks, static fn(ChartMark $m): bool => self::seriesOf($m) === $name);
                     $c->row(0, 6)->alignItems(Node::CENTER);
                       $c->box(8, 8, $colorOf($sample))->radius(4);
                       $c->text((string)$name, $env->theme->fontSize, $env->theme->textMuted)->preferredFont(\MyPHP\UI\Font::CAPTION2); // Swift Charts' legend and axis labels: caption2
@@ -165,8 +164,7 @@ final class Chart extends View
             if ($m->kind === ChartMark::PLOT && $m->xValues !== []) { array_push($xs, min($m->xValues), max($m->xValues)); } // a LinePlot's ends, not its every point
         }
         $kind = $xs === [] ? 'linear' : (is_string($xs[0]) ? 'band' : ($xs[0] instanceof DateTimeInterface ? 'time' : 'linear'));
-        $xLabel = '';
-        foreach ($marks as $m) { if ($m->x !== null && $m->x->label !== '') { $xLabel = $m->x->label; break; } }
+        $xLabel = array_find($marks, static fn(ChartMark $m): bool => $m->x !== null && $m->x->label !== '')?->x->label ?? '';
         if ($kind === 'band') {
             $cats = array_values(array_unique(array_map('strval', $xs)));
             $band = new Band(...$cats)->padding(0.3, 0.15);

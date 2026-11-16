@@ -99,15 +99,15 @@ abstract class View
     /** The width a frame() asks for it, ideal or fixed, which an HSplitView gives its pane at first. @internal */
     public function idealWidth(): ?float
     {
-        foreach ($this->mods as [$name, $a]) { if ($name === 'frame' && ($a[7] ?? $a[0]) !== null) { return $a[7] ?? $a[0]; } }
-        return null;
+        $m = array_find($this->mods, static fn(array $m): bool => $m[0] === 'frame' && ($m[1][7] ?? $m[1][0]) !== null);
+        return $m === null ? null : ($m[1][7] ?? $m[1][0]);
     }
 
     /** The height a frame() asks for it, ideal or fixed, which a VSplitView gives its pane at first. @internal */
     public function idealHeight(): ?float
     {
-        foreach ($this->mods as [$name, $a]) { if ($name === 'frame' && ($a[8] ?? $a[1]) !== null) { return $a[8] ?? $a[1]; } }
-        return null;
+        $m = array_find($this->mods, static fn(array $m): bool => $m[0] === 'frame' && ($m[1][8] ?? $m[1][1]) !== null);
+        return $m === null ? null : ($m[1][8] ?? $m[1][1]);
     }
 
     /** Fixes the view to its ideal size along the given axes, preventing truncation/compression, as SwiftUI's fixedSize. */
@@ -162,8 +162,8 @@ abstract class View
     /** The least width a frame() gives it. @internal */
     public function minWidth(): ?float
     {
-        foreach ($this->mods as [$name, $a]) { if ($name === 'frame' && $a[2] !== null) { return $a[2]; } }
-        return null;
+        $m = array_find($this->mods, static fn(array $m): bool => $m[0] === 'frame' && $m[1][2] !== null);
+        return $m === null ? null : $m[1][2];
     }
 
     /** A color or gradient behind the view; or $content, a view as large as it, under it, as SwiftUI's background(alignment:content:). */
@@ -721,13 +721,13 @@ abstract class View
         }
         if ($bar !== null) {
             $env = $env->with(['toolbarTaken' => true]); // the view inside is built once, under the bar
-            $col = $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
-              $c->row(0, 8)->alignSelf(Node::STRETCH)->shrink(0)->padding(6, 12)->alignItems(Node::CENTER);
-                $c->spacer();
+            $col = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
+              $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignSelf(Node::STRETCH)->shrink(0)->padding(6, 12)->alignItems(Node::CENTER);
+                $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1));
                 $c->toolbar(function () use ($c, $env, $bar): void { self::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $bar); });
               $c->end();
-              $c->divider();
-              $c->column(0, 0, 1)->alignSelf(Node::STRETCH)->minHeight(0);
+              $c->attach(new Node(Node::BOX, 0, 0, 0, 0, 1, 0, null, $env->theme->border));
+              $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
                 $inner = $this->renderBody($c, $env);
               $c->end();
             $c->end();
@@ -757,19 +757,19 @@ abstract class View
     private static function searchField(Context $c, Env $env, Node $box, array &$f): void
     {
         $initQ = $f[0];
-        $make = static fn() => (object)['query' => new \MyPHP\UI\TextState($initQ), 'app' => $initQ];
-        $kept = $c->runtime?->local($box->id, $make, \stdClass::class, 'query') ?? $make();
-        if ($f[0] !== $kept->app) { $kept->query->text = $f[0]; $kept->query->setCursor(strlen($f[0])); } // set by the app
-        $row = $c->row(8, 0)->alignSelf(Node::STRETCH);
+        $make = static fn() => new FieldKept($initQ);
+        $kept = $c->runtime?->local($box->id, $make, FieldKept::class) ?? $make();
+        if ($f[0] !== $kept->app) { $kept->state->text = $f[0]; $kept->state->setCursor(strlen($f[0])); } // set by the app
+        $row = $c->open(new Node(Node::CONTAINER, Node::ROW, 8, 0))->alignSelf(Node::STRETCH);
         if ($c->runtime?->touch ?? false) { $row->padding(8, 16, 10, 16); } // a phone's: 16 in from the sides, as UISearchBar's
-          $field = $c->searchField($kept->query, 0)->label(Localized::string($f[1], $env))->grow(1);
+          $field = $c->searchField($kept->state, 0)->label(Localized::string($f[1], $env))->grow(1);
           $field->text = Localized::string($f[1], $env); // the prompt shows in it, as SwiftUI's
         $c->end();
-        $f[0] = $kept->app = $kept->query->text;
+        $f[0] = $kept->app = $kept->state->text;
         if (isset($f[3]) && $f[3] !== []) { // the scopes: a Picker's segments across under the field, as UISearchBar's scope bar
             $scope = &$f[2];
             $chosen = new Binding(get: function () use (&$scope) { return $scope; }, set: function ($v) use (&$scope): void { $scope = $v; });
-            $bar = $c->row(0, 0)->alignSelf(Node::STRETCH);
+            $bar = $c->open(new Node(Node::CONTAINER, Node::ROW))->alignSelf(Node::STRETCH);
             if ($c->runtime?->touch ?? false) { $bar->padding(0, 16, 10, 16); }
               $seg = (new Picker('', $chosen))(...$f[3])->pickerStyle(\PickerStyle::segmented)->render($c, $env->along(Node::ROW));
               if ($seg !== null) { $seg->grow = 1; $seg->shrink(1)->minWidth(0); foreach ($seg->kids as $k) { $k->basis(0)->grow = 1; } } // across the view, the segments sharing it
@@ -781,12 +781,12 @@ abstract class View
     private static function findBar(Context $c, Node $box, array &$f): void
     {
         $initQ = $f[1];
-        $make = static fn() => (object)['query' => new \MyPHP\UI\TextState($initQ), 'app' => $initQ];
-        $kept = $c->runtime?->local($box->id, $make, \stdClass::class, 'query') ?? $make();
-        if ($f[1] !== $kept->app) { $kept->query->text = $f[1]; $kept->query->setCursor(strlen($f[1])); } // set by the app
+        $make = static fn() => new FieldKept($initQ);
+        $kept = $c->runtime?->local($box->id, $make, FieldKept::class) ?? $make();
+        if ($f[1] !== $kept->app) { $kept->state->text = $f[1]; $kept->state->setCursor(strlen($f[1])); } // set by the app
         if ($c->shortcut('f', \MyPHP\UI\Key::COMMAND)) { $f[0] = true; }
-        $c->findBar($f[0], $kept->query, $f[2], $f[3])?->alignSelf(Node::STRETCH);
-        $f[1] = $kept->app = $kept->query->text;
+        $c->findBar($f[0], $kept->state, $f[2], $f[3])?->alignSelf(Node::STRETCH);
+        $f[1] = $kept->app = $kept->state->text;
     }
 
     /** The view and its boxing modifiers. */

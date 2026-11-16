@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Declarative;
 
-use MyPHP\UI\{Context, Image, Node, SVG};
+use MyPHP\UI\{Context, Image, Node, Painter, SVG, Theme};
 
 /**
  * Image, as SwiftUI's: a picture (MyPHP\UI\Image, an SVG), a file's, or a
@@ -36,12 +36,30 @@ final class ImageView extends View
         if ($this->systemName !== null) {
             $size = ($env->font?->size ?? $env->theme->fontSize) * 1.2;
             $img = Image::symbol($this->systemName, $size, $env->color?->rgb($env) ?? $env->theme->text);
-            return $c->image($img, $size, $size);
+            $n = $c->attach(new Node(Node::IMAGE, 0, 0, 0, $size, $size));
+            $n->image = $img;
+            return $n;
         }
         if ($this->image instanceof SVG && !$this->resizable) { // an icon, as a symbol: the font's size, the foreground color
-            return $c->icon($this->image, ($env->font?->size ?? $env->theme->fontSize) * 1.2, $env->color?->rgb($env) ?? $env->theme->text);
+            $svg = $this->image;
+            $h = ($env->font?->size ?? $env->theme->fontSize) * 1.2;
+            $color = $env->color?->rgb($env) ?? $env->theme->text;
+            $n = $c->attach(new Node(Node::BOX, 0, 0, 0, $h * $svg->w / $svg->h, $h));
+            $n->svg = $svg;
+            $n->draw(static function (Painter $p, array $r, Node $n) use ($svg, $color): void {
+                $rgb = $n->ts?->color ?? $color;
+                Painter::paintIcon($p->displayList(), $p->textPainter(), $svg, $r[0], $r[1], $r[2], $r[3], $n->gray ? Theme::luminance($rgb) : $rgb, $n->alpha, $n->rotation);
+            });
+            return $n;
         }
-        $n = $c->image($this->image, 0, 0);
+        $img = $this->image;
+        if ($img instanceof SVG) {
+            $n = $c->attach(new Node(Node::IMAGE, 0, 0, 0, $img->w, $img->h));
+            $n->svg = $img;
+        } else {
+            $n = $c->attach(new Node(Node::IMAGE, 0, 0, 0, $img->w / $c->scale, $img->h / $c->scale));
+            $n->image = $img;
+        }
         if ($this->resizable) {
             [$w, $h] = [$n->fw, $n->fh];
             $n->size(0, 0); // its own size let go: the room's

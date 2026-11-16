@@ -138,7 +138,9 @@ trait RuntimeMemo
     /** Before memo $id is built: what the runtime holds, to tell what its build changes. */
     public function memoBegin(): void
     {
-        $this->memoMarks[] = [get_object_vars($this), $this->readsKeys, $this->animating, $this->wakeAt, $this->unmeasuredRect];
+        $vars = get_object_vars($this);
+        unset($vars['memos'], $vars['memoMarks'], $vars['scopes'], $vars['rootScope'], $vars['reactivePoints']);
+        $this->memoMarks[] = [$vars, $this->readsKeys, $this->animating, $this->wakeAt, $this->unmeasuredRect];
         $this->readsKeys = false; $this->animating = false; $this->wakeAt = null; $this->unmeasuredRect = false;
     }
 
@@ -154,7 +156,7 @@ trait RuntimeMemo
         $readKeys = $this->readsKeys;
         $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
-        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect']) : null;
+        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints']) : null;
         $n->memo = 1;
         if ($adds === null) {
             if (($old = $this->memos[$id]['node'] ?? null) !== null && $old !== $n && $old->placed === $this->frameNumber) { self::detach($old, -1); }
@@ -256,20 +258,25 @@ trait RuntimeMemo
      */
     public static function memoAdds(array $before, array $after, array $skip): ?array
     {
+        $skipMap = array_flip($skip);
         $adds = [];
         foreach ($after as $prop => $v) {
-            if (in_array($prop, $skip, true)) { continue; }
+            if (isset($skipMap[$prop])) { continue; }
             $b = $before[$prop] ?? null;
             if ($v === $b) { continue; }
-            if (!is_array($v) || !is_array($b) || count($v) < count($b)) { return null; }
+            if (!is_array($v) || !is_array($b) || ($lenB = count($b)) > count($v)) { return null; }
             if (array_is_list($b) && array_is_list($v)) {
-                if (array_slice($v, 0, count($b)) !== $b) { return null; }
-                $adds[$prop] = [true, array_slice($v, count($b))];
+                if ($lenB > 0 && array_slice($v, 0, $lenB) !== $b) { return null; }
+                $adds[$prop] = [true, array_slice($v, $lenB)];
                 continue;
             }
-            $added = array_diff_key($v, $b);
-            if (count($b) + count($added) !== count($v) || array_intersect_key($v, $b) !== $b) { return null; } // an entry it had changed
-            $adds[$prop] = [false, $added];
+            if ($lenB > 0 && array_slice($v, 0, $lenB, true) !== $b) {
+                $added = array_diff_key($v, $b);
+                if ($lenB + count($added) !== count($v) || array_intersect_key($v, $b) !== $b) { return null; }
+                $adds[$prop] = [false, $added];
+                continue;
+            }
+            $adds[$prop] = [false, array_slice($v, $lenB, null, true)];
         }
         return $adds;
     }
@@ -326,7 +333,9 @@ trait RuntimeMemo
     /** Before memo node $n is recorded: what the runtime holds, to tell what its record adds. @return array{0: array, 1: bool} */
     private function memoRecordBegin(): array
     {
-        $mark = [get_object_vars($this), $this->recordTaint];
+        $vars = get_object_vars($this);
+        unset($vars['memos'], $vars['memoMarks'], $vars['scopes'], $vars['rootScope'], $vars['reactivePoints'], $vars['recordTaint']);
+        $mark = [$vars, $this->recordTaint];
         $this->recordTaint = false;
         return $mark;
     }
@@ -345,7 +354,7 @@ trait RuntimeMemo
         if ($tainted) { unset($this->memos[$n->id]['rec']); return; }
         $adds = []; $cursor = null; $inner = [];
         foreach (get_object_vars($this) as $prop => $v) {
-            if ($prop === 'memos' || $prop === 'recordTaint') { continue; }
+            if ($prop === 'memos' || $prop === 'memoMarks' || $prop === 'scopes' || $prop === 'rootScope' || $prop === 'reactivePoints' || $prop === 'recordTaint') { continue; }
             $b = $before[$prop];
             if ($v === $b) { continue; }
             if ($prop === 'counter') { continue; }

@@ -19,10 +19,9 @@ use RuntimeException;
  * how a view loads what it shows; elsewhere in a running app the run loop
  * turns meanwhile (App::wait); before App::run it blocks.
  *
- *     App::go(function () use ($state, $win) {
- *         $r = Http::get('https://api.github.com/repos/egoist/mygo', ['Accept' => 'application/vnd.github+json']);
+ *     App::go(function () use ($state) {
+ *         $r = Http::get('https://api.github.com/repos/owner888/myphp', ['Accept' => 'application/vnd.github+json']);
  *         $state->stars = $r->ok() ? $r->json()['stargazers_count'] : null;
- *         $win->invalidate(); // the view shows it
  *     });
  *
  * A response of any status is returned; what keeps the request from being

@@ -52,7 +52,7 @@ final class NavigationStack extends View
         $entry = $this->router->entry();
         $large = $entry->largeTitle ?? null;
         $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
-        $backdrop = (object)['color' => null, 'tabBarHidden' => $env->backdrop->tabBarHidden ?? false, 'navBarHidden' => false];
+        $backdrop = new Backdrop(tabBarHidden: $env->backdrop->tabBarHidden ?? false);
           $toolbar = $entry->toolbar ?? null;
           $hideBar = ($entry->navBarHidden ?? false) || ($this->router->title() === '' && !$this->router->canGoBack() && $toolbar === null && $large === null);
           if ($hideBar) { $c->safeArea[0] = 0.0; }

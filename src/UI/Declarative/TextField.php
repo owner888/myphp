@@ -68,8 +68,8 @@ final class TextField extends View
         $box = $this->search || $this->suggestions !== null ? $c->row(0, 0)->alignItems(Node::CENTER) : null; // a search field's or suggesting one's: its own state is the input's, the text's kept by the box around it
         $id = $box?->id ?? $c->upcomingId($this->editor || $this->vertical ? Node::TEXTAREA : Node::INPUT);
         $initialText = $this->text;
-        $kept = $rt === null ? (object)['state' => new TextState($initialText), 'app' => $initialText]
-            : $rt->local($id, static fn() => (object)['state' => new TextState($initialText), 'app' => $initialText], \stdClass::class, 'state'); // keyed by the node it builds, which keeps it
+        $kept = $rt === null ? new FieldKept($initialText)
+            : $rt->local($id, static fn() => new FieldKept($initialText), FieldKept::class); // keyed by the node it builds, which keeps it
         $state = $kept->state;
         if ($this->text !== $kept->app) { // the app changed it since: shown, the caret at its end
             $state->text = $this->text;

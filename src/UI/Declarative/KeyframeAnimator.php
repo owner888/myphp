@@ -28,7 +28,8 @@ final class KeyframeAnimator extends View
     {
         $timeline = new KeyframeTimeline($this->initialValue, $this->keyframes instanceof Closure ? ($this->keyframes)($this->initialValue) : $this->keyframes);
         $rt = $c->runtime;
-        $kept = $rt?->local($c->upcomingId(), static fn() => (object)['start' => null, 'trigger' => self::UNSET], null) ?? (object)['start' => null, 'trigger' => self::UNSET];
+        $make = static fn() => new class { public ?int $start = null; public mixed $trigger = KeyframeAnimator::UNSET; };
+        $kept = $rt?->local($c->upcomingId(), $make) ?? $make();
         $now = $c->now();
         if ($this->repeating) { $kept->start ??= $now; }
         elseif ($kept->trigger !== self::UNSET && $kept->trigger !== $this->trigger) { $kept->start = $now; } // the trigger changed: it plays
@@ -41,7 +42,7 @@ final class KeyframeAnimator extends View
             if ($this->repeating || $t < $d) { $c->animationFrame(); } // it plays: another frame
             $value = $timeline->value(min($t, $d));
         }
-        $n = $c->column(0, 0)->alignItems(Node::CENTER);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->alignItems(Node::CENTER);
           View::renderAll($c, $env->along(Node::COLUMN), ($this->content)($value));
         $c->end();
         $flex = View::flexOfKids($n);

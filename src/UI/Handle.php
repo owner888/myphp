@@ -32,7 +32,11 @@ final class Handle
             if (!$create) {
                 return null;
             }
-            $this->bindings[$rt] = (object)['id' => 0, 'node' => null, 'frame' => -1, 'pass' => -1, 'requested' => $this->pending];
+            $this->bindings[$rt] = new class($this->pending) {
+                public int $id = 0, $frame = -1, $pass = -1;
+                public ?Node $node = null;
+                public function __construct(public bool $requested) {}
+            };
             $this->pending = false;
             $rt->addHandle($this);
         }

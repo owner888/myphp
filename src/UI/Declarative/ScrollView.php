@@ -65,13 +65,13 @@ final class ScrollView extends View
         $content = function () use ($c, $env, $inner, $fn, $large, $inset): void {
             if ($large !== null) { $c->largeTitle(Localized::string($env->title ?? '', $env)); }
             $fn($inner);
-            if ($inset > 0) { $c->box(0, $inset, 0)->shrink(0)->color = null; }
+            if ($inset > 0) { $c->attach(new Node(Node::BOX, 0, 0, 0, 0, $inset))->shrink(0); }
         };
         $rt = $c->runtime;
         if ($env->refresh !== null) {
             $id = $c->upcomingId();
-            $kept = $rt === null ? (object)['scroll' => new ScrollState(), 'refreshing' => false]
-                : $rt->local($id, static fn() => (object)['scroll' => $large ?? new ScrollState(), 'refreshing' => false], \stdClass::class, 'refreshing');
+            $make = static fn() => new class($large ?? new ScrollState()) { public function __construct(public ScrollState $scroll, public bool $refreshing = false) {} };
+            $kept = $rt === null ? $make() : $rt->local($id, $make, null, 'refreshing');
             $was = $kept->refreshing;
             $n = $c->refreshable($large ?? $kept->scroll, $kept->refreshing, $content);
             if ($kept->refreshing && !$was) { // pulled: the action in a fiber, the spinner until it ends

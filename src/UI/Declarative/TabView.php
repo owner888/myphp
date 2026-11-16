@@ -60,7 +60,7 @@ final class TabView extends View
             if ($this->style === \TabViewStyle::automatic && !($c->runtime?->touch ?? false)) { return $this->desktop($c, $env, $index); }
             if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
             $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env), $t->role === \TabRole::prominent], $this->tabs); // a prominent tab apart, at the bar's end (iOS 27's)
-            $backdrop = (object)['color' => null, 'tabBarHidden' => false];
+            $backdrop = new Backdrop();
             $minimize = match ($this->minimize) { \TabBarMinimizeBehavior::onScrollDown => 1, \TabBarMinimizeBehavior::onScrollUp => -1, default => 0 };
             $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {
                 $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it

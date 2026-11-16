@@ -39,8 +39,7 @@ final class Http
     /** The request chosen, or null. */
     public function shown(): ?array
     {
-        foreach ($this->history as $r) { if ($r['id'] === $this->chosen) { return $r; } }
-        return null;
+        return array_find($this->history, fn(array $r): bool => $r['id'] === $this->chosen);
     }
 
     public function send(): void

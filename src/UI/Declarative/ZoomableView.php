@@ -30,13 +30,8 @@ final class ZoomableView extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $id = $c->upcomingId();
-        $kept = $c->runtime?->local($id, fn() => (object)[
-            'scale' => 1.0,
-            'x' => 0.0,
-            'y' => 0.0,
-            'baseX' => 0.0,
-            'baseY' => 0.0,
-        ], \stdClass::class, 'scale') ?? (object)['scale' => 1.0, 'x' => 0.0, 'y' => 0.0, 'baseX' => 0.0, 'baseY' => 0.0];
+        $make = static fn() => new class { public float $scale = 1.0, $x = 0.0, $y = 0.0, $baseX = 0.0, $baseY = 0.0; };
+        $kept = $c->runtime?->local($id, $make, null, 'scale') ?? $make();
 
         $inner = VStack()(...$this->content)
             ->scaleEffect($kept->scale)

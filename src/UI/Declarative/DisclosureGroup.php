@@ -33,7 +33,8 @@ final class DisclosureGroup extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $own = $this->isExpanded === null ? ($c->runtime?->local($c->upcomingId(), static fn() => (object)['open' => false]) ?? (object)['open' => false]) : null;
+        $make = static fn() => new class { public bool $open = false; };
+        $own = $this->isExpanded === null ? ($c->runtime?->local($c->upcomingId(), $make) ?? $make()) : null;
         $open = $own?->open ?? $this->isExpanded;
         $n = $c->collapsible(Localized::string($this->title, $env), $open, function () use ($c, $env): void { View::renderAll($c, $env->along(Node::COLUMN), $this->content); });
         $own !== null ? $own->open = $open : $this->isExpanded = $open;

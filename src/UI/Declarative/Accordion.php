@@ -41,7 +41,8 @@ final class Accordion extends View
     {
         $items = array_values(array_filter(ListView::flat($this->content), fn($v) => $v instanceof DisclosureGroup));
         $id = $c->upcomingId();
-        $kept = $c->runtime?->local($id, static fn() => (object)['heads' => [], 'open' => []], \stdClass::class, 'heads') ?? (object)['heads' => [], 'open' => []];
+        $make = static fn() => new class { public array $heads = [], $open = []; };
+        $kept = $c->runtime?->local($id, $make, null, 'heads') ?? $make();
 
         $n = $c->accordion(function () use ($c, $env, $items, $kept): void {
             foreach ($items as $i => $item) {

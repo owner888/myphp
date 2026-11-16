@@ -36,11 +36,11 @@ final class Presentation
             case 'alert':
                 $chosen = $c->alertDialog($this->shown, Localized::string($this->title, $env), Localized::string($this->message, $env), ...array_map(fn(Button $b) => Localized::string($b->title, $env), $this->actions));
                 if ($chosen >= 0) { $this->actions[$chosen]->run(); }
-                elseif ($chosen === \MyPHP\UI\Context::ALERT_DISMISSED) { foreach ($this->actions as $b) { if ($b->role === \ButtonRole::cancel) { $b->run(); break; } } } // Escape: its cancel button's action, as SwiftUI's
+                elseif ($chosen === \MyPHP\UI\Context::ALERT_DISMISSED) { array_find($this->actions, static fn(Button $b): bool => $b->role === \ButtonRole::cancel)?->run(); } // Escape: its cancel button's action, as SwiftUI's
                 break;
             case 'confirm':
-                $choices = array_values(array_filter($this->actions, fn(Button $b) => $b->role !== \ButtonRole::cancel)); // a cancel role's is the sheet's own Cancel button, apart below, as UIKit's
-                $cancel = array_values(array_filter($this->actions, fn(Button $b) => $b->role === \ButtonRole::cancel))[0] ?? null;
+                $choices = array_values(array_filter($this->actions, static fn(Button $b): bool => $b->role !== \ButtonRole::cancel)); // a cancel role's is the sheet's own Cancel button, apart below, as UIKit's
+                $cancel = array_find($this->actions, static fn(Button $b): bool => $b->role === \ButtonRole::cancel);
                 $chosen = $c->actionSheet($this->shown, Localized::string($this->title, $env), ...array_map(fn(Button $b) => ($b->role === \ButtonRole::destructive ? '!' : '') . Localized::string($b->title, $env), $choices));
                 if ($chosen >= 0) { $choices[$chosen]->run(); }
                 elseif ($chosen === \MyPHP\UI\Context::SHEET_DISMISSED) { $cancel?->run(); }

@@ -111,11 +111,7 @@ final class NavigationSplitView extends View
     private function asList(): bool
     {
         if ($this->sidebar->items !== null || $this->sidebar->events !== [] || $this->sidebar->mods !== []) { return true; }
-        foreach (ListView::flat($this->sidebar->content()) as $v) {
-            if ($v instanceof Section) { continue; }
-            if (!($v instanceof Label || $v instanceof Text) || !$v->hasTag) { return true; }
-        }
-        return false;
+        return array_any(ListView::flat($this->sidebar->content()), static fn(View $v): bool => !$v instanceof Section && (!($v instanceof Label || $v instanceof Text) || !$v->hasTag));
     }
 
     /** The tag of the item of $content keyed $key, null for none. @param array<mixed> $content */
@@ -132,7 +128,8 @@ final class NavigationSplitView extends View
     {
         foreach (ListView::flat($content) as $v) {
             if ($v instanceof Section) {
-                $own = $c->runtime?->local($c->upcomingId(), static fn() => (object)['open' => true]) ?? (object)['open' => true];
+                $make = static fn() => new class { public bool $open = true; };
+                $own = $c->runtime?->local($c->upcomingId(), $make) ?? $make();
                 $open = $own->open;
                 $c->sidebarSection(Localized::string($v->header, $env), $open, function () use ($c, $env, $v): void { self::items($c, $env, $v->content()); });
                 $own->open = $open;
