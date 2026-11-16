@@ -354,16 +354,16 @@ final class Node
     public float $minMw = 0;
 
     public function __construct(
-        public int $kind,
-        public int $dir,
-        public float $pad,
-        public float $gap,
-        public float $fw,
-        public float $fh,
-        public float $grow,
-        public ?string $text,
+        public int $kind = self::CONTAINER,
+        public int $dir = self::COLUMN,
+        public float $pad = 0,
+        public float $gap = 0,
+        public float $fw = 0,
+        public float $fh = 0,
+        public float $grow = 0,
+        public ?string $text = null,
         /** Fill color as 0xRRGGBB; null paints no background. */
-        public ?int $color,
+        public ?int $color = null,
         /** For text: font size in points and text color. */
         public float $fontSize = 0,
         public int $fg = 0,

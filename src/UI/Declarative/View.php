@@ -819,7 +819,9 @@ abstract class View
         $anim = $env->animation ?? Transaction::current($c);
         for ($i = count($layers) - 1; $i > 0; $i--) { // the outer layers, boxes the view goes in, outermost first
             $first = $layers[$i][0][0];
-            $box = $first === 'overlay' ? $c->grid([Track::fr()]) : $c->column(0, 0, 0)->alignItems($first === 'search' || $first === 'find' ? Node::STRETCH : Node::CENTER); // an overlay's, a cell the view and it share
+            $box = $first === 'overlay'
+                ? $c->open(new Node(Node::CONTAINER, Node::ROW))->grid([Track::fr()])
+                : $c->open(new Node(Node::CONTAINER, Node::COLUMN))->alignItems($first === 'search' || $first === 'find' ? Node::STRETCH : Node::CENTER); // an overlay's, a cell the view and it share
             if ($first === 'direction') { $box->direction($layers[$i][0][1][0] === \LayoutDirection::rightToLeft ? \MyPHP\UI\Direction::RightToLeft : \MyPHP\UI\Direction::LeftToRight); } // before what is inside, which reads it
             if ($first === 'search') { self::searchField($c, $env, $box, $layers[$i][0][1]); } // over the view, in its box
             if ($first === 'find') { self::findBar($c, $box, $layers[$i][0][1]); }
@@ -881,7 +883,7 @@ abstract class View
     /** View $v filling a pane of a split: a column taking all of it. @internal */
     public static function fillPane(Context $c, Env $env, View $v): void
     {
-        $c->column(0, 0, 1)->alignSelf(Node::STRETCH);
+        $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
           $v->render($c, $env);
         $c->end();
     }

@@ -25,7 +25,7 @@ final class VSplitView extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $panes = array_values(array_filter(ListView::flat($this->content), fn($v) => $v !== null));
-        $wrap = $c->column(0, 0);
+        $wrap = $c->open(new Node(Node::CONTAINER, Node::COLUMN));
           $kept = $c->runtime?->local($wrap->id, static fn() => new SplitKept(), SplitKept::class) ?? new SplitKept();
           $paneEnv = $env->along(Node::COLUMN);
           $build = function (int $i) use (&$build, $c, $panes, $kept, $paneEnv): void {

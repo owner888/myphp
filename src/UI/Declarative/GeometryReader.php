@@ -22,7 +22,7 @@ final class GeometryReader extends View
         $id = $c->upcomingId();
         $rect = $c->runtime?->rectOf($id);
         $size = $rect === null ? $c->size() : [$rect[2], $rect[3]];
-        $n = $c->column(0, 0);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN));
           View::renderAll($c, $env->along(Node::COLUMN), ($this->content)(new GeometryProxy($size, $c->titleBar())));
         $c->end();
         // Built with the size of the frame before: laid out to another (the window resized), it builds again with it.

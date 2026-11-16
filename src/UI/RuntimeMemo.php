@@ -26,6 +26,8 @@ trait RuntimeMemo
     private array $memos = [];
     /** @var list<array{0: float, 1: float}> where the pointer was, went, pressed or scrolled since the frame before: a memo there is built again */
     private array $memoPoints = [];
+    /** @var list<array{0: float, 1: float}> actual pointer events or moved pointer coordinates for reactive scopes */
+    private array $reactivePoints = [];
     /** Whether a key, a command or text came this frame: what reads keys (shortcut()) or holds the focus is built again. */
     private bool $memoKeyed = false;
     /** Whether the state the build reads outside the nodes (the focus, a press, a tip, a menu, a drag…) changed since the frame before: every memo is built again. */
@@ -37,6 +39,22 @@ trait RuntimeMemo
     private bool $readsKeys = false;
     /** The runtime's state that a memo's build changes, as it was before it, while one is built: [values, its own flags]. */
     private array $memoMarks = [];
+    /** The window's root reactive scope, tracking State and PHP 8.4 Property Hook reads outside Computed subtrees. */
+    private ?Reactive\Scope $rootScope = null;
+    /** @var array<int, Reactive\Scope> persistent reactive scopes by Computed node id */
+    private array $scopes = [];
+
+    /** The window's root reactive scope. @internal */
+    public function rootScope(): Reactive\Scope
+    {
+        return $this->rootScope ??= new Reactive\Scope($this);
+    }
+
+    /** The reactive scope of Computed subtree $id. @internal */
+    public function reactiveScope(int $id): Reactive\Scope
+    {
+        return $this->scopes[$id] ??= new Reactive\Scope($this);
+    }
 
     /** The context the nodes memos keep are in from the frame they were built on (memoKeeper). */
     private ?Context $keeper = null;
@@ -51,10 +69,13 @@ trait RuntimeMemo
     private function memoFrame(array $events): void
     {
         $this->memoPoints = [];
+        $this->reactivePoints = [];
         $this->memoKeyed = false;
         foreach ($events as $e) {
             if (in_array($e[0], ['down', 'up', 'drag', 'scroll', 'magnify', 'pressure'], true)) {
-                $this->memoPoints[] = [(float)$e[1], (float)$e[2]];
+                $pt = [(float)$e[1], (float)$e[2]];
+                $this->memoPoints[] = $pt;
+                $this->reactivePoints[] = $pt;
             } elseif (in_array($e[0], ['key', 'edit', 'command', 'insert', 'access', 'accessOn'], true)) {
                 $this->memoKeyed = true;
             }
@@ -63,8 +84,14 @@ trait RuntimeMemo
         if ($pointer !== null) {
             $this->memoPoints[] = $pointer; // where it rests: what moves under it hovers
         }
-        if ($this->memoPointer !== null && $this->memoPointer !== $pointer) {
-            $this->memoPoints[] = $this->memoPointer; // where it was: what it left hovers no longer
+        if ($this->memoPointer !== $pointer) {
+            if ($this->memoPointer !== null) {
+                $this->memoPoints[] = $this->memoPointer; // where it was: what it left hovers no longer
+                $this->reactivePoints[] = $this->memoPointer;
+            }
+            if ($pointer !== null) {
+                $this->reactivePoints[] = $pointer;
+            }
         }
         $this->memoPointer = $pointer;
         $seen = [$this->focus, $this->focusVisible, $this->tip, $this->tipAnchor, $this->tipByFocus, $this->pointerPress['id'] ?? null, $this->pointerPress['down'] ?? null,
@@ -138,6 +165,84 @@ trait RuntimeMemo
         }
         $this->memos[$id] = ['deps' => $deps, 'ctx' => $ctx, 'style' => $style, 'node' => $n, 'adds' => $adds, 'ids' => $old['ids'] ?? [], 'area' => $old['area'] ?? null,
             'states' => [], 'frame' => $this->frameNumber, 'keys' => $readKeys];
+        return true;
+    }
+
+    /**
+     * Reactive subtree cache lookup for Computed: reuses the retained Node
+     * subtree when its reactive Scope is clean and no targeted input event
+     * reached an interactive node inside it.
+     */
+    public function reactiveMemoHit(int $id, int $version, array $ctx, TextStyle $style): ?Node
+    {
+        $m = $this->memos[$id] ?? null;
+        if ($m === null || $m['deps'] !== [$version] || $m['ctx'] !== $ctx || $m['style'] != $style || ($m['area'] === null && $m['ids'] === [])) {
+            return null;
+        }
+        if ($this->memoKeyed && ($m['keys'] || ($this->focus !== null && isset($m['ids'][$this->focus])))) {
+            return null;
+        }
+        if ($m['interactive'] ?? true) {
+            if ($this->pass !== 0 || $this->memoStale) {
+                return null;
+            }
+            if ($m['area'] !== null) {
+                [$x0, $y0, $x1, $y1] = $m['area'];
+                foreach ($this->reactivePoints as [$x, $y]) {
+                    if ($x >= $x0 - 2 && $x <= $x1 + 2 && $y >= $y0 - 2 && $y <= $y1 + 2) { return null; }
+                }
+            }
+        }
+        foreach ($m['states'] as [$state, $was]) {
+            if (self::stateSeen($state) !== $was) { return null; }
+        }
+        $sameFrame = $m['frame'] === $this->frameNumber;
+        foreach ($m['adds'] as $prop => [$list, $added]) {
+            if ($list) {
+                if (!$sameFrame || in_array($prop, ['kept', 'routers', 'uses', 'actions'], true)) {
+                    array_push($this->$prop, ...$added);
+                }
+            } elseif (!$sameFrame) {
+                foreach ($added as $k => $v) { $this->$prop[$k] = $v; }
+            }
+        }
+        if (isset($this->scopes[$id])) {
+            $this->scopes[$id]->setParent(Reactive\Observer::current());
+        }
+        $this->memos[$id]['frame'] = $this->frameNumber;
+        $n = $m['node'];
+        $n->memo = 2;
+        return $n;
+    }
+
+    /** Stores the retained Node subtree built by a reactive Computed scope. */
+    public function reactiveMemoEnd(int $id, int $version, array $ctx, TextStyle $style, Node $n, bool $clean): bool
+    {
+        [$before, $keys, $animating, $wake] = array_pop($this->memoMarks);
+        $asked = $this->animating || $this->wakeAt !== null;
+        $readKeys = $this->readsKeys;
+        $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating;
+        $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
+        $adds = $clean && !$asked && !$this->consumed
+            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'scopes', 'rootScope', 'reactivePoints'])
+            : null;
+        $n->memo = 1;
+        if ($adds === null) {
+            if (($old = $this->memos[$id]['node'] ?? null) !== null && $old !== $n && $old->placed === $this->frameNumber) { self::detach($old, -1); }
+            unset($this->memos[$id]);
+            return false;
+        }
+        $old = $this->memos[$id] ?? null;
+        if ($old !== null && $old['node'] !== $n && $old['node']->placed === $this->frameNumber) {
+            self::detach($old['node'], -1);
+        }
+        $interactive = isset($adds['clickable']) || isset($adds['tips']) || isset($adds['sliders']) || isset($adds['steppers'])
+            || isset($adds['fields']) || isset($adds['draggables']) || isset($adds['menuNodes']) || isset($adds['toggles']);
+        $this->memos[$id] = [
+            'deps' => [$version], 'ctx' => $ctx, 'style' => $style, 'node' => $n, 'adds' => $adds,
+            'ids' => $old['ids'] ?? [], 'area' => $old['area'] ?? null, 'states' => [],
+            'frame' => $this->frameNumber, 'keys' => $readKeys, 'interactive' => $interactive,
+        ];
         return true;
     }
 
@@ -349,7 +454,9 @@ trait RuntimeMemo
     private function memoSweep(): void
     {
         foreach ($this->memos as $id => $m) {
-            if ($m['frame'] < $this->frameNumber) { unset($this->memos[$id]); }
+            if ($m['frame'] < $this->frameNumber) {
+                unset($this->memos[$id], $this->scopes[$id]);
+            }
         }
     }
 }

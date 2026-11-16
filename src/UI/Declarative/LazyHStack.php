@@ -30,7 +30,7 @@ final class LazyHStack extends View
             \VerticalAlignment::firstTextBaseline, \VerticalAlignment::lastTextBaseline => Node::BASELINE,
             default => Node::CENTER,
         };
-        $n = $c->row(0, $this->spacing)->alignItems($align);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, $this->spacing))->alignItems($align);
           View::renderAll($c, $env->along(Node::ROW), $this->content);
         $c->end();
         View::takeRoom($n, $env->axis, View::flexOfKids($n));

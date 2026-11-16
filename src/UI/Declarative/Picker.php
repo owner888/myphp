@@ -20,9 +20,10 @@ final class Picker extends View
 
     private ?Binding $binding = null;
 
-    /** $selection: a variable, or a Binding(get:set:) of a value computed. */
+    /** $selection: a variable, a State<T>, or a Binding(get:set:) of a value computed. */
     public function __construct(public readonly string $title, mixed &$selection)
     {
+        if ($selection instanceof \MyPHP\UI\Reactive\State) { $this->binding = $selection->binding(); $this->selection = $selection->value; return; }
         if ($selection instanceof Binding) { $this->binding = $selection; $this->selection = $selection->get(); return; }
         $this->selection = &$selection;
     }

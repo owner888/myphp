@@ -39,7 +39,7 @@ final class Grid extends View
                 $maxCols = max($maxCols, $cols);
             }
         }
-        $n = $c->grid(array_fill(0, $maxCols, Track::fit()))->gap($this->horizontalSpacing, $this->verticalSpacing);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->grid(array_fill(0, $maxCols, Track::fit()))->gap($this->horizontalSpacing, $this->verticalSpacing);
         $cellEnv = $env->along(Node::ROW);
         $rowIdx = 1;
         foreach ($rows as $r) {

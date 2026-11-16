@@ -15,6 +15,15 @@ final class Binding
 {
     public function __construct(public readonly Closure $get, public readonly Closure $set) {}
 
+    /** A two-way binding to a property (including PHP 8.4 hooked properties) of $target. */
+    public static function of(object $target, string $property): self
+    {
+        return new self(
+            get: static fn(): mixed => $target->$property,
+            set: static function (mixed $v) use ($target, $property): void { $target->$property = $v; },
+        );
+    }
+
     public function get(): mixed { return ($this->get)(); }
 
     public function set(mixed $value): void { ($this->set)($value); }

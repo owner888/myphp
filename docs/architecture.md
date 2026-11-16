@@ -9163,6 +9163,18 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   library the UCRT (`Native\Mem`). The player's system (`Windows\Media`)
   plays nothing before its stage: a player's state works, a film throws.
   A plugin's package is unzipped by Windows's tar (bsdtar), unzip elsewhere.
+- **Native PHP 8.4+ fine-grained reactivity & retained subtrees (`UI\Reactive`)**:
+  `Observer` tracks dependencies via `WeakMap<object, array<string|int, array<int, WeakReference<Scope>>>>`
+  so state objects and `Scope` instances never form reference cycles (`gc_collect_cycles() === 0`).
+  State properties use PHP 8.4 native Property Hooks (`Observer::get` / `Observer::set`) or `State<T>`
+  (`State(initial)`). Note two PHP 8.4/8.5 Zend Engine rules: (1) a short-arrow `set => expr` assigns
+  the return value of `expr` to the backing store, so `Observer::set($this, 'prop', $this->prop, $value)`
+  takes the old backing value by value and returns `$value`; (2) a property with a `set` hook cannot be
+  taken by reference (`&$obj->prop`), so controls bind to hooked properties via `Binding::of($this, 'prop')`
+  or `State<T>`. Wrapping a view subtree in `Computed(fn() => ...)` binds it to a persistent `Scope` in
+  `Runtime`: when its tracked properties do not change, `Runtime::reactiveMemoHit` reuses the retained
+  `Node` subtree across build, layout, hit-test recording and GPU quad painting (`4.74 ms/frame` down to
+  `0.30 ms/frame` on a 10×25 declarative page in `tests/bench.php`, 15.8× faster).
 
 ## Open items
 

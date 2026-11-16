@@ -39,7 +39,7 @@ final class ScrollView extends View
         }
         if ($this->axis === \Axis::horizontal) { // as SwiftUI's: across the room it is given, as high as what it shows
             $state = $c->runtime?->local($c->upcomingId(), static fn() => new ScrollState(), ScrollState::class) ?? new ScrollState(); // of its type: another view built here before (an if's other branch) kept other state
-            $n = $c->row(0, 8)->alignItems(Node::CENTER)->scroll($state, horizontal: true, vertical: false);
+            $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignItems(Node::CENTER)->scroll($state, horizontal: true, vertical: false);
               View::renderAll($c, $env->along(Node::ROW), $this->content);
             $c->end();
             View::takeRoom($n, $env->axis, View::FLEX_X);
@@ -78,8 +78,9 @@ final class ScrollView extends View
                 App::go(function () use ($action, $kept, $rt): void { try { $action(); } finally { $kept->refreshing = false; $rt?->changed(); } });
             }
         } else {
-            $n = $both ? $c->scrollBoth(0, $gap, 1, $background) : $c->scroll(0, $gap, 1, $background);
-            if ($large !== null) { $n->scroll($large); }
+            $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, $gap, 0, 0, 1, null, $background));
+            $scroll = $large ?? ($c->runtime?->local($n->id, static fn() => new ScrollState(), ScrollState::class) ?? new ScrollState());
+            $n->scroll($scroll, $both, true);
               $content();
             $c->end();
         }

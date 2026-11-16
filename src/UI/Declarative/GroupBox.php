@@ -22,9 +22,9 @@ final class GroupBox extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $t = $env->theme;
-        $n = $c->column(0, 6);
-          if ($this->title !== '') { $c->text(Localized::string($this->title, $env), style: Font::BOLD); }
-          $box = $c->column(10, 6, 0, $t->surface)->radius(8)->border(1, $t->border)->alignSelf(Node::STRETCH)->alignItems(Node::START);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 6));
+          if ($this->title !== '') { new Text($this->title)->bold()->render($c, $env->along(Node::COLUMN)); }
+          $box = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 10, 6, 0, 0, 0, null, $t->surface))->radius(8)->border(1, $t->border)->alignSelf(Node::STRETCH)->alignItems(Node::START);
             View::renderAll($c, $env->along(Node::COLUMN), $this->content);
           $c->end();
         $c->end();

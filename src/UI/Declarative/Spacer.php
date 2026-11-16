@@ -12,7 +12,7 @@ final class Spacer extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->spacer();
+        $n = $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1));
         if ($this->minLength !== null) { $env->axis === Node::ROW ? $n->minWidth($this->minLength) : $n->minHeight($this->minLength); }
         return $n;
     }

@@ -20,7 +20,7 @@ final class ScrollViewReader extends View
     {
         $id = $c->upcomingId();
         $proxy = $c->runtime?->local($id, static fn() => new ScrollViewProxy()) ?? new ScrollViewProxy();
-        $n = $c->column(0, 0);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN));
           View::renderAll($c, $env->along(Node::COLUMN)->with(['scrollProxy' => $proxy]), ($this->content)($proxy));
         $c->end();
         View::takeRoom($n, $env->axis, View::flexOfKids($n));

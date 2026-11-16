@@ -31,7 +31,7 @@ final class OutlineGroup extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $content = $this->content ?? throw new \LogicException('OutlineGroup($data) takes a row closure: OutlineGroup($data, children: \'children\')(fn($item) => Text($item->name))');
-        $n = $c->column(0, 4)->alignItems(Node::STRETCH);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 4))->alignItems(Node::STRETCH);
           foreach ($this->buildViews($this->data, $content, 0) as $v) {
               $v->render($c, $env->along(Node::COLUMN));
           }

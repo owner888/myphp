@@ -60,7 +60,7 @@ final class ZoomableView extends View
                     $kept->baseY = $kept->y;
                 }));
 
-        $n = $c->column(0, 0)->alignItems(Node::CENTER)->justify(Node::CENTER)->clip();
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->alignItems(Node::CENTER)->justify(Node::CENTER)->clip();
           $inner->render($c, $env->along(Node::COLUMN));
         $c->end();
         View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);

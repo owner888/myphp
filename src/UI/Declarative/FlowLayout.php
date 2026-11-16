@@ -29,7 +29,7 @@ final class FlowLayout extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->row(0, $this->spacing);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, $this->spacing));
         $rect = $c->runtime?->rectOf($n->id);
         $w = $rect !== null && $rect[2] > 0 ? $rect[2] : 360.0;
         $n->wrap($w)

@@ -28,7 +28,7 @@ final class LazyHGrid extends View
         $items = ListView::flat($this->content);
         $rowCount = max(1, count($this->rows));
         $colCount = max(1, (int)ceil(count($items) / $rowCount));
-        $n = $c->grid(array_fill(0, $colCount, Track::fit()), $this->spacing);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, $this->spacing))->grid(array_fill(0, $colCount, Track::fit()));
         $cellEnv = $env->along(Node::COLUMN);
         foreach ($items as $idx => $v) {
             $r = ($idx % $rowCount) + 1;

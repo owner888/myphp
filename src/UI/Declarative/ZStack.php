@@ -21,7 +21,7 @@ final class ZStack extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->grid([Track::fr()]);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->grid([Track::fr()]);
         $flex = 0;
         foreach (self::flat($this->content) as $v) {
             $from = count($n->kids);

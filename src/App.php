@@ -825,16 +825,12 @@ final class App
         foreach ($queue as $fn) {
             $fn();
         }
-        Window::checkObservedStates();
     }
 
     /** Runs $fn once, $seconds from now, on the main thread (mygo's After). */
     public static function after(float $seconds, Closure $fn): void
     {
-        self::backend()->timer($seconds, static function () use ($fn): void {
-            $fn();
-            Window::checkObservedStates();
-        });
+        self::backend()->timer($seconds, $fn);
     }
 
     /**

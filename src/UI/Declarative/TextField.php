@@ -16,10 +16,13 @@ use MyPHP\UI\{Context, Node, TextState};
 final class TextField extends View
 {
     private string $text;
+    private ?Binding $binding = null;
     private ?Closure $submit = null;
 
-    public function __construct(public readonly string $title, string &$text, public readonly ?string $prompt = null, public readonly bool $secure = false, public readonly bool $vertical = false, public readonly bool $editor = false, public readonly bool $search = false)
+    public function __construct(public readonly string $title, string|Binding|\MyPHP\UI\Reactive\State &$text, public readonly ?string $prompt = null, public readonly bool $secure = false, public readonly bool $vertical = false, public readonly bool $editor = false, public readonly bool $search = false)
     {
+        if ($text instanceof \MyPHP\UI\Reactive\State) { $this->binding = $text->binding(); $this->text = (string)$text->value; return; }
+        if ($text instanceof Binding) { $this->binding = $text; $this->text = (string)$text->get(); return; }
         $this->text = &$text;
     }
 
@@ -73,6 +76,7 @@ final class TextField extends View
             $state->setCursor(strlen($this->text));
         } elseif ($state->text !== $this->text) { // typed in: the app's
             $this->text = $state->text;
+            $this->binding?->set($this->text);
         }
         $keys = $this->keys;
         $state->onTextKey = $keys === [] ? null : static function (int $code, string $chars, int $mods) use ($keys): bool {
@@ -98,7 +102,7 @@ final class TextField extends View
         $n->label(Localized::string($this->title, $env));
         $env->font?->apply($n);
         if ($env->disabled) { $n->disabled(); }
-        if ($c->changed($n)) { $this->text = $state->text; }
+        if ($c->changed($n)) { $this->text = $state->text; $this->binding?->set($this->text); }
         $kept->app = $this->text;
         if ($this->submit !== null && $c->submitted($n)) { ($this->submit)(); }
         if ($box !== null) {

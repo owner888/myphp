@@ -34,9 +34,7 @@ final class Shape extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $color = $this->fill ?? ($this->stroke === null ? ($env->color ?? new ColorValue(\Color::primary)) : null);
-        $n = $c->column(0, 0, 1);
-        $c->end();
-        $n->alignSelf(Node::STRETCH);
+        $n = $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
         if ($color instanceof LinearGradientView) { $n->linearGradient($color->toGradient($env)); }
         elseif ($color instanceof \MyPHP\UI\LinearGradient) { $n->linearGradient($color); }
         elseif ($color !== null) { $n->background($color->rgb($env), $color->alpha); }

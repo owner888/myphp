@@ -385,7 +385,14 @@ final class Context
         return unpack('q', hash('xxh64', $path, true))[1];
     }
 
-    private function open(Node $n): Node
+    /** @internal Attaches $n to the current container on the tree stack and assigns its deterministic node id. */
+    public function attach(Node $n): Node
+    {
+        return $this->add($n);
+    }
+
+    /** @internal Attaches container $n and pushes it onto the container stack; close with end(). */
+    public function open(Node $n): Node
     {
         $this->add($n);
         $this->stack[] = $n;
@@ -908,6 +915,67 @@ final class Context
             $keeper = $rt->memoKeeper(fn(): self => new self($this->metrics, $rt, 0, 0, $this->theme, $this->scale));
             $stack = [$n];
             while (($k = array_pop($stack)) !== null) { // kept from frame to frame: in a context of no tree, which holds the runtime, not this frame's, which would hold the frame's tree
+                $k->context = $keeper;
+                foreach ($k->kids as $kid) { $stack[] = $kid; }
+            }
+        }
+        return $n;
+    }
+
+    /**
+     * Builds or reuses a reactive Computed subtree keyed by $key, tracking
+     * PHP 8.4 Property Hooks and State<T> reads automatically through
+     * Reactive\Observer. @internal
+     */
+    public function reactiveMemo(int|string $key, Declarative\Env $env, Closure $build): Node
+    {
+        $top = array_last($this->stack);
+        [$base] = $this->place($top);
+        $id = self::mix($base, self::keyHash($key));
+        $rt = $this->runtime;
+        $scope = $rt?->reactiveScope($id);
+        $ctx = [
+            $top->rtl, $top->isDisabled(), $this->selectScope(), $this->theme, $this->scale, $this->width, $this->height,
+            $this->toolbars, $this->inert, $this->inOverlay, $this->overlayInModal, $this->router, $this->form,
+            $this->checks !== null, $this->listRow[0] ?? null, count($this->sidebars), count($this->accordions),
+            count($this->trees), $this->vibrancy, $this->titleBar,
+            $env->axis, $env->stackAxis, $env->disabled, $env->locale, $env->font, $env->weight, $env->italic,
+            $env->mono, $env->underline, $env->strikethrough, $env->color, $env->tint, $env->buttonStyle,
+            $env->labelStyle, $env->pickerStyle, $env->textFieldStyle, $env->listStyle, $env->formRow, $env->inList,
+            $env->redacted, $env->textAlign, $env->lineLimit, $env->linesReserved,
+        ];
+        $style = $this->inheritedText();
+        if ($rt !== null && $scope !== null && !$scope->dirty && ($n = $rt->reactiveMemoHit($id, $scope->version, $ctx, $style)) !== null) {
+            if (isset($this->keyed[$id])) { $rt->duplicateKey($id, $key, Inspector::callSite()); }
+            $this->keyed[$id] = true;
+            foreach ($rt->memoContextAdds($id) as $prop => [$list, $added]) {
+                if ($list) { array_push($this->$prop, ...$added); } else { foreach ($added as $k => $v) { $this->$prop[$k] = $v; } }
+            }
+            $this->took($top);
+            $top->kids[] = $n;
+            $n->placed = $rt->frameNumber;
+            return $n;
+        }
+        $count = count($top->kids); $depth = count($this->stack);
+        $before = get_object_vars($this);
+        $rt?->memoBegin();
+        $this->key($key);
+        if ($scope !== null) {
+            Reactive\Observer::run($scope, $build);
+        } else {
+            $build();
+        }
+        if (count($top->kids) !== $count + 1 || count($this->stack) !== $depth || $top->kids[$count]->id !== $id) {
+            throw new \LogicException('Computed() builds one root node: the build built ' . (count($top->kids) - $count));
+        }
+        $n = $top->kids[$count];
+        $n->placed = $rt?->frameNumber ?? 0;
+        $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base']);
+        if ($rt !== null && $scope !== null && $rt->reactiveMemoEnd($id, $scope->version, $ctx, $style, $n, $adds !== null)) {
+            $rt->memoKeepContext($id, $adds);
+            $keeper = $rt->memoKeeper(fn(): self => new self($this->metrics, $rt, 0, 0, $this->theme, $this->scale));
+            $stack = [$n];
+            while (($k = array_pop($stack)) !== null) {
                 $k->context = $keeper;
                 foreach ($k->kids as $kid) { $stack[] = $kid; }
             }

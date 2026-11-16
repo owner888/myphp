@@ -24,7 +24,7 @@ final class ControlGroup extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->row(2, 2)
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 2, 2))
             ->alignItems(Node::CENTER)
             ->radius(8)
             ->background($env->theme->surface)

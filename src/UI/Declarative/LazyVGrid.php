@@ -71,7 +71,7 @@ final class LazyVGrid extends View
             }
         }
         $cellEnv = $env->along(Node::COLUMN);
-        $n = $c->grid($tracks, $this->spacing);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, $this->spacing))->grid($tracks);
           foreach (ListView::flat($this->content) as $v) {
               $k = $v->render($c, $cellEnv);
               if ($k !== null) {
@@ -92,7 +92,7 @@ final class LazyVGrid extends View
         $keys = array_keys($items); $items = array_values($items);
         $count = count($items);
         $idOf = fn(int $i) => $each->idOf($items[$i], $keys[$i]);
-        $wrap = $c->column(0, 0); // its state kept by a node of its own, apart from the grid's
+        $wrap = $c->open(new Node(Node::CONTAINER, Node::COLUMN)); // its state kept by a node of its own, apart from the grid's
         $kept = $c->runtime?->local($wrap->id, static fn() => new GridKept($min), GridKept::class) ?? new GridKept($min);
         $g = $kept->grid;
         $g->selects = true;

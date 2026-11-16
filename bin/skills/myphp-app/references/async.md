@@ -51,7 +51,7 @@ App::go(function () use ($app, $query, $seq) {
         [$data, $error] = [null, $e->getMessage()];
     }
     if ($seq !== $app->seq) { return; } // a newer query was sent: drop this answer
-    [$app->results, $app->error, $app->loading] = [$data['items'] ?? [], $error, false]; // auto-observed by Content::file!
+    [$app->results, $app->error, $app->loading] = [$data['items'] ?? [], $error, false]; // reactive Property Hooks or State<T> automatically schedule a frame!
 });
 ```
 
@@ -65,7 +65,7 @@ App::go(function () use ($app, $query, $seq) {
 - For remote images (avatars, covers, photos), always use the declarative
   `AsyncImage($url, content: fn($img) => $img->resizable()->scaledToFill(), placeholder: fn() => ...)`
   view rather than manually downloading bytes into `Image::fromBytes()`.
-- State objects bound via `Content::file(__DIR__ . '/view.php', $app)` are automatically observed: mutating properties inside `App::go()` fibers or `App::after()` timers automatically schedules the next frame.
+- Reactive properties defined with PHP 8.4 Property Hooks (`get => Observer::get($this, 'prop', $this->prop); set => Observer::set($this, 'prop', $this->prop, $value);`) or `State<T>` (`State(initial)`) automatically notify subscribed `Computed` scopes and wake the window when mutated inside `App::go()` fibers or `App::after()` timers.
 
 ## Stale answers, debouncing, states
 

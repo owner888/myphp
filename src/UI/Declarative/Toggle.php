@@ -15,9 +15,10 @@ final class Toggle extends View
     /** @var list<bool>|null the bindings a Toggle(sources:) switches together */
     private ?array $sources = null;
 
-    /** $isOn: a variable, or a Binding(get:set:), whose set() a switch by the user runs, not a change of the app's. */
-    public function __construct(public readonly string $title, bool|Binding|null &$isOn)
+    /** $isOn: a variable, a State<bool>, or a Binding(get:set:), whose set() a switch by the user runs, not a change of the app's. */
+    public function __construct(public readonly string $title, bool|Binding|\MyPHP\UI\Reactive\State|null &$isOn)
     {
+        if ($isOn instanceof \MyPHP\UI\Reactive\State) { $this->binding = $isOn->binding(); $this->isOn = (bool)$isOn->value; return; }
         if ($isOn instanceof Binding) { $this->binding = $isOn; $this->isOn = (bool)$isOn->get(); return; }
         if ($isOn === null) { $isOn = false; }
         $this->isOn = &$isOn;

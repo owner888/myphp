@@ -27,8 +27,7 @@ final class Stack extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $gap = $this->spacing ?? 8.0;
-        $n = $this->axis === Node::COLUMN ? $c->column(0, $gap) : $c->row(0, $gap);
+        $n = $c->open(new Node(Node::CONTAINER, $this->axis, 0, $this->spacing ?? 8.0));
         $n->alignItems($this->align);
         View::renderAll($c, $env->along($this->axis), $this->content);
         $c->end();

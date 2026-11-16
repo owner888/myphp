@@ -12,9 +12,7 @@ final class ColorView extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->column(0, 0, 1, $this->color->rgb($env));
-        $c->end();
-        $n->alignSelf(Node::STRETCH);
+        $n = $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1, null, $this->color->rgb($env)))->alignSelf(Node::STRETCH);
         if ($this->color->alpha < 1) { $n->background($this->color->rgb($env), $this->color->alpha); }
         return $n;
     }

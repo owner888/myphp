@@ -69,17 +69,26 @@ the framework): no `use` line, as SwiftUI needs no import beyond
 
 | SwiftUI | myphp |
 |---|---|
-| `@State var on = false` | A property of the state class: `public bool $on = false;` |
-| `@Binding var on: Bool`, passed as `$on` | The property itself, by reference: `Toggle('Wi-Fi', isOn: $app->on)`; `Binding(get:, set:)` for a computed one |
-| `@StateObject`, `@Observable` | An object your state holds. Nothing to observe: the next frame reads it |
+| `@State var on = false` | `$on = State(false)` or a PHP 8.4 hooked property (`Observer::get` / `Observer::set`), or `public bool $on = false;` |
+| `@Binding var on: Bool`, passed as `$on` | The property or `State` itself: `Toggle('Wi-Fi', isOn: $app->on)`; `Binding::of($app, 'on')` or `Binding(get:, set:)` |
+| `@StateObject`, `@Observable` | PHP 8.4 Property Hooks (`Observer::get` / `Observer::set`) + `Computed(fn() => …)` for fine-grained retained subtrees |
 | `@Environment(\.colorScheme)` | `->preferredColorScheme()` to set it; the theme follows the system |
 | `@FocusState` | `->focused($app->editing)`, `->defaultFocus()` |
 | `onChange(of: value) { }` | `->onChange(of: $app->value, action: fn() => …)` |
 | `@AppStorage` | A file under `App::path(PathName::UserData)`, read when the state is made, written from its methods |
 
 ```php
-$app = new class { public bool $wifi = true; public float $volume = 0.5; public int $changes = 0; };
+$app = new class {
+    public int $count = 0 {
+        get => Observer::get($this, 'count', $this->count);
+        set => Observer::set($this, 'count', $this->count, $value);
+    }
+    public bool $wifi = true;
+    public float $volume = 0.5;
+    public int $changes = 0;
+};
 $view = fn() => Form()(
+    Computed(fn() => Text(verbatim: "Count: {$app->count}")),
     Toggle('Wi-Fi', isOn: $app->wifi),
     $app->wifi ? Slider(value: $app->volume, in: [0, 1])->onChange(of: $app->volume, action: fn() => $app->changes++) : null,
 );

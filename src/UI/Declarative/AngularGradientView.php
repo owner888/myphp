@@ -37,9 +37,7 @@ final class AngularGradientView extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $n = $c->column(0, 0, 1);
-        $c->end();
-        $n->alignSelf(Node::STRETCH);
+        $n = $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
         $n->gradient = $this->toGradient($env);
         return $n;
     }

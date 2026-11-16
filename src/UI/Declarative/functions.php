@@ -288,6 +288,8 @@ class_alias(D\ScrollGeometry::class, 'ScrollGeometry');
 class_alias(D\ScrollPosition::class, 'ScrollPosition');
 /** A binding of a value computed, as SwiftUI's Binding(get:set:): new Binding(get: fn() => …, set: fn($v) => …), given to a control. */
 class_alias(D\Binding::class, 'Binding');
+/** Fine-grained reactive dependency tracker for PHP 8.4+ Property Hooks (Observer::get / Observer::set). */
+class_alias(MyPHP\UI\Reactive\Observer::class, 'Observer');
 /** The header a Table is sorted by: its column's value key, and whether descending (Table(sortOrder:)). */
 class_alias(MyPHP\UI\SortOrder::class, 'SortOrder');
 
@@ -355,6 +357,24 @@ function Divider(): D\Divider { return new D\Divider(); }
 function Group(): D\Group { return new D\Group(); }
 
 /**
+ * A reactive state value powered by PHP 8.4 Property Hooks, as SwiftUI's @State:
+ * `$count = State(0);` — reading `$count->value` (or `"{$count}"`) tracks the
+ * dependency; writing `$count->value++` (even in an async Fiber) invalidates
+ * subscribed scopes and wakes the window.
+ * @template T
+ * @param T $initial
+ * @return MyPHP\UI\Reactive\State<T>
+ */
+function State(mixed $initial = null): MyPHP\UI\Reactive\State { return new MyPHP\UI\Reactive\State($initial); }
+
+/**
+ * A fine-grained reactive view subtree: runs $body inside Observer::run(),
+ * automatically tracking every State<T> or PHP 8.4 Property Hook read, and
+ * retains the resulting Node subtree across frames until a tracked dependency changes.
+ */
+function Computed(Closure $body, string|int|null $key = null): D\Computed { return new D\Computed($body, $key); }
+
+/**
  * Text, as SwiftUI's: $text the key of its translation in the app's catalogs (locales/zh-Hans.json: {"Profile": "个人资料"}),
  * shown as it is where none has it, its ICU placeholders named arguments (Text('Hello, {name}!', name: $this->name)), its inline
  * Markdown read (**bold**, *italic*, `code`, ~~struck~~); Text(verbatim: $note->title), for what the user wrote, neither.
@@ -384,26 +404,26 @@ function Button(string $title = '', ?Closure $action = null, ?ButtonRole $role =
 }
 
 /** A switch bound to $isOn: Toggle('Wi-Fi', isOn: $this->wifi), or a Binding(get:set:) whose set() runs as the user switches it; or of several, Toggle('All', sources: [&$this->mail, &$this->calendar]), mixed while some are on. */
-function Toggle(string $title, bool|D\Binding|null &$isOn = null, ?array $sources = null): D\Toggle
+function Toggle(string $title, bool|D\Binding|MyPHP\UI\Reactive\State|null &$isOn = null, ?array $sources = null): D\Toggle
 {
     if ($sources !== null) { return D\Toggle::of($title, $sources); }
     return new D\Toggle($title, $isOn);
 }
 
 /** A field bound to $text: TextField('Name', text: $this->name). */
-function TextField(string $title, string &$text, ?string $prompt = null, Axis $axis = Axis::horizontal): D\TextField
+function TextField(string $title, string|D\Binding|MyPHP\UI\Reactive\State &$text, ?string $prompt = null, Axis $axis = Axis::horizontal): D\TextField
 {
     return new D\TextField($title, $text, $prompt, false, $axis === Axis::vertical);
 }
 
 /** A field for a search, a glass at its left and a button clearing it, as a Mac's: SearchField(text: $this->query). myphp's own, as .searchable is a NavigationStack's. */
-function SearchField(string &$text, ?string $prompt = null): D\TextField
+function SearchField(string|D\Binding|MyPHP\UI\Reactive\State &$text, ?string $prompt = null): D\TextField
 {
     return new D\TextField('Search', $text, $prompt, search: true);
 }
 
 /** A field that hides what is typed: SecureField('Password', text: $this->password). */
-function SecureField(string $title, string &$text, ?string $prompt = null): D\TextField
+function SecureField(string $title, string|D\Binding|MyPHP\UI\Reactive\State &$text, ?string $prompt = null): D\TextField
 {
     return new D\TextField($title, $text, $prompt, true);
 }
@@ -588,10 +608,10 @@ class_alias(MyPHP\UI\Router::class, 'NavigationPath');
 function Picker(string $title, mixed &$selection): D\Picker { return new D\Picker($title, $selection); }
 
 /** A slider bound to $value, between the ends of $in: Slider(value: $this->volume, in: [0, 100], step: 5). */
-function Slider(float|int|D\Binding &$value, array $in = [0.0, 1.0], ?float $step = null, string $title = '', ?Closure $onEditingChanged = null): D\Slider { return new D\Slider($value, $in, $step, $title, $onEditingChanged); }
+function Slider(float|int|D\Binding|MyPHP\UI\Reactive\State &$value, array $in = [0.0, 1.0], ?float $step = null, string $title = '', ?Closure $onEditingChanged = null): D\Slider { return new D\Slider($value, $in, $step, $title, $onEditingChanged); }
 
 /** Buttons stepping $value by $step between the ends of $in: Stepper('Quantity', value: $this->qty, in: [1, 10]). */
-function Stepper(string $title, int|float &$value, array $in = [PHP_INT_MIN, PHP_INT_MAX], float $step = 1): D\Stepper { return new D\Stepper($title, $value, $in, $step); }
+function Stepper(string $title, int|float|D\Binding|MyPHP\UI\Reactive\State &$value, array $in = [PHP_INT_MIN, PHP_INT_MAX], float $step = 1): D\Stepper { return new D\Stepper($title, $value, $in, $step); }
 
 /** A date, a time or both, bound to $selection: DatePicker('Due', selection: $this->due, displayedComponents: [DatePickerComponents::date]). */
 function DatePicker(string $title, DateTimeImmutable &$selection, array $displayedComponents = [DatePickerComponents::date, DatePickerComponents::hourAndMinute]): D\DatePicker

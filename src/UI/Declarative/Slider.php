@@ -12,10 +12,11 @@ final class Slider extends View
     private ?Binding $binding = null;
 
     /** @param array{0: float, 1: float} $in */
-    /** $value: a variable, or a Binding(get:set:) of a value computed. */
-    public function __construct(float|int|Binding &$value, public readonly array $in = [0.0, 1.0], public readonly ?float $step = null, public readonly string $title = '', private readonly ?\Closure $onEditingChanged = null)
+    /** $value: a variable, a State<float|int>, or a Binding(get:set:) of a value computed. */
+    public function __construct(float|int|Binding|\MyPHP\UI\Reactive\State &$value, public readonly array $in = [0.0, 1.0], public readonly ?float $step = null, public readonly string $title = '', private readonly ?\Closure $onEditingChanged = null)
     {
-        if ($value instanceof Binding) { $this->binding = $value; $this->value = (float)$value->get(); return; }
+        if ($value instanceof \MyPHP\UI\Reactive\State) { $this->binding = $value->binding(); $this->value = $value->value; return; }
+        if ($value instanceof Binding) { $this->binding = $value; $this->value = $value->get(); return; }
         $this->value = &$value;
     }
 

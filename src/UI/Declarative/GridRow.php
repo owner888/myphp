@@ -21,7 +21,7 @@ final class GridRow extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $row = $c->row(0, 8);
+        $row = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8));
           View::renderAll($c, $env->along(Node::ROW), $this->cells);
         $c->end();
         return $row;

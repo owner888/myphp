@@ -825,7 +825,7 @@ final class Runtime
             $this->actions = [];
             if (isset($root)) { self::detach($root, $this->frameNumber); } // the pass before's tree, which this one replaces
             $this->frameZoom = $this->zoom; // the size the pass builds at: a zoom set in the one before builds again (setZoom)
-            $root = $build();
+            $root = Reactive\Observer::run($this->rootScope(), $build instanceof Closure ? $build : Closure::fromCallable($build));
             if ($this->enterToggle !== null) { // Enter at a toggle no shortcut took presses it
                 foreach ($this->keys as $i => $k) {
                     if (!$k[3] && ($k[1] === Key::RETURN || $k[1] === Key::ENTER) && $k[2] === 0) { $this->keys[$i][3] = true; $this->activated = $this->enterToggle; $this->consumed = true; }

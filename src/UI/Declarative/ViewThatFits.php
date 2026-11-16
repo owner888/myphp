@@ -31,7 +31,7 @@ final class ViewThatFits extends View
         if ($candidates === []) {
             return null;
         }
-        $n = $c->column(0, 0)->alignItems(Node::STRETCH);
+        $n = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->alignItems(Node::STRETCH);
           $rect = $c->runtime?->rectOf($n->id);
           $availW = $rect !== null && $rect[2] > 0 ? $rect[2] : INF;
           $availH = $rect !== null && $rect[3] > 0 ? $rect[3] : INF;

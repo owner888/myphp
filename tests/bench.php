@@ -54,6 +54,37 @@ $phases('2000 texts, not virtualized', function (Context $c) use ($sc) { $c->col
 $ta = new TextState(implode("\n", array_map(fn($i) => "Line $i: " . str_repeat('lorem ipsum ', 6), range(1, 2000)))); $ta->multiline = true;
 $phases('textarea, 2000 lines', function (Context $c) use ($ta) { $c->column(0, 0, 1); $c->textarea($ta, '', 0, 0); $c->end(); }, 900, 700);
 
+// Declarative 500-node page: full rebuild vs fine-grained Computed reactive subtree when 1 counter changes each frame.
+$rState = new class {
+    public int $tick = 0 {
+        get => \Observer::get($this, 'tick', $this->tick);
+        set => \Observer::set($this, 'tick', $this->tick, $value);
+    }
+    public int $static = 42 {
+        get => \Observer::get($this, 'static', $this->static);
+        set => \Observer::set($this, 'static', $this->static, $value);
+    }
+};
+$makeSection = fn(int $s) => \VStack(spacing: 4)(
+    ...array_map(fn(int $r) => \HStack(spacing: 8)(\Text("Section $s Row $r"), \Spacer(), \Text("Value {$rState->static}")), range(1, 25))
+);
+$fullView = function (Context $c) use ($rState, $makeSection): void {
+    $rState->tick++;
+    \MyPHP\UI\Content::render(fn() => \VStack(spacing: 8)(
+        \Text("Tick {$rState->tick}"),
+        ...array_map(fn(int $s) => $makeSection($s), range(1, 10)),
+    ), $c);
+};
+$reactiveView = function (Context $c) use ($rState, $makeSection): void {
+    $rState->tick++;
+    \MyPHP\UI\Content::render(fn() => \VStack(spacing: 8)(
+        \Computed(fn() => \Text("Tick {$rState->tick}"), key: 'tick'),
+        ...array_map(fn(int $s) => \Computed(fn() => $makeSection($s), key: "sec-$s"), range(1, 10)),
+    ), $c);
+};
+$phases('declarative 10×25 full rebuild', $fullView, 900, 700);
+$phases('declarative 10×25 Computed', $reactiveView, 900, 700);
+
 // Typing into the text area, a character a frame, at its end and at its start.
 $hl = new Headless(function (Context $c) use ($ta) { $c->column(0, 0, 1); $c->textarea($ta, '', 0, 0); $c->end(); }, 900, 700);
 $root = $hl->frame(); $hl->rt->focusOn($root->kids[0]->kids[0]->id); $hl->frame();

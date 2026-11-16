@@ -289,7 +289,6 @@ final class Menu
         self::performRole($it->role, $w);
         if ($it->click !== null) {
             ($it->click)($it, $w);
-            Window::checkObservedStates();
         }
     }
 

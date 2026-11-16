@@ -26,7 +26,6 @@ final class Fibers
     public static function go(Closure $fn): void
     {
         (new Fiber($fn))->start();
-        \MyPHP\Window::checkObservedStates();
     }
 
     /** Waits $seconds, letting the rest of the app run meanwhile. */
@@ -44,10 +43,7 @@ final class Fibers
             return;
         }
         if (App::running()) {
-            App::after($seconds, static function () use ($fiber): void {
-                $fiber->resume();
-                \MyPHP\Window::checkObservedStates();
-            });
+            App::after($seconds, $fiber->resume(...));
         } else {
             self::$queue[] = [microtime(true) + $seconds, $fiber];
         }
@@ -88,7 +84,6 @@ final class Fibers
                 continue;
             }
             $fiber->resume();
-            \MyPHP\Window::checkObservedStates();
         }
         return true;
     }

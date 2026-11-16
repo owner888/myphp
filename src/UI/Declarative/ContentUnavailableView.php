@@ -37,7 +37,7 @@ final class ContentUnavailableView extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $col = $c->column(24, 12, 1)->alignSelf(Node::STRETCH)->center();
+        $col = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 24, 12, 0, 0, 1))->alignSelf(Node::STRETCH)->center();
           if ($this->systemImage !== null && $this->systemImage !== '') {
               (new ImageView(null, $this->systemImage))
                   ->font(\Font::system(40))
@@ -57,7 +57,7 @@ final class ContentUnavailableView extends View
                   ->render($c, $env->along(Node::COLUMN));
           }
           if ($this->actions !== []) {
-              $row = $c->row(8, 8)->alignItems(Node::CENTER)->justify(Node::CENTER);
+              $c->open(new Node(Node::CONTAINER, Node::ROW, 8, 8))->alignItems(Node::CENTER)->justify(Node::CENTER);
                 View::renderAll($c, $env->along(Node::ROW), $this->actions);
               $c->end();
           }

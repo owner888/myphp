@@ -11,7 +11,7 @@ final class Divider extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $vertical = $env->stackAxis === Node::ROW;
-        $n = $c->divider($vertical);
+        $n = $c->attach(new Node(Node::BOX, 0, 0, 0, $vertical ? 1 : 0, $vertical ? 0 : 1, 0, null, $env->theme->border));
         if ($vertical === ($env->axis === Node::ROW)) { $n->alignSelf(Node::STRETCH); } else { $n->grow = 1; } // across its container, or along it in a frame's box
         return $n;
     }

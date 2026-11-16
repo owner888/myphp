@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 return fn() => VStack(spacing: 16)(
-    Text("{$this->n}")->font(Font::system(size: 56, weight: Weight::bold)),
+    Computed(fn() => Text("{$this->n}")->font(Font::system(size: 56, weight: Weight::bold))),
     HStack(spacing: 8)(
         Button('−', action: fn() => $this->n--)
             ->keyboardShortcut(KeyEquivalent::downArrow, modifiers: [])
