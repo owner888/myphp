@@ -927,7 +927,7 @@ final class Context
      * PHP 8.4 Property Hooks and State<T> reads automatically through
      * Reactive\Observer. @internal
      */
-    public function reactiveMemo(int|string $key, Declarative\Env $env, Closure $build): Node
+    public function reactiveMemo(int|string $key, Declarative\Env $env, Closure $build, ?Closure $userClosure = null): Node
     {
         $top = array_last($this->stack);
         [$base] = $this->place($top);
@@ -945,7 +945,7 @@ final class Context
             $env->redacted, $env->textAlign, $env->lineLimit, $env->linesReserved,
         ];
         $style = $this->inheritedText();
-        if ($rt !== null && $scope !== null && !$scope->dirty && ($n = $rt->reactiveMemoHit($id, $scope->version, $ctx, $style)) !== null) {
+        if ($rt !== null && $scope !== null && $scope->isClean() && ($n = $rt->reactiveMemoHit($id, $scope->version, $ctx, $style)) !== null) {
             if (isset($this->keyed[$id])) { $rt->duplicateKey($id, $key, Inspector::callSite()); }
             $this->keyed[$id] = true;
             foreach ($rt->memoContextAdds($id) as $prop => [$list, $added]) {
@@ -961,7 +961,7 @@ final class Context
         $rt?->memoBegin();
         $this->key($key);
         if ($scope !== null) {
-            Reactive\Observer::run($scope, $build);
+            Reactive\Observer::run($scope, $build, $userClosure ?? $build);
         } else {
             $build();
         }

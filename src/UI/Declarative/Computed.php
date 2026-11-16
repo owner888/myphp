@@ -48,6 +48,6 @@ final class Computed extends View
                 View::takeRoom($box, $env->axis, View::flexOfKids($box));
             }
             $c->end();
-        });
+        }, $this->body);
     }
 }

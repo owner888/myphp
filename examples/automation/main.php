@@ -18,11 +18,7 @@ class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 /** What the windows show. */
 final class Driven
 {
-    public int $count = 0 {
-        get => Observer::get($this, 'count', $this->count);
-        set => Observer::set($this, 'count', $this->count, $value);
-    }
-    public int $rowClicks = 0, $deletes = 0;
+    public int $count = 0, $rowClicks = 0, $deletes = 0;
     public string $name = '';
     /** The pointer is over the row, whose Delete shows then. */
     public bool $rowHovered = false;

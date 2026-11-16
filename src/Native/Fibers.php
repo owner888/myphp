@@ -26,6 +26,7 @@ final class Fibers
     public static function go(Closure $fn): void
     {
         (new Fiber($fn))->start();
+        \MyPHP\UI\Reactive\Observer::sync();
     }
 
     /** Waits $seconds, letting the rest of the app run meanwhile. */
@@ -84,6 +85,7 @@ final class Fibers
                 continue;
             }
             $fiber->resume();
+            \MyPHP\UI\Reactive\Observer::sync();
         }
         return true;
     }

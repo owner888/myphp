@@ -78,15 +78,7 @@ the framework): no `use` line, as SwiftUI needs no import beyond
 | `@AppStorage` | A file under `App::path(PathName::UserData)`, read when the state is made, written from its methods |
 
 ```php
-$app = new class {
-    public int $count = 0 {
-        get => Observer::get($this, 'count', $this->count);
-        set => Observer::set($this, 'count', $this->count, $value);
-    }
-    public bool $wifi = true;
-    public float $volume = 0.5;
-    public int $changes = 0;
-};
+$app = new class { public int $count = 0; public bool $wifi = true; public float $volume = 0.5; public int $changes = 0; };
 $view = fn() => Form()(
     fn() => Text(verbatim: "Count: {$app->count}"),
     Toggle('Wi-Fi', isOn: $app->wifi),

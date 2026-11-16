@@ -24,10 +24,7 @@ final class Http
     public ?int $chosen = null;
     /** The header the history is sorted by. */
     public ?SortOrder $sortOrder = null;
-    public ?Process $inFlight = null {
-        get => Observer::get($this, 'inFlight', $this->inFlight);
-        set => Observer::set($this, 'inFlight', $this->inFlight, $value);
-    }
+    public ?Process $inFlight = null;
     private int $nextId = 0;
     public ?Window $window = null;
 

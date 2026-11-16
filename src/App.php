@@ -825,12 +825,16 @@ final class App
         foreach ($queue as $fn) {
             $fn();
         }
+        UI\Reactive\Observer::sync();
     }
 
     /** Runs $fn once, $seconds from now, on the main thread (mygo's After). */
     public static function after(float $seconds, Closure $fn): void
     {
-        self::backend()->timer($seconds, $fn);
+        self::backend()->timer($seconds, static function () use ($fn): void {
+            $fn();
+            UI\Reactive\Observer::sync();
+        });
     }
 
     /**

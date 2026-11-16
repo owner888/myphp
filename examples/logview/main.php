@@ -150,7 +150,7 @@ App::whenReady(function () use ($log, $argv) {
     }
     // Follow the file: look for new lines twice a second and redraw when there are.
     $tick = function () use (&$tick, $log) {
-        if ($log->poll()) { $log->window->invalidate(); }
+        $log->poll();
         App::after(0.5, $tick);
     };
     $tick();

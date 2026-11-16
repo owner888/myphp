@@ -10,13 +10,10 @@ use MyPHP\UI\Content;
 // MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
 class_exists(\MyPHP\App::class) || require __DIR__ . '/../../src/autoload.php';
 
-/** The state the window shows, reactive via PHP 8.4 Property Hooks. */
+/** The state the window shows. */
 final class Counter
 {
-    public int $n = 0 {
-        get => Observer::get($this, 'n', $this->n);
-        set => Observer::set($this, 'n', $this->n, $value);
-    }
+    public int $n = 0;
 }
 
 $s = new Counter();

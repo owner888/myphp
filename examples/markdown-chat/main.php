@@ -28,20 +28,7 @@ const REPLIES = [
 
 final class Message
 {
-    public string $text = '' {
-        get => Observer::get($this, 'text', $this->text);
-        set => Observer::set($this, 'text', $this->text, $value);
-    }
-    public bool $done = false {
-        get => Observer::get($this, 'done', $this->done);
-        set => Observer::set($this, 'done', $this->done, $value);
-    }
-
-    public function __construct(public int $id, public bool $mine, string $text = '', bool $done = false)
-    {
-        $this->text = $text;
-        $this->done = $done;
-    }
+    public function __construct(public int $id, public bool $mine, public string $text = '', public bool $done = false) {}
 }
 
 final class Chat

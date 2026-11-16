@@ -188,7 +188,43 @@ $hi->frame(1);
 same([2, 1], [$impBuildsA, $impBuildsB], 'mutating $impA only rebuilds the first closure child; second closure child has 0 rebuilds');
 check($hi->byText('Implicit A: 101') !== null && $hi->byText('Implicit B: 200') !== null, 'implicit closure children render updated text');
 
-// 5. Zero reference cycles across 50 frames with State, Observer and Computed
+// 5. Zero-boilerplate plain PHP properties (no Property Hooks, no State(), no #[Observable])
+$plain = new class {
+    public int $a = 1;
+    public int $b = 2;
+};
+$plainBuildsA = 0;
+$plainBuildsB = 0;
+$hp = new Headless(function (Context $c) use ($plain, &$plainBuildsA, &$plainBuildsB) {
+    Content::render(function () use ($plain, &$plainBuildsA, &$plainBuildsB) {
+        return VStack(spacing: 8)(
+            function () use ($plain, &$plainBuildsA) {
+                $plainBuildsA++;
+                return Text("Plain A: {$plain->a}");
+            },
+            function () use ($plain, &$plainBuildsB) {
+                $plainBuildsB++;
+                return Text("Plain B: {$plain->b}");
+            },
+        );
+    }, $c);
+}, 300, 200);
+$hp->frame(1);
+same([1, 1], [$plainBuildsA, $plainBuildsB], 'zero-boilerplate plain properties: initial build');
+$plain->a = 99;
+$hp->frame(1);
+same([2, 1], [$plainBuildsA, $plainBuildsB], 'zero-boilerplate plain properties: mutating $plain->a rebuilds only A; B has 0 rebuilds');
+check($hp->byText('Plain A: 99') !== null && $hp->byText('Plain B: 2') !== null, 'zero-boilerplate plain properties: updated A text rendered');
+
+$hp->rt->needsFrame = false;
+$plain->b = 88;
+Observer::sync();
+check($hp->rt->needsFrame === true, 'Observer::sync() wakes runtime when a watched plain property mutates asynchronously');
+$hp->frame(1);
+same([2, 2], [$plainBuildsA, $plainBuildsB], 'Observer::sync() only invalidated B; A stayed at 2 builds');
+check($hp->byText('Plain B: 88') !== null, 'zero-boilerplate plain properties: updated B text rendered');
+
+// 6. Zero reference cycles across 50 frames with State, Observer and Computed
 gc_collect_cycles();
 gc_disable();
 for ($i = 0; $i < 25; $i++) {
