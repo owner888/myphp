@@ -935,7 +935,9 @@ final class Runtime
         }
         $this->syncDropFormats();
         foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines, &$this->poses, &$this->contents, &$this->dragRecs] as &$moving) {
-            $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
+            if ($moving !== []) {
+                $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
+            }
         }
         unset($moving);
         if ($this->focus !== null && !$this->reachable($this->focus)) { // the focus was behind what now blocks it: into its first control, or none (mygo's Modal)
@@ -2139,7 +2141,7 @@ final class Runtime
             else { $this->frags[$n->id] = array_map(fn(array $r) => [$n->x + $r[0], $n->y + $r[1], $r[2], $r[3]], $n->hitAreas); }
         }
         $this->parents[$n->id] = $parent?->id ?? 0;
-        $this->pageOf[$n->id] = $page;
+        if ($page !== 0) { $this->pageOf[$n->id] = $page; } elseif (isset($this->pageOf[$n->id])) { unset($this->pageOf[$n->id]); }
         $inert = $inert || $n->inert || $hidden;
         if ($inert) { $this->inertIds[$n->id] = true; }
         if ($n->passThrough) { $this->passing[$n->id] = true; }

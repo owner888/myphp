@@ -916,7 +916,7 @@ final class Context
         }
         $n = $top->kids[$count];
         $n->placed = $rt?->frameNumber ?? 0;
-        $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base']);
+        $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base', 'scopeTop', 'scopeFlags', 'scopeVal']);
         if ($rt !== null && $rt->memoEnd($id, $deps, $ctx, $style, $n, $adds !== null)) {
             $rt->memoKeepContext($id, $adds);
             $keeper = $rt->memoKeeper(fn(): self => new self($this->metrics, $rt, 0, 0, $this->theme, $this->scale));
@@ -978,7 +978,7 @@ final class Context
         }
         $n = $top->kids[$count];
         $n->placed = $rt?->frameNumber ?? 0;
-        $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base']);
+        $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base', 'scopeTop', 'scopeFlags', 'scopeVal']);
         if ($rt !== null && $scope !== null && $rt->reactiveMemoEnd($id, $scope->version, $ctx, $style, $n, $adds !== null)) {
             $rt->memoKeepContext($id, $adds);
             $keeper = $rt->memoKeeper(fn(): self => new self($this->metrics, $rt, 0, 0, $this->theme, $this->scale));
@@ -1388,19 +1388,28 @@ final class Context
     /** @var array<int, Theme> the theme each themed() node built in, by its object's id, which end() gives back */
     private array $outerThemes = [];
 
+    private ?Node $scopeTop = null;
+    private int $scopeFlags = -1, $scopeVal = 0;
+
     /** The Selectable container text built now is in: the innermost, unless a control, an Unselectable or a disabled node is nearer (mygo's prepareSelectable); 0 for none. */
     private function selectScope(): int
     {
+        $top = array_last($this->stack);
+        $flags = ($top->selectable ? 1 : 0) | ($top->unselectable ? 2 : 0) | ($top->focusable ? 4 : 0) | ($top->disabled ? 8 : 0);
+        if ($top === $this->scopeTop && $flags === $this->scopeFlags) {
+            return $this->scopeVal;
+        }
+        $this->scopeTop = $top; $this->scopeFlags = $flags;
         for ($i = count($this->stack) - 1; $i > 0; $i--) {
             $p = $this->stack[$i];
             if ($p->kind === Node::CONTAINER && $p->selectable && !$p->disabled) {
-                return $p->id;
+                return $this->scopeVal = $p->id;
             }
             if ($p->unselectable || $p->focusable || $p->disabled || $p->kind !== Node::CONTAINER) {
-                return 0; // a control owns its text
+                return $this->scopeVal = 0; // a control owns its text
             }
         }
-        return 0;
+        return $this->scopeVal = 0;
     }
 
     /** The text style the nodes being built set over the theme's, which text built now inherits (mygo's resolvedText). */
