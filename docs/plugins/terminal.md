@@ -10,7 +10,7 @@ return fn() => TerminalView($this)->defaultFocus();
 The terminal plugin is a terminal for apps of [native UI](../ui/README.md):
 a view that runs the user's shell, or any program, in a pseudo-terminal,
 with the terminal emulator of [Ghostty](https://ghostty.org),
-libghostty-vt. It is all PHP, with no npm package: the emulator is a
+libghostty-vt. It is all PHP: the emulator is a
 native library that the app loads at run time through FFI, and that
 `myphp build` and `myphp dev` put into the app.
 

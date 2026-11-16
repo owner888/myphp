@@ -4,7 +4,7 @@ The updater plugin gives an app the update window that Mac users know from
 Sparkle: it checks for updates in the background, shows the release notes
 of a new version and offers to install it, skip it or remind the user
 later, then downloads it with a progress bar and relaunches the app into
-it. It is all PHP, with no npm package, and works in apps of web pages and
+it. It is all PHP, and works in apps of
 of [native UI](../ui/README.md) alike. Its window is a web page, or native
 UI with [`Native::plugin()`](#native-ui), for apps that show no web page
 at all.

@@ -568,18 +568,7 @@ same(array_fill(0, 4, "1 development $root/d"), file("$stub/log", FILE_IGNORE_NE
 $devApp = glob("$root/d/.myphp/dev/darwin-*/Demo Dev.app")[0] ?? '';
 same(['com.example.demo.dev', 'Demo Dev', 'data!'], [\MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleIdentifier'], \MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleName'], file_get_contents("$devApp/Contents/Resources/data.txt")], 'the development app: its own identifier and name, with the resources');
 
-// myphp.config.ts: evaluated by Bun or Node.js, a function of the command running; not along with myphp.json.
-$p = bldDir();
-$cli = dirname(__DIR__) . '/packages/cli/index.js';
-file_put_contents("$p/myphp.config.ts", "import { defineConfig } from " . json_encode($cli) . ";\nconst scheme: string = \"bad-\";\nexport default defineConfig(({ command }) => ({ name: \"TS\", devUrl: scheme + command }));\n");
-[$code, $out] = $myphp('generate', $p);
-check($code === 1 && str_contains($out, 'myphp.config.ts: devUrl "bad-generate" is not an http(s) URL'), 'the configuration of the command running, checked as myphp.json\'s: ' . $out);
-file_put_contents("$p/myphp.config.ts", "export default 3;\n");
-[$code, $out] = $myphp('generate', $p);
-check($code === 1 && str_contains($out, 'myphp.config.ts:') && str_contains($out, 'not a configuration object'), 'a default export that is no configuration: ' . $out);
-file_put_contents("$p/myphp.json", '{}');
-[$code, $out] = $myphp('generate', $p);
-check($code === 1 && str_contains($out, 'myphp.json configures the project too'), 'one of the two');
+
 
 // Linux (mygo's build.go for linux, deb_test.go and pkgbuild_test.go): the desktop entry, the MIME package, the Debian package and the PKGBUILD.
 /** The entries of a tar archive, by name: [type, mode, contents or link target]; PAX paths followed. @return array<string, array{string, int, string}> */

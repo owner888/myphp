@@ -242,90 +242,23 @@ function path(string $dir, string $p): string
     return str_starts_with($p, '/') ? $p : "$dir/$p";
 }
 
-const CONFIG_TS = 'myphp.config.ts';
-const CONFIG_LOADER = <<<'JS'
-import { writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
-
-const mod = await import(pathToFileURL(process.env.MYPHP_CONFIG_FILE).href);
-let config = await mod.default;
-if (typeof config === "function") config = await config({ command: process.env.MYPHP_CONFIG_COMMAND });
-if (typeof config !== "object" || config === null || Array.isArray(config)) {
-  throw new Error("the default export is not a configuration object, or a function returning one");
-}
-writeFileSync(process.env.MYPHP_CONFIG_OUT, JSON.stringify(config));
-JS;
-
-/** The myphp command running, which a configuration exporting a function gets. */
+/** The myphp command running. */
 $GLOBALS['running'] = '';
 
 /**
  * The configuration of the project in $dir as JSON, and the file it comes
- * from (mygo's readConfig): myphp.json, or myphp.config.ts, which a
- * JavaScript runtime evaluates; without either, null and myphp.json.
+ * from: myphp.json; without it, null and myphp.json.
  *
  * @return array{?string, string}
  */
 function readConfig(string $dir): array
 {
-    $json = is_file("$dir/" . CONFIG); $ts = is_file("$dir/" . CONFIG_TS);
-    $json && $ts && fail(CONFIG . ' configures the project too; keep one of them');
-    if ($ts) {
-        return [evalTSConfig($dir, "$dir/" . CONFIG_TS), CONFIG_TS];
-    }
+    $json = is_file("$dir/" . CONFIG);
     return [$json ? (string)file_get_contents("$dir/" . CONFIG) : null, CONFIG];
 }
 
 /**
- * Evaluates myphp.config.ts with Bun, or Node.js 22.6 and later, which strip
- * the types (mygo's evalTSConfig): a loader read from the runtime's standard
- * input imports the file, awaits its default export, calls it with the
- * command when it is a function, and writes the configuration as JSON, which
- * then goes through the checks of myphp.json.
- */
-function evalTSConfig(string $dir, string $file): string
-{
-    $cmd = null;
-    if (($bun = Cmd::look('bun')) !== '') {
-        $cmd = [$bun, 'run', '-'];
-    } elseif (($node = Cmd::look('node')) !== '' && ($flags = nodeTypeScriptFlags($node)) !== null) {
-        $cmd = [$node, ...$flags, '--input-type=module', '-'];
-    }
-    $cmd !== null || fail('evaluating ' . CONFIG_TS . ' needs Bun (https://bun.sh) or Node.js 22.6 or later');
-    $out = tempnam(sys_get_temp_dir(), 'myphp-config-');
-    try {
-        $env = ['MYPHP_CONFIG_FILE' => $file, 'MYPHP_CONFIG_OUT' => $out, 'MYPHP_CONFIG_COMMAND' => $GLOBALS['running']] + getenv();
-        $p = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['file', 'php://stderr', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, $env); // what it prints does not mix with myphp's output
-        fwrite($pipes[0], CONFIG_LOADER);
-        fclose($pipes[0]);
-        $err = trim((string)stream_get_contents($pipes[2]));
-        fclose($pipes[2]);
-        if (proc_close($p) !== 0) {
-            fail(CONFIG_TS . ': ' . ($err !== '' ? $err : basename($cmd[0]) . ' failed'));
-        }
-        $data = (string)file_get_contents($out);
-        $data !== '' || fail(CONFIG_TS . ': ' . basename($cmd[0]) . ' exited without writing the configuration');
-        return $data;
-    } finally {
-        @unlink($out);
-    }
-}
-
-/** The flags that make the Node.js at $node run TypeScript, or null when it is too old to. @return ?list<string> */
-function nodeTypeScriptFlags(string $node): ?array
-{
-    $v = explode('.', ltrim(trim((string)shell_exec(escapeshellarg($node) . ' --version')), 'v'));
-    [$major, $minor] = [(int)($v[0] ?? 0), (int)($v[1] ?? 0)];
-    return match (true) {
-        $major >= 24, $major === 23 && $minor >= 6, $major === 22 && $minor >= 18 => ['--no-warnings'], // types are stripped by default
-        $major === 23, $major === 22 && $minor >= 6 => ['--no-warnings', '--experimental-strip-types'],
-        default => null,
-    };
-}
-
-/**
- * The project of the directory in $args and its configuration, myphp.json
- * or myphp.config.ts,
+ * The project of the directory in $args and its configuration, myphp.json,
  * with mygo's defaults and checks (mygo's loadConfig): every field is
  * optional. name (default: the directory's), identifier (com.myphp.<name>),
  * slug (lower-case letters, digits and hyphens: the name of the update
@@ -467,16 +400,14 @@ function sh(array $cmd, ?string $cwd = null): int
 const INIT_USAGE = <<<'TXT'
 init [flags] [dir]
 
-Creates a new MyPHP project (in dir, or the current directory when omitted). The native template shows a user interface
-MyPHP draws itself, written in PHP with MyPHP\UI. The web template has a
-TypeScript frontend built with Vite: Bun installs its dependencies, the
-myphp-cli and myphp-runtime packages of this checkout among them, and runs
-its scripts, bun run dev and bun run build. Both get the app's icon,
-resources/icon.png, and the bundled agent skills.
+Creates a new MyPHP project (in dir, or the current directory when omitted).
+The native template scaffolds a 2D declarative SwiftUI app drawn on the GPU;
+the 3d template scaffolds a 5-platform 3D SceneView app. Both include
+resources/icon.png and the bundled agent skills.
 
 Flags:
-  -name name               application name (default: directory name)
-  -template native|3d|web  the project (default native)
+  -name name           application name (default: directory name)
+  -template native|3d  the project template (default native)
 TXT;
 
 function init(array $args): void
@@ -485,15 +416,14 @@ function init(array $args): void
     $template = option($args, 'template', 'native');
     $name = option($args, 'name', '');
     count($args) <= 1 || fail("too many arguments\n\nUsage: myphp " . INIT_USAGE);
-    in_array($template, ['native', '3d', 'web'], true) || fail("unknown template \"$template\": native, 3d or web");
+    in_array($template, ['native', '3d'], true) || fail("unknown template \"$template\": native or 3d");
     ensurePhpEnvironment(false);
     $dir = $args[0] ?? '.';
     !is_dir($dir) || count(scandir($dir)) === 2 || fail("$dir is not empty");
     is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
     $dir = realpath($dir);
     $name = $name !== '' ? $name : basename($dir);
-    $data = ['name' => $name, 'slug' => Slug::of($name), 'identifier' => 'com.example.' . str_replace('-', '', Slug::of($name)), 'framework' => realpath(FRAMEWORK),
-        'runtime' => 'file:' . realpath(FRAMEWORK) . '/packages/runtime', 'cli' => 'file:' . realpath(FRAMEWORK) . '/packages/cli'];
+    $data = ['name' => $name, 'slug' => Slug::of($name), 'identifier' => 'com.example.' . str_replace('-', '', Slug::of($name)), 'framework' => realpath(FRAMEWORK)];
     logf("Creating $dir");
     writeTemplate(TEMPLATES . "/$template", $dir, $data);
     mkdir("$dir/resources");
@@ -502,26 +432,10 @@ function init(array $args): void
     $cwd = realpath((string)getcwd()) ?: (string)getcwd();
     $rel = $dir === $cwd ? '' : (str_starts_with($dir, $cwd . '/') ? substr($dir, strlen($cwd) + 1) : $dir);
     $cdLine = $rel !== '' ? "  cd $rel\n" : '';
-    if ($template === 'native' || $template === '3d') {
-        echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  php -d ffi.enable=1 tests/ui_test.php  # test the view headless\n  myphp build                          # package the app\n\n";
-        return;
-    }
-    if (Cmd::look('bun') === '') {
-        warnf('Bun not found: install it from https://bun.sh, then run bun install');
-    } else {
-        logf('Installing the dependencies');
-        sh(['bun', 'install'], $dir) === 0 || fail('bun install failed');
-        logf('Installed the dependencies');
-        try {
-            generateBindings($dir, project([$dir])['config']);
-        } catch (Failure $e) {
-            warnf("{$e->getMessage()}; run myphp generate once it can be read");
-        }
-    }
-    echo "\nCreated $name. Next steps:\n\n{$cdLine}  bun run dev      # develop with live reload\n  bun run build    # package the app\n\n";
+    echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  php -d ffi.enable=1 tests/ui_test.php  # test the view headless\n  myphp build                          # package the app\n\n";
 }
 
-/** The templates of myphp init (mygo's template): native UI, and a TypeScript frontend built with Vite. */
+/** The templates of myphp init: native 2D UI and 3D SceneView. */
 const TEMPLATES = __DIR__ . '/template';
 
 /**
@@ -577,7 +491,7 @@ const DEV_USAGE = <<<'TXT'
 dev [flags] [dir] [args...]
 
 Develops the app with live reload. It writes the TypeScript client of a
-frontend, runs devCommand from myphp.json (such as a Vite dev server),
+frontend, runs devCommand from myphp.json,
 waits for devUrl to answer, then builds a development app, which loads
 devUrl in place of its built frontend, and launches it. Without devUrl,
 the app serves frontendDist from disk. The development app is "<name> Dev"
@@ -725,7 +639,7 @@ function devInputs(string $dir, array $c): array
     if ($i18n !== null) {
         $walk($i18n['path'], '.json');
     }
-    foreach (array_filter([CONFIG, CONFIG_TS, $c['icon'] ?? '', $c['macos']['entitlements'] ?? '', $c['macos']['provisioningProfile'], ...array_values($c['macos']['helperEntitlements'])]) as $f) {
+    foreach (array_filter([CONFIG, $c['icon'] ?? '', $c['macos']['entitlements'] ?? '', $c['macos']['provisioningProfile'], ...array_values($c['macos']['helperEntitlements'])]) as $f) {
         $add(path($dir, $f));
     }
     $walk = null; // the closure held itself, and through $add the inputs: polled 4 times a second, each poll's stayed until the memory ran out

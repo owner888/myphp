@@ -21,22 +21,20 @@ later with `ext-ffi`, and the system's libraries.
 ## myphp init
 
 ```sh
-myphp init my-app                  # native UI
+myphp init my-app                  # 2D declarative SwiftUI app
 myphp init -template 3d my-3d-app  # 5-platform 3D scene (SceneView + PBR + particles)
-myphp init -template web my-app    # a TypeScript frontend built with Vite
 ```
 
 Creates a new project. The `native` template shows a 2D declarative user
 interface MyPHP draws on the GPU; the `3d` template scaffolds a 5-platform
 3D scene (`SceneView` with Cook-Torrance PBR material, PCF soft shadows,
-orbit controls and 3D particles); the `web` template has a TypeScript
-frontend built with Vite. All templates get `resources/icon.png` and the
-bundled agent skills.
+orbit controls and 3D particles). Both templates include `resources/icon.png`
+and the bundled agent skills.
 
 | Flag | |
 |---|---|
 | `-name name` | the application name (default: the directory's name) |
-| `-template native\|3d\|web` | the project template (default `native`) |
+| `-template native\|3d` | the project template (default `native`) |
 
 ## myphp install-skills
 
@@ -45,11 +43,7 @@ project, for coding agents that write MyPHP apps.
 
 ## myphp dev
 
-Develops the app with live reload. It writes the TypeScript client of a
-frontend, runs `devCommand` (such as a Vite dev server), waits for `devUrl`
-to answer, then builds a development app, which loads `devUrl` in place of
-its built frontend, and launches it. Without `devUrl`, the app serves
-`frontendDist` from disk. The development app is `<name> Dev` with the
+Develops the app with live reload. The development app is `<name> Dev` with the
 identifier `<identifier>.dev`, in `.myphp/dev`: a real bundle, with the
 app's icon and resources, whose launcher runs the project's files.
 What follows the folder goes to the app, its `$argv`, at each launch:

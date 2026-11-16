@@ -205,76 +205,13 @@ The page's `window.close()` leaves the window open. Content rules block
 what a web view's page loads, as they do a window's ([blocking
 content](../windows.md#blocking-content)).
 
-### The typed client
+### Calling PHP from the embedded page
 
-The page calls PHP with the client `myphp dev` writes, as a window's page
-does: the client knows nothing of web views. A project of native UI has no
-frontend, and so no client: give it one, say a Vite app in a `frontend`
-directory, with the fields of [the
-frontend](../configuration.md#development-and-the-frontend) in its
-myphp.json:
-
-```json
-{
-  "name": "Notes",
-  "devUrl": "http://localhost:5173",
-  "devCommand": "bun run --cwd frontend dev",
-  "buildCommand": "bun run --cwd frontend build",
-  "frontendDist": "frontend/dist"
-}
-```
-
-A web view loading `/` shows the frontend, from the dev server during
-`myphp dev` and from the bundle in builds, and its page calls the services
-bound with `Ipc::bind()` and hears the events declared with `new Event()`:
-
-<!-- no-test -->
-```php
-/** Bound for the pages. */
-final class Likes
-{
-    private int $likes = 0;
-    public static Event $liked; // tells pages how many likes there are
-
-    /** Counts a like and tells every page. */
-    public function like(): int
-    {
-        self::$liked->broadcast(++$this->likes);
-        return $this->likes;
-    }
-}
-Likes::$liked = new Event('liked', 'int');
-
-$page = null;
-Ipc::bind(new Likes());
-App::whenReady(function () use (&$page) {
-    $win = new Window(new WindowOptions(title: 'Notes', content: Content::view(function (Context $c) use (&$page) {
-        if ($page !== null) {
-            $c->webView($page)->fill();
-        }
-    })));
-    $page = $win->newWebView(new WebViewOptions(url: '/'));
-    $win->invalidate();
-});
-App::run();
-```
-
-```ts
-import { Likes, events } from "./myphp";
-
-likeButton.onclick = async () => {
-  count.textContent = String(await Likes.like());
-};
-events.liked.on((likes) => (count.textContent = String(likes)));
-```
-
-Calls with a `CallContext`, errors, [channels](../bindings.md#channels)
-and events work as in a window. A page without a build, such as HTML the
-app loads with `loadHTML()`, calls by name with the runtime the bridge puts
-in every page, `myphp.call("Likes.like")` and `myphp.on("liked", …)`.
-Pages that are not the app's own, as a web view showing
-`https://example.com`, cannot call PHP at all: see [who may
-call](../bindings.md#who-may-call).
+An embedded page loaded with `loadHTML()` or from a custom protocol can call
+services bound with `Ipc::bind()` and listen to `Event`s using the built-in
+`window.myphp.call("Class.method", ...args)` and `window.myphp.on("event", fn)`
+bridge. External websites (such as `https://example.com`) cannot call PHP
+unless listed in `PageOptions::$trustedOrigins` (see [bindings](../bindings.md)).
 
 ## Limits
 

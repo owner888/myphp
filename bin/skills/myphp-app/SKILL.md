@@ -34,7 +34,7 @@ MyPHP draws SwiftUI-style declarative views directly on the GPU (Metal on macOS/
 - **Colors & Fonts**: `Color::primary`, `Color::secondary`, `Color::systemBackground`, `Color::secondarySystemBackground`, `Color::systemGroupedBackground`, `Color::secondarySystemGroupedBackground`, `Color::tertiarySystemGroupedBackground`, `Color::rgb(0x00CAA4)`; `Font::largeTitle`, `Font::title`, `Font::title2`, `Font::title3`, `Font::headline`, `Font::subheadline`, `Font::body`, `Font::callout`, `Font::footnote`, `Font::caption`, `Font::caption2`, `Font::system(size: 24, weight: Weight::bold)`.
 - **Modals**: `->sheet(isPresented: $this->open, content: fn() => ...)` (`->presentationDetents([PresentationDetent::medium(), PresentationDetent::large()])`, `->interactiveDismissDisabled()`), `->alert('Title', isPresented: $this->alertOpen, actions: [Button('OK')], message: '...')`, `->confirmationDialog('Title', isPresented: $this->confirmOpen, actions: [Button('Delete', role: ButtonRole::destructive, action: ...), Button('Cancel', role: ButtonRole::cancel)])`.
 
-*(Load `references/*.md` ONLY when needed: `references/async.md` for `URLSession`/SQLite/Secrets, `references/pitfalls.md` when debugging, `references/windows.md` for multi-window desktop apps, `references/web.md` for Vite web frontends.)*
+*(Load `references/*.md` ONLY when needed: `references/async.md` for `URLSession`/SQLite/Secrets, `references/pitfalls.md` when debugging, `references/windows.md` for multi-window desktop apps.)*
 
 ## 2. Project & Code Architecture
 

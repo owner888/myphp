@@ -5,8 +5,7 @@ disk image on macOS; a launcher, a desktop entry, an archive, a Debian
 package and a PKGBUILD for Arch Linux on Linux.
 
 ```sh
-bun run build        # myphp build, in a project with a web frontend
-myphp build          # in a project of native UI
+myphp build
 ```
 
 It:
@@ -281,7 +280,7 @@ entitlements. A profile cannot be used with ad-hoc signing (`-sign -`).
 `dev` signs ad hoc unless it is given `-sign`, and its app's identifier is
 `<identifier>.dev`, which the app's profile does not authorize: leave the
 profile and the restricted entitlements out of development builds with a
-configuration that is a function of the command (in myphp.config.ts),
+configuration,
 
 ```ts
 export default defineConfig(({ command }) => ({
