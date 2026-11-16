@@ -37,6 +37,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
     /** @var array<int, bool> whether each face's glyphs are in color */
     private array $colorFaces = [];
     private ?DWriteEngine $engine = null;
+    private ?CData $glyphIdxBuf = null, $glyphAdvBuf = null, $glyphRunBuf = null, $glyphOutBuf = null, $rectBuf = null;
 
     public function __construct(private float $scale)
     {
@@ -324,16 +325,17 @@ final class DWrite implements \MyPHP\Platform\Fonts
     private function coverage(CData $face, int $glyph, float $px, float $dx): ?array
     {
         $f = $this->f;
-        $index = $f->new('uint16_t[1]'); $index[0] = $glyph;
-        $advance = $f->new('float[1]');
-        $run = $f->new('DWRITE_GLYPH_RUN');
+        $index = $this->glyphIdxBuf ??= $f->new('uint16_t[1]'); $index[0] = $glyph;
+        $advance = $this->glyphAdvBuf ??= $f->new('float[1]');
+        $run = $this->glyphRunBuf ??= $f->new('DWRITE_GLYPH_RUN');
         $run->fontFace = $face;
         $run->fontEmSize = $px;
         $run->glyphCount = 1;
         $run->glyphIndices = $f->cast('const uint16_t *', FFI::addr($index[0]));
         $run->glyphAdvances = $f->cast('const float *', FFI::addr($advance[0]));
         $mode = $this->aliased ? 1 : 5; // DWRITE_RENDERING_MODE_ALIASED, NATURAL_SYMMETRIC
-        $out = $f->new('void *');
+        $out = $this->glyphOutBuf ??= $f->new('void *');
+        $out->cdata = null;
         if ($this->factory2 !== null) { // IDWriteFactory2's: grayscale coverage; IDWriteFactory3's takes Windows 10's modes too
             $fac = $f->cast('IDWriteFactory23 *', $this->factory3 ?? $this->factory2);
             $make = $this->factory3 !== null ? $fac->v->CreateGlyphRunAnalysis3 : $fac->v->CreateGlyphRunAnalysis;
@@ -348,7 +350,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
         try {
             // Grayscale coverage is DWRITE_TEXTURE_ALIASED_1x1 with IDWriteFactory2's analyses; without, ClearType's three values a pixel, averaged.
             $type = $this->factory2 !== null || $this->aliased ? 0 : 1;
-            $r = $f->new('RECT');
+            $r = $this->rectBuf ??= $f->new('RECT');
             if (($a->v->GetAlphaTextureBounds)($a, $type, FFI::addr($r)) < 0 || $r->right <= $r->left || $r->bottom <= $r->top) {
                 return null;
             }

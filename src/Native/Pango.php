@@ -37,6 +37,7 @@ final class Pango implements \MyPHP\Platform\Fonts
     /** @var array<int, bool> whether each font's glyphs are in color */
     private array $colorFonts = [];
     private ?PangoEngine $engine = null;
+    private ?CData $inkRect = null, $logicalRect = null, $glyphBuf = null, $extentsBuf = null;
 
     public function __construct(private float $scale)
     {
@@ -233,7 +234,7 @@ final class Pango implements \MyPHP\Platform\Fonts
         $f->pango_layout_set_auto_dir($layout, 0);
         $f->pango_layout_set_font_description($layout, $desc);
         $f->pango_layout_set_text($layout, $text, strlen($text));
-        $ink = $f->new('PangoRectangle'); $logical = $f->new('PangoRectangle');
+        $ink = $this->inkRect ??= $f->new('PangoRectangle'); $logical = $this->logicalRect ??= $f->new('PangoRectangle');
         $f->pango_layout_get_extents($layout, FFI::addr($ink), FFI::addr($logical));
         $ascent = $f->pango_layout_get_baseline($layout) / self::SCALE;
         // The UTF-16 index of each byte of the text, and of its end.
@@ -288,9 +289,9 @@ final class Pango implements \MyPHP\Platform\Fonts
             return null;
         }
         $f = $this->f;
-        $g = $f->new('cairo_glyph_t[1]');
-        $g[0]->index = $glyph;
-        $ext = $f->new('cairo_text_extents_t');
+        $g = $this->glyphBuf ??= $f->new('cairo_glyph_t[1]');
+        $g[0]->index = $glyph; $g[0]->x = 0.0; $g[0]->y = 0.0;
+        $ext = $this->extentsBuf ??= $f->new('cairo_text_extents_t');
         $f->cairo_scaled_font_glyph_extents($sf, $g, 1, FFI::addr($ext));
         if ($ext->width <= 0 || $ext->height <= 0) {
             return null;
@@ -398,8 +399,8 @@ final class Pango implements \MyPHP\Platform\Fonts
         $surface = $f->cairo_image_surface_create(self::FORMAT_A8, 1, 1);
         $cr = $f->cairo_create($surface);
         $f->cairo_set_scaled_font($cr, $sf);
-        $g = $f->new('cairo_glyph_t[1]');
-        $g[0]->index = $glyph;
+        $g = $this->glyphBuf ??= $f->new('cairo_glyph_t[1]');
+        $g[0]->index = $glyph; $g[0]->x = 0.0; $g[0]->y = 0.0;
         $f->cairo_glyph_path($cr, $g, 1);
         $path = $f->cairo_copy_path_flat($cr);
         $segs = [];

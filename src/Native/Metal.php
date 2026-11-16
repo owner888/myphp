@@ -602,6 +602,7 @@ final class Metal
     /** @var array<int, true> views adopted from another thread (iOS): their layer is the UI thread's */
     private array $adopted = [];
     private $blurParams;
+    private ?\FFI\CData $scissorBuf = null, $originFrom = null, $originZero = null, $copySize = null, $transparentClear = null;
     private $queue;
     private $pipeline;
     private array $buffers = [];
@@ -1294,7 +1295,7 @@ final class Metal
         if ($this->backdrop !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->backdrop, 2);
         }
-        $scissor = $rects === null ? null : ObjC::$c->new('unsigned long[4]'); // MTLScissorRect: x, y, width, height; set by pointer, as setScissorRect: would take it by value
+        $scissor = $rects === null ? null : ($this->scissorBuf ??= ObjC::$c->new('unsigned long[4]')); // MTLScissorRect: x, y, width, height; set by pointer, as setScissorRect: would take it by value
         $cut = function (array $r) use ($enc, $scissor): void {
             [$scissor[0], $scissor[1], $scissor[2], $scissor[3]] = [$r[0], $r[1], $r[2] - $r[0], $r[3] - $r[1]];
             ObjC::msg('v:pL', $enc, 'setScissorRects:count:', ObjC::$c->cast('void*', FFI::addr($scissor)), 1);
@@ -1492,11 +1493,12 @@ final class Metal
         }
         [$u, $v, $page] = $c->slot;
         $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
-        $from = ObjC::$c->new('MTLOrigin');
-        [$from->x, $from->y] = [$u, $v];
-        $size = ObjC::$c->new('MTLSize');
+        $from = $this->originFrom ??= ObjC::$c->new('MTLOrigin');
+        [$from->x, $from->y, $from->z] = [$u, $v, 0];
+        $size = $this->copySize ??= ObjC::$c->new('MTLSize');
         [$size->w, $size->h, $size->d] = [$c->w, $c->h, 1];
-        ObjC::msg('v:pLLoZpLLo', $blit, 'copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:', $this->imagesTexture, $page, 0, $from, $size, $t, 0, 0, ObjC::$c->new('MTLOrigin'));
+        $zero = $this->originZero ??= ObjC::$c->new('MTLOrigin');
+        ObjC::msg('v:pLLoZpLLo', $blit, 'copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:', $this->imagesTexture, $page, 0, $from, $size, $t, 0, 0, $zero);
         ObjC::msg('v:', $blit, 'endEncoding');
         return $t;
     }
@@ -1534,7 +1536,7 @@ final class Metal
             ObjC::msg('v:p', $ca, 'setTexture:', $target);
             ObjC::msg('v:L', $ca, 'setLoadAction:', $c->scene !== null ? self::LOAD_LOAD : self::LOAD_CLEAR);
             ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
-            ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::$c->new('MTLClearColor')); // transparent
+            ObjC::msg('v:k', $ca, 'setClearColor:', $this->transparentClear ??= ObjC::$c->new('MTLClearColor')); // transparent
             $this->shaderTextures($cb, $list); // copied before the pass, which may not copy
             $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
             $quads = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($list->buf)), $list->n * DisplayList::FLOATS_PER_RECT * 4, 0);

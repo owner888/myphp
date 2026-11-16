@@ -108,6 +108,7 @@ final class D3d
     private array $target = [1.0, 1.0, 1.0, 1.0];
     /** @var array<string, bool> what this renderer does not draw yet and has said so */
     private array $warned = [];
+    private ?CData $bindViews = null, $bindSamplers = null, $bindBuffers = null, $frameBuf = null, $mapSub = null, $clearFloats = null, $nullViews = null, $copyBox = null;
 
     public function __construct(public int $capacity = 65536)
     {
@@ -691,7 +692,7 @@ final class D3d
             \MyPHP\Plugins\Scene\Native\D3dRenderPass::instance()->render($c->scene, $c->w, $c->h, $target[1]);
         } else {
             self::renderTo($target[1], $c->w, $c->h);
-            $clear = $f->new('float[4]');
+            $clear = $this->clearFloats ??= $f->new('float[4]');
             ($ctx->v->ClearRenderTargetView)($ctx, $target[1], $clear);
         }
         $list = $c->list;
@@ -714,7 +715,7 @@ final class D3d
         }
         [$u, $v, $page] = $c->slot;
         // the image texture the shaders read takes it: nothing reads it, nor writes the canvas's, as it is copied
-        $nulls = $f->new('void *[5]');
+        $nulls = $this->nullViews ??= $f->new('void *[5]');
         ($ctx->v->VSSetShaderResources)($ctx, 0, 5, $nulls);
         ($ctx->v->PSSetShaderResources)($ctx, 0, 5, $nulls);
         ($ctx->v->OMSetRenderTargets)($ctx, 0, null, null);
@@ -778,7 +779,7 @@ final class D3d
         if ($c->slot !== null && self::$imagesTexture !== null) {
             [$u, $v, $page] = $c->slot;
             $f = self::$f;
-            $box = $f->new('D3D11_BOX');
+            $box = $this->copyBox ??= $f->new('D3D11_BOX');
             [$box->left, $box->top, $box->front, $box->right, $box->bottom, $box->back] = [$u, $v, 0, $u + $c->w, $v + $c->h, 1];
             $ctx = self::$context;
             ($ctx->v->CopySubresourceRegion)($ctx, $tex, 0, 0, 0, 0, self::$imagesTexture, $page, FFI::addr($box));
@@ -916,16 +917,16 @@ final class D3d
         ($c->v->VSSetShader)($c, self::$quadVS, null, 0);
         ($c->v->PSSetShader)($c, self::$quadPS, null, 0);
         ($c->v->RSSetState)($c, self::$rasterizer);
-        $views = $f->new('void *[5]');
+        $views = $this->bindViews ??= $f->new('void *[5]');
         foreach ([$this->quadsView, $this->xformsView, self::$atlasView, self::$imagesView, $this->glass['backdrop'][2] ?? self::$noBackdrop] as $i => $v) {
             $views[$i] = $v;
         }
         ($c->v->VSSetShaderResources)($c, 0, 5, $views);
         ($c->v->PSSetShaderResources)($c, 0, 5, $views);
-        $samplers = $f->new('void *[1]');
+        $samplers = $this->bindSamplers ??= $f->new('void *[1]');
         $samplers[0] = self::$sampler;
         ($c->v->PSSetSamplers)($c, 0, 1, $samplers);
-        $buffers = $f->new('void *[1]');
+        $buffers = $this->bindBuffers ??= $f->new('void *[1]');
         $buffers[0] = self::$frameBuffer;
         ($c->v->VSSetConstantBuffers)($c, 0, 1, $buffers);
         ($c->v->PSSetConstantBuffers)($c, 0, 1, $buffers);
@@ -940,7 +941,7 @@ final class D3d
         $f = self::$f;
         $c = self::$context;
         [$vw, $vh, $scale, $th] = $this->target;
-        $frame = $f->new('FRAME');
+        $frame = $this->frameBuf ??= $f->new('FRAME');
         $frame->viewport[0] = $vw;
         $frame->viewport[1] = $vh;
         $frame->atlas[0] = (float)(self::$atlas?->w ?? 1);
@@ -951,7 +952,7 @@ final class D3d
         $frame->flip = 1.0;
         $frame->targetH = $th;
         $frame->from = $at;
-        $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
+        $m = $this->mapSub ??= $f->new('D3D11_MAPPED_SUBRESOURCE');
         self::hr(($c->v->Map)($c, self::$frameBuffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (constants)');
         FFI::memcpy($m->pData, $frame, FFI::sizeof($frame));
         ($c->v->Unmap)($c, self::$frameBuffer, 0);
@@ -965,9 +966,8 @@ final class D3d
         if ($bytes <= 0) {
             return;
         }
-        $f = self::$f;
         $c = self::$context;
-        $m = $f->new('D3D11_MAPPED_SUBRESOURCE');
+        $m = $this->mapSub ??= self::$f->new('D3D11_MAPPED_SUBRESOURCE');
         self::hr(($c->v->Map)($c, $buffer, 0, self::MAP_WRITE_DISCARD, 0, FFI::addr($m)), 'Map (quads)');
         FFI::memcpy($m->pData, $from, $bytes);
         ($c->v->Unmap)($c, $buffer, 0);

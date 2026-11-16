@@ -38,6 +38,7 @@ final class CoreText implements \MyPHP\Platform\Fonts
     private ?bool $smooth = null;
     /** The callback CGPathApply hands an outline's elements, made once and held (outline()). */
     private ?CData $applier = null;
+    private ?CData $dictKeys = null, $dictValues = null, $ascBuf = null, $descBuf = null, $leadBuf = null, $cfRange = null, $glyphIdBuf = null, $glyphBoundsBuf = null, $zeroPoint = null;
     /** @var list<array{0: float, 1: float, 2: float, 3: float}> the segments of the outline being read */
     private array $segs = [];
     /** The current point of the outline being read, and the start of its subpath. */
@@ -209,20 +210,20 @@ final class CoreText implements \MyPHP\Platform\Fonts
         $c = $this->c;
         $font = $this->font($size, $style);
         $str = $c->CFStringCreateWithCString(null, $text, self::UTF8) ?? throw new RuntimeException('CFString');
-        $keys = $c->new('void*[1]'); $keys[0] = $this->fontKey;
-        $values = $c->new('void*[1]'); $values[0] = $font;
+        $keys = $this->dictKeys ??= $c->new('void*[1]'); $keys[0] = $this->fontKey;
+        $values = $this->dictValues ??= $c->new('void*[1]'); $values[0] = $font;
         $attrs = $c->CFDictionaryCreate(null, $keys, $values, 1, $this->keyCallbacks, $this->valueCallbacks);
         $attributed = $c->CFAttributedStringCreate(null, $str, $attrs);
         $line = $c->CTLineCreateWithAttributedString($attributed);
 
-        $asc = $c->new('double'); $desc = $c->new('double'); $lead = $c->new('double');
+        $asc = $this->ascBuf ??= $c->new('double'); $desc = $this->descBuf ??= $c->new('double'); $lead = $this->leadBuf ??= $c->new('double');
         $width = $c->CTLineGetTypographicBounds($line, FFI::addr($asc), FFI::addr($desc), FFI::addr($lead));
 
         $glyphs = [];
         $carets = [0 => 0.0];
         $runs = $c->CTLineGetGlyphRuns($line);
         $runCount = $c->CFArrayGetCount($runs);
-        $range = $c->new('CFRange'); // {0, 0} means the whole run
+        $range = $this->cfRange ??= $c->new('CFRange'); // {0, 0} means the whole run
         for ($r = 0; $r < $runCount; $r++) {
             $run = $c->CFArrayGetValueAtIndex($runs, $r);
             $n = $c->CTRunGetGlyphCount($run);
@@ -300,8 +301,8 @@ final class CoreText implements \MyPHP\Platform\Fonts
     {
         $c = $this->c;
         $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
-        $ids = $c->new('CGGlyph[1]'); $ids[0] = $glyph;
-        $bounds = $c->new('CGRect[1]');
+        $ids = $this->glyphIdBuf ??= $c->new('CGGlyph[1]'); $ids[0] = $glyph;
+        $bounds = $this->glyphBoundsBuf ??= $c->new('CGRect[1]');
         $c->CTFontGetBoundingRectsForGlyphs($font, 0, $ids, $bounds, 1);
         $b = $bounds[0];
         if ($b->size->w <= 0 || $b->size->h <= 0) {
@@ -348,7 +349,7 @@ final class CoreText implements \MyPHP\Platform\Fonts
             $c->CGContextDrawPath($ctx, 3); // kCGPathFillStroke
             $c->CGPathRelease($path);
         } else {
-            $origin = $c->new('CGPoint[1]');
+            $origin = $this->zeroPoint ??= $c->new('CGPoint[1]');
             $c->CTFontDrawGlyphs($font, $ids, $origin, 1, $ctx);
         }
         $rows = Mem::alloc($bpp * $w * $h);
@@ -361,7 +362,7 @@ final class CoreText implements \MyPHP\Platform\Fonts
             $c->CGContextTranslateCTM($cut, $dx - $x0, -$y0);
             $c->CGContextScaleCTM($cut, $s, $s);
             $c->CGContextSetBlendMode($cut, 23); // kCGBlendModeDestinationOut
-            $c->CTFontDrawGlyphs($font, $ids, $c->new('CGPoint[1]'), 1, $cut);
+            $c->CTFontDrawGlyphs($font, $ids, $this->zeroPoint ??= $c->new('CGPoint[1]'), 1, $cut);
             $c->CGContextRelease($cut);
         }
         return ['w' => $w, 'h' => $h, 'ox' => $x0, 'oy' => $y0, 'rows' => $rows, 'addr' => $addr, 'color' => $color];
