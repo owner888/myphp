@@ -6,19 +6,12 @@ namespace MyPHP\Plugins\Watch;
 use MyPHP\Plugin;
 
 /**
- * The watch plugin (mygo's plugins/watch): pages watch for changes to the
- * files and directories the app names, by those names, with the watch of
- * its TypeScript client (client/index.ts, @myphp-plugins/watch). PHP code
- * and native UI call App::watchFiles() directly.
+ * The watch plugin: registers the "plugin:watch" IPC service for embedded
+ * WebView pages. Native PHP apps call `App::watchFiles()` directly.
  *
  *     App::use(Watch::new(new Options(roots: [
  *         'project' => new Root($projectDir, recursive: true),
  *     ])));
- *
- *     // the page
- *     import { watch } from "@myphp-plugins/watch";
- *     const watcher = await watch("project", { recursive: true });
- *     for await (const events of watcher) for (const e of events) console.log(e.op, e.path);
  */
 final class Watch
 {

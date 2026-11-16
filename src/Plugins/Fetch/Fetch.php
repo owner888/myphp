@@ -6,18 +6,12 @@ namespace MyPHP\Plugins\Fetch;
 use MyPHP\Plugin;
 
 /**
- * The fetch plugin (mygo's plugins/fetch): pages make HTTP requests from
- * PHP with the fetch of its TypeScript client (client/index.ts,
- * @myphp-plugins/fetch), which takes and returns the standard Request
- * options and Response. Requests made this way are not subject to CORS,
- * may set any header (Origin, Cookie, User-Agent, Host…) and read every
- * response header but Set-Cookie, which a Response cannot hold.
+ * The fetch plugin: registers the "plugin:fetch" IPC service so embedded
+ * WebView pages can make CORS-free HTTP requests from PHP with custom headers
+ * and streaming responses. Native PHP apps use `URLSession::shared()` or
+ * `MyPHP\Http` directly.
  *
  *     App::use(Fetch::plugin());
- *
- *     // the page
- *     import { fetch } from "@myphp-plugins/fetch";
- *     const items = await (await fetch("https://api.example.com/items", { headers: { authorization: `Bearer ${token}` } })).json();
  *
  * The response body streams to the page as it arrives, and aborting the
  * request's signal stops it. The requests are libcurl's, the system's,

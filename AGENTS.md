@@ -154,8 +154,7 @@ myphp.json or myphp.config.ts take mygo.json's fields. `build` makes
 `<out>/darwin-<arch>/<name>.app` (a C launcher that execs this php, or
 `-launcher micro`: phpmicro from static-php-cli), signed, and a .dmg; on Linux
 `<out>/linux-<arch>`: the app, its .tar.gz, a .deb, a PKGBUILD (`Build\Linux`); `dev` runs "<name> Dev"
-from .myphp/dev. Work in `src/Native/Build/` (`tests/build_test.php`). Pages import `packages/runtime` (myphp-runtime,
-TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `php scripts/version.php <v>`, commit, tag `v<v>` (release.yml publishes npm). Slugs' pinyin: `php scripts/gen-pinyin.php` (Unihan).
+from .myphp/dev. Work in `src/Native/Build/` (`tests/build_test.php`). Project `vendor/` (Composer packages) is bundled automatically across all 5 platforms. To release: `php scripts/version.php <v>`, commit, tag `v<v>` (`release.yml` creates the GitHub release). Slugs' pinyin: `php scripts/gen-pinyin.php` (Unihan).
 
 ## Working on it
 

@@ -482,7 +482,7 @@ final class Plugins
     /**
      * Installs plugin $p unpacked (IINA's PluginManager.install): its
      * permissions agreed to ($agree, of them), one of its identifier
-     * replaced where $reinstall says so; moved to "<id>.iinaplugin" and
+     * replaced where $reinstall says so; moved to "<id>.myphpplugin" and
      * turned on. 'installed', 'reinstalled' or 'cancelled'.
      * @param Closure(Plugin): bool $agree @param Closure(Plugin): bool $reinstall
      */
@@ -516,7 +516,7 @@ final class Plugins
         return 'installed';
     }
 
-    /** Moves $p's folder to "<id>.iinaplugin", "<id>-2.iinaplugin" where that is taken (IINA's normalizePath). */
+    /** Moves $p's folder to "<id>.myphpplugin", "<id>-2.myphpplugin" where that is taken (IINA's normalizePath). */
     private static function normalizePath(Plugin $p): void
     {
         $dest = self::dir() . "/{$p->identifier}.myphpplugin";

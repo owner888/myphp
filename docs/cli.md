@@ -8,14 +8,11 @@ flags of one.
 
 A checkout of MyPHP runs it as `bin/myphp`; a project that installed MyPHP
 with Composer (the package `owner888/myphp`) has it in
-`vendor/owner888/myphp/bin/myphp`. Projects with a web frontend also
-depend on it through npm, as the `myphp-cli` package, which runs the
-project's Composer-installed MyPHP, so `bun run dev` and `bun run build`
-reach it:
+`vendor/bin/myphp`:
 
 ```sh
-bin/myphp init my-app          # from a checkout of MyPHP
-cd my-app && bun run dev       # in a project with a frontend: myphp-cli dev
+bin/myphp init my-app
+cd my-app && myphp dev
 ```
 
 `myphp doctor` checks that the machine has what MyPHP needs: PHP 8.4 or

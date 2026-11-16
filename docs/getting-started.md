@@ -25,8 +25,7 @@ script, `bin/myphp` in a checkout of MyPHP:
 bin/myphp init my-app
 ```
 
-Projects with a web frontend also depend on it through npm, as the
-`myphp-cli` package, which their scripts run. See [the CLI](cli.md).
+See [the CLI](cli.md) for all commands and flags.
 
 `myphp doctor` checks that the machine has what MyPHP needs.
 

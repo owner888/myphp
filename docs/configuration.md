@@ -1,44 +1,7 @@
 # Configuration
 
 `myphp.json`, at the root of a project, describes the app and how the CLI
-develops and builds it; `myphp init` makes one. A project with a web
-frontend may have `myphp.config.ts` instead, whose default export is the
-configuration, typed by `defineConfig` from the `myphp-cli` package, so
-editors complete and document every field:
-
-```ts
-import { defineConfig } from "myphp-cli";
-
-export default defineConfig({
-  name: "My App",
-  slug: "my-app",
-  identifier: "com.example.myapp",
-  version: "1.2.0",
-  copyright: "© 2026 Example Inc.",
-  entry: "app.php",
-
-  devUrl: "http://localhost:5173",
-  devCommand: "bun run dev:web",
-  buildCommand: "bun run build:web",
-  frontendDist: "dist",
-  bindings: "src/myphp.ts",
-  out: "build",
-
-  resources: ["third_party/licenses"],
-  urlSchemes: ["myapp"],
-  fileAssociations: [{ ext: ["md"], name: "Markdown Document", mimeType: "text/markdown" }],
-
-  i18n: { dir: "locales", source: "en" },
-  updates: { publicKey: "…", github: "you/my-app" },
-  macos: { signingIdentity: "Developer ID Application: Example Inc. (TEAMID)" },
-  linux: { maintainer: "Example Inc. <dev@example.com>" },
-});
-```
-
-Every field is optional. Projects of [native UI](ui/README.md) have no
-JavaScript, and no frontend to develop or build, so they leave out the
-fields of [the frontend](#development-and-the-frontend) and keep the
-configuration in myphp.json:
+develops and builds it; `myphp init` makes one. Every field is optional:
 
 ```json
 {
