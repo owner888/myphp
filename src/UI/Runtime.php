@@ -2144,10 +2144,14 @@ final class Runtime
         if ($inert) { $this->inertIds[$n->id] = true; }
         if ($n->passThrough) { $this->passing[$n->id] = true; }
         if ($n->attachTarget !== null) { $this->attachedTo[$n->id] = $n->attachTarget->id; }
-        if ($parent !== null && $parent->isDisabled()) { $n->disabledIn = true; } // inside a node disabled after it was built, as a fieldset (mygo's IsDisabled)
-        if ($n->isDisabled()) { $this->disabledIds[$n->id] = true; }
-        if ($parent !== null && $parent->ignoresInput()) { $n->ignoringIn = true; }
-        if ($n->ignoresInput()) { // it shows and reads to assistive technology, but takes neither the pointer nor the focus (mygo's ignoreInput)
+        if ($parent !== null) {
+            if ($parent->disabled || $parent->disabledIn) { $n->disabledIn = true; }
+            if ($parent->ignoreInput || $parent->ignoringIn) { $n->ignoringIn = true; }
+        }
+        $disabled = $n->disabled || $n->disabledIn;
+        $ignoring = $n->ignoreInput || $n->ignoringIn;
+        if ($disabled) { $this->disabledIds[$n->id] = true; }
+        if ($ignoring) { // it shows and reads to assistive technology, but takes neither the pointer nor the focus (mygo's ignoreInput)
             $this->passing[$n->id] = true;
             if ($this->focus === $n->id) { $this->focus = null; }
         }
@@ -2158,7 +2162,7 @@ final class Runtime
         if ($n->pose !== null || $n->draggable || $n->blocks || $n->ghosts !== [] || $n->focusGroup !== 0) { $this->recordTaint = true; } // what records what changes in place: a memo around it is recorded every frame
         if ($n->drags) { $this->dragSources[$n->id] = $n->dragValue; }
         if ($n->dataSource !== null) { $this->dataSources[$n->id] = $n->dataSource; }
-        if (!$n->isDisabled()) {
+        if (!$disabled) {
             if ($n->accepts !== null) { $this->dropTargets[$n->id] = $n->accepts; }
             if ($n->dataTarget !== null) { $this->dataTargets[$n->id] = $n->dataTarget; }
             if ($n->takesFiles) { $this->fileTargets[$n->id] = true; }
@@ -2208,8 +2212,13 @@ final class Runtime
             if ($by1 < $clip[3]) { $clip[3] = $by1; }
         }
         $this->order[$n->id] = ++$this->counter;
-        $this->recordSelectable($n, $parent);
-        $this->recordMenus($n);
+        if ($n->selectable || $n->unselectable || $n->scope !== 0 || ($parent !== null && $parent->textScope !== 0)) {
+            $this->recordSelectable($n, $parent);
+        }
+        if ($n->rtl) { $this->menuRtl[$n->id] = true; }
+        if (($n->contextMenu || $n->menuButton) && !$disabled) {
+            $this->menuNodes[$n->id] = ($n->contextMenu ? 1 : 0) | ($n->menuButton ? 2 : 0);
+        }
         if ($n->dragsWindow) {
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
@@ -2227,7 +2236,7 @@ final class Runtime
             $group = $n->id;
             $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null, 'rtl' => $n->rtl];
         }
-        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->isDisabled() && !$n->ignoresInput()) {
+        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$disabled && !$ignoring) {
             $this->focusables[] = $n->id;
             if ($n->role === Role::CHECK_BOX || $n->role === Role::RADIO || $n->role === Role::SWITCH) { $this->toggles[$n->id] = true; }
             if ($group !== 0) {
@@ -2241,7 +2250,7 @@ final class Runtime
         if ($n->focused && $n->id === $this->focus) {
             $n->focusVisible = $this->focusVisible && !$n->ownRing; // the painter rings it, unless it rings itself
         }
-        if ($n->kind === Node::SLIDER && !$n->isDisabled()) { // a disabled slider takes no press
+        if ($n->kind === Node::SLIDER && !$disabled) { // a disabled slider takes no press
             $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h, $n->rtl, $n->x + $n->padL(), max(1.0, $n->w - $n->padL() - $n->padR()), $n->y + $n->padT(), max(1.0, $n->h - $n->padT() - $n->padB()), $n->vertical]; // its box, and the content box its values span
         }
         if ($n->tooltip !== null) {
@@ -2304,8 +2313,10 @@ final class Runtime
         [$cellWas, $colorWas] = [$this->recordCell, $this->recordColor];
         if ($n->contextPreview) { $this->recordCell = $n; }
         if ($n->color !== null && $n->bgAlpha >= 0.5) { $this->recordColor = $n->color; }
-        foreach ($n->paintOrder() as $k) {
-            $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
+        if ($n->kids !== []) {
+            foreach ($n->pinned === null ? $n->kids : $n->paintOrder() as $k) {
+                $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
+            }
         }
         [$this->recordCell, $this->recordColor] = [$cellWas, $colorWas];
         $this->setInk($n);

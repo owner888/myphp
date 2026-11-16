@@ -46,7 +46,7 @@ final class Layout
         self::$window = [$w, $h];
         self::$metrics = $c->metrics();
         self::$aligned = []; self::$scrolled = [];
-        self::measure($c->root);
+        self::measure($c->root, false);
         self::arrange($c->root, 0, 0, $w, $h);
         if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width), and wrapping rows at theirs
             // A list's row aligned again, from where it showed, as high as its lines wrap: a list following its end keeps it in view as a reply grows past the list.
@@ -55,7 +55,7 @@ final class Layout
             }
             // A scroll container where it was asked to scroll, which the content grown by the wrapping may let it (its offset kept within the first pass's content).
             foreach (self::$scrolled as [$s, $x, $y]) { [$s->x, $s->y] = [$x, $y]; }
-            self::measure($c->root);
+            self::measure($c->root, false);
             self::arrange($c->root, 0, 0, $w, $h);
         }
         $ids = $c->runtime?->takeReveals($c->reveal) ?? $c->reveal;
@@ -88,7 +88,7 @@ final class Layout
     private static function wrapTexts(Node $n): bool
     {
         if ($n->memo === 2) { return false; }
-        if ($n->wrapsAtWidth() && $n->w > 0 && $n->w + 0.5 < max($n->mw, $n->natW)) { // narrower than its lines, also by its maxWidth()
+        if ($n->w > 0 && $n->w + 0.5 < max($n->mw, $n->natW) && $n->wrapsAtWidth()) { // narrower than its lines, also by its maxWidth()
             // Its width stays the one it asked unwrapped (its max-content width, its flex base size in a row, as mygo's
             // leafWidths), so the second pass shares the room as the first did and gives it the width it wraps at; only
             // its height follows its lines.
@@ -105,7 +105,9 @@ final class Layout
         // A wrapping row arranged at another width than it was measured at, as one given none (wrap(0)) or last frame's: its lines at this width, and so its height, in this frame (mygo's Wrap).
         $wrapped = $n->wraps && $n->w > 0 && abs($n->w - $n->wrapWidth) > 0.5;
         if ($wrapped) { $n->wrapWidth = $n->w; }
-        foreach ($n->kids as $k) { $wrapped = self::wrapTexts($k) || $wrapped; }
+        if ($n->kids !== []) {
+            foreach ($n->kids as $k) { $wrapped = self::wrapTexts($k) || $wrapped; }
+        }
         return $wrapped;
     }
 
@@ -210,7 +212,7 @@ final class Layout
     }
 
     /** Measures $n and what is inside it, bottom-up: the size it asks, its margins included, which its parent's arrange gives it back less them (margins()). */
-    public static function measure(Node $n): void
+    public static function measure(Node $n, bool $needsMinW = true): void
     {
         if ($n->memo === 2) { return; } // a memo placed again: measured as it was (Context::memo)
         if ($n->colFit !== null) {
@@ -225,7 +227,7 @@ final class Layout
             [$pw, $ph] = $n->padSums();
             $n->padW = $pw; $n->padH = $ph;
         }
-        self::measureBox($n);
+        self::measureBox($n, $needsMinW);
         if ($n->mw < $pw) { $n->mw = $pw; } // no smaller than its padding and border, whatever its size says, as in CSS
         if ($n->mh < $ph) { $n->mh = $ph; }
         if ($n->natW < $pw) { $n->natW = $pw; }
@@ -246,7 +248,7 @@ final class Layout
         }
     }
 
-    private static function measureBox(Node $n): void
+    private static function measureBox(Node $n, bool $needsMinW = true): void
     {
         if ($n->kind === Node::RICH) { // laid out at the width it wraps at, unless given a size
             $l = $n->textLayout();
@@ -276,7 +278,7 @@ final class Layout
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
             $n->mh = $n->fh;
-            $n->minMw = $n->single ? $n->minW : ($n->wrapsAtWidth() ? min($n->fw, $n->minContentWidth()) : $n->fw); // a single-line text shrinks to its min width (and shows an ellipsis), one that wraps to its widest word; other leaves keep their size
+            $n->minMw = $n->single ? $n->minW : ($needsMinW && $n->wrapsAtWidth() ? min($n->fw, $n->minContentWidth()) : $n->fw); // a single-line text shrinks to its min width (and shows an ellipsis), one that wraps to its widest word; other leaves keep their size
             if (($n->kind === Node::TEXT || $n->kind === Node::RICH) && !$n->inline) { // a text's padding and border around its lines (mygo's)
                 $px = $n->padW; $py = $n->padH;
                 $n->mw += $px; $n->mh += $py; $n->minMw += $px;
@@ -298,8 +300,9 @@ final class Layout
             return;
         }
         $main = 0.0; $cross = 0.0; $cnt = 0; $least = 0.0; // least: the min-content width, the automatic minimum a row shrinks this node to
+        $childNeedsMinW = $n->dir === Node::ROW || ($needsMinW && $n->fw <= 0 && !$n->scrollX && !$n->wraps && !$n->minSet);
         foreach ($n->kids as $k) {
-            self::measure($k);
+            self::measure($k, $childNeedsMinW || ($k->kind === Node::CONTAINER && (($k->self === Node::AUTO ? $n->align : $k->self) !== Node::STRETCH && ($k->self === Node::AUTO ? $n->align : $k->self) !== Node::AUTO || is_infinite($k->margins[1]) || is_infinite($k->margins[3]))));
             if ($k->absolute || $k->hidden) {
                 continue; // out of the flow, or hidden: it takes no room
             }

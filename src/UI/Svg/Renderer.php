@@ -37,6 +37,10 @@ final class Renderer
         if ($a <= 0) { return; }
         $m = Matrix::mul($ctm, $n->m);
         if ($n->clip === null && $n->mask === null && ($n->opacity >= 1 || $n->single)) { $this->content($n, $m, $dst, $a); return; }
+        if ($n->shape !== null && $n->clip !== null && $n->mask === null && ($n->shape->stroke[0] === Shape::NONE || $n->shape->fill[0] === Shape::NONE)) {
+            $this->clippedShape($n->shape, $m, $dst, $a, $n->bbox, $n->clip);
+            return;
+        }
         // Group opacity, clipping and masking apply to the content as a whole.
         $l = $this->layer();
         $this->content($n, $m, $l, 1);
@@ -44,6 +48,53 @@ final class Renderer
         if ($n->mask !== null) { $this->mask($l, $n->mask, $m, $n->bbox); }
         $this->composite($dst, $l, $a);
         $this->release($l);
+    }
+
+    /** Fast path for a single fill-only or stroke-only shape with a clip-path: fuses clip mask directly into shape coverage before painting into $dst. */
+    private function clippedShape(Shape $s, array $m, Layer $dst, float $alpha, ?array $bbox, ClipDef $cd): void
+    {
+        if ($s->fill[0] !== Shape::NONE) {
+            $this->flat->reset();
+            $s->path->flatten($m, true, $this->flat);
+            $rect = $this->cover($this->flat, $s->evenOdd);
+            $paint = $s->fill;
+            $op = $alpha * $s->fillOpacity;
+        } else {
+            if ($s->width <= 0) { return; }
+            $scale = Matrix::stretch($m);
+            if (!($scale > 0)) { return; }
+            $this->flat->reset();
+            $s->path->flatten($m, false, $this->flat);
+            $lines = $this->flat;
+            if ($s->dashes !== []) { $this->dashed->reset(); Stroker::dash($this->flat, $s->dashes, $s->dashOffset, $this->dashed, 1 << 16); $lines = $this->dashed; }
+            $st = $this->stroker; $st->out->reset();
+            $st->hw = $s->width / 2; $st->join = $s->join; $st->cap = $s->cap; $st->miter = $s->miter; $st->tol = 0.1 / $scale;
+            $st->stroke($lines);
+            $st->out->transform($m);
+            $rect = $this->cover($st->out, false);
+            $paint = $s->stroke;
+            $op = $alpha * $s->strokeOpacity;
+        }
+        if ($rect === null) { return; }
+        $f = Layer::ffi();
+        $n = ($rect[2] - $rect[0]) * ($rect[3] - $rect[1]);
+        $shapeCov = $f->cast('uint8_t*', $f->calloc(max(1, $n), 1));
+        \FFI::memcpy($shapeCov, $this->cov, $n);
+        $clipCov = $this->clipMask($cd, $m, $bbox, $rect);
+        try {
+            for ($i = 0; $i < $n; $i++) {
+                $cv = $clipCov[$i];
+                if ($cv === 0) { $shapeCov[$i] = 0; continue; }
+                if ($cv === 255) { continue; }
+                $sv = $shapeCov[$i];
+                if ($sv !== 0) { $shapeCov[$i] = self::div255($sv * $cv); }
+            }
+            $this->cov = $shapeCov;
+            $this->paint($dst, $rect, $paint, $op, $m, $bbox);
+        } finally {
+            $f->free($clipCov);
+            $f->free($shapeCov);
+        }
     }
 
     private function content(Node $n, array $m, Layer $dst, float $alpha): void
@@ -155,17 +206,39 @@ final class Renderer
             // A linear gradient padded is a dot product a pixel, inline; the others go through Gradient::at.
             $linear = !$g->radial && $g->spread === Gradient::PAD && ($g->x2 - $g->x1) ** 2 + ($g->y2 - $g->y1) ** 2 > 0;
             if ($linear) { $dx = $g->x2 - $g->x1; $dy = $g->y2 - $g->y1; $dd = $dx * $dx + $dy * $dy; $tx = ($i0 * $dx + $i1 * $dy) / $dd; $ty = ($i2 * $dx + $i3 * $dy) / $dd; $t0 = (($i4 - $g->x1) * $dx + ($i5 - $g->y1) * $dy) / $dd; }
+            $lutR = []; $lutG = []; $lutB = []; $lutA = [];
+            foreach ($lut as $c) { $lutR[] = $c[0]; $lutG[] = $c[1]; $lutB[] = $c[2]; $lutA[] = $c[3]; }
+            $empty = $dst->dirty === null;
             for ($y = $y0; $y < $y1; $y++) {
                 $ci = ($y - $y0) * $w; $pi = ($y * $lw + $x0) * 4; $py = $y + 0.5;
+                $rowT = $linear ? ($tx * ($x0 + 0.5) + $ty * $py + $t0) : 0.0;
                 for ($x = 0; $x < $w; $x++, $pi += 4) {
                     $v = $cov[$ci + $x];
-                    if ($v === 0) { continue; }
-                    $px = $x0 + $x + 0.5;
-                    if ($linear) { $t = $tx * $px + $ty * $py + $t0; $t = $t < 0 ? 0.0 : ($t > 1 ? 1.0 : $t); }
-                    else { $t = $g->at($i0 * $px + $i2 * $py + $i4, $i1 * $px + $i3 * $py + $i5); if ($t === null) { continue; } }
-                    [$cr, $cg, $cb, $ca] = $lut[(int)($t * 255 + 0.5)];
-                    if ($v === 255 && $ca === 255) { $pix[$pi] = $cr; $pix[$pi + 1] = $cg; $pix[$pi + 2] = $cb; $pix[$pi + 3] = 255; continue; }
-                    $tmp = $ca * $v + 128; $sa = ($tmp + ($tmp >> 8)) >> 8; $ia = 255 - $sa;
+                    if ($v === 0) { if ($linear) { $rowT += $tx; } continue; }
+                    if ($linear) {
+                        $t = $rowT < 0.0 ? 0.0 : ($rowT > 1.0 ? 1.0 : $rowT);
+                        $rowT += $tx;
+                    } else {
+                        $px = $x0 + $x + 0.5;
+                        $t = $g->at($i0 * $px + $i2 * $py + $i4, $i1 * $px + $i3 * $py + $i5);
+                        if ($t === null) { continue; }
+                    }
+                    $idx = (int)($t * 255 + 0.5);
+                    $ca = $lutA[$idx];
+                    if ($v === 255 && $ca === 255) {
+                        $pix[$pi] = $lutR[$idx]; $pix[$pi + 1] = $lutG[$idx]; $pix[$pi + 2] = $lutB[$idx]; $pix[$pi + 3] = 255;
+                        continue;
+                    }
+                    $cr = $lutR[$idx]; $cg = $lutG[$idx]; $cb = $lutB[$idx];
+                    $tmp = $ca * $v + 128; $sa = ($tmp + ($tmp >> 8)) >> 8;
+                    if ($empty) {
+                        $t0 = $cr * $v + 128; $pix[$pi] = ($t0 + ($t0 >> 8)) >> 8;
+                        $t0 = $cg * $v + 128; $pix[$pi + 1] = ($t0 + ($t0 >> 8)) >> 8;
+                        $t0 = $cb * $v + 128; $pix[$pi + 2] = ($t0 + ($t0 >> 8)) >> 8;
+                        $pix[$pi + 3] = $sa;
+                        continue;
+                    }
+                    $ia = 255 - $sa;
                     $t0 = $cr * $v + 128; $t1 = $pix[$pi] * $ia + 128;
                     $pix[$pi] = (($t0 + ($t0 >> 8)) >> 8) + (($t1 + ($t1 >> 8)) >> 8);
                     $t0 = $cg * $v + 128; $t1 = $pix[$pi + 1] * $ia + 128;
@@ -188,27 +261,46 @@ final class Renderer
         $d = $src->dirty;
         if ($d === null) { return; }
         $k = (int)(max(0.0, min(1.0, $alpha)) * 255 + 0.5);
+        if ($k === 0) { return; }
+        if ($dst->dirty === null && $k === 255 && $dst->w === $src->w && $dst->h === $src->h) {
+            [$dst->pix, $src->pix] = [$src->pix, $dst->pix];
+            $dst->dirty = $d;
+            $src->dirty = null;
+            return;
+        }
         [$x0, $y0, $x1, $y1] = $d; $lw = $this->w;
         $s = $src->pix; $t = $dst->pix;
-        for ($y = $y0; $y < $y1; $y++) {
-            for ($i = ($y * $lw + $x0) * 4, $e = ($y * $lw + $x1) * 4; $i < $e; $i += 4) {
-                $sa = $s[$i + 3];
-                if ($sa === 0) { continue; }
-                $sr = $s[$i]; $sg = $s[$i + 1]; $sb = $s[$i + 2];
-                if ($k !== 255) {
-                    $tmp = $sr * $k + 128; $sr = ($tmp + ($tmp >> 8)) >> 8;
-                    $tmp = $sg * $k + 128; $sg = ($tmp + ($tmp >> 8)) >> 8;
-                    $tmp = $sb * $k + 128; $sb = ($tmp + ($tmp >> 8)) >> 8;
-                    $tmp = $sa * $k + 128; $sa = ($tmp + ($tmp >> 8)) >> 8;
-                } elseif ($sa === 255) {
-                    $t[$i] = $sr; $t[$i + 1] = $sg; $t[$i + 2] = $sb; $t[$i + 3] = 255;
-                    continue;
+        if ($k === 255) {
+            for ($y = $y0; $y < $y1; $y++) {
+                for ($i = ($y * $lw + $x0) * 4, $e = ($y * $lw + $x1) * 4; $i < $e; $i += 4) {
+                    $sa = $s[$i + 3];
+                    if ($sa === 0) { continue; }
+                    if ($sa === 255) {
+                        $t[$i] = $s[$i]; $t[$i + 1] = $s[$i + 1]; $t[$i + 2] = $s[$i + 2]; $t[$i + 3] = 255;
+                        continue;
+                    }
+                    $ia = 255 - $sa;
+                    $tmp = $t[$i] * $ia + 128;     $t[$i]     = $s[$i] + (($tmp + ($tmp >> 8)) >> 8);
+                    $tmp = $t[$i + 1] * $ia + 128; $t[$i + 1] = $s[$i + 1] + (($tmp + ($tmp >> 8)) >> 8);
+                    $tmp = $t[$i + 2] * $ia + 128; $t[$i + 2] = $s[$i + 2] + (($tmp + ($tmp >> 8)) >> 8);
+                    $tmp = $t[$i + 3] * $ia + 128; $t[$i + 3] = $sa + (($tmp + ($tmp >> 8)) >> 8);
                 }
-                $ia = 255 - $sa;
-                $tmp = $t[$i] * $ia + 128;     $t[$i]     = $sr + (($tmp + ($tmp >> 8)) >> 8);
-                $tmp = $t[$i + 1] * $ia + 128; $t[$i + 1] = $sg + (($tmp + ($tmp >> 8)) >> 8);
-                $tmp = $t[$i + 2] * $ia + 128; $t[$i + 2] = $sb + (($tmp + ($tmp >> 8)) >> 8);
-                $tmp = $t[$i + 3] * $ia + 128; $t[$i + 3] = $sa + (($tmp + ($tmp >> 8)) >> 8);
+            }
+        } else {
+            for ($y = $y0; $y < $y1; $y++) {
+                for ($i = ($y * $lw + $x0) * 4, $e = ($y * $lw + $x1) * 4; $i < $e; $i += 4) {
+                    $sa = $s[$i + 3];
+                    if ($sa === 0) { continue; }
+                    $tmp = $s[$i] * $k + 128;     $sr = ($tmp + ($tmp >> 8)) >> 8;
+                    $tmp = $s[$i + 1] * $k + 128; $sg = ($tmp + ($tmp >> 8)) >> 8;
+                    $tmp = $s[$i + 2] * $k + 128; $sb = ($tmp + ($tmp >> 8)) >> 8;
+                    $tmp = $sa * $k + 128;         $sa = ($tmp + ($tmp >> 8)) >> 8;
+                    $ia = 255 - $sa;
+                    $tmp = $t[$i] * $ia + 128;     $t[$i]     = $sr + (($tmp + ($tmp >> 8)) >> 8);
+                    $tmp = $t[$i + 1] * $ia + 128; $t[$i + 1] = $sg + (($tmp + ($tmp >> 8)) >> 8);
+                    $tmp = $t[$i + 2] * $ia + 128; $t[$i + 2] = $sb + (($tmp + ($tmp >> 8)) >> 8);
+                    $tmp = $t[$i + 3] * $ia + 128; $t[$i + 3] = $sa + (($tmp + ($tmp >> 8)) >> 8);
+                }
             }
         }
         $dst->touch($d);
@@ -257,7 +349,8 @@ final class Renderer
             if ($bbox === null || $bbox[2] == 0 || $bbox[3] == 0) { return $mask; } // nothing to clip to
             $cm = Matrix::mul($cm, Matrix::box($bbox));
         }
-        foreach ($cd->kids as $k) { $this->clipNode($k, $cm, $rect, $mask); }
+        $empty = true;
+        foreach ($cd->kids as $k) { $this->clipNode($k, $cm, $rect, $mask, $empty); }
         if ($cd->clip !== null) {
             $inner = $this->clipMask($cd->clip, $m, $bbox, $rect);
             for ($i = 0; $i < $n; $i++) { $mask[$i] = self::div255($mask[$i] * $inner[$i]); }
@@ -267,11 +360,11 @@ final class Renderer
     }
 
     /** Adds the coverage of a clip path's node to $mask, a rectangle. */
-    private function clipNode(Node $n, array $m, array $rect, \FFI\CData $mask): void
+    private function clipNode(Node $n, array $m, array $rect, \FFI\CData $mask, bool &$empty): void
     {
         $m = Matrix::mul($m, $n->m);
         if ($n->shape === null) {
-            foreach ($n->kids as $k) { $this->clipNode($k, $m, $rect, $mask); }
+            foreach ($n->kids as $k) { $this->clipNode($k, $m, $rect, $mask, $empty); }
             return;
         }
         $this->flat->reset();
@@ -279,12 +372,29 @@ final class Renderer
         $cr = $this->cover($this->flat, $n->shape->evenOdd);
         if ($cr === null) { return; }
         $ix0 = max($cr[0], $rect[0]); $iy0 = max($cr[1], $rect[1]); $ix1 = min($cr[2], $rect[2]); $iy1 = min($cr[3], $rect[3]);
+        if ($ix1 <= $ix0 || $iy1 <= $iy0) { return; }
         $cw = $cr[2] - $cr[0]; $w = $rect[2] - $rect[0]; $cov = $this->cov;
+        $n2 = $ix1 - $ix0;
+        if ($empty) {
+            $empty = false;
+            if ($cr === $rect) {
+                \FFI::memcpy($mask, $cov, $w * ($rect[3] - $rect[1]));
+                return;
+            }
+            for ($y = $iy0; $y < $iy1; $y++) {
+                $si = ($y - $cr[1]) * $cw + $ix0 - $cr[0];
+                $di = ($y - $rect[1]) * $w + $ix0 - $rect[0];
+                \FFI::memcpy($mask + $di, $cov + $si, $n2);
+            }
+            return;
+        }
         for ($y = $iy0; $y < $iy1; $y++) {
             $si = ($y - $cr[1]) * $cw + $ix0 - $cr[0]; $di = ($y - $rect[1]) * $w + $ix0 - $rect[0];
-            for ($x = 0, $n2 = $ix1 - $ix0; $x < $n2; $x++) {
-                $a = $mask[$di + $x]; $b = $cov[$si + $x];
-                $mask[$di + $x] = $a + $b - self::div255($a * $b);
+            for ($x = 0; $x < $n2; $x++) {
+                $b = $cov[$si + $x];
+                if ($b === 0) { continue; }
+                $a = $mask[$di + $x];
+                $mask[$di + $x] = $a === 0 ? $b : ($b === 255 ? 255 : $a + $b - self::div255($a * $b));
             }
         }
     }

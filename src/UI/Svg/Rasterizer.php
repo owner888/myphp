@@ -121,24 +121,35 @@ final class Rasterizer
     {
         $this->closePath();
         $w = $this->w;
-        $n = max(1, $w * $this->h);
+        $total = $w * $this->h;
+        $n = max(1, $total);
         if ($n > $this->covCap || $this->cov === null) {
             $f = self::ffi();
             if ($this->cov !== null) { $f->free($this->cov); }
             $this->cov = $f->cast('uint8_t*', $f->calloc($n, 1));
             $this->covCap = $n;
+        } else {
+            FFI::memset($this->cov, 0, $n);
         }
         $out = $this->cov;
         $acc = $this->acc;
-        $total = $w * $this->h;
         for ($y = 0; $y < $total; $y += $w) {
             $sum = 0.0;
             for ($x = $y, $e = $y + $w; $x < $e; $x++) {
-                $sum += $acc[$x];
+                $d = $acc[$x];
+                if ($d == 0.0 && $sum == 0.0) { continue; }
+                $sum += $d;
                 $a = $sum < 0 ? -$sum : $sum;
-                if ($evenOdd) { $a -= 2 * (int)($a / 2); if ($a > 1) { $a = 2 - $a; } }
-                elseif ($a > 1) { $a = 1.0; }
-                $out[$x] = (int)($a * 255 + 0.5);
+                if ($evenOdd) {
+                    $a -= 2 * (int)($a / 2);
+                    if ($a > 1) { $a = 2 - $a; }
+                } elseif ($a >= 1.0) {
+                    $out[$x] = 255;
+                    continue;
+                }
+                if ($a > 0.0019) {
+                    $out[$x] = (int)($a * 255 + 0.5);
+                }
             }
         }
         return $out;
