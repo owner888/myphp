@@ -87,6 +87,9 @@ jobs:
           ini-values: ffi.enable=1
           coverage: none
       - name: Build micro.sfx
+        # spc asks GitHub's API for each library's releases: without a token the runner's shared address is refused (403).
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: php -d ffi.enable=1 bin/myphp micro
       - name: Upload to GitHub Release
         env:
