@@ -34,12 +34,22 @@ myphp build -platform darwin/universal,linux/amd64,linux/arm64
 `darwin/universal` combines arm64 and amd64 in one app. macOS apps are
 made, signed and put in disk images on macOS only.
 
-The app runs on PHP. `-launcher exec` (the default) makes a small launcher
-that runs the PHP that built the app, which the machines the app installs
-on need too: the Linux packages depend on `php<version>-cli`. `-launcher
-micro` makes the app one static binary of PHP, with its extensions and the
-app's files, built by `myphp micro` from static-php-cli; `-php` picks the
-PHP version.
+The app runs on PHP, and carries its own: a built app is for machines
+where none is installed. On macOS and Linux it is one static binary of PHP
+(`-launcher micro`, the default), with its extensions and the app's files:
+the prebuilt micro.sfx of the platform, downloaded once from MyPHP's
+releases to `~/.myphp`, or for this machine's platform built once by
+`myphp micro` from static-php-cli when none is published; `-php` picks the
+PHP version. A platform that is not this machine's and has no prebuilt one
+stops the build, as does `darwin/universal`, which has none. The static PHP
+runs without OPcache and its JIT (they crash in it), so code runs slower in
+it than under `myphp run`. A Windows app holds the PHP that builds it, a
+phone's its own runtime.
+
+`-launcher exec` makes instead a small launcher that runs the PHP that
+built the app, by its path, with OPcache and the JIT: on macOS an app for
+this machine alone; on Linux one whose packages depend on
+`php<version>-cli`.
 
 | Platform | In `dist/<os>-<arch>/` |
 |---|---|

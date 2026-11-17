@@ -116,14 +116,16 @@ final class Checker
         return $this->text;
     }
 
-    /** The PNG image of the update window: Options::$icon, else the project's icon.png among the app's resources, or null. */
+    /** The PNG image of the update window: Options::$icon, else the project's icon.png among the app's files (a static app's are its phar, the others' the bundle's app directory), or null. */
     public function icon(): ?string
     {
         if ($this->opts->icon !== null) {
             return $this->opts->icon;
         }
         $res = Bundle::resources();
-        $png = $res === null ? false : @file_get_contents("$res/app/icon.png");
+        $phar = class_exists(\Phar::class) ? \Phar::running() : '';
+        $app = $phar !== '' ? $phar : ($res === null ? null : "$res/app");
+        $png = $app === null ? false : @file_get_contents("$app/icon.png");
         return $png === false ? null : $png;
     }
 

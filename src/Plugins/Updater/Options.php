@@ -12,7 +12,7 @@ final class Options
         public float $interval = 0,
         /** Turns automatic checks off until Updater::setAutomaticChecks() turns them on, for apps that ask the user first or only check from the menu. */
         public bool $disableAutomaticChecks = false,
-        /** The PNG image shown in the update window: icon.png of the app (Resources/app/icon.png in its bundle) when null, when there is one. */
+        /** The PNG image shown in the update window: icon.png of the app (among its files in the bundle: Resources/app, or a static app's phar) when null, when there is one. */
         public ?string $icon = null,
         /** The language of the window, a tag such as "fr" or "zh-Hant": the user's (App::locale()) when empty, as the plugin has it among its own and those of $strings, else English. */
         public string $language = '',

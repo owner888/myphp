@@ -99,8 +99,8 @@ archive, delta updates from the last versions published, and
 | Flag | |
 |---|---|
 | `-platform list` | comma separated targets: `darwin/arm64`, `darwin/amd64`, `darwin/universal`, `linux/amd64`, `linux/arm64` (default: this machine's) |
-| `-launcher exec\|micro` | `exec` runs the PHP that built the app; `micro` makes one static binary (see `myphp micro`) |
-| `-php version` | the PHP version of micro.sfx, when `myphp micro` builds it |
+| `-launcher micro\|exec` | `micro` (the default) makes the app one static binary of PHP, which runs where no PHP is installed (see `myphp micro`); `exec` makes a launcher that runs the PHP that built the app, by its path. Windows apps hold the PHP that builds them, phones' their own runtime |
+| `-php version` | the PHP version of micro.sfx |
 | `-debug` | keep development features such as the inspector |
 | `-skip-build-command` | do not run `buildCommand` |
 | `-skip-dmg` | do not create a disk image |
@@ -252,8 +252,10 @@ Manager installs them, or `brew install --cask android-commandlinetools`).
 
 ## myphp micro
 
-Builds the static PHP (phpmicro of static-php-cli) that apps built with
-`-launcher micro` run on, with the extensions MyPHP uses.
+Gets the static PHP (phpmicro of static-php-cli, with the extensions MyPHP
+uses) that the apps `myphp build` makes carry: the prebuilt one of this
+machine, downloaded from MyPHP's releases, else built here once, which
+compiles PHP. `myphp build` does the same the first time it needs one.
 
 ## myphp generate
 

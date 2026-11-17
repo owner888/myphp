@@ -7909,6 +7909,39 @@ on ELF (macOS's goes inside __LINKEDIT for codesign); spc must build it
 against glibc (`SPC_LIBC=glibc`), as a PHP linked statically with musl
 cannot dlopen GTK, which `microLacks` checks with an FFI call.
 
+A built app carries its PHP by default (after v1.200.2). `-launcher exec`
+had been the default, and its macOS launcher holds the path of the php that
+built the app: the .app and its .dmg ran on the building machine alone,
+though `build` is for machines without PHP (`run` is for this one). Now a
+target's launcher, when `-launcher` names none, is micro on macOS and Linux
+and exec on Windows, whose app holds its PHP already (`build`'s `$with`, a
+target's third element); phones keep their runtime. `ensureMicro($php, $os,
+$arch)` gives the micro.sfx of each target: this machine's as before
+(prebuilt, else built by spc, which is now fetched only when there is
+something to build); another's only prebuilt (`foreignMicro`, kept as
+`~/.myphp/micro-<os>-<arch>-php-<v>.sfx`), since it can be neither built nor
+run here, so it is checked by what can be read of it (ELF's magic, the
+Mach-O section) and a platform with none published stops the build rather
+than falling back to exec. `darwin/universal` has no micro (the payload
+goes inside one thin binary's __LINKEDIT) and stops too. What it costs: the
+static PHP runs without OPcache and the JIT (`MICRO_INI`'s note).
+
+`myphp build -platform darwin/arm64,android/arm64,ios/arm64` left only the
+iOS app: the summary listed the .app, the .dmg and the APK at 0 KB, for
+they were gone. `scripts/package-ios-app.sh` began with `rm -rf` of its
+output directory, which by itself is `dist/ios`, its own, but `buildIOS`
+passes the project's `out`, where every platform's app is. It removes its
+own .app and .ipa alone now.
+
+A static app held its files twice: `buildMicroLauncher` packs
+`Resources/app` (Linux: `app/`) into the phar inside the launcher, and the
+directory stayed. An empty project's .app was 38.7 MB, of which the static
+PHP is 17.4. The directory is removed once the launcher is made: a static
+app runs from its phar and reads nothing of it from disk (the note of
+v1.28 above). One thing did, by the bundle's path, the update window's
+icon (`Checker::icon`), which now reads `icon.png` from the running phar
+when there is one.
+
 GTK names the window class and the themed icon after the program name,
 which was the app's name ("Counter") while the package installs
 counter.desktop and the counter icon: a packaged app now sets its program

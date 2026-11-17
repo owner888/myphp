@@ -465,7 +465,7 @@ $root = bldDir();
 $myphp('init', "$root/b");
 unlink("$root/b/resources/icon.png"); // ImageIO decodes it, on macOS
 bldWrite("$root/b", ['resources/darwin-arm64/bin/tool' => 'arm', 'resources/darwin-amd64/bin/tool' => 'amd', 'resources/notes.txt' => 'notes']);
-$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-skip-dmg', '-platform', 'darwin/arm64,darwin/amd64', "$root/b"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
+$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64,darwin/amd64', "$root/b"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
 $out = stream_get_contents($pipes[1]);
 same(0, proc_close($p), 'myphp build: ' . $out);
 check(str_contains($out, 'Built b 0.1.0 in') && str_contains($out, 'build/darwin-amd64/'), 'and its summary');
@@ -483,9 +483,9 @@ $cfg['macos']['provisioningProfile'] = 'app.provisionprofile';
 file_put_contents("$root/b/myphp.json", json_encode($cfg));
 file_put_contents("$root/b/app.provisionprofile", 'profile');
 exec('rm -rf ' . escapeshellarg("$root/b/build"));
-[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
+[$code, $out] = $myphp('build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 check($code !== 0 && str_contains($out, 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: set macos.signingIdentity or pass -sign') && !is_dir("$root/b/build"), 'a profile with ad-hoc signing: refused, nothing built: ' . $out);
-[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', '-sign', 'Developer ID Application: X', "$root/b");
+[$code, $out] = $myphp('build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64', '-sign', 'Developer ID Application: X', "$root/b");
 same([0, 'profile'], [$code, @file_get_contents(glob("$root/b/build/darwin-*/b.app/Contents/embedded.provisionprofile")[0] ?? '')], 'signed with an identity: the profile in Contents/embedded.provisionprofile: ' . $out);
 // macos.icon an .icns (mygo's 8820ebb): the app's as it is, in place of the one rendered from icon, and no asset catalog; one that is no .icns refused.
 $cfg = json_decode(file_get_contents("$root/b/myphp.json"), true);
@@ -494,11 +494,11 @@ $cfg['macos']['icon'] = 'App.icns';
 file_put_contents("$root/b/myphp.json", json_encode($cfg));
 file_put_contents("$root/b/App.icns", 'icns drawn per size');
 exec('rm -rf ' . escapeshellarg("$root/b/build"));
-[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
+[$code, $out] = $myphp('build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 $app = glob("$root/b/build/darwin-*/b.app/Contents")[0] ?? '';
 same([0, 'icns drawn per size', false], [$code, @file_get_contents("$app/Resources/AppIcon.icns"), file_exists("$app/Resources/Assets.car")], 'macos.icon an .icns: bundled as it is, no catalog: ' . $out);
 file_put_contents("$root/b/App.icns", 'png');
-[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
+[$code, $out] = $myphp('build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 check($code !== 0 && str_contains($out, 'macos.icon App.icns: not an .icns file'), 'one that is no .icns: refused: ' . $out);
 unset($cfg['macos']['icon']);
 file_put_contents("$root/b/myphp.json", json_encode($cfg));
@@ -511,14 +511,14 @@ bldWrite("$root/b", ['locales/en.json' => '{}', 'locales/zh-Hans.json' => '{"myp
     'resources/zh-Hans.lproj/InfoPlist.strings' => "/* 中文 */\n\"NSMicrophoneUsageDescription\" = \"录音\";\n",
     'resources/fr.lproj/InfoPlist.strings' => "\xFF\xFE" . mb_convert_encoding("\"CFBundleName\" = \"Bé à moi\";\n", 'UTF-16LE', 'UTF-8')]);
 exec('rm -rf ' . escapeshellarg("$root/b/build"));
-[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
+[$code, $out] = $myphp('build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 $lp = glob("$root/b/build/darwin-*/b.app/Contents/Resources")[0] ?? '';
 same([0, ['CFBundleDisplayName' => '乙', 'CFBundleName' => '乙', 'NSMicrophoneUsageDescription' => '录音'], ['CFBundleDisplayName' => 'Bé', 'CFBundleName' => 'Bé à moi']], // the keys in order, as the plist writes them
     [$code, \MyPHP\Native\Plist::parse((string)@file_get_contents("$lp/zh-Hans.lproj/InfoPlist.strings")), \MyPHP\Native\Plist::parse((string)@file_get_contents("$lp/fr.lproj/InfoPlist.strings"))],
     'the app\'s strings kept, the name added where they give none: ' . $out);
 same('/* 中文 */', substr(file_get_contents("$root/b/resources/zh-Hans.lproj/InfoPlist.strings"), 0, 12), 'the resources\' own file untouched');
 file_put_contents("$root/b/resources/zh-Hans.lproj/InfoPlist.strings", '"a" = "b"');
-[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
+[$code, $out] = $myphp('build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 check($code !== 0 && str_contains($out, 'zh-Hans.lproj/InfoPlist.strings of the resources: line 1: want a ; after "a"'), 'one it cannot read stops the build, naming it: ' . $out);
 putenv("PATH=$path");
 
@@ -734,7 +734,7 @@ if (PHP_OS_FAMILY === 'Linux') {
     $cfg = json_decode(file_get_contents("$root/l/myphp.json"), true);
     $cfg['linux'] = ['command' => 'linux-demo'];
     file_put_contents("$root/l/myphp.json", json_encode($cfg));
-    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-platform', 'linux/' . (php_uname('m') === 'aarch64' ? 'arm64' : 'amd64'), "$root/l"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, ['PATH' => "$stub:" . getenv('PATH')] + getenv());
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-launcher', 'exec', '-platform', 'linux/' . (php_uname('m') === 'aarch64' ? 'arm64' : 'amd64'), "$root/l"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, ['PATH' => "$stub:" . getenv('PATH')] + getenv());
     $out = stream_get_contents($pipes[1]);
     same(0, proc_close($p), 'myphp build linux: ' . $out);
     $arch = php_uname('m') === 'aarch64' ? 'arm64' : 'amd64';
@@ -754,3 +754,38 @@ if (PHP_OS_FAMILY === 'Linux') {
     [$code, $out] = $myphp('build', '-platform', 'linux/riscv64', "$root/l");
     check($code !== 0 && str_contains($out, 'linux/arm64, windows/amd64 or windows/arm64, not linux/riscv64'), 'a platform it does not build: ' . $out);
 }
+
+// myphp build with no -launcher: the app carries a static PHP, to run where none is installed. One of another system or
+// architecture than this machine's is the prebuilt micro.sfx, downloaded once; where there is none the build says so.
+$root = bldDir();
+$home = bldDir();
+$myphp('init', '-name', 'Carry', "$root/c");
+$other = PHP_OS_FAMILY === 'Linux' && !in_array(php_uname('m'), ['aarch64', 'arm64'], true) ? 'arm64' : 'amd64'; // a Linux this machine is not
+$carry = function (string $url, string ...$args) use ($root, $home): array {
+    $env = ['HOME' => $home, 'MYPHP_PREBUILT_URL' => $url, 'MYPHP_PHP_VERSION' => '8.4'] + getenv();
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', ...$args, "$root/c"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, $env);
+    $out = stream_get_contents($pipes[1]);
+    return [proc_close($p), $out];
+};
+[$code, $out] = $carry("file://$home/none", '-platform', 'darwin/universal');
+check($code !== 0 && str_contains($out, 'darwin/universal has no static PHP') && str_contains($out, '-launcher exec'), 'a universal app has none to carry, and is told the way: ' . $out);
+[$code, $out] = $carry("file://$home/none", '-platform', "linux/$other");
+check($code !== 0 && str_contains($out, "no static PHP of linux/$other at file://$home/none/myphp-micro-linux-$other-php-8.4.sfx") && str_contains($out, '-launcher exec'), 'none published for the platform: the build stops and says where it looked: ' . $out);
+check(!is_dir("$root/c/build/linux-$other") && glob("$home/.myphp/*") === [], 'with nothing built and nothing kept');
+mkdir("$home/rel");
+file_put_contents("$home/rel/myphp-micro-linux-$other-php-8.4.sfx", "\x7fELF static php");
+[$code, $out] = $carry("file://$home/rel", '-platform', "linux/$other");
+same(0, $code, 'myphp build, the static PHP of another platform downloaded: ' . $out);
+$dir = "$root/c/build/linux-$other";
+$launcher = (string)file_get_contents("$dir/carry");
+check(str_starts_with($launcher, "\x7fELF static php") && strlen($launcher) > 1000, 'the launcher is that PHP, with the app after it');
+$held = array_keys(bldTar(\MyPHP\Native\Zlib::inflate(file_get_contents(glob("$dir/*.tar.gz")[0]), 31)));
+check(!file_exists("$dir/app") && array_filter($held, fn(string $f) => str_starts_with(ltrim($f, './'), 'app/')) === [] && str_contains($launcher, 'app.php'), 'which holds the app once: no app directory beside it, nor in its archive');
+$dctl = bldTar(\MyPHP\Native\Zlib::inflate(bldAr(file_get_contents(glob("$dir/*.deb")[0]))['control.tar.gz'], 31))['./control'][2];
+check(!str_contains($dctl, '-cli'), 'and its package depends on no PHP: ' . $dctl);
+unlink("$home/rel/myphp-micro-linux-$other-php-8.4.sfx");
+[$code, $out] = $carry("file://$home/rel", '-platform', "linux/$other");
+check($code === 0 && !str_contains($out, 'downloading'), 'downloaded once: ' . $out);
+file_put_contents("$home/.myphp/micro-linux-$other-php-8.4.sfx", 'not it');
+[$code, $out] = $carry("file://$home/rel", '-platform', "linux/$other");
+check($code !== 0 && str_contains($out, "is no micro.sfx of linux/$other"), 'one that is no program of that system is refused: ' . $out);
