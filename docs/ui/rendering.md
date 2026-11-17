@@ -14,4 +14,4 @@ Every frame packs all UI primitives into a single contiguous GPU buffer (**16 fl
 
 MyPHP draws a frame only on demand: when an input event arrives, when a reactive `State` or watched property mutates, or when an active `Animation` or `TimelineView` requests the next display tick. An idle window consumes **0% CPU and 0% GPU**.
 
-Set `MYPHP_FRAME_STATS=1` to log any frame that takes longer than 8 ms (or `MYPHP_FRAME_STATS=all` for every frame), detailing build time, layout time, quad recording, GPU presentation, shaped text count, and GC activity. Set `MYPHP_STATS=1` for a once-per-second summary.
+Set `MYPHP_FRAME_STATS=1` to log any frame that takes longer than 8 ms (or `MYPHP_FRAME_STATS=all` for every frame), detailing build time, layout time, quad recording, GPU presentation, shaped text count, and GC activity. On macOS it also logs a frame that came more than 100 ms after it was asked for, with how it was to come (at a tick of the display link, at the next turn of the run loop), and a window whose frames are held because none of it shows: stops that no frame's own times show. Set `MYPHP_STATS=1` for a once-per-second summary.

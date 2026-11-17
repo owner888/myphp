@@ -14,7 +14,10 @@ use MyPHP\App;
  * PHP; a device that does not open is stood in for by one that plays
  * nothing, on time, and tries the device again after a while. It closes
  * five seconds after everything stopped, so that an app that plays
- * nothing keeps no audio device busy.
+ * nothing keeps no audio device busy; unless something holds it open
+ * (hold(), Audio::hold): a game's, whose sounds come one by one with
+ * silences between, each of which would open the device anew, which
+ * keeps the main thread 50 to 100 ms, a stop in the game.
  * @internal
  */
 final class Output
@@ -33,6 +36,28 @@ final class Output
     private static ?Device $dev = null;
     private static float $idle = 0.0;
     private static bool $closing = false;
+    /** How many hold the output open while nothing plays (hold()). */
+    private static int $holds = 0;
+
+    /** Keeps the output open while nothing plays, until release(): opened now, or as the app starts when it does not run yet. */
+    public static function hold(): void
+    {
+        self::$holds++;
+        App::whenReady(static function (): void { if (self::$holds > 0) { self::wake(); } });
+    }
+
+    /** Lets go of a hold(): with none left, the output closes after five seconds of silence again. */
+    public static function release(): void
+    {
+        if (self::$holds === 0) { throw new \LogicException('audio: the output was released more times than it was held'); }
+        self::$holds--;
+    }
+
+    /** Whether something holds the output open (hold()). */
+    public static function holding(): bool
+    {
+        return self::$holds > 0;
+    }
 
     /** A voice started: opens the output, unless it is open. */
     public static function wake(): void
@@ -76,10 +101,10 @@ final class Output
         [$out, $busy] = Mixer::mix($frames);
         if ($busy) {
             self::$idle = 0.0;
-        } elseif ((self::$idle += $frames / Mixer::RATE) >= self::IDLE_CLOSE && !self::$closing && self::$dev !== null) {
+        } elseif ((self::$idle += $frames / Mixer::RATE) >= self::IDLE_CLOSE && self::$holds === 0 && !self::$closing && self::$dev !== null) {
             self::$closing = true;
             $dev = self::$dev;
-            App::later(function () use ($dev): void { if (self::$dev === $dev && Mixer::$voices === []) { self::close(); } else { self::$closing = false; self::$idle = 0.0; } }); // not from the device's own callback
+            App::later(function () use ($dev): void { if (self::$dev === $dev && Mixer::$voices === [] && self::$holds === 0) { self::close(); } else { self::$closing = false; self::$idle = 0.0; } }); // not from the device's own callback
         }
         return pack('g*', ...$out);
     }
@@ -92,11 +117,11 @@ final class Output
         $dev?->close();
     }
 
-    /** The device stopped taking frames, as when it went away, or a stand-in tries the device again: it opens anew while anything plays. */
+    /** The device stopped taking frames, as when it went away, or a stand-in tries the device again: it opens anew while anything plays, or something holds it. */
     public static function lost(Device $dev): void
     {
         if (self::$dev !== $dev) { return; }
         self::close();
-        if (Mixer::$voices !== []) { self::wake(); }
+        if (Mixer::$voices !== [] || self::$holds > 0) { self::wake(); }
     }
 }

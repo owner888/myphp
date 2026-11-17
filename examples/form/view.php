@@ -13,6 +13,10 @@ return fn() => ScrollView()(VStack(alignment: HorizontalAlignment::leading, spac
     Text('Profile')->font(Font::title2),
     $labeled('Name', TextField('Name', text: $this->name)->onSubmit(fn() => $this->submit())->frame(width: 320)),
     $labeled('City', TextField('City (try an input method)', text: $this->city)->onSubmit(fn() => $this->submit())->frame(width: 320)),
+    // An address: the email keyboard, nothing capitalized or corrected; a password: secure entry, which no keyboard reads.
+    $labeled('Email', TextField('Email', text: $this->email)->keyboardType(KeyboardType::emailAddress)->textContentType(TextContentType::emailAddress)
+        ->textInputAutocapitalization(TextInputAutocapitalization::never)->autocorrectionDisabled()->onSubmit(fn() => $this->submit())->frame(width: 320)),
+    $labeled('Password', SecureField('Password', text: $this->password)->textContentType(TextContentType::password)->onSubmit(fn() => $this->submit())->frame(width: 320)),
     $labeled('Note', TextEditor(text: $this->note)->frame(width: 320, height: 96)), // wraps at the width; Enter breaks a line
     // A message field: a line that grows with what is typed, Return sends it, Shift+Return breaks a line.
     $labeled('Message', TextField('Return sends, Shift+Return breaks a line', text: $this->draft, axis: Axis::vertical)

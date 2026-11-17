@@ -16,7 +16,7 @@ require_once __DIR__ . '/locales/Locales.php'; // the catalogs, which myphp dev 
 
 final class Profile
 {
-    public string $name = 'Ada', $city = '', $note = '', $draft = '', $log = '';
+    public string $name = 'Ada', $city = '', $email = '', $password = '', $note = '', $draft = '', $log = '';
     /** What the last line says: nothing yet, the greeting of a submit, or the card activated. */
     public string $greeting = '';
     public int $submits = 0;
@@ -35,7 +35,7 @@ final class Profile
 
     public function clear(): void
     {
-        [$this->name, $this->city, $this->note, $this->greeting] = ['', '', '', ''];
+        [$this->name, $this->city, $this->email, $this->password, $this->note, $this->greeting] = ['', '', '', '', '', ''];
     }
 
     /** Sends the message being written to the log below it. */

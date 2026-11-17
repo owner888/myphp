@@ -276,6 +276,9 @@ $sound = $audio->registerTone('hit', startFreq: 520.0, endFreq: 180.0, duration:
 check($sound->frames() > 3000, 'GameAudio synthesized retro tone frames');
 $audio->muted = true;
 same(null, $audio->playSfx('hit'), 'GameAudio muted returns null player');
+check(\MyPHP\Audio\Output::holding(), 'GameAudio holds the audio output open while it lives');
+unset($audio);
+check(!\MyPHP\Audio\Output::holding(), 'and lets go of it when it goes');
 
 // 5. ScreenTransition (Fade, Battle Blinds, Shutter).
 $trans = new ScreenTransition();

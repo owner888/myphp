@@ -641,6 +641,13 @@ final class Metal
     /** @var array<int, mixed> the views by their display links' addresses, for the ticker */
     private static array $linked = [];
     private static $ticker = null;
+    /**
+     * Whether a frame that comes long after it was asked for is logged (with MYPHP_FRAME_STATS set, FrameStats's
+     * subsystem "frames"), with the way it was to come: what keeps frames from coming, which a frame's own times miss.
+     */
+    private static ?bool $logLate = null;
+    /** How long after it was asked for a frame comes before it is logged, in seconds: some refreshes, not one late tick. */
+    private const LATE = 0.1;
 
     public function __construct(public int $capacity = 65536)
     {
@@ -821,7 +828,14 @@ final class Metal
             if (isset(self::$drawing[$key])) { self::$drawing[$key] = true; return; } // asked while a frame waits for a sheet: drawn after it
             self::$drawing[$key] = false;
             self::$repaints[$key] = self::$pace[$key]['repaint'] ?? false; // a frame no ask asked for (a resize, AppKit's) builds the view
-            if (isset(self::$pace[$key])) { self::$pace[$key]['last'] = microtime(true); self::$pace[$key]['timing'] = false; self::$pace[$key]['repaint'] = null; }
+            if (isset(self::$pace[$key])) {
+                $now = microtime(true);
+                [$asked, $way] = self::$pace[$key]['asked'] ?? [null, ''];
+                if ($asked !== null && $now - $asked > self::LATE && (self::$logLate ??= \MyPHP\UI\FrameStats::fromEnv() !== null)) {
+                    \MyPHP\Logger::debug(sprintf('a frame came %.0f ms after it was asked for, %s', 1000 * ($now - $asked), $way), 'frames');
+                }
+                self::$pace[$key]['last'] = $now; self::$pace[$key]['timing'] = false; self::$pace[$key]['repaint'] = null; self::$pace[$key]['asked'] = null;
+            }
             $list = $this->lists[$this->frame % self::RING];
             $list->reset(); $list->zoom = 1.0; // a view's draw zooms it (Context::setZoom); this ring's list was another's
             $draw($view, $list);
@@ -913,18 +927,23 @@ final class Metal
             $r->minimum = $r->maximum = $r->preferred = $rate;
             ObjC::msg('v:F', $p['link'], 'setPreferredFrameRateRange:', $r);
         }
+        $p['asked'] ??= [microtime(true), '']; // when the frame drawn next was first asked for, and, below, how it is to come (logLate)
         if ($p['link'] !== null) {
             if ($p['running']) {
                 $p['due'] = true;
+                $p['asked'][1] = $p['asked'][1] ?: 'at a tick of the display link, which ran';
             } elseif (microtime(true) - $p['last'] > 2 * $refresh && ($p['last'] == 0.0 || self::visible($view))) {
                 self::drawLater($view, 0.0); // the first frame too, which a window waits for before it shows (readyToShow): a link of a window not on screen yet never ticks; the window holds the frames of one out of sight (Window::showing)
+                $p['asked'][1] = $p['asked'][1] ?: 'at the next turn of the run loop';
             } else { // frames that follow each other, at the display's refreshes; or a window out of sight, whose frame waits for the link, which ticks once some of it shows (mygo's RequestFrame): what an app changes meanwhile draws then
 
                 $p['due'] = $p['running'] = true;
                 ObjC::msg('v:b', $p['link'], 'setPaused:', false);
+                $p['asked'][1] = $p['asked'][1] ?: 'at a tick of the display link, started' . (self::visible($view) ? '' : ' for a window out of sight');
             }
             return;
         }
+        $p['asked'][1] = $p['asked'][1] ?: 'by a delayed draw (no display link)';
         if ($p['timing']) {
             return;
         }

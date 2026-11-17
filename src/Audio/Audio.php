@@ -156,6 +156,24 @@ final class Audio
         return new Player(new Stream($d), $d->sampleRate(), min($d->channels(), 2), $d->len());
     }
 
+    /**
+     * Keeps the output open while nothing plays, until release(), as a
+     * game's sounds want, which come one at a time with silences between:
+     * the output otherwise closes five seconds into a silence, and opening
+     * it again for the next sound keeps the main thread 50 to 100 ms.
+     * Opened now, or as the app starts. GameAudio holds it.
+     */
+    public static function hold(): void
+    {
+        Output::hold();
+    }
+
+    /** Lets go of a hold(). */
+    public static function release(): void
+    {
+        Output::release();
+    }
+
     /** Sets the volume of everything played, a gain: 1 (the default) as decoded, 0 silent. */
     public static function setVolume(float $v): void
     {

@@ -16,6 +16,9 @@ use MyPHP\Audio\{Audio, Player, Sound};
  *   in the new track over $crossfadeDuration seconds when switching scenes/battles.
  * - Procedural Retro Synth: Built-in helper (`registerTone`) to synthesize 8-bit/16-bit
  *   retro sound effects (square/sine/noise sweeps) without external audio files.
+ * - Ready at once: it holds the audio output open while it lives (Audio::hold), as
+ *   game engines keep theirs, so a sound after a silence plays without the stop
+ *   of opening the system's audio again.
  */
 final class GameAudio
 {
@@ -32,6 +35,16 @@ final class GameAudio
 
     private float $fadeTimer = 0.0;
     private float $fadeDuration = 0.0;
+
+    public function __construct()
+    {
+        Audio::hold();
+    }
+
+    public function __destruct()
+    {
+        Audio::release();
+    }
 
     /**
      * Preloads a sound effect file into memory under $name.

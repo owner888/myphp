@@ -348,6 +348,7 @@ final class Window
             // Nothing of the window shows (covered, minimized, on another space): what moves waits until some of it
             // does (shownAgain) rather than draw frames nobody sees, as browsers pause the
             // animation frames of windows out of sight (mygo's held). It goes on from where the time puts it.
+            if (!$this->held && $this->frameStats !== null) { Logger::debug('frames held: none of the window shows (its occlusion state), until some of it does', 'frames'); }
             $this->held = true;
         } elseif ($every !== null) {
             $n->requestFrame($every, $this->runtime->repaints()); // at a drawing's rate (Painter::animationFrameRate), every so many refreshes; painting again alone when only drawings asked

@@ -1120,15 +1120,20 @@ check($t->byText('Version') !== null && $t->byLabel('Your name') === null, 'rout
 [$view, $s] = Headless::load('form');
 $t = new Headless($view, 600, 900);
 $t->frame(2);
-$fields = []; // the fields in order: Name, City, Note, Message
+$fields = []; // the fields in order: Name, City, Email, Password, Note, Message
 $walk = function (\MyPHP\UI\Node $n) use (&$walk, &$fields) { if (in_array($n->kind, [\MyPHP\UI\Node::INPUT, \MyPHP\UI\Node::TEXTAREA], true)) { $fields[] = $n; } foreach ($n->kids as $k) { $walk($k); } };
 $walk($t->root); $walk = null;
-same(4, count($fields), 'form: four fields');
+same(6, count($fields), 'form: six fields');
 $t->clickOn($fields[0]); $t->key(\MyPHP\UI\Key::END, 'moveToEndOfLine:'); $t->type(' L'); $t->frame();
 same('Ada L', $s->name, 'form: the Name field writes the Profile');
 $t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:'); $t->frame(2);
 check($s->submits === 1 && $t->byText('Hello, Ada L from  (#1)') !== null, 'form: Return in a field submits, the greeting its placeholders filled: ' . json_encode(array_slice($t->texts(), -3)));
-$t->clickOn($fields[3]); $t->type('hi'); $t->frame();
+// Email asks for the email keyboard, nothing capitalized or corrected; Password is secure entry, its text not the keyboard's.
+same([7, 0, 0, 0, 'emailAddress', 1], \MyPHP\Platform\iOS\Window::keyboardTraits($fields[2]->edit), "form: Email's keyboard, not capitalized, not corrected");
+$t->clickOn($fields[3]); $t->type('secret'); $t->frame();
+check($s->password === 'secret' && $fields[3]->edit?->password === true, 'form: Password writes the Profile, secure entry');
+same([0, '', 0, 0], \MyPHP\Platform\iOS\Window::document($t->input), "form: the password's text is not the keyboard's document");
+$t->clickOn($fields[5]); $t->type('hi'); $t->frame();
 $t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:'); $t->frame(2);
 check($s->log === 'hi' && $s->draft === '', "form: Return sends the message to the log: log \"{$s->log}\", draft \"{$s->draft}\"");
 $t->type('a'); $t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:', \MyPHP\UI\Key::SHIFT); $t->type('b'); $t->frame();
@@ -1142,7 +1147,7 @@ same(2, $s->submits, 'form: Submit submits');
 $t->clickOn($t->byText('A card. Tab to it and press Space, or click it. This sentence wraps at the width the window gives the card, so make the window narrower and watch it reflow.')); $t->frame();
 check($s->greeting === 'card' && $t->byText('Card activated (#3)') !== null, 'form: the card, a button, activates');
 $t->clickText('Clear'); $t->frame(2);
-check($s->name === '' && $s->city === '' && $s->greeting === '', 'form: Clear empties the fields');
+check($s->name === '' && $s->city === '' && $s->email === '' && $s->password === '' && $s->greeting === '', 'form: Clear empties the fields');
 // Its text in the language chosen, as SwiftUI's String Catalog: each text the key of its translation in locales/, a
 // placeholder's value, a plural, a field's prompt, a button's title; the language names in their own.
 $s->lang = 'zh-Hans'; $t->frame(2);

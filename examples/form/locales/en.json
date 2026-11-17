@@ -4,6 +4,8 @@
   "Name": "Name",
   "City": "City",
   "City (try an input method)": "City (try an input method)",
+  "Email": "Email",
+  "Password": "Password",
   "Note": "Note",
   "Message": "Message",
   "Sent": "Sent",

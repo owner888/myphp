@@ -125,7 +125,10 @@ Audio::newPlayer(new Tone())->play();
 
 The output opens when something first plays and closes five seconds
 after everything stopped, so an app that plays nothing keeps no audio
-device busy. It plays at 48 kHz in stereo, about 85 ms ahead, through an
+device busy. `Audio::hold()` keeps it open through silences until
+`Audio::release()`, as a game wants (`GameAudio` holds it while it lives):
+opening the device again for the sound after a silence keeps the main
+thread 50 to 100 ms, a stop a game shows. It plays at 48 kHz in stereo, about 85 ms ahead, through an
 Audio Queue on the default output, which follows it; players of other
 rates are resampled as they play. PHP mixes on the main thread, as the
 app runs (`App::run`): work that keeps the main thread busy for longer

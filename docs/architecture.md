@@ -9455,6 +9455,29 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
   `Node` subtree across build, layout, hit-test recording and GPU quad painting (`4.74 ms/frame` down to
   `0.30 ms/frame` on a 10×25 declarative page in `tests/bench.php`, 15.8× faster).
 
+## A game's sounds and the audio device; frames that do not come
+
+A game played a sound, then nothing for a while, then another: each of
+those stopped it 50 to 115 ms. The output closes five seconds into a
+silence (an app that plays nothing keeps no device), and the next sound
+opened the Audio Queue anew on the main thread. Game engines keep their
+device open while the game runs, outputting silence; `Audio::hold()` does
+that, `GameAudio` holding it while it lives, and `Output::lost` reopens a
+held output as it reopens one that plays. Found with a game's own frame
+log, which told the time of its sounds apart from the rest of an update.
+
+The same game stopped half a second or a second at a time with nothing in
+its update, its drawing or PHP's collector, and `MYPHP_FRAME_STATS` logged
+no slow frame then. It was the closing, not the opening: five seconds after
+a sound, `Output::close` ran from `App::later`, between frames, and
+`AudioQueueStop` and `AudioQueueDispose`, both immediate, kept the main
+thread 0.5 to 1 s. Held open, the game's output never closes, and the stops
+went with the others. To tell such stops from slow frames, with the
+variable set `Metal::requestFrame` now notes when the next frame was first
+asked for and how it was to come, and a frame that comes more than 100 ms
+later is logged with both; `Window` logs frames held for a window that does
+not show.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is
@@ -9482,6 +9505,9 @@ known to fall short of what it could be is here.
   having no decoder of them.
 - Video: the hardware AV1 decoder's display layer sometimes shows a
   hidden frame (v1.52, its section).
+- Closing the audio output (five seconds into a silence, in an app that
+  does not hold it) stops the main thread 0.5 to 1 s: `AudioQueueStop` and
+  `AudioQueueDispose` are called immediate, on the main thread.
 - **tvOS / Android TV runtime notes (future target)**:
   - **tvOS (`appletvos` / `appletvsimulator`)**: Although Apple TV is `arm64` Darwin like iOS, Mach-O `LC_BUILD_VERSION` platform tags prevent linking an iOS `libphp.a` into a tvOS binary (`ld: building for 'tvOS', but linking in object file built for 'iOS'`). When targeting tvOS, cross-compile a dedicated `libphp.a` (+ `libffi.a`, `libssl.a`, `libcrypto.a`, `libcurl.a`, `libxml2.a`) with `-target arm64-apple-tvos16.0` (or `-simulator`), and pass `ac_cv_func_fork=no ac_cv_func_vfork=no ac_cv_func_system=no ac_cv_func_popen=no` to PHP's `./configure` because Apple's tvOS SDK marks `fork`/`vfork`/`system`/`popen` as `__OS_AVAILABILITY(tvos, unavailable)`. Also pass `-Wl,-exported_symbols_list` when linking the launcher with `-Wl,-dead_strip` so `ext-ffi` C bridge symbols are not stripped. Metal 2D/3D, CoreText, AudioQueue, and `GCController` (Siri Remote & gamepads) work unchanged.
   - **Android TV**: Shares the exact same `aarch64-linux-android` NDK ABI and `libphp.so` / `libmyphp.so` as Android phones; no separate PHP runtime build is required (only `<uses-feature android:name="android.software.leanback" android:required="false"/>` and a `LEANBACK_LAUNCHER` intent filter in `AndroidManifest.xml`).

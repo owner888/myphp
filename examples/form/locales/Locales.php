@@ -42,6 +42,22 @@ final class Locales
     }
 
     /**
+     * Says "Email" in the language the app shows.
+     */
+    public static function Email(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Email();
+    }
+
+    /**
+     * Says "Password" in the language the app shows.
+     */
+    public static function Password(): string
+    {
+        return self::in(\MyPHP\I18n::locale())->Password();
+    }
+
+    /**
      * Says "Note" in the language the app shows.
      */
     public static function Note(): string
@@ -157,6 +173,22 @@ final class LocalesMessages
     public function City(): string
     {
         return Locales::$catalog->format($this->locale, 'City', []);
+    }
+
+    /**
+     * Says "Email" in the language of these messages.
+     */
+    public function Email(): string
+    {
+        return Locales::$catalog->format($this->locale, 'Email', []);
+    }
+
+    /**
+     * Says "Password" in the language of these messages.
+     */
+    public function Password(): string
+    {
+        return Locales::$catalog->format($this->locale, 'Password', []);
     }
 
     /**

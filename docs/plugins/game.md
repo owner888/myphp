@@ -278,7 +278,7 @@ $walkRight->draw($p, [$x, $y, 32, 32]);
 
 ### 4. Game Audio Pool & BGM Cross-Fader (`GameAudio`)
 
-`GameAudio` manages low-latency in-memory SFX playback (with optional random pitch variance to prevent ear fatigue), procedural 8-bit/16-bit retro tone synthesis (`registerTone`), and smooth BGM cross-fading when switching between field maps and battle scenes:
+`GameAudio` keeps the audio output open while it lives (`Audio::hold`, as game engines keep theirs), so a sound after a silence plays at once rather than stopping the game while the system's audio opens again. It manages low-latency in-memory SFX playback (with optional random pitch variance to prevent ear fatigue), procedural 8-bit/16-bit retro tone synthesis (`registerTone`), and smooth BGM cross-fading when switching between field maps and battle scenes:
 
 <!-- no-test -->
 ```php

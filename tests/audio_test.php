@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Audio\{Audio, Decoder, ErrFormat, Mixer, NullDevice, Output, Player, Sound, Stream};
+use MyPHP\Audio\{Audio, Decoder, Device, ErrFormat, Mixer, NullDevice, Output, Player, Sound, Stream};
 
 const RATE = Mixer::RATE;
 const RAMP = Mixer::RAMP;
@@ -481,3 +481,23 @@ $loop->onEnd(function () use (&$ends): void { $ends++; });
 $loop->play(); render(350); $loop->stop(); render(200);
 same(1, $ends, 'onEnd: never a loop, nor a stopped player');
 check($p instanceof \MyPHP\MediaPlayer, 'a player is a MediaPlayer, for NowPlaying::control');
+
+// Held open (Audio::hold, as GameAudio does): the output does not close five seconds into a silence, which would
+// open the device anew for the next sound, a stop of 50 to 100 ms on the main thread; let go, it closes again.
+setup();
+$setDev = \Closure::bind(static function (?Device $d): void { Output::$dev = $d; Output::$idle = 0.0; Output::$closing = false; }, null, Output::class);
+$closing = \Closure::bind(static fn(): bool => Output::$closing, null, Output::class);
+$setDev(new NullDevice(0.0, false));
+Audio::hold();
+check(Output::holding(), 'hold: the output is held open');
+Output::render((int)(Output::IDLE_CLOSE * RATE) + Output::FRAMES);
+check(!$closing(), 'held, five seconds of silence do not close it');
+Audio::release();
+check(!Output::holding(), 'released, nothing holds it');
+try {
+    Audio::release();
+    check(false, 'released more than held throws');
+} catch (\LogicException) {
+    check(true, 'released more than held throws');
+}
+$setDev(null);

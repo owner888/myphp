@@ -4,6 +4,8 @@
   "Name": "姓名",
   "City": "城市",
   "City (try an input method)": "城市（试试中文输入法）",
+  "Email": "邮箱",
+  "Password": "密码",
   "Note": "备注",
   "Message": "消息",
   "Sent": "已发送",

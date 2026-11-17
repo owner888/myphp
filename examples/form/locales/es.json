@@ -4,6 +4,8 @@
   "Name": "Nombre",
   "City": "Ciudad",
   "City (try an input method)": "Ciudad (prueba un método de entrada)",
+  "Email": "Correo",
+  "Password": "Contraseña",
   "Note": "Nota",
   "Message": "Mensaje",
   "Sent": "Enviados",
