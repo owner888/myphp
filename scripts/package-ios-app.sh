@@ -36,9 +36,14 @@ mkdir -p "${APP_DIR}"
 
 # 2. Compile launcher binary
 echo "==> Compiling native iOS launcher..."
-# Export all myphp_ios_* C bridge symbols so -Wl,-dead_strip and strip -x keep them for PHP ext-ffi
+# What PHP's ext-ffi looks up in the app's own process (FFI::cdef without a library), exported so that -Wl,-dead_strip
+# and strip -x keep it: the launcher's C bridge (Native\iOS), and libcurl's API (Native\Curl), linked in whole
+# (-force_load) and found there, as the app has no libcurl of the system's. A pattern takes every curl_* function the
+# library has, as ld's exported_symbols_list allows (its internal ones are Curl_*). tests/ios_exports_test.php checks
+# that the functions declared for FFI are all in it.
 EXPORT_LIST="${BUILD_DIR}/myphp_ios_exports.txt"
 grep -oE 'myphp_ios_[a-zA-Z0-9_]+' "${ROOT_DIR}/src/Platform/iOS/launcher/main.m" | sort -u | sed 's/^/_/' > "${EXPORT_LIST}"
+echo '_curl_*' >> "${EXPORT_LIST}"
 xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -Wl,-dead_strip -Wl,-exported_symbols_list,"${EXPORT_LIST}" -fobjc-arc \
     -I"${PHP_BUILD}" \
     -I"${PHP_BUILD}/main" \
