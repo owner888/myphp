@@ -43,7 +43,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, FfiGen, Icns, JniGen, Linux, MachO, Pkgbuild, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, FfiGen, Icns, JniGen, Linux, MachO, Pkgbuild, Provisioning, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -270,7 +270,10 @@ function readConfig(string $dir): array
  * minimumSystemVersion (12.0), signingIdentity ("-", ad hoc),
  * entitlements, provisioningProfile (embedded before signing),
  * helperEntitlements, infoPlist, dmgTitle (the name) and notarize
- * ({"keychainProfile": …, "keychain": …}); linux (mygo's): maintainer
+ * ({"keychainProfile": …, "keychain": …}); ios: teamId, signingIdentity and
+ * provisioningProfile, how an iPhone's build is signed (iosSigning: each found
+ * by the others and the app's identifier when not set, as Xcode's automatic
+ * signing finds them); linux (mygo's): maintainer
  * (package.json's author, else the name), comment, categories, depends,
  * webview (a bool, else whether the app shows pages, Linux::usesPages) and
  * command (a name or a list of them, kept as a list); windows
@@ -329,6 +332,14 @@ function project(array $args): array
         $bad("macos.icon {$m['icon']} is an Assets.car, an Icon Composer .icon or an .icns");
     }
     $c['macos'] = $m;
+    $i = $c['ios'] ?? [];
+    is_array($i) && ($i === [] || !array_is_list($i)) || $bad('ios is an object');
+    foreach (['teamId', 'signingIdentity', 'provisioningProfile'] as $k) {
+        $i[$k] ??= '';
+        is_string($i[$k]) || $bad("ios.$k is a string");
+    }
+    $i['teamId'] === '' || preg_match('/^[A-Z0-9]{10}$/', $i['teamId']) === 1 || $bad('ios.teamId ' . json_encode($i['teamId']) . ' is not a team ID (ten letters and digits, as Xcode → Settings → Accounts shows it)');
+    $c['ios'] = $i;
     $l = $c['linux'] ?? [];
     is_array($l) && ($l === [] || !array_is_list($l)) || $bad('linux is an object');
     $l['maintainer'] = orElse(orElse(trim((string)($l['maintainer'] ?? '')), packageAuthor($dir)), $c['name']);
@@ -1198,6 +1209,8 @@ function buildIOS(string $dir, array $c, string $arch, array $opts): array
     $script = dirname(__DIR__) . '/scripts/package-ios-app.sh';
     is_executable($script) || chmod($script, 0755);
     putenv('MYPHP_EXCLUDE=' . implode(':', $c['exclude'] ?? []));
+    putenv('MYPHP_IOS_SDK=iphoneos'); // a build is for devices
+    iosSigning($dir, $c, $bundleId, '', $out);
     $cmd = [$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName];
     sh($cmd, $dir) === 0 || fail("Failed to package iOS App");
     return ["$out/$exeName.app", "$out/$exeName.ipa"];
@@ -2371,6 +2384,56 @@ function appLanguages(string $dir, array $c): array
     return $langs;
 }
 
+/**
+ * How package-ios-app.sh signs the app $bundleId (MYPHP_IOS_SIGN_IDENTITY,
+ * MYPHP_IOS_PROFILE, MYPHP_IOS_ENTITLEMENTS), as Xcode's automatic signing:
+ * for the simulator ($udid null) ad hoc, which it runs; for an iPhone ($udid
+ * its UDID, '' a build for any device) with a provisioning profile, which the
+ * app carries as embedded.mobileprovision, and the identity whose certificate
+ * it names, else iOS refuses to install it ("The executable contains an
+ * invalid signature", 0xe8008014). The profile is ios.provisioningProfile,
+ * else the one of Xcode's that fits the app, the team (ios.teamId) and the
+ * device best (Provisioning::choose); the identity ios.signingIdentity, else
+ * the keychain's for the profile's certificate. The entitlements, the app's
+ * of the profile (Provisioning::entitlements), are written to $out.
+ */
+function iosSigning(string $dir, array $c, string $bundleId, ?string $udid, string $out): void
+{
+    $env = ['MYPHP_IOS_SIGN_IDENTITY' => '', 'MYPHP_IOS_PROFILE' => '', 'MYPHP_IOS_ENTITLEMENTS' => ''];
+    if ($udid !== null) {
+        $i = $c['ios'];
+        $how = 'set ios.teamId in ' . $c['configFile'] . ' (Xcode → Settings → Accounts shows it) and let Xcode make a profile for it (a project of identifier ' . $bundleId . ' run once on this iPhone, with "Automatically manage signing"), or set ios.provisioningProfile and ios.signingIdentity';
+        if ($i['provisioningProfile'] !== '') {
+            $file = path($dir, $i['provisioningProfile']);
+            $p = Provisioning::read((string)@file_get_contents($file)) ?? fail("ios.provisioningProfile $file is not an iOS provisioning profile");
+            Provisioning::fit($p, $bundleId, $i['teamId'], $udid, time()) > 0 || fail("ios.provisioningProfile {$p['name']} is not for $bundleId" . ($i['teamId'] !== '' ? " of team {$i['teamId']}" : '') . ($udid !== '' ? ' on this device' : '') . ', or has expired (' . date('Y-m-d', $p['expires']) . ')');
+        } else {
+            $profiles = [];
+            foreach (Provisioning::DIRS as $d) {
+                foreach (glob(getenv('HOME') . "/$d/*.mobileprovision") ?: [] as $f) {
+                    if (($p = Provisioning::read((string)@file_get_contents($f))) !== null) {
+                        $profiles[] = $p + ['file' => $f];
+                    }
+                }
+            }
+            $p = Provisioning::choose($profiles, $bundleId, $i['teamId'], $udid, time()) ?? fail("no provisioning profile of Xcode's is for $bundleId" . ($udid !== '' ? ' on this iPhone' : '') . ": $how");
+            $file = $p['file'];
+        }
+        $identity = $i['signingIdentity'];
+        if ($identity === '') {
+            [, $found] = Cmd::output(['security', 'find-identity', '-v', '-p', 'codesigning']);
+            $identity = Provisioning::identity($p, $found) ?? fail("the keychain has no certificate of the profile {$p['name']} to sign with: sign in to the team in Xcode → Settings → Accounts (Manage Certificates), or set ios.signingIdentity");
+        }
+        $entitlements = "$out/.myphp-ios-entitlements.plist";
+        file_put_contents($entitlements, Bundle::xml(Provisioning::entitlements($p, $bundleId))) !== false || fail("cannot write $entitlements");
+        logf("Signing for iOS devices with {$p['name']} (team {$p['team']})");
+        $env = ['MYPHP_IOS_SIGN_IDENTITY' => $identity, 'MYPHP_IOS_PROFILE' => $file, 'MYPHP_IOS_ENTITLEMENTS' => $entitlements];
+    }
+    foreach ($env as $k => $v) {
+        putenv("$k=$v");
+    }
+}
+
 const PROFILE_AD_HOC = 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: set macos.signingIdentity or pass -sign';
 
 /**
@@ -3440,13 +3503,18 @@ function runCommand(array $args): void
         $exclude = $c['exclude'] ?? [];
         $seen = fileStamps(phoneFiles($dir, 'ios', $mainPhp, $exclude)); // before the build: what changes during it is restarted with
         putenv('MYPHP_IOS_SDK=' . ($targetDev->type === 'simulator' ? 'iphonesimulator' : 'iphoneos')); // the simulator's runtime and binary are another architecture slice
+        if ($targetDev->type === 'device') {
+            iosSigning($dir, $c, $bundleId, $targetDev->id, $out); // before the build: a device it cannot sign for stops here
+        } else {
+            iosSigning($dir, $c, $bundleId, null, $out);
+        }
         putenv('MYPHP_EXCLUDE=' . implode(':', $exclude));
         $step([$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName], $dir) === 0 || fail("Failed to build iOS application");
 
         $appBundle = "$out/$exeName.app";
         if ($targetDev->type === 'device') {
             $say("Installing app on device {$targetDev->id}...");
-            $step(['xcrun', 'devicectl', 'device', 'install', 'app', '--device', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on {$targetDev->name} (physical devices require a signed .app with a provisioning profile)");
+            $step(['xcrun', 'devicectl', 'device', 'install', 'app', '--device', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on {$targetDev->name}");
             $say("Launching application ($bundleId)...");
             logf("$displayName is running on {$targetDev->name}; its log follows, Ctrl+C quits");
             sh(['xcrun', 'devicectl', 'device', 'process', 'launch', '--console', '--terminate-existing', '--device', $targetDev->id, $bundleId]);

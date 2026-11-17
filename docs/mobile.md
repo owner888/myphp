@@ -28,8 +28,17 @@ iPhone) and `build/ios-simulator` (the simulator, another slice of the
 same libraries) and built again when its script changes. The scripts under `scripts/` are the CLI's
 internals, not to be run by hand.
 
-A device runs the `.ipa` signed with your own certificate, or through
-Xcode's Devices window.
+An iPhone runs an app signed with an Apple Development certificate and a
+provisioning profile, as Xcode's automatic signing signs it (the simulator
+runs one signed ad hoc). `myphp run -d <iPhone>` and `myphp build -platform
+ios/arm64` find them themselves: the profile for the app's `identifier`
+among the ones Xcode keeps (the app's own over a wildcard, one that lists
+the iPhone), the certificate in the keychain the profile names. Sign in to
+your team in Xcode → Settings → Accounts, and let Xcode make the profile
+once: a project of the same identifier run on the iPhone with
+"Automatically manage signing". With more than one team, `ios.teamId` in
+`myphp.json` chooses; `ios.provisioningProfile` and `ios.signingIdentity`
+name them outright (`configuration.md`).
 
 The app's `main.php` becomes the package's `app.php`, with the framework
 under `src/` beside it; the launcher requires `src/autoload.php` before

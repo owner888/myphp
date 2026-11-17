@@ -24,7 +24,7 @@ Native iOS/iPadOS GPU UI support via Metal and CoreText, powered by an embedded 
 
 ```bash
 # Package an iOS application (.app and .ipa)
-bin/myphp build -platform ios/arm64 examples/counter-native
+myphp build -platform ios/arm64 examples/counter-native
 ```
 
 ## Running in Simulator or Device
@@ -33,3 +33,5 @@ bin/myphp build -platform ios/arm64 examples/counter-native
 # Build, install, launch and stream logs on iOS Simulator or physical iPhone/iPad
 myphp run -d ios examples/counter-native
 ```
+
+An iPhone needs the app signed with your Apple Development certificate and a provisioning profile, which `myphp` finds as Xcode's automatic signing does (`ios` in `myphp.json`, `configuration.md`; how, `mobile.md`).

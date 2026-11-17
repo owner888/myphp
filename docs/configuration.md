@@ -50,6 +50,12 @@ Every field is optional:
 - **`provisioningProfile`**: Path to `.provisionprofile` embedded before signing.
 - **`notarize`**: `{ "keychainProfile": "..." }` for Apple notarization during `myphp build`.
 
+### `ios`
+How an iPhone's build is signed (`myphp run -d <iPhone>`, `myphp build -platform ios/arm64`); the simulator's is ad hoc. Each is found when not set, as Xcode's automatic signing finds it:
+- **`teamId`**: The team (ten letters and digits, Xcode → Settings → Accounts) whose profile and certificate sign the app; any team's by default.
+- **`provisioningProfile`**: Path to the `.mobileprovision` embedded in the app; by default the one of Xcode's for `identifier` (its own over a wildcard) that lists the iPhone and expires last.
+- **`signingIdentity`**: Code-signing identity; by default the keychain's whose certificate the profile names.
+
 ### `windows`
 - **`displayName`**, **`installDirName`**, **`publisher`**: Metadata for the `.exe` version resource and NSIS installer.
 - **`certificate`**, **`signCommand`**, **`timestampUrl`**: Authenticode code signing options.

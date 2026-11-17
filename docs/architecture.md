@@ -9014,6 +9014,27 @@ changed, which no hot reload can take.
   `build-android-php.sh` no longer patches `HARDCODED_INI` (a `sed` of
   its exact text, which a PHP of other text would have left undone
   without a word); the test checks that no script patches php_embed.c.
+- An app did not install on an iPhone: "Failed to verify code signature
+  … 0xe8008014 (The executable contains an invalid signature)".
+  `package-ios-app.sh` signed ad hoc (`codesign -s -`), which the
+  simulator runs and an iPhone refuses: it installs an app signed by a
+  development or distribution certificate with a provisioning profile in
+  it (embedded.mobileprovision) that names the app, the device and the
+  certificate. Rule: as Xcode's automatic signing, `iosSigning` (bin/myphp)
+  chooses before the build, for an iPhone (`myphp run` on a device, its
+  UDID; `myphp build -platform ios`, any device): the profile
+  (`ios.provisioningProfile`, else the best of the ones Xcode keeps,
+  `Native\Build\Provisioning::choose`: the app's own identifier over a
+  wildcard, the longer wildcard over `*`, of `ios.teamId` when set, listing
+  the device, not expired, the last to expire), the identity
+  (`ios.signingIdentity`, else the keychain's whose certificate the profile
+  names, by its SHA-1, as codesign takes it) and the entitlements
+  (`Provisioning::entitlements`: the app's identifier, team, get-task-allow
+  of a development profile and its keychain group; nothing of a wildcard's
+  `*`). The script embeds the profile and signs with them, and stops for
+  an iPhone without them; it signs ad hoc for the simulator alone. One
+  that cannot be signed stops before the build, saying how to get a
+  profile. `tests/ios_signing_test.php`.
 - On iOS every HTTP request failed: "cannot load libcurl (the app's own):
   Failed resolving C function 'curl_easy_init'". Cause: `Curl::ffi()`
   finds libcurl in the app's own process there (FFI::cdef without a

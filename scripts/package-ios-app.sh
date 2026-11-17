@@ -205,9 +205,19 @@ if [ ! -f "${BUILD_DIR}/cacert.pem" ]; then
 fi
 cp "${BUILD_DIR}/cacert.pem" "${APP_DIR}/cacert.pem"
 
-# 6. Ad-Hoc code sign
+# 6. Code sign: for an iPhone with the identity and provisioning profile myphp chose (bin/myphp's iosSigning: the profile
+# in the app as embedded.mobileprovision, the entitlements the app has of it), as iOS installs nothing else ("The
+# executable contains an invalid signature", 0xe8008014); for the simulator ad hoc, which it runs.
 echo "==> Code signing application..."
-codesign -s - --force --deep --timestamp=none "${APP_DIR}"
+if [ -n "${MYPHP_IOS_SIGN_IDENTITY:-}" ]; then
+    cp "${MYPHP_IOS_PROFILE}" "${APP_DIR}/embedded.mobileprovision"
+    codesign --force --sign "${MYPHP_IOS_SIGN_IDENTITY}" --entitlements "${MYPHP_IOS_ENTITLEMENTS}" --generate-entitlement-der --timestamp=none "${APP_DIR}"
+elif [ "$IOS_SDK" = iphoneos ]; then
+    echo "error: an iPhone's app needs a signing identity and a provisioning profile (myphp run and myphp build choose them: ios in myphp.json)" >&2
+    exit 1
+else
+    codesign -s - --force --deep --timestamp=none "${APP_DIR}"
+fi
 
 # 7. Generate .ipa archive
 echo "==> Packaging .ipa archive..."
