@@ -37,6 +37,8 @@ final class TextState
      * field's eye button does. Only single-line fields hide their text.
      */
     public bool $password = false;
+    /** What the field asks of the system's keyboard while it has it (TextField's keyboardType(), submitLabel()…), null for the system's defaults: set each frame by the view that builds the field. */
+    public ?TextInputTraits $traits = null;
     /**
      * Sees a paste into the field, by Cmd+V or a Paste menu item, before
      * it is inserted, as mygo's OnPaste: fn(string $text): bool with the

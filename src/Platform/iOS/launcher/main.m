@@ -1010,6 +1010,46 @@ int myphp_ios_draw_symbol(const char *name, float size, float weight, int rgb, f
     return bytes;
 }
 
+// What the field with the keyboard asks of it (TextField's keyboardType(), submitLabel(), textContentType(),
+// textInputAutocapitalization(); a SecureField's secure entry), PHP's (iOS\Window::keyboardTraits): the view answers
+// UITextInputTraits with it, and the keyboard reloads when it changes while it is up.
+static UIKeyboardType g_keyboard_type = UIKeyboardTypeDefault;
+static UIReturnKeyType g_return_key = UIReturnKeyDefault;
+static UITextAutocapitalizationType g_autocapitalization = UITextAutocapitalizationTypeSentences;
+static BOOL g_secure_entry = NO;
+static UITextContentType g_content_type = nil;
+
+// TextContentType's cases, by name, as UIKit's content types
+static UITextContentType myphp_content_type(NSString *name) {
+    static NSDictionary<NSString *, UITextContentType> *types;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        types = @{
+            @"username": UITextContentTypeUsername, @"password": UITextContentTypePassword, @"newPassword": UITextContentTypeNewPassword,
+            @"oneTimeCode": UITextContentTypeOneTimeCode, @"emailAddress": UITextContentTypeEmailAddress,
+            @"telephoneNumber": UITextContentTypeTelephoneNumber, @"name": UITextContentTypeName, @"givenName": UITextContentTypeGivenName,
+            @"familyName": UITextContentTypeFamilyName, @"URL": UITextContentTypeURL,
+            @"streetAddressLine1": UITextContentTypeStreetAddressLine1, @"streetAddressLine2": UITextContentTypeStreetAddressLine2,
+            @"addressCity": UITextContentTypeAddressCity, @"addressState": UITextContentTypeAddressState, @"postalCode": UITextContentTypePostalCode
+        };
+    });
+    return name ? types[name] : nil;
+}
+
+void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalization, int secure, const char *content_type) {
+    NSString *content = content_type ? [NSString stringWithUTF8String:content_type] : nil; // copied before PHP's string goes
+    dispatch_async(dispatch_get_main_queue(), ^{
+        g_keyboard_type = (UIKeyboardType)keyboard;
+        g_return_key = (UIReturnKeyType)return_key;
+        g_autocapitalization = (UITextAutocapitalizationType)autocapitalization;
+        g_secure_entry = secure != 0;
+        g_content_type = myphp_content_type(content);
+        if (g_view && [g_view isFirstResponder]) {
+            [g_view reloadInputViews];
+        }
+    });
+}
+
 void myphp_ios_show_keyboard(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (g_view && ![g_view isFirstResponder]) {
@@ -1291,6 +1331,14 @@ static void* php_worker_thread(void *arg) {
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range { return range.end; }
 - (UITextRange *)characterRangeAtPoint:(CGPoint)point { return nil; }
 
+// UITextInputTraits: what the field with the keyboard asks (myphp_ios_set_text_traits). Corrections and spelling stay
+// off whatever it asks: the keyboard sees the composition alone as the document, not the field's text, so its
+// corrections would replace the wrong text (autocorrectionDisabled() is how every field already is here).
+- (UIKeyboardType)keyboardType { return g_keyboard_type; }
+- (UIReturnKeyType)returnKeyType { return g_return_key; }
+- (UITextAutocapitalizationType)autocapitalizationType { return g_autocapitalization; }
+- (BOOL)isSecureTextEntry { return g_secure_entry; }
+- (UITextContentType)textContentType { return g_content_type; }
 - (UITextAutocorrectionType)autocorrectionType { return UITextAutocorrectionTypeNo; }
 - (UITextSpellCheckingType)spellCheckingType { return UITextSpellCheckingTypeNo; }
 - (UITextSmartQuotesType)smartQuotesType { return UITextSmartQuotesTypeNo; }

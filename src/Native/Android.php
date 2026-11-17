@@ -87,6 +87,7 @@ final class Android
             int myphp_read_event(MyphpEvent *ev, int timeout_ms);
             void myphp_signal_backend(void);
             void myphp_request_frame(void);
+            void myphp_set_text_input_traits(int input_type, int ime_options);
             void myphp_show_keyboard(void);
             void myphp_hide_keyboard(void);
             int myphp_clipboard_get_text(char *out, int max_len);

@@ -176,6 +176,7 @@ or a user's tag.
 | `Picker("Plan", selection: $plan) { Text("Free").tag(0) }` | `Picker('Plan', selection: $app->plan)(Text('Free')->tag(0), …)`, `->pickerStyle(PickerStyle::segmented)` (`::menu`, `::radioGroup`, `::inline`) |
 | `TextField("Name", text: $name)`, `.onSubmit { }` | `TextField('Name', text: $app->name)->onSubmit(fn() => …)`; `prompt:`, `axis: Axis::vertical` |
 | `SecureField`, `TextEditor(text:)` | `SecureField('Password', text: $app->password)`, `TextEditor(text: $app->notes)` |
+| `.keyboardType(.emailAddress)`, `.textContentType(.oneTimeCode)`, `.submitLabel(.send)`, `.textInputAutocapitalization(.never)`, `.autocorrectionDisabled()` | `->keyboardType(KeyboardType::emailAddress)`, `->textContentType(TextContentType::oneTimeCode)`, `->submitLabel(SubmitLabel::send)`, `->textInputAutocapitalization(TextInputAutocapitalization::never)`, `->autocorrectionDisabled()`; a case's name works too (`->keyboardType('numberPad')`). The phones' keyboards take all of them; Windows' touch keyboard and Linux's on-screen keyboards and input methods the keyboard type and what the field holds (Linux also the capitalization and spell checking); a Mac has no on-screen keyboard |
 | `DatePicker`, `ColorPicker` | `DatePicker('Due', selection: $app->due)`, `ColorPicker('Tint', selection: $app->rgb)` |
 | `ProgressView()`, `ProgressView(value:)`, `Gauge` | the same |
 | `Link("Site", destination:)` | `WebLink('Site', destination: 'https://…')` |

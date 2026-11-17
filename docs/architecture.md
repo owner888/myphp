@@ -7942,6 +7942,16 @@ v1.28 above). One thing did, by the bundle's path, the update window's
 icon (`Checker::icon`), which now reads `icon.png` from the running phar
 when there is one.
 
+The static app of an empty project stopped at its first frame: `Class
+"PhpToken" not found` in `Reactive\Observer`, then "Throwing from FFI
+callbacks is not allowed", since the frame runs inside the view's draw
+callback and an exception cannot cross one, whatever threw it. The static
+PHP had no tokenizer: `MICRO_EXTENSIONS` was written before the views'
+closures were read with PhpToken, and nothing held the two together.
+The extension is in the list now, `microLacks` finds a micro.sfx without it
+and gets it again, and `static_app_test` holds the list to what the sources
+call on. The prebuilt micro.sfx of the release must be built again with it.
+
 GTK names the window class and the themed icon after the program name,
 which was the app's name ("Counter") while the package installs
 counter.desktop and the counter icon: a packaged app now sets its program
@@ -8835,6 +8845,25 @@ changed, which no hot reload can take.
   keeps it in `Node::$borderAlpha`; under 1 over a background, the face is
   painted whole and the ring over it, so the background shows through
   the border as SwiftUI's overlay does, not what is behind the node.
+- TextField's `keyboardType`, `textContentType`, `submitLabel`,
+  `textInputAutocapitalization` and `autocorrectionDisabled` did nothing
+  (`return $this`), and a SecureField was not secure entry to the system.
+  Rule: the modifiers set `TextState::$traits` (a `UI\TextInputTraits`)
+  each frame, as `password` is; each platform's window maps it with a
+  pure function the tests check (`iOS\Window::keyboardTraits`,
+  `Android\Window::editorInfo`, `Windows\Window::inputScope`,
+  `Linux\Window::inputPurpose`) and tells the system only when
+  `TextInputTraits::key` changes: iOS's view answers UITextInputTraits
+  and reloads its input views, MyphpActivity's EditorInfo restarts the
+  input, Windows sets the window's InputScope (a password's IME off, as
+  Microsoft asks of password fields), GTK's IM context takes
+  input-purpose and input-hints. A field that asks nothing maps to what
+  the native side starts with, so nothing changes for it. On the Mac a
+  password with the keyboard in the key window turns secure event input
+  on, as NSSecureTextField does, and off at once on blur (a frame that
+  draws nothing runs no afterFrame) and on close. iOS keeps corrections
+  off: its document is the composition alone, so the keyboard's
+  corrections would replace the wrong text.
 
 ## The Windows backend, stage by stage
 

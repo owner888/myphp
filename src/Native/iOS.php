@@ -97,6 +97,7 @@ int myphp_ios_poll_memory_warning(void);
             void myphp_ios_place_web_view(int page_id, float x, float y, float w, float h, int visible);
             char *myphp_ios_poll_web_message(int *out_page_id);
             void myphp_ios_free_web_message(char *msg);
+            void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalization, int secure, const char *content_type);
             void myphp_ios_show_keyboard(void);
             void myphp_ios_hide_keyboard(void);
         ");

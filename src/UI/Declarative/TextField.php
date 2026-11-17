@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Declarative;
 
 use Closure;
-use MyPHP\UI\{Context, Node, TextState};
+use MyPHP\UI\{Context, Node, TextInputTraits, TextState};
 
 /**
  * TextField, as SwiftUI's: one line editing $text, bound, its title the
@@ -47,20 +47,38 @@ final class TextField extends View
     /** What Return in the field does, as SwiftUI's .onSubmit. */
     public function onSubmit(Closure $action): static { $this->submit = $action; return $this; }
 
-    /** Sets the soft keyboard type on mobile, as SwiftUI's keyboardType. */
-    public function keyboardType(\KeyboardType|string $type): static { return $this; }
+    private ?\KeyboardType $keyboard = null;
+    private ?\TextContentType $contentType = null;
+    private ?\SubmitLabel $submitLabel = null;
+    private ?\TextInputAutocapitalization $autocapitalization = null;
+    private bool $autocorrectionDisabled = false;
 
-    /** Sets the text content semantic type (autofill/suggestion hint), as SwiftUI's textContentType. */
-    public function textContentType(\TextContentType|string|null $type): static { return $this; }
+    /** The keyboard the field shows, as SwiftUI's keyboardType: a number pad, an email address's, a URL's… On the phones, and a tablet's touch keyboard on Windows and Linux; a Mac has none. */
+    public function keyboardType(\KeyboardType|string $type): static { $this->keyboard = self::caseOf(\KeyboardType::class, $type); return $this; }
 
-    /** Sets the Return key label on mobile keyboards, as SwiftUI's submitLabel. */
-    public function submitLabel(\SubmitLabel|string $label): static { return $this; }
+    /** What the field holds, as SwiftUI's textContentType: the system's autofill offers a password, a one-time code, an address for it, and picks the keyboard for it unless keyboardType() does. */
+    public function textContentType(\TextContentType|string|null $type): static { $this->contentType = self::caseOf(\TextContentType::class, $type); return $this; }
 
-    /** Configures automatic capitalization on mobile, as SwiftUI's textInputAutocapitalization. */
-    public function textInputAutocapitalization(\TextInputAutocapitalization|string|null $autocapitalization): static { return $this; }
+    /** The Return key's label on a phone's keyboard, as SwiftUI's submitLabel: Done, Go, Send, Search, Next…; it still submits (onSubmit). */
+    public function submitLabel(\SubmitLabel|string $label): static { $this->submitLabel = self::caseOf(\SubmitLabel::class, $label); return $this; }
 
-    /** Disables or enables autocorrection, as SwiftUI's autocorrectionDisabled. */
-    public function autocorrectionDisabled(bool $disable = true): static { return $this; }
+    /** How the keyboard capitalizes what is typed, as SwiftUI's textInputAutocapitalization: never for a user name or an email address. */
+    public function textInputAutocapitalization(\TextInputAutocapitalization|string|null $autocapitalization): static { $this->autocapitalization = self::caseOf(\TextInputAutocapitalization::class, $autocapitalization); return $this; }
+
+    /** Keeps the keyboard from correcting and suggesting words, as SwiftUI's autocorrectionDisabled. */
+    public function autocorrectionDisabled(bool $disable = true): static { $this->autocorrectionDisabled = $disable; return $this; }
+
+    /**
+     * The case of $enum $value is, or names ('emailAddress'), as Swift's
+     * shorthand (.emailAddress) does; a name it has not is an error.
+     * @template T of \UnitEnum
+     * @param class-string<T> $enum
+     * @return ?T
+     */
+    private static function caseOf(string $enum, \UnitEnum|string|null $value): ?\UnitEnum
+    {
+        return is_string($value) ? constant($enum . '::' . ltrim($value, '.')) : $value;
+    }
 
     protected function build(Context $c, Env $env): ?Node
     {
@@ -71,6 +89,8 @@ final class TextField extends View
         $kept = $rt === null ? new FieldKept($initialText)
             : $rt->local($id, static fn() => new FieldKept($initialText), FieldKept::class); // keyed by the node it builds, which keeps it
         $state = $kept->state;
+        $state->traits = $this->keyboard === null && $this->contentType === null && $this->submitLabel === null && $this->autocapitalization === null && !$this->autocorrectionDisabled
+            ? null : new TextInputTraits($this->keyboard, $this->contentType, $this->submitLabel, $this->autocapitalization, $this->autocorrectionDisabled); // each frame: a field in another's place has its own
         if ($this->text !== $kept->app) { // the app changed it since: shown, the caret at its end
             $state->text = $this->text;
             $state->setCursor(strlen($this->text));

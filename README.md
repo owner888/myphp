@@ -66,7 +66,7 @@ What works today, macOS first (the rows name the version that brought them):
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
 | Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sorted by one column or several, columns resized, fitted to their cells, moved, scrolled sideways), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer; radio groups, editable text in place (a table's names), lists whose section headers stay at the top and whose rows typing their labels chooses, trimmed paths, tinted bitmaps, glyphs shaped and drawn one by one | works (`examples/widgets`, `markdown-notes`, `http`, `gallery`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
-| `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
+| `myphp init / dev / build`: scaffold, run with restart, .app bundle (static micro launcher, which carries its PHP, or exec) | works |
 | Packaging as mygo's (v1.12): `-platform darwin/arm64,darwin/amd64,darwin/universal`, the resources directory and its platform directories (universal binaries combined), the icon from a PNG or an asset catalog, code signing inside out, the .dmg with its window laid out, notarization, `-upload` to GitHub releases or S3; `myphp doctor`, `install-skills`, `version`, `help` | works (signing, the .dmg and notarizing need the developer's Mac) |
 | Development (v1.13): `myphp dev` runs "<name> Dev", a bundle with the app's icon and resources, hot reloaded on changes, `r`/`c`/`q`/`h` on the terminal; SIGINT and SIGTERM quit the app as Quit | works (the development app needs the developer's Mac) |
 | Widgets and keys as mygo's (v1.14): password fields; a dialog keeps the window's shortcuts; lists whose place, choice and rows' state follow their items' keys, and scroll by the step into rows never measured; the keys scroll what the pointer is over, Page Up/Down in a list scroll as AppKit's; stepper Left/Right, slider Page Up/Down; tooltips for the keyboard focus, hidden by a press or Escape; Control-K in text fields; JPEG photos upright; a sidebar's typeahead; shortcuts by the key's place on other layouts; `MYPHP_FRAME_STATS` | works (decoding photos, the frame statistics and other layouts' keys need the developer's Mac) |
@@ -269,8 +269,8 @@ myphp devices                      # phones over adb, and the simulators
 myphp emulators --launch <id>      # starts an Android emulator or the iOS Simulator (--create makes one)
 myphp run -d macos|linux|windows|android|ios   # packages, installs, starts, follows the log (the first run builds a phone's PHP runtime); on Windows bin\myphp.cmd is the command
 myphp dev                          # the desktop app in development: restarts on changes, regenerates the TS client
-myphp build                        # build/darwin-arm64/my-app.app and its .dmg; -platform linux/amd64 the Linux packages, android/arm64 the APK, ios/arm64 the .ipa
-myphp build -launcher micro        # one static binary: fetches static-php-cli and builds phpmicro the first time
+myphp build                        # build/darwin-arm64/my-app.app and its .dmg, carrying a static PHP (downloaded once); -platform linux/amd64 the Linux packages, android/arm64 the APK, ios/arm64 the .ipa
+myphp build -launcher exec         # a launcher that runs this machine's PHP instead, with the JIT: an app for this machine
 myphp screenshot                   # runs the app once, saves a PNG of its window and its elements (for agents without a display)
 myphp install-skills               # the bundled agent skills into the project's .agents/skills
 ```
@@ -450,7 +450,7 @@ App::run();
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点；复选框、单选、滑块、下拉选择、链接、进度条、提示 | 可用（`examples/form`） |
 | 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（按一列或多列排序，列可拖宽、双击适配内容、拖动换位，过宽时横向滚动）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位；单选组、原地编辑的文字（表格里的文件名）、分节标题吸顶且可输入首字母选行的列表、截取部分长度的路径、着色位图、逐个排版和绘制的字形 | 可用（`examples/widgets`、`markdown-notes`、`http`、`gallery`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
-| `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
+| `myphp init / dev / build`：脚手架、改动重启、.app 打包（自带 PHP 的静态 micro 启动器，或 exec） | 可用 |
 | 与 mygo 一致的打包（v1.12）：`-platform darwin/arm64,darwin/amd64,darwin/universal`，resources 目录及按平台的子目录（通用二进制自动合并），PNG 或 asset catalog 生成图标，由内而外代码签名，排好窗口布局的 .dmg，公证，`-upload` 到 GitHub Releases 或 S3；`myphp doctor`、`install-skills`、`version`、`help` | 可用（签名、.dmg、公证要在开发者的 Mac 上跑） |
 | 实时热重载开发流程（v1.13）：`myphp dev` 运行 "<name> Dev"，带应用图标和资源的 bundle，改动后自动热重载，终端里 `r`/`c`/`q`/`h`；SIGINT、SIGTERM 让应用像 Quit 一样退出 | 可用 |
 | 与 mygo 一致的控件和按键（v1.14）：密码框；对话框打开时窗口快捷键不生效；列表按条目的 key 保持位置、选中项和行状态，滚进未测量的行时按步长精确滚动；按键滚动指针下的容器，列表里 Page Up/Down 像 AppKit 一样只滚动；步进器左右键、滑块 Page Up/Down；键盘焦点也显示提示，按下或 Esc 隐藏；文本框 Control-K；JPEG 照片按 EXIF 方向摆正；侧栏输入首字母选择；其他键盘布局下快捷键按键位匹配；`MYPHP_FRAME_STATS` | 可用（照片解码、帧统计和其他布局的按键要在开发者的 Mac 上验证） |
@@ -648,8 +648,8 @@ myphp devices                      # adb 连着的手机和模拟器
 myphp emulators --launch <id>      # 启动 Android 模拟器或 iOS 模拟器（--create 新建一个）
 myphp run -d macos|linux|windows|android|ios   # 打包、安装、启动、跟日志（手机第一次运行会先编它的 PHP 运行时）；Windows 上命令是 bin\myphp.cmd
 myphp dev                          # 桌面开发模式：文件改动自动重启，重新生成 TS client
-myphp build                        # build/darwin-arm64/my-app.app 和 .dmg；-platform linux/amd64 出 Linux 包，android/arm64 出 APK，ios/arm64 出 .ipa
-myphp build -launcher micro        # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
+myphp build                        # build/darwin-arm64/my-app.app 和 .dmg，自带静态 PHP（只下载一次）；-platform linux/amd64 出 Linux 包，android/arm64 出 APK，ios/arm64 出 .ipa
+myphp build -launcher exec         # 改用启动器运行本机的 PHP（带 JIT）：只给本机用的应用
 myphp screenshot                   # 跑一次应用，存窗口的 PNG 和元素树（给没有显示器的 agent 自检）
 myphp install-skills               # 把内置的 agent skill 装进项目的 .agents/skills
 ```

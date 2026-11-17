@@ -147,6 +147,7 @@ final class Window implements Platform\Window, Platform\NativeTips
         Metal::$afterFrame[Mem::addr($this->view)] = function (): void { // the layer under the materials drawn in the same turn as the frame, the list it used let go
             if ($this->under !== null && ($this->w->runtime->underPaints !== [] || $this->underShown)) { ObjC::msg('v:', $this->under, 'draw'); }
             $this->w->runtime->framePresented();
+            $this->secureInput($this->isKey() && ($this->w->input?->focus?->password ?? false));
         };
         $this->w->runtime->onAccess = fn(\MyPHP\UI\AccessTree $t) => Access::update($view, $t); // VoiceOver reads each frame once it asked
         $this->attach($o);
@@ -285,6 +286,9 @@ final class Window implements Platform\Window, Platform\NativeTips
                 if ($event === 'enterFullScreen' || $event === 'leaveFullScreen') {
                     $win->blackOut($event === 'enterFullScreen' && $win->w->blackOutAsked());
                 }
+                if ($event === 'blur') {
+                    $win->secureInput(false); // at once: a frame drawing nothing new runs no afterFrame to turn it off
+                }
                 $win->w->nativeEvent($event);
             };
             ObjC::defineClass('MyPHPWindowDelegate', 'NSObject', [
@@ -292,7 +296,9 @@ final class Window implements Platform\Window, Platform\NativeTips
                     return (self::$open[Mem::addr($sender)] ?? null)?->w->shouldClose() ?? true;
                 }],
                 'windowWillClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($of) {
-                    $of($note)?->w->closed();
+                    $win = $of($note);
+                    $win?->secureInput(false);
+                    $win?->w->closed();
                 }],
                 // The user clicked elsewhere, in a transient popover: a press on its own tray icon leaves it to the icon's click, which toggles it, rather than closing it for the click to open it again.
                 'popoverShouldClose:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $popover) {
@@ -585,6 +591,22 @@ final class Window implements Platform\Window, Platform\NativeTips
     public function backingScale(): float
     {
         return ObjC::msg('d:', $this->ns, 'backingScaleFactor');
+    }
+
+    /** Whether the window has turned secure event input on (secureInput()), which it turns off again. */
+    private bool $secure = false;
+
+    /**
+     * Secure event input on while a password field has the keyboard in the
+     * key window, as NSSecureTextField's (no other process reads the keys
+     * typed), off once it has not: after each frame, and as it closes.
+     */
+    private function secureInput(bool $on): void
+    {
+        if ($on !== $this->secure) {
+            $this->secure = $on;
+            \MyPHP\Native\Carbon::secureEventInput($on);
+        }
     }
 
     /** Whether the window takes the keyboard, where a selection shows. */

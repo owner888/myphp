@@ -207,6 +207,12 @@ final class Win32
         return self::$libs['gdi32'] ??= FFI::cdef('void *CreateSolidBrush(uint32_t color); int32_t DeleteObject(void *object);', 'gdi32.dll');
     }
 
+    /** The text services' (TSF): the input scope a window's field asks of the touch keyboard and the input methods. */
+    public static function msctf(): FFI
+    {
+        return self::$libs['msctf'] ??= FFI::cdef('int32_t SetInputScope(void *hwnd, int32_t scope);', 'msctf.dll');
+    }
+
     /** The input methods' (IMM32): a window's input context, its composition, where its windows show. */
     public static function imm32(): FFI
     {

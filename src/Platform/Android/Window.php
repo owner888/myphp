@@ -7,7 +7,7 @@ use FFI;
 use MyPHP\{App, L10n, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\{Android, Gl};
 use MyPHP\Platform;
-use MyPHP\UI\{AccessElements, AccessTree, DisplayList, Image, Key, Node, TextInputRange, TextState};
+use MyPHP\UI\{AccessElements, AccessTree, DisplayList, Image, Key, Node, TextInputRange, TextInputTraits, TextState};
 
 /**
  * Android Window backed by Activity SurfaceView, rendered via EGL & GLES 3.2.
@@ -287,6 +287,8 @@ final class Window implements Platform\Window
 
     // Keyboard state
     private bool $keyboardVisible = false;
+    /** What the keyboard was last told of the field it types into (TextInputTraits::key): told again when it changes. */
+    private string $traitsKey = '';
 
     // App lifecycle & insets state
     private bool $paused = false;
@@ -403,7 +405,13 @@ final class Window implements Platform\Window
             throw $e;
         }
 
-        // Check if soft keyboard should be shown or hidden based on text focus
+        // Check if soft keyboard should be shown or hidden based on text focus, told what the field asks of it first
+        $focus = $this->w->input?->focus;
+        if (($key = TextInputTraits::key($focus)) !== $this->traitsKey) {
+            $this->traitsKey = $key;
+            [$inputType, $imeOptions] = self::editorInfo($focus);
+            Android::ffi()->myphp_set_text_input_traits($inputType, $imeOptions);
+        }
         $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
         if ($hasInputFocus && !$this->keyboardVisible) {
             $this->keyboardVisible = true;
@@ -413,6 +421,73 @@ final class Window implements Platform\Window
             Android::ffi()->myphp_hide_keyboard();
         }
     }
+
+    /**
+     * The EditorInfo the keyboard is given for the field $f (null: none,
+     * the defaults): its inputType and imeOptions, Android's, from what the
+     * field asks (TextField's keyboardType(), textContentType(),
+     * submitLabel(), textInputAutocapitalization(),
+     * autocorrectionDisabled()) and whether it hides its text or takes
+     * lines. The keyboard type picks the class, else what the field
+     * holds; a password is the class's own; Return is Done, a field of
+     * lines' Return breaks the line.
+     * @return array{0: int, 1: int}
+     */
+    public static function editorInfo(?TextState $f): array
+    {
+        $t = $f?->traits;
+        [$class, $variation] = match ($t?->keyboard) {
+            \KeyboardType::numbersAndPunctuation => [self::TYPE_NUMBER, self::NUMBER_SIGNED | self::NUMBER_DECIMAL],
+            \KeyboardType::URL => [self::TYPE_TEXT, self::TEXT_URI],
+            \KeyboardType::numberPad => [self::TYPE_NUMBER, 0],
+            \KeyboardType::phonePad => [self::TYPE_PHONE, 0],
+            \KeyboardType::namePhonePad => [self::TYPE_TEXT, self::TEXT_PERSON_NAME],
+            \KeyboardType::emailAddress => [self::TYPE_TEXT, self::TEXT_EMAIL],
+            \KeyboardType::decimalPad => [self::TYPE_NUMBER, self::NUMBER_DECIMAL],
+            null, \KeyboardType::default, \KeyboardType::asciiCapable, \KeyboardType::twitter, \KeyboardType::webSearch => match ($t?->contentType) {
+                \TextContentType::emailAddress => [self::TYPE_TEXT, self::TEXT_EMAIL],
+                \TextContentType::URL => [self::TYPE_TEXT, self::TEXT_URI],
+                \TextContentType::telephoneNumber => [self::TYPE_PHONE, 0],
+                \TextContentType::oneTimeCode => [self::TYPE_NUMBER, 0],
+                \TextContentType::name, \TextContentType::givenName, \TextContentType::familyName => [self::TYPE_TEXT, self::TEXT_PERSON_NAME],
+                \TextContentType::streetAddressLine1, \TextContentType::streetAddressLine2, \TextContentType::addressCity, \TextContentType::addressState, \TextContentType::postalCode => [self::TYPE_TEXT, self::TEXT_POSTAL_ADDRESS],
+                \TextContentType::password, \TextContentType::newPassword => [self::TYPE_TEXT, self::TEXT_VISIBLE_PASSWORD], // shown, as a TextField's is: no suggestions learned from it
+                null, \TextContentType::username => [self::TYPE_TEXT, 0],
+            },
+        };
+        $secure = $f?->password ?? false;
+        if ($secure) { // a SecureField's: a PIN on a number pad, else a password
+            [$class, $variation] = $class === self::TYPE_NUMBER ? [self::TYPE_NUMBER, self::NUMBER_PASSWORD] : [self::TYPE_TEXT, self::TEXT_PASSWORD];
+        }
+        $flags = 0;
+        if ($class === self::TYPE_TEXT && !$secure) {
+            $flags |= match ($t?->autocapitalization) {
+                null, \TextInputAutocapitalization::never => 0, // an EditText's own: none
+                \TextInputAutocapitalization::words => self::TEXT_CAP_WORDS,
+                \TextInputAutocapitalization::sentences => self::TEXT_CAP_SENTENCES,
+                \TextInputAutocapitalization::characters => self::TEXT_CAP_CHARACTERS,
+            };
+            if ($t?->autocorrectionDisabled ?? false) { $flags |= self::TEXT_NO_SUGGESTIONS; }
+            if ($f?->multiline ?? false) { $flags |= self::TEXT_MULTI_LINE; }
+        }
+        $action = match ($t?->submitLabel) {
+            null => ($f?->multiline ?? false) ? self::IME_FLAG_NO_ENTER_ACTION : self::IME_ACTION_DONE,
+            \SubmitLabel::return => 0, // IME_ACTION_UNSPECIFIED: the keyboard's Enter
+            \SubmitLabel::go, \SubmitLabel::join, \SubmitLabel::route => 2,
+            \SubmitLabel::search => 3,
+            \SubmitLabel::send => 4,
+            \SubmitLabel::next, \SubmitLabel::continue => 5,
+            \SubmitLabel::done => self::IME_ACTION_DONE,
+        };
+        return [$class | $variation | $flags, $action | self::IME_FLAG_NO_FULLSCREEN | ($secure ? self::IME_FLAG_NO_PERSONALIZED_LEARNING : 0)];
+    }
+
+    /** Android's InputType and EditorInfo constants, editorInfo()'s. */
+    private const TYPE_TEXT = 0x1, TYPE_NUMBER = 0x2, TYPE_PHONE = 0x3;
+    private const TEXT_URI = 0x10, TEXT_EMAIL = 0x20, TEXT_PERSON_NAME = 0x60, TEXT_POSTAL_ADDRESS = 0x70, TEXT_PASSWORD = 0x80, TEXT_VISIBLE_PASSWORD = 0x90;
+    private const TEXT_CAP_CHARACTERS = 0x1000, TEXT_CAP_WORDS = 0x2000, TEXT_CAP_SENTENCES = 0x4000, TEXT_MULTI_LINE = 0x20000, TEXT_NO_SUGGESTIONS = 0x80000;
+    private const NUMBER_SIGNED = 0x1000, NUMBER_DECIMAL = 0x2000, NUMBER_PASSWORD = 0x10;
+    private const IME_ACTION_DONE = 6, IME_FLAG_NO_PERSONALIZED_LEARNING = 0x1000000, IME_FLAG_NO_FULLSCREEN = 0x2000000, IME_FLAG_NO_ENTER_ACTION = 0x40000000;
 
     public function onTouch(int $action, float $x, float $y, int $timeMs): void
     {

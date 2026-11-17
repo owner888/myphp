@@ -30,7 +30,8 @@ echo "==> Entry file: ${ENTRY}"
 "${ROOT_DIR}/scripts/build-ios-php.sh"
 
 APP_DIR="${OUT_DIR}/${APP_NAME}.app"
-rm -rf "${OUT_DIR}"
+# Only what this script makes: myphp build passes the project's whole output directory, where the other platforms' apps are.
+rm -rf "${APP_DIR}" "${OUT_DIR}/${APP_NAME}.ipa"
 mkdir -p "${APP_DIR}"
 
 # 2. Compile launcher binary

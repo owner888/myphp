@@ -184,6 +184,7 @@ static jmethodID g_mid_shape = NULL;
 static jmethodID g_mid_rasterize = NULL;
 static jmethodID g_mid_show_keyboard = NULL;
 static jmethodID g_mid_hide_keyboard = NULL;
+static jmethodID g_mid_set_text_input_traits = NULL;
 static jmethodID g_mid_clipboard_get = NULL;
 static jmethodID g_mid_clipboard_set = NULL;
 static jmethodID g_mid_open_url = NULL;
@@ -353,6 +354,7 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_rasterize = (*env)->GetStaticMethodID(env, clazz, "rasterizeGlyph", "(IFI[I)[B");
     g_mid_show_keyboard = (*env)->GetStaticMethodID(env, clazz, "showSoftKeyboard", "()V");
     g_mid_hide_keyboard = (*env)->GetStaticMethodID(env, clazz, "hideSoftKeyboard", "()V");
+    g_mid_set_text_input_traits = (*env)->GetStaticMethodID(env, clazz, "setTextInputTraits", "(II)V");
     g_mid_clipboard_get = (*env)->GetStaticMethodID(env, clazz, "getClipboardText", "()Ljava/lang/String;");
     g_mid_clipboard_set = (*env)->GetStaticMethodID(env, clazz, "setClipboardText", "(Ljava/lang/String;)V");
     g_mid_open_url = (*env)->GetStaticMethodID(env, clazz, "openUrl", "(Ljava/lang/String;)V");
@@ -460,6 +462,15 @@ Java_com_owner888_myphp_MyphpActivity_nativeTouchEvent(JNIEnv *env, jclass clazz
             .time_ms = timeMs
         };
         write(g_event_pipe[1], &ev, sizeof(ev));
+    }
+}
+
+// What the field with the keyboard asks of it, as EditorInfo's inputType and imeOptions (Android\Window::editorInfo):
+// the activity's view gives them to the keyboard, which restarts if it is up
+void myphp_set_text_input_traits(int input_type, int ime_options) {
+    JNIEnv *env = get_jni_env();
+    if (env && g_activity_class && g_mid_set_text_input_traits) {
+        (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_set_text_input_traits, (jint)input_type, (jint)ime_options);
     }
 }
 

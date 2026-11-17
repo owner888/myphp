@@ -66,6 +66,14 @@ what scrolls under them goes on to the screen's edges. While a field has
 the focus, the keyboard takes the bottom and what it would cover of the
 field scrolls into view. On the desktop there is none of it.
 
+A field says which keyboard it wants as SwiftUI's does:
+`->keyboardType(KeyboardType::numberPad)`, `->textContentType(TextContentType::oneTimeCode)`
+(the system offers the code from a message), `->submitLabel(SubmitLabel::send)` (Return still
+submits, `->onSubmit`), `->textInputAutocapitalization(TextInputAutocapitalization::never)`,
+`->autocorrectionDisabled()`. A `SecureField` is the system's secure entry: no predictions,
+a password's autofill. On iOS the keyboard never corrects or suggests words in a field, as
+it sees only what is being composed, not the field's text.
+
 ## Pages, tabs and Back
 
 An app's top-level pages are one `TabView(.sidebarAdaptable)`, each tab a

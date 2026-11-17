@@ -42,7 +42,20 @@ final class Carbon
             int RegisterEventHotKey(unsigned int code, unsigned int modifiers, EventHotKeyID id, void* target, unsigned int options, void** outRef);
             int UnregisterEventHotKey(void* ref);
             int GetEventParameter(void* event, unsigned int name, unsigned int type, unsigned int* actualType, unsigned long size, unsigned long* actualSize, void* data);
+            int EnableSecureEventInput(void);
+            int DisableSecureEventInput(void);
         ', '/System/Library/Frameworks/Carbon.framework/Carbon');
+    }
+
+    /**
+     * Turns secure event input on, so that no other process reads the keys
+     * (a password being typed), or off again, as NSSecureTextField does
+     * while it has the keyboard. The system counts them: each on is paired
+     * with an off, which its caller keeps to (Darwin\Window::secureInput).
+     */
+    public static function secureEventInput(bool $on): void
+    {
+        $on ? self::c()->EnableSecureEventInput() : self::c()->DisableSecureEventInput();
     }
 
     private static function install(): void

@@ -158,8 +158,8 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             @Override
             public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
                 Log.i(TAG, "onCreateInputConnection called!");
-                outAttrs.inputType = InputType.TYPE_CLASS_TEXT;
-                outAttrs.imeOptions = EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_FULLSCREEN;
+                outAttrs.inputType = sInputType;
+                outAttrs.imeOptions = sImeOptions;
                 return new MyphpInputConnection(this, false);
             }
 
@@ -559,6 +559,23 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         outMetrics[3] = (int) Math.round(-bounds.bottom) - pad; // oy: CoreText bottom metric relative to baseline, y-up
 
         return pixels;
+    }
+
+    // What the field with the keyboard asks of it (PHP's Android\Window::editorInfo): the EditorInfo the view gives the keyboard
+    private static int sInputType = InputType.TYPE_CLASS_TEXT;
+    private static int sImeOptions = EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_FULLSCREEN;
+
+    public static void setTextInputTraits(int inputType, int imeOptions) {
+        if (sInstance == null || sInstance.surfaceView == null) return;
+        sInstance.runOnUiThread(() -> {
+            if (inputType == sInputType && imeOptions == sImeOptions) return;
+            sInputType = inputType;
+            sImeOptions = imeOptions;
+            InputMethodManager imm = (InputMethodManager) sInstance.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null && sInstance.surfaceView.hasFocus()) {
+                imm.restartInput(sInstance.surfaceView); // the keyboard asks the view again, as it is up for another field
+            }
+        });
     }
 
     public static void showSoftKeyboard() {

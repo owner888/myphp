@@ -7,7 +7,7 @@ use Closure;
 use MyPHP\Native\{iOS, Metal, ObjC};
 use MyPHP\Platform;
 use MyPHP\{App, L10n, Logger, Rectangle, WindowOptions};
-use MyPHP\UI\{AccessElements, AccessTree, DisplayList, Image, Node, TextInputRange, TextState};
+use MyPHP\UI\{AccessElements, AccessTree, DisplayList, Image, Node, TextInputRange, TextInputTraits, TextState};
 
 final class Window implements Platform\Window
 {
@@ -39,6 +39,8 @@ final class Window implements Platform\Window
     /** @var list<array{0: int, 1: float, 2: float}> */
     private array $touchHistory = [];
     private bool $keyboardVisible = false;
+    /** What the keyboard was last told of the field it types into (TextInputTraits::key): told again when it changes. */
+    private string $traitsKey = '';
     private $view = null;
     private ?Metal $metal = null;
     /** The launcher's view over the materials, in which what their nodes hold paints (Runtime::$overLayer), adopted as it is first needed; whether it shows anything; the materials as last given to the launcher. */
@@ -450,7 +452,13 @@ final class Window implements Platform\Window
             $this->requestFrame();
         }
 
-        // Manage soft keyboard visibility
+        // Manage soft keyboard visibility: told what the field asks of it first, so that it shows as asked
+        $focus = $this->w->input?->focus;
+        if (($key = TextInputTraits::key($focus)) !== $this->traitsKey) {
+            $this->traitsKey = $key;
+            [$keyboard, $returnKey, $caps, $secure, $content] = self::keyboardTraits($focus);
+            iOS::ffi()->myphp_ios_set_text_traits($keyboard, $returnKey, $caps, $secure, $content);
+        }
         $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
         if ($hasInputFocus && !$this->keyboardVisible) {
             $this->keyboardVisible = true;
@@ -599,6 +607,32 @@ final class Window implements Platform\Window
     }
 
     /** Gives the launcher the materials where the frame placed them (Runtime::$materialPlaces), when they changed: it places a UIVisualEffectView of each over the Metal view and under the view over the materials. */
+    /**
+     * What the keyboard is told for the field $f (null: none, the
+     * defaults): UIKit's UIKeyboardType, UIReturnKeyType and
+     * UITextAutocapitalizationType, whether it is secure entry (a
+     * SecureField's), and the name of its TextContentType case, which the
+     * launcher turns into UIKit's UITextContentType (null: none). A
+     * TextField's keyboardType() cases are UIKeyboardType's, in its order.
+     * @return array{0: int, 1: int, 2: int, 3: int, 4: ?string}
+     */
+    public static function keyboardTraits(?TextState $f): array
+    {
+        $t = $f?->traits;
+        $returnKey = match ($t?->submitLabel) {
+            null, \SubmitLabel::return => 0, // UIReturnKeyDefault
+            \SubmitLabel::go => 1, \SubmitLabel::join => 3, \SubmitLabel::next => 4, \SubmitLabel::route => 5,
+            \SubmitLabel::search => 6, \SubmitLabel::send => 7, \SubmitLabel::done => 9, \SubmitLabel::continue => 11,
+        };
+        $caps = match ($t?->autocapitalization) {
+            \TextInputAutocapitalization::never => 0, \TextInputAutocapitalization::words => 1,
+            null, \TextInputAutocapitalization::sentences => 2, // UIKit's default
+            \TextInputAutocapitalization::characters => 3,
+        };
+        $keyboard = $t?->keyboard === null ? 0 : array_search($t->keyboard, \KeyboardType::cases(), true);
+        return [$keyboard, $returnKey, $caps, (int)($f?->password ?? false), $t?->contentType?->name];
+    }
+
     /** Tells the text input where the caret of the field taking the keyboard is, in the view: a hardware keyboard's candidates show by it (as Linux\Window::placeCaret). */
     private function placeCaret(): void
     {

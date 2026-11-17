@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.200.2';
+const VERSION = '1.201.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -32,7 +32,7 @@ Commands:
 	devices              list connected devices and available simulators
 	emulators [flags]    list, launch and create emulators (Android AVDs, the iOS Simulator)
 	screenshot [dir]     run the app once and save a PNG of its window, and its elements
-	micro                build the static PHP that apps built with -launcher micro run on
+	micro                get the static PHP that the apps myphp build makes carry
 	keygen               create the key pair that signs updates
 	doctor               check that the development environment is ready
 	version              print the MyPHP version
@@ -997,8 +997,11 @@ update-<platform>.json: publish them where updates point to, or with -upload.
 
 Flags:
   -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64, windows/amd64, windows/arm64, android/arm64, ios/arm64 (default: this machine's)
-  -launcher exec|micro  exec runs the PHP that built the app; micro makes one static binary (see myphp micro)
-  -php version          the PHP version of micro.sfx, when myphp micro builds it
+  -launcher micro|exec  micro (the default) makes the app one static binary of PHP, which runs where no PHP
+                        is installed: its micro.sfx is downloaded once, or built (see myphp micro); exec
+                        makes a launcher that runs the PHP that built the app, by its path. Windows
+                        apps hold the PHP that builds them (exec), phones' their own runtime
+  -php version          the PHP version of micro.sfx
   -debug                keep development features such as the inspector
   -skip-build-command   do not run buildCommand
   -skip-dmg             do not create a disk image
@@ -1025,28 +1028,31 @@ function build(array $args): void
 {
     help($args, BUILD_USAGE);
     $platforms = option($args, 'platform', hostOs() . '/' . hostArch());
-    $launcher = option($args, 'launcher', 'exec');
+    $launcher = option($args, 'launcher', ''); // none named: what each platform's app carries its PHP with, below
     $php = option($args, 'php');
     $sign = option($args, 'sign', '');
     $out = option($args, 'o', '');
-    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer'), 'launcher' => $launcher];
+    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer')];
     $skipBuildCommand = flag($args, 'skip-build-command');
     $upload = flag($args, 'upload');
     ['dir' => $dir, 'config' => $c] = project($args);
     if ($out !== '') {
         $c['out'] = $out;
     }
-    in_array($launcher, ['exec', 'micro'], true) || fail('-launcher is exec or micro');
+    in_array($launcher, ['', 'exec', 'micro'], true) || fail('-launcher is micro or exec');
     $targets = [];
     foreach (array_filter(array_map('trim', explode(',', $platforms))) as $p) {
         [$os, $arch] = array_pad(explode('/', $p, 2), 2, '');
         $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch]) || $os === 'windows' && in_array($arch, Windows::ARCHES, true) || ($os === 'android' && in_array($arch, ['arm64', 'aarch64'], true)) || ($os === 'ios' && in_array($arch, ['arm64', 'aarch64'], true))
             || fail("myphp builds macOS, Linux, Windows, Android and iOS apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, android/arm64, ios/arm64, linux/amd64, linux/arm64, windows/amd64 or windows/arm64, not $p");
         $host = hostOs() . '/' . hostArch();
-        $os !== 'windows' || $launcher === 'exec' || fail('-launcher micro is not for Windows apps: they hold the PHP that builds them (-launcher exec)');
+        // A built app is for machines without PHP, so it carries its own unless -launcher exec asks otherwise: a static PHP of its system
+        // (micro); on Windows the PHP that builds it, which exec means there. A phone's app holds its runtime whatever the launcher.
+        $with = $launcher !== '' ? $launcher : ($os === 'windows' ? 'exec' : 'micro');
+        $os !== 'windows' || $with === 'exec' || fail('-launcher micro is not for Windows apps: they hold the PHP that builds them (-launcher exec)');
         $os !== 'windows' || "$os/$arch" === $host || fail("windows/$arch is built on Windows of that architecture: its app holds the PHP that builds it, which is $host's");
-        $launcher !== 'micro' || "$os/$arch" === $host || fail("-launcher micro builds for this machine, $host: micro.sfx is of its system and architecture");
-        $targets[] = [$os, $arch];
+        $with !== 'micro' || $arch !== 'universal' || fail('darwin/universal has no static PHP to carry: build darwin/arm64 and darwin/amd64, or pass -launcher exec, whose app runs the PHP of this machine by its path');
+        $targets[] = [$os, $arch, $with];
     }
     $targets !== [] || fail('-platform names no platform');
     if ($upload) {
@@ -1064,22 +1070,24 @@ function build(array $args): void
         fail(PROFILE_AD_HOC); // before building anything, as codesign would
     }
     // Check what the launcher needs before touching the output, so a failed build leaves the last one.
-    if ($launcher === 'exec') {
-        foreach ($targets as [$os, $arch]) {
-            if ($os === 'darwin') {
-                trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
-            } elseif ($os === 'linux') {
-                linuxCompiler($arch);
-            } elseif ($os === 'windows') {
-                try {
-                    Windows::compiler();
-                } catch (RuntimeException $e) {
-                    fail($e->getMessage());
-                }
+    $micros = [];
+    foreach ($targets as [$os, $arch, $with]) {
+        if ($os === 'android' || $os === 'ios') {
+            continue;
+        }
+        if ($with === 'micro') {
+            [, $micros["$os/$arch"]] = ensureMicro($php, $os, $arch);
+        } elseif ($os === 'darwin') {
+            trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
+        } elseif ($os === 'linux') {
+            linuxCompiler($arch);
+        } elseif ($os === 'windows') {
+            try {
+                Windows::compiler();
+            } catch (RuntimeException $e) {
+                fail($e->getMessage());
             }
         }
-    } else {
-        [, $opts['micro']] = ensureMicro($php);
     }
     $started = microtime(true);
     // The accessors of the catalogs come first, which the app calls, then the TypeScript client: the frontend build type-checks and bundles them.
@@ -1099,7 +1107,8 @@ function build(array $args): void
         str_starts_with($out, rtrim($dist, '/') . '/') && fail("out {$c['out']} is inside frontendDist {$c['frontendDist']}, which the app copies: set out in myphp.json, as \"build\"");
     }
     $built = [];
-    foreach ($targets as [$os, $arch]) {
+    foreach ($targets as [$os, $arch, $with]) {
+        $opts = ['launcher' => $with, 'micro' => $micros["$os/$arch"] ?? ''] + $opts;
         try {
             $artifacts = match ($os) {
                 'linux' => buildLinux($dir, $c, $arch, $opts),
@@ -1250,6 +1259,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
             buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch);
         } else {
             buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $opts['micro']);
+            removeTree("$contents/Resources/app"); // the launcher holds it now, as its phar, which is all a static app reads: left here it was in the app twice
         }
         $entitlements = ($m['entitlements'] ?? '') !== '' ? path($dir, $m['entitlements']) : '';
         $helpers = array_map(fn(string $f) => path($dir, $f), $m['helperEntitlements']);
@@ -1318,6 +1328,7 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
             buildLinuxExecLauncher("$stage/$slug", $bin, $c['entry'], $arch);
         } else {
             buildLinuxMicroLauncher("$stage/$slug", "$stage/app", $c['entry'], $opts['micro']);
+            removeTree("$stage/app"); // in the launcher now, as in the .app
         }
         file_put_contents("$stage/" . Linux::INFO, json_encode(Linux::info($c, $slug, !$opts['debug']), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
         // The desktop entry, the icon and the MIME package (mygo's writeLinuxDesktop), which the packages install where desktops look for them.
@@ -2046,8 +2057,8 @@ function appPhar(string $appDir, string $entry): string
 // phar:// timestamps (SIGBUS in zend_get_file_handle_timestamp) and its JIT
 // segfaults on arm64 macOS, so the micro build runs the plain interpreter.
 const MICRO_INI = ['ffi.enable=1', 'memory_limit=512M'];
-// What the framework calls: xmlreader/dom/simplexml for SVG icons, curl+openssl for URLSession/fetch/updates, sockets for single-instance, filter; LocalePolyfill covers I18n without the 34 MB ICU table.
-const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json,xml,xmlreader,xmlwriter,dom,simplexml,curl,openssl,sockets,filter,zlib';
+// What the framework calls: xmlreader/dom/simplexml for SVG icons, curl+openssl for URLSession/fetch/updates, sockets for single-instance, filter, tokenizer for the views' closures (Reactive\Observer, ViewFile: PhpToken); LocalePolyfill covers I18n without the 34 MB ICU table.
+const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json,xml,xmlreader,xmlwriter,dom,simplexml,curl,openssl,sockets,filter,zlib,tokenizer';
 const MICRO_PHP = '8.4';
 /**
  * The patch spc applies to phpmicro (`spc build -P`) as `myphp micro`
@@ -2094,40 +2105,44 @@ function ensureSpc(): string
 }
 
 /**
- * spc and a micro.sfx with MyPHP's extensions, building the latter once
- * (minutes: it compiles PHP). $MYPHP_MICRO points at a micro.sfx of your own.
+ * spc and a micro.sfx with MyPHP's extensions: the prebuilt one, downloaded
+ * once, else built once (minutes: it compiles PHP). $MYPHP_MICRO points at a
+ * micro.sfx of your own. For another system or architecture than this
+ * machine's ($os, $arch) there is only the prebuilt one.
  *
- * @return array{0: string, 1: string} spc path, micro.sfx path
+ * @return array{0: string, 1: string} spc path ('' when nothing was built), micro.sfx path
  */
-function ensureMicro(?string $phpVersion = null): array
+function ensureMicro(?string $phpVersion = null, ?string $os = null, ?string $arch = null): array
 {
-    $spc = ensureSpc();
+    $php = $phpVersion ?? getenv('MYPHP_PHP_VERSION') ?: MICRO_PHP;
+    if ($os !== null && "$os/$arch" !== hostOs() . '/' . hostArch()) {
+        return ['', foreignMicro($os, (string)$arch, $php)];
+    }
     $own = getenv('MYPHP_MICRO');
     $micro = $own ?: (getenv('HOME') . '/.myphp/micro.sfx');
     $lacks = is_file($micro) ? microLacks($micro) : '';
     if (is_file($micro) && $lacks === '') {
-        return [$spc, $micro];
+        return ['', $micro]; // spc is fetched when there is something to build
     }
     if (is_file($micro)) {
         $own === false || fail("$micro $lacks: build micro.sfx as `myphp micro` does (`myphp micro -manual`)");
-        echo "myphp: $micro $lacks, as one of a myphp before 1.28; building it again\n";
+        echo "myphp: $micro $lacks, as one of an earlier myphp: getting it again\n";
     }
-    $php = $phpVersion ?? getenv('MYPHP_PHP_VERSION') ?: MICRO_PHP;
     if ($own === false && getenv('MYPHP_BUILD_FROM_SOURCE') !== '1') {
-        $osName = PHP_OS_FAMILY === 'Linux' ? 'linux' : 'darwin';
+        $osName = hostOs();
         $archName = hostArch();
-        $prebuiltUrl = (getenv('MYPHP_PREBUILT_URL') ?: 'https://github.com/owner888/myphp/releases/download/runtime-php-8.5.12')
-            . "/myphp-micro-{$osName}-{$archName}-php-{$php}.sfx";
+        $prebuiltUrl = microUrl($osName, $archName, $php);
         @mkdir(dirname($micro), 0755, true);
         if (quiet(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '120', '-o', $micro, $prebuiltUrl]) === 0 && is_file($micro)) {
             chmod($micro, 0755);
             if (microLacks($micro) === '') {
                 echo "myphp: downloaded prebuilt micro.sfx ($osName-$archName)\n";
-                return [$spc, $micro];
+                return ['', $micro];
             }
             @unlink($micro);
         }
     }
+    $spc = ensureSpc();
     $build = getenv('HOME') . '/.myphp/build';
     @mkdir($build, 0755, true);
     // doctor unpacks tools (pkg-config) into its working directory, which download and build must share.
@@ -2149,6 +2164,36 @@ function ensureMicro(?string $phpVersion = null): array
     chmod($micro, 0755);
     echo "myphp: micro.sfx ready at $micro\n";
     return [$spc, $micro];
+}
+
+/** Where the prebuilt micro.sfx of a system and architecture is published: the release the phones' runtimes are in, or $MYPHP_PREBUILT_URL. */
+function microUrl(string $os, string $arch, string $php): string
+{
+    return (getenv('MYPHP_PREBUILT_URL') ?: 'https://github.com/owner888/myphp/releases/download/runtime-php-8.5.12') . "/myphp-micro-$os-$arch-php-$php.sfx";
+}
+
+/**
+ * The micro.sfx of another system or architecture than this machine's,
+ * which can be neither built nor run here: the prebuilt one, downloaded once
+ * to ~/.myphp and checked for what can be read of it (microLacks runs it).
+ */
+function foreignMicro(string $os, string $arch, string $php): string
+{
+    $micro = getenv('HOME') . "/.myphp/micro-$os-$arch-php-$php.sfx";
+    if (!is_file($micro)) {
+        $url = microUrl($os, $arch, $php);
+        @mkdir(dirname($micro), 0755, true);
+        echo "myphp: downloading the static PHP of $os/$arch from $url\n";
+        if (quiet(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '300', '-o', "$micro.part", $url]) !== 0) {
+            @unlink("$micro.part");
+            fail("no static PHP of $os/$arch at $url: build $os/$arch on such a machine, or pass -launcher exec, whose app runs a PHP installed where it runs");
+        }
+        rename("$micro.part", $micro) || fail("cannot write $micro");
+        chmod($micro, 0755);
+    }
+    $isIt = $os === 'linux' ? file_get_contents($micro, false, null, 0, 4) === "\x7fELF" : MachO::hasMicroSection($micro);
+    $isIt || fail("$micro is no micro.sfx of $os/$arch: delete it and build again");
+    return $micro;
 }
 
 /**
@@ -2181,7 +2226,7 @@ function microLacks(string $path): string
 
 function micro(array $args): void
 {
-    help($args, "micro [-php 8.4] [-manual]\n\nGets static-php-cli and builds micro.sfx once, the static PHP that apps built\nwith -launcher micro run on; -manual prints the steps instead.");
+    help($args, "micro [-php 8.4] [-manual]\n\nGets micro.sfx once, the static PHP that the apps myphp build makes carry:\nthe prebuilt one of this machine, else static-php-cli builds it; -manual\nprints the steps of building it instead.");
     if (flag($args, 'manual')) {
         $ext = MICRO_EXTENSIONS; $php = MICRO_PHP; $url = SPC_NIGHTLY . 'spc-macos-aarch64';
         echo <<<TXT
@@ -2194,14 +2239,14 @@ function micro(array $args): void
           ~/.myphp/spc build $ext --build-micro -P myphp-micro-patch.php   # MICRO_PATCH of bin/myphp, saved there
           cp buildroot/bin/micro.sfx ~/.myphp/micro.sfx
 
-        \$MYPHP_MICRO points `myphp build --launcher micro` at another micro.sfx,
+        \$MYPHP_MICRO points `myphp build` at another micro.sfx,
         \$MYPHP_PHP_VERSION or --php picks the PHP version to build.
 
         TXT;
         return;
     }
     [$spc, $micro] = ensureMicro(option($args, 'php', null));
-    echo "spc: $spc\nmicro.sfx: $micro\n";
+    echo ($spc !== '' ? "spc: $spc\n" : '') . "micro.sfx: $micro\n";
 }
 
 

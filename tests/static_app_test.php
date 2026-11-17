@@ -20,3 +20,17 @@ foreach ($it as $f) {
     }
 }
 same(['PHP_BINARY' => [], 'glob(' => []], $uses, "what a static app lacks, used only where it is handled");
+
+// The extensions the sources call on are those the static PHP is built with (MICRO_EXTENSIONS of bin/myphp): a view's
+// closures are read with PhpToken, and an app whose static PHP had no tokenizer stopped at its first frame.
+preg_match("/^const MICRO_EXTENSIONS = '([^']+)';/m", (string)file_get_contents(__DIR__ . '/../bin/myphp'), $m);
+$built = explode(',', $m[1] ?? '');
+$calls = ['tokenizer' => '/\bPhpToken\b|\btoken_get_all\(/'];
+foreach ($calls as $ext => $pattern) {
+    $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS));
+    $used = false;
+    foreach ($it as $f) {
+        $used = $used || (str_ends_with($f->getPathname(), '.php') && preg_match($pattern, (string)file_get_contents($f->getPathname())) === 1);
+    }
+    check(!$used || in_array($ext, $built, true), "$ext, which the sources use, is in the static PHP");
+}

@@ -10,7 +10,7 @@ use MyPHP\{App, Rectangle, WindowOptions};
 use MyPHP\Platform;
 use MyPHP\Platform\Linux\Keys as LinuxKeys;
 use MyPHP\Platform\Unsupported;
-use MyPHP\UI\{Cursor, Image, Key, TextInputRange, TextState};
+use MyPHP\UI\{Cursor, Image, Key, TextInputRange, TextInputTraits, TextState};
 
 /**
  * A top-level window of Win32 (mygo's windows window): its frame in
@@ -90,6 +90,8 @@ final class Window implements Platform\Window
     private int $high = 0;
     /** Whether the window has its input context (a node takes text with input methods). */
     private bool $ime = true;
+    /** What the text services were last told of the field with the keyboard (TextInputTraits::key): told again when it changes. */
+    private string $traitsKey = '';
     /** The system's lines a wheel's notch scrolls (SPI_GETWHEELSCROLLLINES), asked once. */
     private static ?int $wheelLines = null;
     /** @var ?array{0: int, 1: int, 2: CData} the style, the extended one and the placement before full screen */
@@ -529,7 +531,9 @@ final class Window implements Platform\Window
     /**
      * The input context the window's while a node takes text with input
      * methods, none otherwise, so keys type the layout's characters
-     * (mygo's SetTextInput; one taken away completes what it composed);
+     * (mygo's SetTextInput; one taken away completes what it composed),
+     * nor while it is a password's, as Windows' own password fields; the
+     * input scope the field asks of the touch keyboard (inputScope());
      * its composition and candidates by the caret of the node taking text,
      * in pixels, as Linux's placeCaret.
      */
@@ -539,8 +543,12 @@ final class Window implements Platform\Window
         if ($input === null || $this->dead) {
             return;
         }
+        if (($key = TextInputTraits::key($input->focus)) !== $this->traitsKey) {
+            $this->traitsKey = $key;
+            Win32::msctf()->SetInputScope($this->hwnd, self::inputScope($input->focus));
+        }
         $imm = Win32::imm32();
-        $active = ($input->focus !== null || $input->client !== null || $input->textCaret !== null) && ($input->client === null || $input->inputMethod);
+        $active = ($input->focus !== null || $input->client !== null || $input->textCaret !== null) && ($input->client === null || $input->inputMethod) && !($input->focus?->password ?? false);
         if ($active !== $this->ime) {
             $this->ime = $active;
             if (!$active && ($himc = $imm->ImmGetContext($this->hwnd)) !== null) {
@@ -571,6 +579,43 @@ final class Window implements Platform\Window
         $cand->rcArea->left = $px; $cand->rcArea->top = $py; $cand->rcArea->right = $px + 1; $cand->rcArea->bottom = $py + $ph;
         $imm->ImmSetCandidateWindow($himc, FFI::addr($cand));
         $imm->ImmReleaseContext($this->hwnd, $himc);
+    }
+
+    /**
+     * The InputScope the field $f asks of the touch keyboard and the input
+     * methods (null: none, IS_DEFAULT): its keyboardType()'s, else what it
+     * holds (textContentType()). A password's is the default, Windows
+     * wanting its text services off rather than IS_PASSWORD, unless it is a
+     * PIN on a number pad.
+     */
+    public static function inputScope(?TextState $f): int
+    {
+        $t = $f?->traits;
+        $scope = match ($t?->keyboard) {
+            \KeyboardType::asciiCapable => 40, // IS_ALPHANUMERIC_HALFWIDTH
+            \KeyboardType::numbersAndPunctuation, \KeyboardType::decimalPad => 29, // IS_NUMBER
+            \KeyboardType::URL => 1, // IS_URL
+            \KeyboardType::numberPad => 28, // IS_DIGITS
+            \KeyboardType::phonePad => 32, // IS_TELEPHONE_FULLTELEPHONENUMBER
+            \KeyboardType::emailAddress => 5, // IS_EMAIL_SMTPEMAILADDRESS
+            \KeyboardType::webSearch => 50, // IS_SEARCH
+            null, \KeyboardType::default, \KeyboardType::namePhonePad, \KeyboardType::twitter => match ($t?->contentType) {
+                \TextContentType::username => 6, // IS_LOGINNAME
+                \TextContentType::emailAddress => 5,
+                \TextContentType::URL => 1,
+                \TextContentType::telephoneNumber => 32,
+                \TextContentType::oneTimeCode => 28,
+                \TextContentType::name => 7, // IS_PERSONALNAME_FULLNAME
+                \TextContentType::givenName => 9, // IS_PERSONALNAME_GIVENNAME
+                \TextContentType::familyName => 11, // IS_PERSONALNAME_SURNAME
+                \TextContentType::streetAddressLine1, \TextContentType::streetAddressLine2 => 15, // IS_ADDRESS_STREET
+                \TextContentType::addressCity => 17, // IS_ADDRESS_CITY
+                \TextContentType::addressState => 16, // IS_ADDRESS_STATEORPROVINCE
+                \TextContentType::postalCode => 14, // IS_ADDRESS_POSTALCODE
+                null, \TextContentType::password, \TextContentType::newPassword => 0, // IS_DEFAULT
+            },
+        };
+        return ($f?->password ?? false) && $scope !== 28 && $scope !== 29 ? 0 : $scope;
     }
 
     /** A press's clicks: one more than the last's of the same button within the double-click time and rectangle, centered on it, at the window's DPI; one otherwise. */

@@ -8,7 +8,7 @@ use FFI\CData;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\Gl;
 use MyPHP\Platform;
-use MyPHP\UI\{DataDragEvent, DisplayList, Image, Key, TextInputRange, TextState};
+use MyPHP\UI\{DataDragEvent, DisplayList, Image, Key, TextInputRange, TextInputTraits, TextState};
 use MyPHP\Transfer\{Data, Format, Item, Offer, Operation, Representation, Result};
 use MyPHP\Native\Mem;
 
@@ -39,6 +39,8 @@ final class Window implements Platform\Window
     public ?CData $win = null;
     /** The GtkGLArea native UI draws in, its renderer, and the IM context typing goes through. */
     private ?CData $area = null, $im = null;
+    /** What the input method was last told of the field with the keyboard (TextInputTraits::key): told again when it changes. */
+    private string $traitsKey = '';
     /** The WebKitWebView of a window whose content is a page, which the page holds. */
     private ?CData $web = null;
     /** The overlay the area is in once it has web views, over the layout holding them (mygo's surface layers). */
@@ -403,10 +405,15 @@ final class Window implements Platform\Window
         return [(($rgb >> 16) & 255) / 255, (($rgb >> 8) & 255) / 255, ($rgb & 255) / 255, 1.0];
     }
 
-    /** Tells the input method where the caret of the field taking the keyboard is, in the window: its candidates show by it. */
+    /** Tells the input method where the caret of the field taking the keyboard is, in the window: its candidates show by it; and what the field asks of it and of an on-screen keyboard (inputPurpose()). */
     private function placeCaret(): void
     {
         $input = $this->w->input;
+        if ($input !== null && $this->im !== null && ($key = TextInputTraits::key($input->focus)) !== $this->traitsKey) {
+            $this->traitsKey = $key;
+            [$purpose, $hints] = self::inputPurpose($input->focus);
+            Gtk::ffi()->g_object_set($this->im, 'input-purpose', $purpose, 'input-hints', $hints, null);
+        }
         if ($input === null || $this->im === null || ($input->focus === null && $input->client === null && $input->textCaret === null)) {
             return;
         }
@@ -420,6 +427,48 @@ final class Window implements Platform\Window
         $rect = Gtk::ffi()->new('GdkRectangle');
         [$rect->x, $rect->y, $rect->width, $rect->height] = [(int)round($x), (int)round($y), max(1, (int)round($w)), max(1, (int)round($h))];
         Gtk::ffi()->gtk_im_context_set_cursor_location($this->im, FFI::addr($rect));
+    }
+
+    /**
+     * The GtkInputPurpose and GtkInputHints of the field $f (null: none,
+     * a free form's and none), which input methods and on-screen keyboards
+     * read as GtkEntry's: its keyboardType()'s purpose, else what it holds
+     * (textContentType()); a password's (a PIN on a number pad), which
+     * input methods leave alone; how it capitalizes, whether it is spell
+     * checked (autocorrectionDisabled()).
+     * @return array{0: int, 1: int}
+     */
+    public static function inputPurpose(?TextState $f): array
+    {
+        $t = $f?->traits;
+        $purpose = match ($t?->keyboard) {
+            \KeyboardType::numbersAndPunctuation, \KeyboardType::decimalPad => 3, // GTK_INPUT_PURPOSE_NUMBER
+            \KeyboardType::URL => 5,
+            \KeyboardType::numberPad => 2, // DIGITS
+            \KeyboardType::phonePad => 4,
+            \KeyboardType::namePhonePad => 7, // NAME
+            \KeyboardType::emailAddress => 6,
+            null, \KeyboardType::default, \KeyboardType::asciiCapable, \KeyboardType::twitter, \KeyboardType::webSearch => match ($t?->contentType) {
+                \TextContentType::emailAddress => 6,
+                \TextContentType::URL => 5,
+                \TextContentType::telephoneNumber => 4,
+                \TextContentType::oneTimeCode => 2,
+                \TextContentType::name, \TextContentType::givenName, \TextContentType::familyName => 7,
+                default => 0, // FREE_FORM
+            },
+        };
+        if ($f?->password ?? false) {
+            $purpose = $purpose === 2 || $purpose === 3 ? 9 : 8; // PIN, PASSWORD
+        }
+        $hints = match ($t?->autocapitalization) {
+            null => 0,
+            \TextInputAutocapitalization::never => 1 << 3, // GTK_INPUT_HINT_LOWERCASE
+            \TextInputAutocapitalization::characters => 1 << 4, // UPPERCASE_CHARS
+            \TextInputAutocapitalization::words => 1 << 5, // UPPERCASE_WORDS
+            \TextInputAutocapitalization::sentences => 1 << 6, // UPPERCASE_SENTENCES
+        };
+        if ($t?->autocorrectionDisabled ?? false) { $hints |= 1 << 1; } // NO_SPELLCHECK
+        return [$purpose, $hints];
     }
 
     /** The modifiers of a GDK state as macOS's flags: Control is the shortcut modifier (Command), Super is Control. */
