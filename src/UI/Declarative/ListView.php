@@ -121,7 +121,8 @@ final class ListView extends View
         $row = $this->row;
         $menu = $this->menu;
         $rowEnv = $env->along(Node::COLUMN)->with(['inList' => true]);
-        $n = $c->list($state, $count + $top + $foot, function (int $i) use ($c, $env, $rowEnv, $items, $keys, $row, $idOf, $itemId, $state, $menu, $top, $title, $count, $inset): void {
+        $prev = null; // the row built before, whose separator one that hides the separator above it hides
+        $n = $c->list($state, $count + $top + $foot, function (int $i) use ($c, $env, $rowEnv, $items, $keys, $row, $idOf, $itemId, $state, $menu, $top, $title, $count, $inset, &$prev): void {
             if ($i < $top) { $c->largeTitle($title); return; }
             if ($i - $top >= $count) { $c->box(0, $inset, 0)->color = null; return; }
             $at = $i - $top; // the item's index; $i the state's row
@@ -130,6 +131,8 @@ final class ListView extends View
             if ($v instanceof View) { $v->identity ??= $items === null && !$this->id instanceof Closure ? $at : $itemId($at); }
             $r = self::row($c, $rowEnv, $v, $env->listStyle !== \ListStyle::plain || ($c->runtime?->touch ?? false)); // separated, but in a Mac's plain list
             if ($r === null) { return; }
+            if ($prev !== null && ($r->hideSeparators & Node::SEPARATOR_ABOVE) !== 0) { $prev->hideSeparators |= Node::SEPARATOR_BELOW; }
+            $prev = $r;
             if ($env->alternatingRows && $at & 1) { $r->background($env->theme->surface); }
             if ($menu !== null) {
                 $r->contextMenu(static function (\MyPHP\UI\Menu $m) use ($menu, $state, $i, $idOf, $rowEnv): void {
@@ -139,6 +142,7 @@ final class ListView extends View
             }
         });
         if ($this->selects) { self::chose($state, $idOf, $this->selection, $this->primaryAction); $this->commitBinding(); }
+        View::scrollTraits($c, $env, $n);
         $n->alignSelf(Node::STRETCH);
         $n->grow = max($n->grow, 1); // the room it is given, along the stack it is in and across it
         return $n;
@@ -224,13 +228,49 @@ final class ListView extends View
                     if ($kk->kind === Node::SWITCH || $kk->role === \MyPHP\UI\Role::RADIO_GROUP) { $n->padding(6, 16); break 2; }
                 }
             }
+            if ($v instanceof View) { self::rowInsets($n, $v->rowInsets); } // before the padding goes to a control across the cell
             self::fillWithControl($n);
+            $inset = true;
         }
+        if (!isset($inset) && $n !== null && $v instanceof View) { self::rowInsets($n, $v->rowInsets); } // a cell of its own's, a Mac's plain list's row
         if ($n !== null) { $n->contextPreview = true; } // a context menu inside lifts the whole cell, as SwiftUI's in a List
-        if ($separator && $n !== null) { // UIKit's separator: a hairline under the row from 16 in to its end
-            $n->drawOver(static function (\MyPHP\UI\Painter $p, array $r): void { $hair = 1 / max($p->scale(), 1.0); $p->fill([$r[0] + 16, $r[1] + $r[3] - $hair, $r[2] - 16, $hair], $p->theme()->border); }); // one pixel
+        if ($n !== null && $v instanceof View) {
+            $n->hideSeparators = $v->rowSeparatorsHidden;
+            if ($v->rowBackground !== null) { self::rowBackground($c, $env, $n, $v->rowBackground); }
+        }
+        if ($separator && $n !== null) { // UIKit's separator: a hairline under the row from 16 in to its end, unless hidden (listRowSeparator, of the row or the one under it)
+            $n->drawOver(static function (\MyPHP\UI\Painter $p, array $r, Node $n): void {
+                if (($n->hideSeparators & Node::SEPARATOR_BELOW) !== 0) { return; }
+                $hair = 1 / max($p->scale(), 1.0); $p->fill([$r[0] + 16, $r[1] + $r[3] - $hair, $r[2] - 16, $hair], $p->theme()->border); // one pixel
+            });
         }
         return $n;
+    }
+
+    /** $insets (listRowInsets) in place of the cell $n's padding; null keeps it. */
+    private static function rowInsets(Node $n, ?\EdgeInsets $insets): void
+    {
+        if ($insets === null) { return; }
+        $n->padding($insets->top, 0, $insets->bottom, 0)->paddingStart($insets->leading)->paddingEnd($insets->trailing);
+    }
+
+    /**
+     * $view (listRowBackground) under the cell $n's content, as large as
+     * the cell: a color its background, which its corners and a press keep;
+     * another view built into it, behind what it holds.
+     */
+    private static function rowBackground(Context $c, Env $env, Node $n, View $view): void
+    {
+        if ($view instanceof ColorView && $view->modifiersless()) {
+            $n->background($view->color->rgb($env), $view->color->alpha);
+            return;
+        }
+        $c->into($n, static function () use ($c, $env, $view, $n): void {
+            $bg = $view->render($c, $env->along(Node::COLUMN)->with(['inList' => false]));
+            if ($bg === null) { return; }
+            $bg->absolute()->top(0)->bottom(0)->start(0)->end(0);
+            array_unshift($n->kids, array_pop($n->kids)); // first: under the content
+        });
     }
 
     /**
@@ -282,7 +322,7 @@ final class ListView extends View
         $n = ScrollView::scroller($c, $env, function (Env $e) use ($c, $sections): void {
             foreach ($sections as $s) { $s->render($c, $e->along(Node::COLUMN)); }
             $c->attach(new Node(Node::CONTAINER, Node::COLUMN))->size(0, 24); // room under the last section
-        }, false, 0, $t->groupBackground ?? $t->background);
+        }, false, 0, $env->scrollContentBackground === \Visibility::hidden ? null : $t->groupBackground ?? $t->background); // hidden: what is behind the list shows (scrollContentBackground)
         return $n;
     }
 

@@ -185,7 +185,7 @@ trait RuntimeAccess
     /** What a node inside one named by its content gives the name (mygo's df5074b): its label in place of its texts, as a name from content takes a descendant's aria-label on the web; a row reads "Done Write the report", not "✓ Write the report". */
     private static function contentOf(Node $k): string
     {
-        return $k->invisible ? '' : ($k->label !== '' ? $k->label : self::innerText($k));
+        return $k->invisible || $k->accessHidden ? '' : ($k->label !== '' ? $k->label : self::innerText($k));
     }
 
     /**
@@ -198,6 +198,7 @@ trait RuntimeAccess
         $this->parentOf[$n->id] = $parentId;
         $this->nodeOf[$n->id] = $n;
         if ($n->id === $this->focus) { $focused = $n; }
+        if ($n->accessHidden) { return; } // nor what is inside it (accessibilityHidden)
         // A row swiped for actions: its actions are its row's, the row of the list it is in, not an element of their own.
         $swipes = $this->swipeActionsOf[$n->id] ?? null;
         if ($swipes !== null && $parent >= 0 && in_array($t->nodes[$parent]->role, [Role::LIST_ITEM, Role::ROW], true)) {

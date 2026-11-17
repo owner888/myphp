@@ -356,14 +356,35 @@ abstract class View
         return $this;
     }
 
-    /** Sets the stacking order of overlapping views, as SwiftUI's zIndex. */
-    public function zIndex(float $value): static { return $this; }
+    private ?float $zIndex = null;
 
-    /** Shows or hides the scroll indicators on a ScrollView or ListView inside, as SwiftUI's scrollIndicators. */
-    public function scrollIndicators(\ScrollIndicatorVisibility $visibility, \Axis $axes = \Axis::vertical): static { return $this; }
+    /** Where the view goes among the views beside it as they paint and take taps, as SwiftUI's zIndex: over those of a lower one (0 by default), in their order where it is equal; the layout keeps their order. */
+    public function zIndex(float $value): static { $this->zIndex = $value; return $this; }
 
-    /** Dismisses the software keyboard when scrolling, as SwiftUI's scrollDismissesKeyboard. */
-    public function scrollDismissesKeyboard(\ScrollDismissesKeyboardMode $mode = \ScrollDismissesKeyboardMode::automatic): static { return $this; }
+    /** Shows or hides the bars of the ScrollView, ListView or Form inside on $axes, as SwiftUI's scrollIndicators: hidden and never show none, visible and automatic the system's. */
+    public function scrollIndicators(\ScrollIndicatorVisibility $visibility, \Axis $axes = \Axis::vertical): static { $this->sets['scrollIndicators'] = [$visibility, $axes]; return $this; }
+
+    /** How a finger scrolling the ScrollView, ListView or Form inside closes the keyboard, as SwiftUI's scrollDismissesKeyboard: immediately as it scrolls, interactively as it reaches the keyboard, never (automatic, the system's here). */
+    public function scrollDismissesKeyboard(\ScrollDismissesKeyboardMode $mode = \ScrollDismissesKeyboardMode::automatic): static { $this->sets['scrollDismissesKeyboard'] = $mode; return $this; }
+
+    /**
+     * The scroll modifiers of $env on the scroll container $n of the view
+     * built: its bars hidden (scrollIndicators), the height a finger
+     * scrolling it closes the keyboard from (scrollDismissesKeyboard). @internal
+     */
+    public static function scrollTraits(Context $c, Env $env, Node $n): Node
+    {
+        if ($env->scrollIndicators !== null) {
+            [$visibility, $axis] = $env->scrollIndicators;
+            if (($visibility === \ScrollIndicatorVisibility::hidden || $visibility === \ScrollIndicatorVisibility::never) && ($axis === \Axis::vertical ? $n->scrollY : $n->scrollX)) { $n->scrollbars(false); }
+        }
+        $n->dismissesKeyboard = match ($env->scrollDismissesKeyboard) {
+            \ScrollDismissesKeyboardMode::immediately => -INF,
+            \ScrollDismissesKeyboardMode::interactively => $c->height - $c->keyboard, // the keyboard's top, in the window
+            null, \ScrollDismissesKeyboardMode::automatic, \ScrollDismissesKeyboardMode::never => INF,
+        };
+        return $n;
+    }
 
     /** Sets the accessibility hint read after the label, as SwiftUI's accessibilityHint. */
     public function accessibilityHint(string $hint): static { $this->events[] = ['hint', $hint]; return $this; }
@@ -371,26 +392,46 @@ abstract class View
     /** Sets the accessibility value of the view, as SwiftUI's accessibilityValue. */
     public function accessibilityValue(string $value): static { $this->events[] = ['accValue', $value]; return $this; }
 
-    /** Hides the view from assistive technology, as SwiftUI's accessibilityHidden. */
-    public function accessibilityHidden(bool $hidden = true): static { return $this; }
+    /** Hides the view and what is inside it from assistive technology, as SwiftUI's accessibilityHidden: it shows, but VoiceOver and TalkBack do not read it, nor does a container's label take its text. */
+    public function accessibilityHidden(bool $hidden = true): static { $this->events[] = ['accessHidden', $hidden]; return $this; }
 
-    /** Sets the background of a row in a ListView/Form, as SwiftUI's listRowBackground. */
-    public function listRowBackground(?View $view): static { return $this; }
+    /** The row's background in a ListView or Form, as SwiftUI's listRowBackground: a Color (Color(Color::clear) for none), or any view, under the row's content, as large as the row. @internal public for ListView::row */
+    public ?View $rowBackground = null;
+    /** The row's insets in a ListView or Form in place of the cell's padding, as SwiftUI's listRowInsets. @internal */
+    public ?\EdgeInsets $rowInsets = null;
+    /** Which of the row's separators do not show (Node::SEPARATOR_ABOVE, SEPARATOR_BELOW). @internal */
+    public int $rowSeparatorsHidden = 0;
 
-    /** Sets the insets of a row in a ListView/Form, as SwiftUI's listRowInsets. */
-    public function listRowInsets(?\EdgeInsets $insets = null): static { return $this; }
+    /** Whether the view has no modifiers of its own: a color only, which a cell takes as its background. @internal */
+    public function modifiersless(): bool { return $this->mods === [] && $this->events === [] && $this->sets === []; }
 
-    /** Shows or hides the separator line on a ListView row, as SwiftUI's listRowSeparator. */
-    public function listRowSeparator(\Visibility $visibility, \Edge $edges = \Edge::all): static { return $this; }
+    /** The row's background in a ListView or Form, under its content, as large as the row, as SwiftUI's listRowBackground; null for the cell's. */
+    public function listRowBackground(?View $view): static { $this->rowBackground = $view; return $this; }
 
-    /** Shows or hides the background of a ScrollView/ListView/Form, as SwiftUI's scrollContentBackground. */
-    public function scrollContentBackground(\Visibility $visibility): static { return $this; }
+    /** The row's insets in a ListView or Form in place of the cell's padding (11 by 16), as SwiftUI's listRowInsets; null for the cell's. */
+    public function listRowInsets(?\EdgeInsets $insets = null): static { $this->rowInsets = $insets; return $this; }
 
-    /** Sets the corner radius of a sheet, as SwiftUI's presentationCornerRadius. */
-    public function presentationCornerRadius(?float $cornerRadius): static { return $this; }
+    /** Hides the row's separators in a ListView or Form on $edges (top: the one above it, bottom: the one under it), or shows them, as SwiftUI's listRowSeparator. */
+    public function listRowSeparator(\Visibility $visibility, \Edge $edges = \Edge::all): static
+    {
+        $bits = ($edges->top() ? Node::SEPARATOR_ABOVE : 0) | ($edges->bottom() ? Node::SEPARATOR_BELOW : 0);
+        $this->rowSeparatorsHidden = $visibility === \Visibility::hidden ? $this->rowSeparatorsHidden | $bits : $this->rowSeparatorsHidden & ~$bits;
+        return $this;
+    }
 
-    /** Shows or hides the drag indicator grabber at the top of a sheet, as SwiftUI's presentationDragIndicator. */
-    public function presentationDragIndicator(\Visibility $visibility): static { return $this; }
+    /** Hides a ListView's or Form's own background behind its sections, so that a background() of the view's shows there, as SwiftUI's scrollContentBackground. */
+    public function scrollContentBackground(\Visibility $visibility): static { $this->sets['scrollContentBackground'] = $visibility; return $this; }
+
+    /** The sheet's corners' radius, of the view a sheet presents, as SwiftUI's presentationCornerRadius; null for the system's. @internal public for Presentation */
+    public ?float $sheetCornerRadius = null;
+    /** Whether the sheet shows its grabber, null for the system's way. @internal */
+    public ?bool $sheetGrabber = null;
+
+    /** Rounds the corners of the sheet presenting the view by $cornerRadius, as SwiftUI's presentationCornerRadius; null for the system's. */
+    public function presentationCornerRadius(?float $cornerRadius): static { $this->sheetCornerRadius = $cornerRadius; return $this; }
+
+    /** Shows or hides the grabber at the top of the sheet presenting the view, as SwiftUI's presentationDragIndicator: automatic as the system does (a phone's sheet has one, an iPad's page sheet not). */
+    public function presentationDragIndicator(\Visibility $visibility): static { $this->sheetGrabber = match ($visibility) { \Visibility::visible => true, \Visibility::hidden => false, \Visibility::automatic => null }; return $this; }
 
     /** Opens the system save/export dialog when $isPresented is true, as SwiftUI's fileExporter. */
     public function fileExporter(bool &$isPresented, string $document = '', string $defaultFilename = 'untitled.txt', ?Closure $onCompletion = null): static
@@ -777,6 +818,10 @@ abstract class View
             $node ??= $row;
         } else {
             $node = $this->renderBox($c, $env);
+        }
+        if ($this->zIndex !== null && ($top = $this->swipe !== null ? $row : $node) !== null) { // among the views beside it, in the container it was built in
+            $top->zIndex = $this->zIndex;
+            $c->currentParent()->zOrdered = true;
         }
         foreach ($this->presentations as $p) { $p->render($c, $env); }
         return $node;
@@ -1203,6 +1248,7 @@ abstract class View
                 case 'help': $whole->tooltip(Localized::string($a, $env)); break;
                 case 'label': $node->label(Localized::string($a, $env)); break;
                 case 'hint': $node->hint(Localized::string($a, $env)); break;
+                case 'accessHidden': $whole->accessHidden = $a; break;
                 case 'accValue': $node->value(Localized::string($a, $env)); break;
                 case 'key':
                     foreach ([0, \MyPHP\UI\Key::SHIFT, \MyPHP\UI\Key::COMMAND, \MyPHP\UI\Key::OPTION, \MyPHP\UI\Key::CONTROL] as $mods) {

@@ -205,6 +205,21 @@ final class Node
     public float $caretWidth = 1.0;
     /** scrollbars(false)'s: a scroll container that shows no bars, which take no press. */
     public bool $hideScrollbars = false;
+    /**
+     * A scroll container's keyboard dismissal (SwiftUI's scrollDismissesKeyboard): a finger scrolling it at or below
+     * this height in the window (the keyboard's top, interactively) takes the focus from a field, which closes the
+     * keyboard; -INF from any height (immediately), INF never.
+     */
+    public float $dismissesKeyboard = INF;
+    /** Where the node goes among its siblings as they paint and take the pointer (SwiftUI's zIndex): over those of a lower one, in their order where they are equal. */
+    public float $zIndex = 0.0;
+    /** Whether a child of the node has a zIndex, so that they paint in its order (paintOrder()). */
+    public bool $zOrdered = false;
+    /** Hidden from assistive technology, the node and those inside it (SwiftUI's accessibilityHidden): they show, but are not read. */
+    public bool $accessHidden = false;
+    /** Which separators of a list's row do not show (SwiftUI's listRowSeparator): SEPARATOR_ABOVE, SEPARATOR_BELOW. */
+    public int $hideSeparators = 0;
+    public const SEPARATOR_ABOVE = 1, SEPARATOR_BELOW = 2;
     /** A gradient filling the node in place of its color (gradient, linearGradient, radialGradient, conicGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
     public LinearGradient|RadialGradient|ConicGradient|null $gradient = null;
     /** The gradient painting the node's border in place of its color (borderLinearGradient, borderConicGradient), or null. */
@@ -977,12 +992,13 @@ final class Node
      * last to the first, Home and End to the first and the last; with
      * $selects, moving chooses the member it moves to, as a radio does.
      */
-    /** The children in the order they paint and take the pointer: a list's pinned header last, over its rows. @return list<Node> */
+    /** The children in the order they paint and take the pointer: by their zIndex, in their order where it is equal (a stable sort); a list's pinned header last, over its rows. @return list<Node> */
     public function paintOrder(): array
     {
-        if ($this->pinned === null) { return $this->kids; }
-        $kids = array_values(array_filter($this->kids, fn(Node $k): bool => $k !== $this->pinned));
-        $kids[] = $this->pinned;
+        if ($this->pinned === null && !$this->zOrdered) { return $this->kids; }
+        $kids = $this->pinned === null ? $this->kids : array_values(array_filter($this->kids, fn(Node $k): bool => $k !== $this->pinned));
+        if ($this->zOrdered) { usort($kids, static fn(Node $a, Node $b): int => $a->zIndex <=> $b->zIndex); }
+        if ($this->pinned !== null) { $kids[] = $this->pinned; }
         return $kids;
     }
 

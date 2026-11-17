@@ -31,6 +31,10 @@ final class Runtime
     private array $frags = [];
     /** @var array<int, Scrollable> id => scroll state, from last frame */
     private array $scrolls = [];
+    /** @var array<int, float> the scroll containers that close the keyboard as a finger scrolls them, by id: from what height (Node::$dismissesKeyboard) */
+    private array $keyboardDismissers = [];
+    /** The scroll container a finger is scrolling, until it lifts ('scrollEnd'): it may move on past its edge, onto the keyboard. */
+    private ?int $fingerScroll = null;
     /** @var array<int, array{0: bool, 1: bool}> id => scrolls horizontally, vertically */
     private array $scrollAxes = [];
     /** @var array<int, TextState> text areas by id, from last frame: the wheel scrolls them too */
@@ -745,6 +749,7 @@ final class Runtime
                     }
                     break; // ['scroll', x, y, dx, dy, precise]: a mouse wheel's notches are not precise
                 case 'scrollEnd': // a finger that scrolled lifted (the phone Windows): what it pulled past a top is let go (Context::refreshable)
+                    $this->fingerScroll = null;
                     foreach ($this->scrolls as $state) {
                         if ($state instanceof ScrollState && $state->pull > 0) { $state->released = true; $this->changed(); }
                     }
@@ -893,6 +898,7 @@ final class Runtime
         $this->sliders = [];
         $this->scrolls = [];
         $this->scrollAxes = [];
+        $this->keyboardDismissers = [];
         $this->areas = [];
         $this->tips = [];
         $this->cursor = Cursor::Default;
@@ -2296,6 +2302,7 @@ final class Runtime
                 $this->barsShown[$n->id] = true; // its bars show this frame, as the painter draws them: a press on them is theirs next frame
             }
             $this->scrolls[$n->id] = $n->scroll;
+            if ($n->dismissesKeyboard < INF) { $this->keyboardDismissers[$n->id] = $n->dismissesKeyboard; }
             $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl, $n->barInsets, $n->theme?->scrollbarWidth ?? $this->scrollbarWidth]; // its bars' width, its theme's (Context::themed)
             if ($n->scroll->moving() || ($n->scroll instanceof ListState && $n->scroll->gap > 0)) {
                 $this->needsFrame = true;
@@ -2316,7 +2323,7 @@ final class Runtime
         if ($n->contextPreview) { $this->recordCell = $n; }
         if ($n->color !== null && $n->bgAlpha >= 0.5) { $this->recordColor = $n->color; }
         if ($n->kids !== []) {
-            foreach ($n->pinned === null ? $n->kids : $n->paintOrder() as $k) {
+            foreach ($n->pinned === null && !$n->zOrdered ? $n->kids : $n->paintOrder() as $k) {
                 $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
             }
         }
@@ -3772,20 +3779,32 @@ final class Runtime
      * wheel's notches ($precise false) glide there, as browsers scroll them (mygo's wheelScroll); a touchpad's small
      * moves follow the fingers at once.
      */
+    /** A finger scrolling container $id at height $y takes the focus from a field, which closes the keyboard, where the container closes it from (scrollDismissesKeyboard). */
+    private function dismissKeyboardAt(int $id, float $y): void
+    {
+        if ($y >= ($this->keyboardDismissers[$id] ?? INF) && $this->focus !== null && isset($this->fields[$this->focus])) {
+            $this->focus = null;
+            $this->changed();
+        }
+    }
+
     private function scrollAt(float $x, float $y, float $dx, float $dy, bool $precise = true): void
     {
+        if ($this->touch && $precise && $this->fingerScroll !== null) { // the finger scrolling a container, wherever it is now: there it may close the keyboard
+            $this->dismissKeyboardAt($this->fingerScroll, $y);
+        }
         $under = [];
         foreach ($this->scrolls as $id => $state) {
             $r = $this->rects[$id];
-            if ($this->under($id, $x, $y)) { $under[] = [$r[2] * $r[3], $state, $this->scrollAxes[$id]]; }
+            if ($this->under($id, $x, $y)) { $under[] = [$r[2] * $r[3], $state, $this->scrollAxes[$id], $id]; }
         }
         foreach ($this->areas as $id => $state) {
             $r = $this->rects[$id];
-            if ($this->under($id, $x, $y)) { $under[] = [$r[2] * $r[3], $state, [false, true]]; }
+            if ($this->under($id, $x, $y)) { $under[] = [$r[2] * $r[3], $state, [false, true], $id]; }
         }
         usort($under, fn(array $a, array $b): int => $a[0] <=> $b[0]); // innermost first
         $glide = !$precise && !$this->reduceMotion;
-        foreach ($under as [, $state, $axes]) {
+        foreach ($under as [, $state, $axes, $id]) {
             if ($state instanceof TextState) {
                 $state->scrollY = max(0.0, $state->scrollY - $dy); // the painter clamps it to the text
                 return;
@@ -3813,6 +3832,10 @@ final class Runtime
             if ($sy != 0) { $state->scrollBy($sy); }
             if ($sx != 0) { $state->scrollByX($sx); } // right to left as well: the offset counts from the right, so the content moves as the wheel does
             if ($state->extent()[0] != $was[0] || (($state instanceof ScrollState || $state instanceof ListState) && $state->extentX()[0] != $was[1])) {
+                if ($this->touch && $precise) {
+                    $this->fingerScroll = $id;
+                    $this->dismissKeyboardAt($id, $y);
+                }
                 return;
             }
         }

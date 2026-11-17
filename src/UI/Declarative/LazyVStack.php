@@ -48,6 +48,6 @@ final class LazyVStack extends View
         })->gap($this->spacing);
         if ($bottom) { $n->justify(Node::END); } // shorter than its room, it sits at its end, as SwiftUI's anchored at the bottom
         View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
-        return $n;
+        return View::scrollTraits($c, $env, $n);
     }
 }

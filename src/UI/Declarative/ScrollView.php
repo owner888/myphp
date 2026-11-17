@@ -44,7 +44,7 @@ final class ScrollView extends View
               View::renderAll($c, $env->along(Node::ROW), $this->content);
             $c->end();
             View::takeRoom($n, $env->axis, View::FLEX_X);
-            return $n;
+            return View::scrollTraits($c, $env, $n);
         }
         return self::scroller($c, $env, function (Env $env) use ($c): void {
             View::renderAll($c, $env->along(Node::COLUMN), $this->content);
@@ -85,6 +85,7 @@ final class ScrollView extends View
               $content();
             $c->end();
         }
+        View::scrollTraits($c, $env, $n);
         $n->alignSelf(Node::STRETCH);
         $n->grow = max($n->grow, 1);
         if ($background !== null) { $n->background($background); }

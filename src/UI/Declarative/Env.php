@@ -61,6 +61,12 @@ final class Env
     public ?\MyPHP\UI\Animation $animation = null;
     /** What a pull of the ScrollView or ListView inside runs (refreshable). */
     public ?\Closure $refresh = null;
+    /** Whether the scroll views inside show their bars, and on which axis (scrollIndicators): [visibility, axis], null for the system's. @var ?array{0: \ScrollIndicatorVisibility, 1: \Axis} */
+    public ?array $scrollIndicators = null;
+    /** How a finger scrolling the scroll views inside closes the keyboard (scrollDismissesKeyboard), null for the system's (it does not). */
+    public ?\ScrollDismissesKeyboardMode $scrollDismissesKeyboard = null;
+    /** Whether a List's or Form's own background shows behind its sections (scrollContentBackground), null for the system's (it does). */
+    public ?\Visibility $scrollContentBackground = null;
 
     public function __construct(public Theme $theme) {}
 

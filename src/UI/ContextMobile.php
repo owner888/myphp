@@ -316,10 +316,13 @@ trait ContextMobile
      * (tabsPlacement() not TABS_BOTTOM) it is iPadOS's page sheet instead:
      * centered, 700 wide at most and as high as the window less 40 under
      * its safe area, rounded all round, rising from the bottom; detents are
-     * a phone's, as UIKit's in a regular width. Not mygo's.
+     * a phone's, as UIKit's in a regular width. $cornerRadius rounds it
+     * otherwise (SwiftUI's presentationCornerRadius), null the system's;
+     * $grabber shows the grabber or not (presentationDragIndicator), null
+     * as the system does: on a phone's sheet, not on a page sheet. Not mygo's.
      * @param list<float> $detents
      */
-    public function sheet(bool &$open, Closure $fn, array $detents = [], bool $dismissDisabled = false): ?Node
+    public function sheet(bool &$open, Closure $fn, array $detents = [], bool $dismissDisabled = false, ?float $cornerRadius = null, ?bool $grabber = null): ?Node
     {
         $t = $this->theme;
         $rt = $this->runtime;
@@ -329,7 +332,7 @@ trait ContextMobile
         $key = 'sheet' . $this->sheets++; // each sheet of the frame its own, open or closed: two (one going, one coming) do not share a state
         $tablet = ($rt?->touch ?? false) && $this->tabsPlacement() !== self::TABS_BOTTOM;
         if ($tablet) { $detents = []; } // a page sheet has no detents
-        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet, $dismissDisabled): void {
+        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet, $dismissDisabled, $cornerRadius, $grabber): void {
             $this->key($key);
             $rise = $rt?->motions[$this->upcomingId()]['rise'] ?? null;
             if (!$shown && ($rise === null || ($rise->value <= 0.001 && !$rise->moving))) { // closed, and gone below the window
@@ -363,14 +366,14 @@ trait ContextMobile
               // iOS 26's: short of the whole window, a sheet floats, 8 in from the window's sides and bottom, rounded all round; at the whole, it meets them
               $float = ($rt?->touch ?? false) ? ($detents === [] ? 1.0 : min(1.0, max(0.0, $down / 30))) : 0.0;
               if (!$tablet) { $panel->margin(0, 8 * $float, 8 * $float, 8 * $float); }
-              $corner = ($rt?->touch ?? false) ? 32.0 : 10.0;
+              $corner = $cornerRadius ?? (($rt?->touch ?? false) ? 32.0 : 10.0);
               $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
               if ($rt !== null && !isset($rt->motions[$back->id]['rise'])) { $this->jump($back, 'rise', 0.0); } // shown now: from below the window, not at its place
               $p = $this->animate($back, 'rise', $shown ? 1 : 0, $shown ? 0.35 : 0.3); // up as it shows, back down as it closes
               $panel->translate(0, (1 - $p) * ($tablet ? $this->height : $h) - $down); // rises from below the window; the drag's move is its height's
               $back->alpha = 0.4 * $p; // the window dims as it rises
               $panel->draw(static fn(Painter $pt, array $r) => $pt->displayList()->box($r[0], $r[1], $r[2], $r[3], [$corner, $corner, $corner * $float, $corner * $float], $pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background, 1.0)); // in the dark UIKit's elevated background, a gray over the black
-                if (!$tablet) { // a page sheet has none
+                if ($grabber ?? !$tablet) { // a page sheet has none, unless asked for
                     $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                       $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
                     $this->end();
@@ -701,6 +704,7 @@ trait ContextMobile
               $rows = array_values(array_filter($group->kids, static fn(Node $k): bool => !$k->absolute));
               for ($i = 0, $last = count($rows) - 1; $i < $last; $i++) {
                   $k = $rows[$i];
+                  if (($k->hideSeparators & Node::SEPARATOR_BELOW) !== 0 || ($rows[$i + 1]->hideSeparators & Node::SEPARATOR_ABOVE) !== 0) { continue; } // listRowSeparator(.hidden) of either row
                   $hair = $touch ? 1 / max($p->scale(), 1.0) : 1.0; // a phone's: one pixel, as UIKit's separators on every screen
                   $p->fill([$r[0] + 16, $k->y + $k->h - $hair, $r[2] - ($touch ? 32 : 16), $hair], $p->theme()->border);
               }

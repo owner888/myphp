@@ -186,7 +186,8 @@ or a user's tag.
 | `AsyncImage(url:)` | `AsyncImage($url, content: fn(ImageView $img) => $img->resizable(), placeholder: fn() => ProgressView())` |
 | `PhotosPicker`, `ShareLink`, `.fileImporter` | `PhotosPicker('Select Photo', selection: $app->photo)`, `ShareLink($url, title: 'Share')`, `->fileImporter(isPresented: $app->importing, onCompletion: fn(array $files) => …)` |
 | `ContentUnavailableView` | `ContentUnavailableView('No Mail', systemImage: 'tray', description: '…')`, `ContentUnavailableView::search($query)` |
-| `.help("tip")`, `.accessibilityLabel("Close")` | the same names |
+| `.help("tip")`, `.accessibilityLabel("Close")`, `.accessibilityHidden(true)` | the same names; a hidden view shows but is not read, nor is its text taken into a container's label |
+| `.zIndex(1)` | the same: over the views beside it as they paint; the layout keeps their order |
 | `Form { Section("Account") { LabeledContent("Version", value: "1.0") } }` | `Form()(Section('Account')(LabeledContent('Version', '1.0')))` |
 
 ```php
@@ -215,6 +216,8 @@ and the views of what the framework does: `VideoPlayer`, `WebView`,
 |---|---|
 | `List(items) { Row($0) }` | `ListView($items, id: 'id')(fn(array $item, int $i) => …)`: only the rows in view are built, for millions of rows |
 | `List(selection: $chosen)` | `ListView($items, id: 'id', selection: $app->chosen)` |
+| `.listRowBackground(Color.clear)`, `.listRowInsets(EdgeInsets(…))`, `.listRowSeparator(.hidden, edges: .bottom)` | on the row's view: `->listRowBackground(Color(Color::clear))` (any view, under the row's content), `->listRowInsets(new EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))`, `->listRowSeparator(Visibility::hidden, edges: Edge::bottom)` |
+| `.scrollContentBackground(.hidden)`, `.scrollIndicators(.hidden)`, `.scrollDismissesKeyboard(.immediately)` | the same names: a `Form`'s or `List`'s own background gone (a `->background(…)` of the view shows), no bars, the keyboard closed as a finger scrolls (`interactively`: as it reaches the keyboard) |
 | `ForEach(items, id: \.id) { }` | `Each($items, id: 'id')(fn(array $item) => …)` |
 | `.swipeActions { Button(role: .destructive) }` | `->swipeActions(Button('Delete', role: ButtonRole::destructive, action: …))` on a row: a full swipe performs the first |
 | `.onMove` | `->onMove(fn(array $from, int $to) => …)` on the list |
@@ -270,6 +273,7 @@ property the control sets back to false when the user dismisses it.
 |---|---|
 | `.sheet(isPresented: $open) { }` | `->sheet(isPresented: $app->open, content: fn() => …)`: a dialog on the desktop, a sheet from the bottom on a phone, a page sheet on an iPad |
 | `.presentationDetents([.medium, .large])` | the same on the sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]` |
+| `.presentationCornerRadius(20)`, `.presentationDragIndicator(.hidden)` | the same on the sheet's content |
 | `.alert("Title", isPresented:) { Button("OK") {} } message: { }` | `->alert('Title', isPresented: $app->asking, actions: [Button(…), …], message: '…')` |
 | `.confirmationDialog` | `->confirmationDialog('Title', isPresented: $app->asking, actions: [Button(…), Button('Cancel', role: ButtonRole::cancel)])` |
 | `.popover(isPresented:)` | `->popover(isPresented: $app->open, content: fn() => …)` |

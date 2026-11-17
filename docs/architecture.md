@@ -8896,6 +8896,29 @@ changed, which no hot reload can take.
   draws nothing runs no afterFrame) and on close. iOS keeps corrections
   off: its document is the composition alone, so the keyboard's
   corrections would replace the wrong text.
+- Ten declarative modifiers were accepted and did nothing (`return
+  $this`): zIndex, scrollIndicators, scrollDismissesKeyboard,
+  accessibilityHidden, listRowBackground, listRowInsets,
+  listRowSeparator, scrollContentBackground, presentationCornerRadius,
+  presentationDragIndicator. Rule: each is SwiftUI's now, and
+  `tests/modifiers_test.php` fails on any declarative modifier whose body
+  is only `return $this`. zIndex orders `Node::paintOrder()` (a stable
+  sort, only for a parent marked `zOrdered`), which the painter and
+  `Runtime::record` (pointer order) follow; the layout keeps the views'
+  order. The scroll ones go through the environment to
+  `View::scrollTraits` on each scroll container: its bars
+  (`scrollbars(false)`), and `Node::$dismissesKeyboard`, the height from
+  which a finger scrolling it takes the focus from a field: -INF at once,
+  the keyboard's top interactively; `Runtime` keeps the container a
+  finger scrolls until it lifts (`scrollEnd`), so a finger moved on past
+  its edge onto the keyboard closes it. accessibilityHidden leaves the
+  node and what is inside it out of the tree and of a container's label
+  (`Node::$accessHidden`). A row's background is the cell's color, or a
+  view built into the cell (`Context::into`) under its content, absolute
+  and as large; its insets replace the cell's padding before it goes to a
+  control across the cell; its separators (`Node::$hideSeparators`) are
+  skipped by the section's and the list row's hairlines, the one above a
+  row by the row before it.
 
 ## The Windows backend, stage by stage
 
@@ -9297,6 +9320,10 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is
 known to fall short of what it could be is here.
 
+- Views that overlap give a tap to the one built first, not to the one on
+  top: `ZStack(A, B)` taps A where B covers it (`Runtime::clicked`
+  answers the first node to ask that the point is under; only overlays
+  occlude). SwiftUI's top view takes it unless it allows no hit testing.
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
   second at 1000 rows); the shaped-line cache is swept by age but the
   burst itself is CoreText's.

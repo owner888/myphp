@@ -397,6 +397,13 @@ final class Context
         return array_last($this->stack);
     }
 
+    /** @internal Builds what $fn builds into $n, a container already built and ended, after the children it has. */
+    public function into(Node $n, Closure $fn): void
+    {
+        $this->stack[] = $n;
+        try { $fn(); } finally { array_pop($this->stack); }
+    }
+
     /** @internal Attaches container $n and pushes it onto the container stack; close with end(). */
     public function open(Node $n): Node
     {
