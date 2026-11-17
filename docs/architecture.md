@@ -7958,6 +7958,14 @@ machine that had built one: `microLacks` now reads the version it reports
 and one of another is fetched or built again (not one's own, `$MYPHP_MICRO`).
 The prebuilt one is published as `myphp-micro-<os>-<arch>-php-8.5.sfx`.
 
+The release held a static PHP of Apple Silicon alone, so an app for Linux or
+an Intel Mac could not be built on another machine. The runtimes' workflow
+(`phone-runtimes.yml`, job `micro`) builds one on a runner of each of the
+four desktop platforms with `myphp micro` and uploads it; its `targets`
+input builds the phones' or the desktops' alone. On Windows `myphp doctor
+--fix` installs PHP 8.5 now (winget's `PHP.PHP.8.5`), the PHP a Windows app
+carries being the one that builds it.
+
 `myphp build -platform darwin/arm64,android/arm64,ios/arm64` left only the
 iOS app: the summary listed the .app, the .dmg and the APK at 0 KB, for
 they were gone. `scripts/package-ios-app.sh` began with `rm -rf` of its
@@ -8919,6 +8927,22 @@ changed, which no hot reload can take.
   control across the cell; its separators (`Node::$hideSeparators`) are
   skipped by the section's and the list row's hairlines, the one above a
   row by the row before it.
+- On iOS every HTTP request failed: "cannot load libcurl (the app's own):
+  Failed resolving C function 'curl_easy_init'". Cause: `Curl::ffi()`
+  finds libcurl in the app's own process there (FFI::cdef without a
+  library), linked in whole (`-force_load`); since the launcher was linked
+  with `-exported_symbols_list` (to keep the `myphp_ios_*` bridge through
+  `-dead_strip` and `strip -x`), only what the list names stays exported,
+  and the list held the bridge alone, so the curl_* functions were gone
+  from the app. An app packaged before the list exported them, as every
+  global symbol is by default. Rule: what FFI finds in the process is in
+  the list: `package-ios-app.sh` adds `_curl_*` (ld takes patterns there;
+  libcurl's internal functions are `Curl_*`), and
+  `tests/ios_exports_test.php` checks every function Native\Curl and
+  Native\iOS declare against the list as the script makes it. Not
+  `grep curl_ Curl.php`: it also takes `curl_slist` and the
+  `myphp_curl_*` typedefs, which are no symbols, and ld fails on a name
+  the list has that the app has not.
 
 ## The Windows backend, stage by stage
 
