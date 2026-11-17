@@ -2056,10 +2056,12 @@ function appPhar(string $appDir, string $entry): string
 // No opcache in the static launcher: the micro SAPI's opcache crashes on
 // phar:// timestamps (SIGBUS in zend_get_file_handle_timestamp) and its JIT
 // segfaults on arm64 macOS, so the micro build runs the plain interpreter.
+// Tried again with a static PHP 8.5.12, where OPcache is part of PHP: enabling it still stops the app before its
+// first line, a plain script after micro.sfx too, with no phar (docs/architecture.md).
 const MICRO_INI = ['ffi.enable=1', 'memory_limit=512M'];
 // What the framework calls: xmlreader/dom/simplexml for SVG icons, curl+openssl for URLSession/fetch/updates, sockets for single-instance, filter, tokenizer for the views' closures (Reactive\Observer, ViewFile: PhpToken); LocalePolyfill covers I18n without the 34 MB ICU table.
 const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json,xml,xmlreader,xmlwriter,dom,simplexml,curl,openssl,sockets,filter,zlib,tokenizer';
-const MICRO_PHP = '8.4';
+const MICRO_PHP = '8.5'; // the phones' runtimes are 8.5 too
 /**
  * The patch spc applies to phpmicro (`spc build -P`) as `myphp micro`
  * builds it: a __DATA,__micro_sfxsize section, which phpmicro reads for
@@ -2120,7 +2122,7 @@ function ensureMicro(?string $phpVersion = null, ?string $os = null, ?string $ar
     }
     $own = getenv('MYPHP_MICRO');
     $micro = $own ?: (getenv('HOME') . '/.myphp/micro.sfx');
-    $lacks = is_file($micro) ? microLacks($micro) : '';
+    $lacks = is_file($micro) ? microLacks($micro, $own === false ? $php : null) : ''; // one's own micro.sfx is of the version one chose
     if (is_file($micro) && $lacks === '') {
         return ['', $micro]; // spc is fetched when there is something to build
     }
@@ -2135,7 +2137,7 @@ function ensureMicro(?string $phpVersion = null, ?string $os = null, ?string $ar
         @mkdir(dirname($micro), 0755, true);
         if (quiet(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '120', '-o', $micro, $prebuiltUrl]) === 0 && is_file($micro)) {
             chmod($micro, 0755);
-            if (microLacks($micro) === '') {
+            if (microLacks($micro, $php) === '') {
                 echo "myphp: downloaded prebuilt micro.sfx ($osName-$archName)\n";
                 return ['', $micro];
             }
@@ -2159,7 +2161,7 @@ function ensureMicro(?string $phpVersion = null, ?string $os = null, ?string $ar
     }
     $built = "$build/buildroot/bin/micro.sfx";
     is_file($built) || fail("spc built nothing at $built");
-    ($lacks = microLacks($built)) === '' || fail("spc built $built, which $lacks");
+    ($lacks = microLacks($built, $php)) === '' || fail("spc built $built, which $lacks");
     copy($built, $micro);
     chmod($micro, 0755);
     echo "myphp: micro.sfx ready at $micro\n";
@@ -2200,16 +2202,17 @@ function foreignMicro(string $os, string $arch, string $php): string
  * What the micro.sfx at $path lacks that MyPHP's apps need, '' for
  * nothing: on macOS the section MICRO_PATCH adds, which a signed app
  * needs; on Linux loading libraries through FFI, which a PHP linked
- * statically with musl cannot; and MICRO_EXTENSIONS, which it reports run
- * with a script after it.
+ * statically with musl cannot; MICRO_EXTENSIONS, which it reports run
+ * with a script after it; and, when $php names one, being of that version
+ * of PHP, so that one kept from an earlier myphp is replaced.
  */
-function microLacks(string $path): string
+function microLacks(string $path, ?string $php = null): string
 {
     if (PHP_OS_FAMILY !== 'Linux' && !MachO::hasMicroSection($path)) {
         return 'has no __DATA,' . MachO::MICRO_SECTION . ' section, which a signed app needs';
     }
     $probe = tempnam(sys_get_temp_dir(), 'myphp-micro');
-    $script = '<?php echo implode(",", get_loaded_extensions());';
+    $script = '<?php echo implode(",", get_loaded_extensions()), ",php", PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;';
     if (PHP_OS_FAMILY === 'Linux') {
         $script = MachO::microPayload('ffi.enable=1', $script . ' try { FFI::cdef("int getpid(void);", "libc.so.6"); echo ",dlopen"; } catch (Throwable) {}');
     }
@@ -2218,6 +2221,10 @@ function microLacks(string $path): string
     $loaded = array_map('strtolower', explode(',', (string)shell_exec(escapeshellarg($probe) . ' 2>/dev/null')));
     unlink($probe);
     $missing = array_diff(explode(',', MICRO_EXTENSIONS), $loaded);
+    $is = implode('', array_filter($loaded, fn(string $l) => preg_match('/^php\d+\.\d+$/', $l) === 1));
+    if ($missing === [] && $php !== null && $is !== '' && $is !== 'php' . implode('.', array_slice(explode('.', $php), 0, 2))) {
+        return 'is of PHP ' . substr($is, 3) . ", not $php";
+    }
     if ($missing === [] && PHP_OS_FAMILY === 'Linux' && !in_array('dlopen', $loaded, true)) {
         return 'cannot load libraries through FFI (a PHP linked statically with musl): build it against glibc, SPC_LIBC=glibc';
     }
@@ -2226,7 +2233,7 @@ function microLacks(string $path): string
 
 function micro(array $args): void
 {
-    help($args, "micro [-php 8.4] [-manual]\n\nGets micro.sfx once, the static PHP that the apps myphp build makes carry:\nthe prebuilt one of this machine, else static-php-cli builds it; -manual\nprints the steps of building it instead.");
+    help($args, "micro [-php 8.5] [-manual]\n\nGets micro.sfx once, the static PHP that the apps myphp build makes carry:\nthe prebuilt one of this machine, else static-php-cli builds it; -manual\nprints the steps of building it instead.");
     if (flag($args, 'manual')) {
         $ext = MICRO_EXTENSIONS; $php = MICRO_PHP; $url = SPC_NIGHTLY . 'spc-macos-aarch64';
         echo <<<TXT

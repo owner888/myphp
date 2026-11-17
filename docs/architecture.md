@@ -7926,6 +7926,38 @@ than falling back to exec. `darwin/universal` has no micro (the payload
 goes inside one thin binary's __LINKEDIT) and stops too. What it costs: the
 static PHP runs without OPcache and the JIT (`MICRO_INI`'s note).
 
+What that costs, measured with `tests/bench.php` on the developer's Mac
+(Apple Silicon, v1.200) with the plain interpreter and with the flags
+`myphp run` gives (`PHP_FLAGS`): a frame takes 1.1 to 1.6 times as long
+without the JIT. Widgets General 1.29 against 1.13 ms, Advanced 1.74
+against 1.22, a million rows' list 0.54 against 0.35, their table of five
+columns 1.98 against 1.26, 2000 texts not virtualized 6.16 against 4.19,
+the declarative 10×25 rebuilt in full 4.44 against 2.76 and with Computed
+0.26 against 0.24; the SVG rasterizer is the same either way. The heaviest
+frame without it is 6.2 ms of the 16.7 a frame has at 60 a second, so the
+UI does not need the JIT; an app's own computing each frame is not in
+these numbers.
+
+Whether a static PHP 8.5 would take OPcache, which is part of PHP there,
+was tried on the same Mac (`myphp micro -php 8.5` from source: 8.5.12, the
+patch for the signature applying as it is; the empty project's .app 34.1 MB
+against 31.8). Without OPcache the app runs. With `opcache.enable=1` and
+`opcache.enable_cli=1` in its INI, timestamps validated or not, it dies of
+a bus error before the first line of app.php, the JIT on or off. It is not
+the phar: micro.sfx with that INI and a one-line script after it, no phar,
+dies too (a segmentation fault), and the same file without the two lines
+prints its version. So OPcache in the micro SAPI on arm64 macOS is what
+fails, in 8.4 and 8.5 alike, and a static app stays on the interpreter;
+an app that needed the JIT would have to carry a PHP of its own beside it,
+as Windows' does.
+
+The static PHP is 8.5 since (`MICRO_PHP`), the version of the phones'
+runtimes, 2.3 MB more in the .app. A micro.sfx kept in `~/.myphp` was
+taken as it was whatever its version, so the change would have reached no
+machine that had built one: `microLacks` now reads the version it reports
+and one of another is fetched or built again (not one's own, `$MYPHP_MICRO`).
+The prebuilt one is published as `myphp-micro-<os>-<arch>-php-8.5.sfx`.
+
 `myphp build -platform darwin/arm64,android/arm64,ios/arm64` left only the
 iOS app: the summary listed the .app, the .dmg and the APK at 0 KB, for
 they were gone. `scripts/package-ios-app.sh` began with `rm -rf` of its
