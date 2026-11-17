@@ -342,7 +342,11 @@ use MyPHP\UI\{Content, TextState};
         same(["$tmp/PhoneDemo"], Bundle::command(), 'Bundle::command() points to <bundle>/<Executable> on iOS');
         same(false, App::isDev(), 'MyPHPProduction in <bundle>/Info.plist turns App::isDev() off');
 
-        check($throwsUnsupported(fn() => App::setMenu(new Menu([new MenuItem('File')]))), 'App::setMenu throws Unsupported on iOS');
+        $menuWas = App::menu();
+        $phoneMenu = new Menu([new MenuItem('File')]);
+        check(!$throwsUnsupported(fn() => App::setMenu($phoneMenu)), 'App::setMenu is no error on iOS: an app sets its menus on every platform, as SwiftUI\'s commands, which an iPhone does not show');
+        same($phoneMenu, App::menu(), 'and keeps the menu set');
+        if ($menuWas !== null) { App::setMenu($menuWas); } else { (new \ReflectionProperty(App::class, 'menu'))->setValue(null, null); }
         same(null, Menu::default(), 'Menu::default() is null on iOS');
         check($throwsUnsupported(fn() => Dock::setMenu(new Menu())), 'Dock::setMenu throws Unsupported on iOS');
         check($throwsUnsupported(fn() => Dock::hide()), 'Dock::hide throws Unsupported on iOS');

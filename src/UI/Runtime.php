@@ -41,7 +41,7 @@ final class Runtime
     private array $areas = [];
     /** Set by a frame that needs another one right after (a list left a gap). */
     public bool $needsFrame = false;
-    private array $clicks = [];     // [x, y, mods] of left mouse-ups this frame
+    private array $clicks = [];     // [x, y, mods, takers] of left mouse-ups this frame (takers: clickTakers())
     /** The modifiers of the click clicked() last took (mygo's ClickModifiers): Shift, Command. */
     public int $clickMods = 0;
     private array $rightClicks = []; // [x, y] of right mouse-ups this frame
@@ -708,7 +708,7 @@ final class Runtime
                     unset($p);
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
-                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif ($e[3] === 2) { $this->middleClicks[] = [$e[1], $e[2]]; } elseif (!$moved && $pressedHere) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
+                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif ($e[3] === 2) { $this->middleClicks[] = [$e[1], $e[2]]; } elseif (!$moved && $pressedHere) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS, $this->clickTakers($e[1], $e[2])]; }
                     break;
                 case 'drag':
                     if ($this->pointerPress !== null && $this->pointerPress['down']) {
@@ -1263,6 +1263,33 @@ final class Runtime
             }
         }
         return $best;
+    }
+
+    /**
+     * The nodes a click at ($x, $y) goes to, by last frame's: the topmost node
+     * there taking the pointer (pressTarget(), last painted, a zIndex
+     * counted), and those around it up to the first that takes clicks, as a
+     * button around the label it focuses; a view under it, as the one a ZStack
+     * builds first under the one it builds after, takes none, as SwiftUI's
+     * topmost view takes the tap. Null for no such node, which then lets the
+     * first node asking that the point is under take it (the first frame's).
+     *
+     * @return array<int, true>|null
+     */
+    private function clickTakers(float $x, float $y): ?array
+    {
+        $top = $this->pressTarget($x, $y);
+        if ($top === null) {
+            return null;
+        }
+        $takers = [];
+        for ($id = $top, $n = 0; $id !== 0 && $n < 1024; $id = $this->parents[$id] ?? 0, $n++) {
+            $takers[$id] = true;
+            if (isset($this->clickable[$id])) {
+                break;
+            }
+        }
+        return $takers;
     }
 
     /** Whether $value is of $type: a class or interface it is an instance of, or one of PHP's types as get_debug_type names them ('string', 'int', 'array'). */
@@ -3003,8 +3030,8 @@ final class Runtime
             $this->clickMods = 0; $this->clickModsOf[$id] = 0; // the keys click with none
             return true;
         }
-        foreach ($this->clicks as $i => [$x, $y, $mods]) {
-            if ($this->under($id, $x, $y)) {
+        foreach ($this->clicks as $i => [$x, $y, $mods, $takers]) {
+            if ($takers !== null ? isset($takers[$id]) : $this->under($id, $x, $y)) {
                 unset($this->clicks[$i]);
                 $this->consumed = true;
                 $this->clickMods = $mods; $this->clickModsOf[$id] = $mods;

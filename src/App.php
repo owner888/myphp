@@ -585,16 +585,18 @@ final class App
     {
         if (self::$ready) {
             self::installMenu(self::$menu ?? Menu::default());
-            Dock::setMenu(Dock::menu());
+            if (!self::isIOS() && !self::isAndroid()) { Dock::setMenu(Dock::menu()); } // a phone has no Dock
         }
     }
 
-    /** The menu bar; Menu::default() unless set (none off macOS, but for an app with documents). Can be set before or after run(). */
+    /**
+     * The menu bar; Menu::default() unless set (none off macOS, but for an
+     * app with documents). Can be set before or after run(). A phone shows
+     * none, and the app's menus are set to no effect there, as SwiftUI's
+     * commands on an iPhone: an app sets the same on every platform.
+     */
     public static function setMenu(Menu $menu): void
     {
-        if (self::isIOS() || self::isAndroid()) {
-            throw new Platform\Unsupported('the menu bar is not supported on a phone');
-        }
         self::$menu = $menu;
         if (self::$ready) {
             self::installMenu($menu);

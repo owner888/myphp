@@ -8942,6 +8942,23 @@ changed, which no hot reload can take.
   control across the cell; its separators (`Node::$hideSeparators`) are
   skipped by the section's and the list row's hairlines, the one above a
   row by the row before it.
+- Views that overlap gave a tap to the one built first, not to the one on
+  top: `ZStack(A, B)` tapped A where B covers it, as `Runtime::clicked`
+  answered the first node to ask that the point was under. Rule: a click
+  is given its takers as it comes (`Runtime::clickTakers`, by last
+  frame's): the topmost node there taking the pointer (`pressTarget`, the
+  last recorded, which is the last painted, a `zIndex` counted) and those
+  around it up to the first taking clicks, as a button around the label
+  it focuses; `clicked()` answers those alone. A view around a button
+  that takes taps does not get the button's; one with
+  `allowsHitTesting(false)` lets it through. A click on no such node (the
+  first frame's) goes as before. `tests/hit_test.php`.
+- `App::setMenu` threw `Platform\Unsupported` on a phone, so an app
+  setting its menus as it does on a desktop (examples/http) did not start
+  there. SwiftUI's `.commands` are no error on an iPhone, which shows none;
+  so is the menu here: kept (`App::menu()`), installed nowhere (the phone
+  backends' `setApplicationMenu` is empty), and `refreshMenus` leaves the
+  Dock, which a phone has not, alone.
 - On iOS every HTTP request failed: "cannot load libcurl (the app's own):
   Failed resolving C function 'curl_easy_init'". Cause: `Curl::ffi()`
   finds libcurl in the app's own process there (FFI::cdef without a
@@ -9367,10 +9384,10 @@ HLSL by d3dcompiler_47), and Windows calling a COM object of PHP's
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is
 known to fall short of what it could be is here.
 
-- Views that overlap give a tap to the one built first, not to the one on
-  top: `ZStack(A, B)` taps A where B covers it (`Runtime::clicked`
-  answers the first node to ask that the point is under; only overlays
-  occlude). SwiftUI's top view takes it unless it allows no hit testing.
+- A view that takes no taps over one that does (a `Color` or a `Text` over
+  a button) does not keep the tap from it, as SwiftUI's would: what is
+  under a tap is asked of the nodes taking the pointer (and overlays),
+  not of what paints.
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
   second at 1000 rows); the shaped-line cache is swept by age but the
   burst itself is CoreText's.

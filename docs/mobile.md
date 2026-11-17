@@ -46,9 +46,11 @@ fonts and fallbacks; nothing is bundled.
 
 ## What a phone does not have
 
-One full-screen window: a second `new Window()`, the menu bar, the tray,
-global shortcuts, the Dock and window placement throw
-`Platform\Unsupported` — never ignored. So do `Dialog::prompt` and
+One full-screen window: a second `new Window()`, the tray, global
+shortcuts, the Dock and window placement throw `Platform\Unsupported` —
+never ignored. The menu bar is no error: `App::setMenu` is set to no
+effect, as SwiftUI's `.commands` on an iPhone, so an app sets its menus
+on every platform alike. So do `Dialog::prompt` and
 `Dialog::login` (ask in the window, with inputs), `Dialog::open` of a
 directory, and on iOS `Dialog::save` (write the file, then share it).
 

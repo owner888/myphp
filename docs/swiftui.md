@@ -187,7 +187,7 @@ or a user's tag.
 | `PhotosPicker`, `ShareLink`, `.fileImporter` | `PhotosPicker('Select Photo', selection: $app->photo)`, `ShareLink($url, title: 'Share')`, `->fileImporter(isPresented: $app->importing, onCompletion: fn(array $files) => …)` |
 | `ContentUnavailableView` | `ContentUnavailableView('No Mail', systemImage: 'tray', description: '…')`, `ContentUnavailableView::search($query)` |
 | `.help("tip")`, `.accessibilityLabel("Close")`, `.accessibilityHidden(true)` | the same names; a hidden view shows but is not read, nor is its text taken into a container's label |
-| `.zIndex(1)` | the same: over the views beside it as they paint; the layout keeps their order |
+| `.zIndex(1)` | the same: over the views beside it as they paint, and takes the tap where it covers them; the layout keeps their order |
 | `Form { Section("Account") { LabeledContent("Version", value: "1.0") } }` | `Form()(Section('Account')(LabeledContent('Version', '1.0')))` |
 
 ```php
