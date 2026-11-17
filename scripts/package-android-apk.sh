@@ -12,15 +12,37 @@ PROJECT_DIR="${1:-}"
 OUTPUT_APK="${2:-${BUILD_DIR}/myphp-debug.apk}"
 APP_NAME="${3:-}"
 
-SDK_DIR="${ANDROID_HOME:-${HOME}/Library/Android/sdk}"
+if [ -n "${ANDROID_HOME:-}" ] && [ -d "${ANDROID_HOME}" ]; then
+    SDK_DIR="${ANDROID_HOME}"
+elif [ -d "${HOME}/Library/Android/sdk" ]; then
+    SDK_DIR="${HOME}/Library/Android/sdk"
+elif [ -d "${HOME}/android-sdk" ]; then
+    SDK_DIR="${HOME}/android-sdk"
+else
+    SDK_DIR="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+fi
 BUILD_TOOLS_DIR="${SDK_DIR}/build-tools/35.0.0"
+if [ ! -d "$BUILD_TOOLS_DIR" ]; then
+    BUILD_TOOLS_DIR=$(ls -1d "${SDK_DIR}/build-tools/"* | sort -V | tail -n 1)
+fi
 PLATFORM_JAR="${SDK_DIR}/platforms/android-34/android.jar"
 if [ ! -f "$PLATFORM_JAR" ]; then
     PLATFORM_JAR=$(ls -1 "${SDK_DIR}/platforms/"*/android.jar | sort -V | tail -n 1)
 fi
 
-JAVAC="/opt/homebrew/opt/openjdk@17/bin/javac"
-KEYTOOL="/opt/homebrew/opt/openjdk@17/bin/keytool"
+if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/javac" ]; then
+    JAVAC="${JAVA_HOME}/bin/javac"
+    KEYTOOL="${JAVA_HOME}/bin/keytool"
+elif [ -x "/opt/homebrew/opt/openjdk@17/bin/javac" ]; then
+    JAVAC="/opt/homebrew/opt/openjdk@17/bin/javac"
+    KEYTOOL="/opt/homebrew/opt/openjdk@17/bin/keytool"
+elif [ -x "/opt/homebrew/opt/openjdk@21/bin/javac" ]; then
+    JAVAC="/opt/homebrew/opt/openjdk@21/bin/javac"
+    KEYTOOL="/opt/homebrew/opt/openjdk@21/bin/keytool"
+else
+    JAVAC="$(command -v javac)"
+    KEYTOOL="$(command -v keytool)"
+fi
 AAPT2="${BUILD_TOOLS_DIR}/aapt2"
 D8="${BUILD_TOOLS_DIR}/d8"
 ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
@@ -53,7 +75,7 @@ echo "==> Compiling resources with aapt2..."
 echo "==> Linking APK and generating R.java..."
 cp "${TEMPLATE_DIR}/AndroidManifest.xml" "${WORK_DIR}/AndroidManifest.xml"
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" != "1" ]; then
-    sed -i '' 's/<application /<application android:extractNativeLibs="true" /' "${WORK_DIR}/AndroidManifest.xml"
+    php -r '$f=$argv[1]; file_put_contents($f, str_replace("<application ", "<application android:extractNativeLibs=\"true\" ", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
 fi
 DEBUG_MODE=""
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi

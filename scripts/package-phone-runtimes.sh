@@ -20,8 +20,11 @@ if [ -f "${ANDROID_PHP}/libs/libphp.so" ]; then
     tar -czf "${ARCHIVE}" \
         "${ANDROID_PHP}/libs/libphp.so" \
         "${ANDROID_PHP}/main"/*.h \
+        "${ANDROID_PHP}/main/streams"/*.h \
         "${ANDROID_PHP}/Zend"/*.h \
+        "${ANDROID_PHP}/Zend/Optimizer"/*.h \
         "${ANDROID_PHP}/TSRM"/*.h \
+        "${ANDROID_PHP}/sapi/embed"/*.h \
         "${ANDROID_PHP}/ext/standard"/*.h \
         "build/android/sysroot/include"
     ls -lh "${ARCHIVE}"

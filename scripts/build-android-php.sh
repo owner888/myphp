@@ -17,9 +17,14 @@ ANDROID_API=31
 
 # Detect NDK
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
-    if [ -d "${HOME}/Library/Android/sdk/ndk" ]; then
-        LATEST_NDK=$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)
-        ANDROID_NDK_HOME="$LATEST_NDK"
+    if [ -n "${ANDROID_NDK_ROOT:-}" ] && [ -d "${ANDROID_NDK_ROOT}" ]; then
+        ANDROID_NDK_HOME="${ANDROID_NDK_ROOT}"
+    elif [ -n "${ANDROID_HOME:-}" ] && [ -d "${ANDROID_HOME}/ndk" ]; then
+        ANDROID_NDK_HOME="$(ls -1d "${ANDROID_HOME}/ndk/"* | sort -V | tail -n 1)"
+    elif [ -d "${HOME}/Library/Android/sdk/ndk" ]; then
+        ANDROID_NDK_HOME="$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)"
+    elif [ -d "${HOME}/android-sdk/ndk" ]; then
+        ANDROID_NDK_HOME="$(ls -1d "${HOME}/android-sdk/ndk/"* | sort -V | tail -n 1)"
     else
         echo "Error: ANDROID_NDK_HOME not set and no NDK found in standard locations" >&2
         exit 1
@@ -45,13 +50,29 @@ mkdir -p "$BUILD_DIR" "$SYSROOT"
 # Fast-path: download prebuilt Android PHP runtime archive BEFORE compiling any dependencies
 PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"
 PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-android-arm64-php-${PHP_VERSION}.tar.gz"
-if [ ! -f "${PHP_DIR}/libs/libphp.so" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
+ensure_php_embed_headers() {
+    if [ ! -f "${PHP_DIR}/main/streams/php_stream_context.h" ] || [ ! -f "${PHP_DIR}/sapi/embed/php_embed.h" ]; then
+        echo "==> Fetching missing PHP ${PHP_VERSION} embed sub-headers..."
+        curl -fsSL "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz" \
+            | tar -xz -C "${BUILD_DIR}" \
+                "php-${PHP_VERSION}/main/streams" \
+                "php-${PHP_VERSION}/Zend/Optimizer" \
+                "php-${PHP_VERSION}/sapi/embed"
+    fi
+}
+
+if [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
+    if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
+        ensure_php_embed_headers
+        exit 0
+    fi
     echo "==> Trying prebuilt Android PHP runtime (android-arm64)..."
     TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
         echo "==> Extracting prebuilt Android runtime..."
         tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
         if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
+            ensure_php_embed_headers
             touch "${PHP_DIR}/libs/libphp.so"
             echo "==> Prebuilt Android PHP runtime ready:"
             ls -lh "${PHP_DIR}/libs/libphp.so"

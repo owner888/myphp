@@ -10,7 +10,15 @@ OUT_DIR="${BUILD_DIR}/libs/arm64-v8a"
 ANDROID_API=31
 
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
-    ANDROID_NDK_HOME="$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)"
+    if [ -n "${ANDROID_NDK_ROOT:-}" ] && [ -d "${ANDROID_NDK_ROOT}" ]; then
+        ANDROID_NDK_HOME="${ANDROID_NDK_ROOT}"
+    elif [ -n "${ANDROID_HOME:-}" ] && [ -d "${ANDROID_HOME}/ndk" ]; then
+        ANDROID_NDK_HOME="$(ls -1d "${ANDROID_HOME}/ndk/"* | sort -V | tail -n 1)"
+    elif [ -d "${HOME}/Library/Android/sdk/ndk" ]; then
+        ANDROID_NDK_HOME="$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* | sort -V | tail -n 1)"
+    elif [ -d "${HOME}/android-sdk/ndk" ]; then
+        ANDROID_NDK_HOME="$(ls -1d "${HOME}/android-sdk/ndk/"* | sort -V | tail -n 1)"
+    fi
 fi
 
 TOOLCHAIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/darwin-x86_64"
