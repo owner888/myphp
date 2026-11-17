@@ -1686,12 +1686,25 @@ function buildLinuxExecLauncher(string $out, string $php, string $entry, string 
     $code === 0 || fail('compiling the launcher failed');
 }
 
-/** The Linux app's launcher as one static binary: micro.sfx, then the INI the app needs and the app as a phar, which phpmicro reads after itself. */
+/** The Linux app's launcher as one static binary: micro.sfx, then the INI the app needs and the app as a phar, which phpmicro reads after itself; copied, not read, as the phar is as large as the app. */
 function buildLinuxMicroLauncher(string $out, string $appDir, string $entry, string $micro): void
 {
-    $sfx = @file_get_contents($micro);
-    $sfx !== false || fail("cannot read $micro");
-    file_put_contents($out, $sfx . MachO::microPayload(implode("\n", MICRO_INI), appPhar($appDir, $entry))) !== false || fail("cannot write $out");
+    is_file($micro) || fail("cannot read $micro");
+    $phar = appPhar($appDir, $entry);
+    try {
+        copy($micro, $out) || fail("cannot write $out");
+        $f = fopen($out, 'ab') ?: fail("cannot write $out");
+        try {
+            fwrite($f, MachO::microHead(implode("\n", MICRO_INI)));
+            MachO::append($f, $phar, (int)filesize($phar), $out);
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        } finally {
+            fclose($f);
+        }
+    } finally {
+        unlink($phar);
+    }
     chmod($out, 0755);
 }
 
@@ -2024,18 +2037,20 @@ function buildExecLauncher(string $out, string $entry, string $arch, ?string $pr
  */
 function buildMicroLauncher(string $out, string $appDir, string $entry, string $micro): void
 {
-    $phar = appPhar($appDir, $entry);
     $sfx = @file_get_contents($micro);
     $sfx !== false || fail("cannot read $micro");
+    $phar = appPhar($appDir, $entry);
     try {
-        MachO::embed($sfx, MachO::microPayload(implode("\n", MICRO_INI), $phar), $out);
+        MachO::embed($sfx, MachO::microHead(implode("\n", MICRO_INI)), $out, $phar); // the phar copied, not read: it is as large as the app
     } catch (RuntimeException $e) {
         fail("$micro: " . $e->getMessage());
+    } finally {
+        unlink($phar);
     }
     chmod($out, 0755);
 }
 
-/** The app in $appDir packed as a phar whose stub runs $entry (or the terminal plugin's spawn.php), for phpmicro. */
+/** The app in $appDir packed as a phar whose stub runs $entry (or the terminal plugin's spawn.php), for phpmicro: the file's path, which the caller removes. */
 function appPhar(string $appDir, string $entry): string
 {
     $phar = sys_get_temp_dir() . '/myphp-' . getmypid() . '.phar';
@@ -2045,11 +2060,7 @@ function appPhar(string $appDir, string $entry): string
     \$p->setStub("<?php Phar::mapPhar('app.phar'); if ((\\\$argv[1] ?? '') === '--myphp-pty-spawn') { require 'phar://app.phar/myphp/src/Plugins/Terminal/Pty/spawn.php'; exit(127); } require 'phar://app.phar/$entry'; __HALT_COMPILER();");
     PHP]);
     $code === 0 || fail('building the phar failed');
-    try {
-        return (string)file_get_contents($phar);
-    } finally {
-        unlink($phar);
-    }
+    return $phar;
 }
 
 // ---- micro --------------------------------------------------------------

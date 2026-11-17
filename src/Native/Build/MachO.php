@@ -172,10 +172,18 @@ final class MachO
      * __DATA,__micro_sfxsize section says where it starts and ends, which
      * phpmicro reads instead of the end of __LINKEDIT. The executable is
      * written to $out unsigned, a piece at a time (micro.sfx with ICU is
-     * some 50 MB); signing the bundle signs it.
+     * some 50 MB); signing the bundle signs it. The payload is $payload
+     * followed by the file $then, when given, copied a piece at a time
+     * rather than read: an app's phar is as large as the app, and was held
+     * twice over (myphp build of a large project ran out of memory).
      */
-    public static function embed(string $sfx, string $payload, string $out): void
+    public static function embed(string $sfx, string $payload, string $out, ?string $then = null): void
     {
+        $more = 0;
+        if ($then !== null) {
+            $more = @filesize($then);
+            $more !== false || throw new RuntimeException("cannot read $then");
+        }
         [$cpu, $ncmds, $sizeofcmds, $linkedit, $section, $signature] = self::microLayout($sfx);
         if ($section === null || $section['size'] < 16) {
             throw new RuntimeException('micro.sfx has no __DATA,' . self::MICRO_SECTION . ' section of 16 bytes, which `myphp micro` links into it');
@@ -205,7 +213,7 @@ final class MachO
         if ($at < strlen($head) || $at + 16 > $end) {
             throw new RuntimeException('micro.sfx has its ' . self::MICRO_SECTION . ' section outside its data');
         }
-        $filesize += strlen($payload);
+        $filesize += strlen($payload) + $more;
         $page = $cpu === self::CPU_ARM64 ? 0x4000 : 0x1000;
         $head = substr_replace($head, pack('PPP', intdiv($filesize + $page - 1, $page) * $page, $fileoff, $filesize), $linkedit + 32, 24);
         $f = @fopen($out, 'wb') ?: throw new RuntimeException("cannot write $out");
@@ -217,11 +225,25 @@ final class MachO
             };
             fwrite($f, $head);
             $put(strlen($head), $at);
-            fwrite($f, pack('JJ', $end, $end + strlen($payload)));
+            fwrite($f, pack('JJ', $end, $end + strlen($payload) + $more));
             $put($at + 16, $end);
             fwrite($f, $payload) === strlen($payload) || throw new RuntimeException("cannot write $out");
+            if ($then !== null) {
+                self::append($f, $then, $more, $out);
+            }
         } finally {
             fclose($f);
+        }
+    }
+
+    /** Copies the $size bytes of the file $from to the end of $f, a piece at a time. @param resource $f */
+    public static function append($f, string $from, int $size, string $out): void
+    {
+        $in = @fopen($from, 'rb') ?: throw new RuntimeException("cannot read $from");
+        try {
+            stream_copy_to_stream($in, $f) === $size || throw new RuntimeException("cannot write $out");
+        } finally {
+            fclose($in);
         }
     }
 
@@ -280,6 +302,12 @@ final class MachO
     /** What phpmicro reads after itself: the INI it runs with (a magic, its length) and the app's phar. */
     public static function microPayload(string $ini, string $phar): string
     {
-        return "\xfd\xf6\x69\xe6" . pack('N', strlen($ini)) . $ini . $phar;
+        return self::microHead($ini) . $phar;
+    }
+
+    /** What phpmicro reads after itself before the app's phar: the INI it runs with, after a magic and its length. */
+    public static function microHead(string $ini): string
+    {
+        return "\xfd\xf6\x69\xe6" . pack('N', strlen($ini)) . $ini;
     }
 }

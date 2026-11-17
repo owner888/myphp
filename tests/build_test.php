@@ -146,6 +146,27 @@ file_put_contents("$d/nosection", $microSfx(false));
 same([[true, false], true, false], [MachO::read("$d/embedded"), MachO::hasMicroSection("$d/embedded"), MachO::hasMicroSection("$d/nosection")], 'unsigned, for the bundle\'s signature; a micro.sfx without the section');
 check(str_contains(bldThrows(fn() => MachO::embed($microSfx(false), 'x', "$d/refused")), MachO::MICRO_SECTION) && !is_file("$d/refused"), 'one without the section is refused');
 check(bldThrows(fn() => MachO::embed(substr($microSfx(true), 0, 100), 'x', "$d/refused")) !== '', 'a truncated one too');
+// The app's phar is copied after the INI, not read: it is as large as the app, and a build held it twice over (a large
+// project's ran out of memory). The same bytes as the payload given whole, and no more memory than a piece of it.
+file_put_contents("$d/phar", 'PHAR');
+MachO::embed($microSfx(true), MachO::microHead("memory_limit=1G"), "$d/streamed", "$d/phar");
+same($embedded, file_get_contents("$d/streamed"), 'the phar copied after the INI makes the same executable');
+$big = fopen("$d/big", 'wb');
+for ($i = 0; $i < 48; $i++) { fwrite($big, str_repeat(chr(65 + $i % 26), 1 << 20)); }
+fclose($big);
+$sfx = $microSfx(true);
+memory_reset_peak_usage(); $memWas = memory_get_usage();
+MachO::embed($sfx, MachO::microHead("memory_limit=1G"), "$d/large", "$d/big");
+check(memory_get_peak_usage() - $memWas < 8 << 20, sprintf('a 48 MB phar embedded in %.1f MB of memory', (memory_get_peak_usage() - $memWas) / 1048576));
+$large = fopen("$d/large", 'rb'); fseek($large, -4, SEEK_END); $tail = fread($large, 4); fclose($large);
+same([0x3000 + 23 + (48 << 20), 'VVVV'], [filesize("$d/large"), $tail], 'all of it there, to its end');
+same([$payloadAt, $payloadAt + 23 + (48 << 20)], array_values(unpack('J2', (string)file_get_contents("$d/large", false, null, 0x1000, 16))), 'and the section saying so');
+@unlink("$d/big"); @unlink("$d/large");
+$cli = (string)file_get_contents(__DIR__ . '/../bin/myphp');
+foreach (['appPhar', 'buildMicroLauncher', 'buildLinuxMicroLauncher'] as $fn) {
+    preg_match('/^function ' . $fn . '\(.*?^}/ms', $cli, $m);
+    check(($m[0] ?? '') !== '' && !preg_match('/file_get_contents\(\$phar|microPayload\(/', $m[0]), "$fn does not read the app's phar into memory");
+}
 
 // Resources: the directory's entries, the listed ones under their names, hidden files left out, links inside kept.
 $p = bldDir();

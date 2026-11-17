@@ -3189,6 +3189,16 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   (`spc build -P`), which adds it, zeros taken as absent so that spc's
   checks of a plain concatenation pass; a micro.sfx without it is built
   again. A micro app signed so ran its phar with its INI on macOS 27.
+- **A micro app's phar is copied, not read.** `appPhar` read the phar it
+  built into a string, the macOS build joined it to the INI in another,
+  and the Linux build joined that to micro.sfx in a third: the app held
+  some three times in the build's 512 MB, so a large project (a gigabyte
+  in its directory) ran out of memory there. `appPhar` gives the file;
+  `MachO::embed` takes the INI (`microHead`) and copies the file after it
+  a piece at a time (`MachO::append`), and Linux's launcher is micro.sfx
+  copied, the INI and the phar appended so. `build_test` embeds 48 MB in
+  less than 8 MB of memory, and checks that none of the three reads the
+  phar.
 - **A micro app has the extensions the framework calls.** micro.sfx had
   ffi, mbstring, ctype, phar and json, and an app stopped at its start
   (`Locale` not found, in `I18n`): `MICRO_EXTENSIONS` adds intl,
