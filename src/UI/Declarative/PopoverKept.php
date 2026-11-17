@@ -44,7 +44,7 @@ final class PopoverKept
         if (!$parent instanceof Window || $w <= 0) { return; } // placed once the anchor has a box
         [$this->size, $this->anchor, $this->shown, $this->byParent, $this->byFlyout] = [null, $rect, false, false, false];
         $fly = $this->flyout = Window::flyout(new FlyoutOptions(parent: $parent, anchor: $rect, placement: self::placement($edge), gap: 4, width: 200, height: 100,
-            focusable: true, hidden: true, shadow: true, popover: true, cornerRadius: 10, content: Content::view($this->render(...))));
+            focusable: true, hidden: true, shadow: true, popover: true, cornerRadius: 10, content: Content::engine($this->render(...))));
         $fly->on('closed', function () use ($parent, $fly): void {
             if ($this->flyout !== $fly) { return; } // one the app closed before: the binding is the one shown since
             $this->flyout = null;

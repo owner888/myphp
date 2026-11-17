@@ -65,7 +65,7 @@ function docProgram(string $code, int $n, array $classes): string
     preg_match_all('/\b(?:class|enum|interface|trait)\s+(\w+)/', $code, $decl);
     foreach ($decl[1] as $d) { $own[$d] = true; }
     $declares = preg_match('/^(?:final |abstract |readonly )*(?:class|enum|interface|trait|function)\s+\w/m', $code) === 1;
-    $declarative = preg_match('/^\$view\s*=\s*(?:static\s+)?(?:fn|function)\s*\(\s*\)/m', $code) === 1; // a view file's closure, of no Context
+    $declarative = preg_match('/^\$view\s*=\s*(?:static\s+)?(?:fn|function)\s*\(\s*\)|new\s+Headless\s*\(\s*(?:static\s+)?(?:fn|function)\s*\(\s*\)/m', $code) === 1; // a view file's closure, of no Context
     $hasView = preg_match('/^\$view\s*=/m', $code) === 1;
     if (!$hasView && !$declares) { $code = "\$view = function (Context \$c) {\n$code\n};"; }
     preg_match_all('/(?<![\\\\$\w>:])([A-Z]\w*)\b/', $code . ' Context', $names);

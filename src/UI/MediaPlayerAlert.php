@@ -32,9 +32,9 @@ final class MediaPlayerAlert
             App::later(function () use (&$sheet, $parent): void { $sheet?->close(); $parent?->invalidate(); });
         };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: $width + 32, height: $height, disableResize: true,
-            content: Content::view(function (Context $c) use ($title, $message, $s, $view, $ready, $ok, $close): void {
+            content: Content::view(static fn() => \Representable(function (Context $c) use ($title, $message, $s, $view, $ready, $ok, $close): Node {
                 $t = $c->theme;
-                $c->column(0, 6, 1)->padding(20, 16, 16, 16)->alignItems(Node::CENTER)->background(MediaPlayerSettings::colors($t)['page']);
+                $root = $c->column(0, 6, 1)->padding(20, 16, 16, 16)->alignItems(Node::CENTER)->background(MediaPlayerSettings::colors($t)['page']);
                   static $icon = null;
                   $icon ??= App::running() ? Image::fromBytes(Shell::appIcon((int)(64 * $c->scale)), 512) : null;
                   if ($icon !== null) { $c->image($icon, 64, 64); }
@@ -58,7 +58,8 @@ final class MediaPlayerAlert
                 $c->end();
                 if ($c->clicked($cancel) || (!($s->recording ?? false) && $c->shortcut(Key::ESCAPE))) { $close(); }
                 if ($enabled && ($c->clicked($okButton) || (!($s->recording ?? false) && $c->shortcut(Key::RETURN)))) { $ok($s); $close(); }
-            })));
+                return $root;
+            }, fills: true))));
     }
 
     /**

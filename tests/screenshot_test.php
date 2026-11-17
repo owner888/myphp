@@ -70,12 +70,10 @@ App::setName("Where");
 App::whenReady(function () {
     $data = App::path(PathName::UserData);
     file_put_contents("$data/touched", "x");
-    new Window(new WindowOptions(title: "Where", width: 300, height: 120, content: Content::view(function (Context $c) use ($data) {
-        $c->column();
-          $c->key("theme")->text($c->theme->dark ? "dark" : "light");
-          $c->key("data")->text($data);
-        $c->end();
-    })));
+    new Window(new WindowOptions(title: "Where", width: 300, height: 120, content: Content::view(fn() => VStack()(
+        Text(verbatim: App::theme()->dark ? "dark" : "light")->id("theme"),
+        Text(verbatim: $data)->id("data"),
+    ))));
 });
 App::run();
 ');
@@ -136,7 +134,7 @@ App::setName("Waits");
 App::whenReady(function () {
     $t = microtime(true);
     App::wait(fn() => microtime(true) - $t > 0.3);
-    new Window(new WindowOptions(title: "Waits", width: 200, height: 80, content: Content::view(fn(Context $c) => $c->key("waited")->text("waited"))));
+    new Window(new WindowOptions(title: "Waits", width: 200, height: 80, content: Content::view(fn() => Text("waited")->id("waited"))));
 });
 App::run();
 ');
@@ -158,7 +156,7 @@ App::whenReady(function () {
     App::go(function () {
         $r = Http::get(' . var_export("$base/repo.json", true) . ');
         $shown = $r->status . " " . $r->json()["stars"];
-        new Window(new WindowOptions(title: "Net", width: 200, height: 80, content: Content::view(fn(Context $c) => $c->key("got")->text($shown))));
+        new Window(new WindowOptions(title: "Net", width: 200, height: 80, content: Content::view(fn() => Text(verbatim: $shown)->id("got"))));
     });
 });
 App::run();

@@ -33,10 +33,10 @@ final class MediaPlayerFontSheet
             });
         };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: self::WIDTH, height: self::HEIGHT, disableResize: true,
-            content: Content::view(function (Context $c) use ($state, $done, $close): void { self::build($c, $state, $done, $close); })));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::build($c, $state, $done, $close), fills: true))));
     }
 
-    private static function build(Context $c, object $s, Closure $done, Closure $close): void
+    private static function build(Context $c, object $s, Closure $done, Closure $close): Node
     {
         $t = $c->theme;
         $k = MediaPlayerSettings::colors($t);
@@ -44,7 +44,7 @@ final class MediaPlayerFontSheet
         $s->families ??= array_map(fn(FontFamily $f) => $f->name, Font::families());
         $filter = mb_strtolower(trim($s->filter->text));
         $shown = $filter === '' ? $s->families : array_values(array_filter($s->families, fn(string $n) => str_contains(mb_strtolower($n), $filter)));
-        $c->column(0, 0, 1)->padding(12, 12, 12, 12)->background($k['page']);
+        $root = $c->column(0, 0, 1)->padding(12, 12, 12, 12)->background($k['page']);
           $c->text($tx->get('fontPickerChoose'), 13, $t->text)->margin(0, 0, 8, 0);
           $c->row()->height(24)->fillWidth()->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
             $f = $c->input($s->filter, $tx->get('fontPickerFilter'), 0, 13)->height(24);
@@ -85,5 +85,6 @@ final class MediaPlayerFontSheet
             if ($c->clicked($ok) || $c->shortcut(Key::RETURN)) { $done($font); $close(); }
           $c->end();
         $c->end();
+        return $root;
     }
 }

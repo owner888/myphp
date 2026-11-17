@@ -47,7 +47,7 @@ final class UpdateWindow
     public static function open(Checker $u, Session $s): void
     {
         $w = self::for($u, $s);
-        $win = $s->newWindow(Content::view(fn(Context $c) => $w->view($c)));
+        $win = $s->newWindow(Content::view(static fn() => \Representable(static fn(Context $c) => $w->view($c), fills: true)));
         Session::present($win, $s->user);
     }
 
@@ -67,7 +67,7 @@ final class UpdateWindow
     }
 
     /** Builds the update window. */
-    public function view(Context $c): void
+    public function view(Context $c): Node
     {
         $v = $this->s->view;
         if ($v['prompt'] !== $this->prompt) {
@@ -78,7 +78,7 @@ final class UpdateWindow
         $c->theme = $t;
         $this->keys($c, $v);
 
-        $c->column(0, self::FOOT_GAP, 1, $t->background)->padding(self::PAD_TOP, self::PAD_SIDE, self::PAD_BOTTOM);
+        $root = $c->column(0, self::FOOT_GAP, 1, $t->background)->padding(self::PAD_TOP, self::PAD_SIDE, self::PAD_BOTTOM);
           $top = $this->row($c, self::ICON_GAP)->alignItems(!empty($v['release']) ? Node::STRETCH : Node::START);
           $top->grow = 1;
             if ($this->icon !== null) {
@@ -99,6 +99,7 @@ final class UpdateWindow
           $c->end();
         $c->end();
         $this->fitContent($c, $v, $body, $aside, $buttons);
+        return $root;
     }
 
     /** A row, laid out from the right in a window of a language written from right to left. */

@@ -1,26 +1,17 @@
-# Rendering
+# GPU rendering pipeline
 
-> This page is about the engine under the views: its builder, `$c` a
-> `Context`, which an app reaches inside a `Representable(fn(Context $c) =>
-> …)`, as SwiftUI's `NSViewRepresentable` ([custom widgets](custom-widgets.md)).
+MyPHP renders declarative views directly on the GPU across all 5 platforms:
+- **macOS & iOS / iPadOS**: Metal (`MTKView`, `CAMetalLayer`) + CoreText
+- **Windows**: Direct3D 11 + DirectWrite (`IDWriteTextLayout`)
+- **Linux**: OpenGL 3.3 Core (`GtkGLArea`) + Pango / Cairo
+- **Android**: OpenGL ES 3.0 (`EGLSurface`) + Android Canvas glyph rasterizer
 
-MyPHP draws on the GPU with Metal on macOS, and with OpenGL on Linux, in
-the GtkGLArea GTK shows. One shader computes rounded rectangles, borders,
-gradients and shadows from the distance to their edges, so they stay sharp
-at any size and scale, and text comes from a glyph atlas that only uploads
-what changes. A frame's quads go into one GPU buffer (16 floats a quad)
-and draw in one instanced draw, in the order the painter recorded them; a
-backdrop (glass, a blur) splits the draw where it samples what is below it.
+One Uber-Shader computes rounded rectangles, per-side borders, linear/radial/conic gradients, Oklab perceptual interpolation, and Gaussian box shadows analytically from signed distance fields (SDF), so every control stays razor-sharp at any DPI scale or window zoom. Text is shaped with the platform's native typography engine and packed into shelf-evicting R8/RGBA glyph atlases.
 
-Set `MYPHP_FRAME_STATS=1` to log each frame that takes longer than 8 ms,
-or `MYPHP_FRAME_STATS=4` for another threshold in milliseconds (`all` logs
-every frame). Each line tells how long building the frame (and in how many
-passes), laying it out, painting and presenting it took, what the process
-came to hold meanwhile, how many texts it laid out, and whether PHP's
-collector ran. While the variable is unset, frames measure nothing.
-`MYPHP_STATS=1` logs a line a second.
+Every frame packs all UI primitives into a single contiguous GPU buffer (**16 floats / 64 bytes per quad**) and submits them in a single instanced draw call in painter's order. Backdrop materials (`glassEffect`, `Blur`, `ScrollEdge`) split the pass to downsample and blur what lies beneath them into a backdrop texture before resuming.
 
-MyPHP draws a frame only when something changes: input,
-`Window::invalidate()`, `$c->after()`, or an animation that moves. An idle
-window draws nothing. Frames are paced by the display: on macOS by the
-view's display link, never faster than the display shows them.
+## Frame pacing and diagnostics
+
+MyPHP draws a frame only on demand: when an input event arrives, when a reactive `State` or watched property mutates, or when an active `Animation` or `TimelineView` requests the next display tick. An idle window consumes **0% CPU and 0% GPU**.
+
+Set `MYPHP_FRAME_STATS=1` to log any frame that takes longer than 8 ms (or `MYPHP_FRAME_STATS=all` for every frame), detailing build time, layout time, quad recording, GPU presentation, shaped text count, and GC activity. Set `MYPHP_STATS=1` for a once-per-second summary.

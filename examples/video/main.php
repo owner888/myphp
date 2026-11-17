@@ -56,9 +56,9 @@ final class Log
     }
 
     /** Around a frame of a player's window: what changed, how long it took. */
-    public static function frame(MediaPlayerState $s, Closure $draw): void
+    public static function frame(MediaPlayerState $s, Closure $draw): mixed
     {
-        if (!self::on()) { $draw(); return; }
+        if (!self::on()) { return $draw(); }
         $id = spl_object_id($s);
         if (self::$depth > 0) { self::line('a frame drawn inside a frame (the UI waited, nested, depth ' . self::$depth . ')'); }
         if (($s->opening ?? '') !== (self::$opening[$id] ?? '')) { self::$opening[$id] = $s->opening ?? ''; if (self::$opening[$id] !== '') { self::line('opening ' . self::$opening[$id]); } }
@@ -68,7 +68,7 @@ final class Log
         self::$depth++;
         $t = microtime(true);
         try {
-            $draw();
+            return $draw();
         } finally {
             self::$depth--;
             if (($d = microtime(true) - $t) > 0.1) { self::line(sprintf('a frame took %.2f s', $d)); }
@@ -141,9 +141,9 @@ final class Players
     private static function create(): array
     {
         $s = new MediaPlayerState();
-        $view = Content::file(__DIR__ . '/view.php', $s); // the player's view (hot reloaded), timed and followed by the menu's state
+        $file = \MyPHP\UI\ViewFile::of(__DIR__ . '/view.php', $s); // the player's view (hot reloaded), timed and followed by the menu's state
         $w = new Window(new WindowOptions(title: 'Video', width: 960, height: 540, stateKey: 'video', backgroundColor: '#000000', titleBarStyle: 'hidden',
-            content: Content::view(function (Context $c) use ($s, $view): void { Log::frame($s, fn() => ($view->view)($c)); self::syncMenu(); })));
+            content: Content::view(function () use ($s, $file) { self::syncMenu(); return Log::frame($s, fn() => ($file->view())()); })));
         $w->on('fileDrop', fn(FileDropEvent $e) => self::drop($s, $e->paths));
         $id = $w->id;
         $w->on('closed', function () use ($id, $s): void { $s->player?->pause(); unset(self::$players[$id]); self::syncMenu(); });

@@ -1,7 +1,6 @@
 # Loading
 
-In a view, an indicator is a `Representable` of the plugin's, as
-`examples/loading` shows them:
+In a view, an indicator is wrapped with `Representable`, as [`examples/loading`](../../examples/loading) shows them:
 
 ```php
 use MyPHP\Plugins\Loading\{Loading, Options};
@@ -9,29 +8,7 @@ use MyPHP\Plugins\Loading\{Loading, Options};
 $view = fn() => Representable(fn(Context $c) => (Loading::all()[0]->new)($c, new Options(size: 24)))->padding();
 ```
 
-> The rest of this page is about the engine under the views: its builder,
-> `$c` a `Context`, which an app reaches inside a `Representable(fn(Context
-> $c) => …)` ([custom widgets](../ui/custom-widgets.md)).
-
-The loading plugin has the 29 loading indicators of
-[loading.dev](https://loading.dev), `loading-dev` for
-React, for native UI: arcs, rings, dots, bars and blocks that MyPHP draws
-itself, each a node that moves while it shows. They look and move as
-loading.dev's do: the same shapes, keyframes and timing functions, the
-same pace. It is all PHP: no JavaScript package, and nothing to
-`App::use()`. Pages, which have CSS, can use `loading-dev` itself.
-
-[examples/loading](../../examples/loading) shows them all, with their
-options (`myphp run -d macos examples/loading`):
-
-```php
-use MyPHP\Plugins\Loading\Loading;
-
-$c->row(0, 8)->alignItems(Node::CENTER);
-  Loading::arc($c)->label('Saving');
-  $c->text('Saving…');
-$c->end();
-```
+The loading plugin includes all 29 vector loading indicators of [loading.dev](https://loading.dev) for native GPU UI: arcs, rings, dots, bars, and blocks drawn in pure PHP at 60 fps.
 
 ## The indicators
 
@@ -67,75 +44,31 @@ $c->end();
 | `trace` | A dash tracing the outline of a rounded square. |
 | `wave` | Five bars rising and falling in a wave. |
 
-Each is a static method of `Loading`, as `Loading::ring($c)`.
-`Loading::all()` lists them as `Spinner`s with their names, for a gallery
-or a setting that lets the user choose one:
-
-```php
-use MyPHP\Plugins\Loading\Loading;
-
-$c->row(0, 16);
-  foreach (Loading::all() as $s) {
-      $c->key($s->name)->column(0, 8)->alignItems(Node::CENTER);
-        ($s->new)($c)->label($s->name);
-        $c->text($s->name, 11);
-      $c->end();
-  }
-$c->end();
-```
-
-## Options
-
-Each method takes an `Options`, whose defaults are loading.dev's:
+Each is a static method on `Loading` (such as `Loading::ring($c, $opts)`), and `Loading::all()` lists all 29 as `Spinner` descriptors with their names:
 
 ```php
 use MyPHP\Plugins\Loading\{Cap, Easing, Loading, Options};
 
-Loading::ring($c, new Options(
-    size: 32,                    // points high: 20 by default
-    color: $c->theme->accent,    // the theme's text color by default
-    duration: 0.6,               // seconds of one cycle: the indicator's own by default
-    easing: Easing::EaseInOut,
-    cap: Cap::FlatCap,
-));
+$view = fn() => HStack(spacing: 16)(
+    Representable(fn(Context $c) => Loading::ring($c, new Options(
+        size: 32,
+        color: 0x38bdf8,
+        duration: 0.6,
+        easing: Easing::EaseInOut,
+        cap: Cap::FlatCap,
+    ))),
+    Text('Saving…'),
+)->padding();
 ```
 
-- **`size`** is the indicator's height, and its width, except for
-  `bouncingDots` and `linearDots`, rows of dots 1.15 and 0.9375 times as
-  wide as high. The node's own size, as `size()`, `fill()` or a parent's
-  layout give it, scales the drawing to fit, centered.
-- **`color`** is what it draws in, `0xRRGGBB`, with the faint parts (a
-  ring's track, a fading dot) in it at their opacity. Null is the theme's
-  `text`.
-- **`duration`** is one cycle of its motion, in seconds, which differs
-  from one to another: 0.8 for `arc`, 2.4 for `slide`.
-- **`paused`** stops it where it is; set back to false, it goes on from
-  there.
-- **`easing`** is how the indicators that turn (`arc`, `atom`, `clock`,
-  `comet`, `dual`, `orbit`, `radar`, `ring`, `snake`, `trace`) go around:
-  `Easing::Linear` at one speed, `EaseInOut` slowing at the end of each
-  turn, `Stacked` both added, two turns a cycle, fast in the middle.
-- **`cap`** ends the strokes of `arc`, `cascade`, `dual`, `ring`, `snake`
-  and `trace`: `Cap::RoundCap` or `FlatCap`.
-- **`sweep`** is the order of `blocks`'s blocks: `Sweep::Diagonal`, `Rows`
-  or `Columns`.
-- **`direction`** sends `ripple`'s rings out from the center
-  (`RippleDirection::RippleOut`) or in to it (`RippleIn`).
-- **`origin`** grows `wave`'s bars from their middle
-  (`WaveOrigin::WaveCenter`) or their bottom (`WaveBottom`).
+## Options
 
-## Motion and accessibility
-
-An indicator asks for a frame each time it is painted, as a spinner does
-(`Painter::animationFrame()`), and only while it shows: one out of view is
-not painted and asks for none, and it does not build the view again. Each
-starts its cycle as it first shows, as a CSS animation does.
-
-Where the desktop asks for less motion (`$c->preferences()->reduceMotion`:
-macOS's Reduce Motion or GNOME's animations turned off), an indicator
-stands still in loading.dev's pose for reduced motion, as dimmed dots or a
-ring of rings, and asks for no frames.
-
-Assistive technology sees a progress indicator of unknown length. Name it
-with `label()`, as what is loading: `Loading::ring($c)->label('Loading
-messages')`.
+- **`size`** — height and width in points (`20` by default).
+- **`color`** — `0xRRGGBB` color (defaults to the theme's text color).
+- **`duration`** — seconds per cycle.
+- **`paused`** — holds the animation at its current frame when `true`.
+- **`easing`** — `Easing::Linear`, `EaseInOut`, or `Stacked`.
+- **`cap`** — `Cap::RoundCap` or `FlatCap`.
+- **`sweep`** — `Sweep::Diagonal`, `Rows`, or `Columns` (for `blocks`).
+- **`direction`** — `RippleDirection::RippleOut` or `RippleIn` (for `ripple`).
+- **`origin`** — `WaveOrigin::WaveCenter` or `WaveBottom` (for `wave`).

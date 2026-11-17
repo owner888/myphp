@@ -60,16 +60,11 @@ src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), cli
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
-src/UI/            Node, Direction, Inspector* (dev tools), Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/ (scales, plot, marks), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
-                   select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
-                   menuButton/toast/progress/meter/numberInput/decimalInput/spinner/badge/divider/spacer/input/searchField/
-                   textarea(minLines, maxLines)/image/box/list/scroll/radioGroup/editableText/shape; the phone's (ContextMobile: tabBar/navigationBar/sheet/actionSheet/safeArea; Window::back; docs/mobile.md); clicked/changed/hovered/dragged/shortcut; ->tooltip()/at()/
-                   radius()/material()/alignItems()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
-                   minWidth()/minHeight()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
-                   rows center across,
-                   columns stretch, as mygo), Material (+ MaterialBuilder, LinearGradient: Plugins/Glass/), Font (style
+src/UI/Declarative/ SwiftUI declarative views and modifiers (`View`, `VStack`, `HStack`, `ZStack`, `LazyVStack`, `LazyVGrid`, `ListView`, `Table`, `NavigationStack`, `NavigationSplitView`, `TabView`, `Form`, `Section`, `Picker`, `Toggle`, `TextField`, `Slider`, `DatePicker`, `Chart`, `Canvas`, `GeometryReader`, `TimelineView`, `KeyframeAnimator`, `Representable`, `functions.php`)
+src/UI/Reactive/   Fine-grained PHP 8.4+ reactivity (`State<T>` with Property Hooks, `Observer` with `PhpToken` AST dependency tracking, `Scope` for retained `Computed` subtrees, zero reference cycles via `WeakMap`/`WeakReference`)
+src/UI/            Node, Direction, Inspector* (dev tools), Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/, Editor/ (CodeEditor, DiffView), RichText/, Shader/ (Kage -> MSL/HLSL/GLSL compiler), Context (`@internal` engine IR builder under Declarative views), Material (+ MaterialBuilder, LinearGradient: Plugins/Glass/), Font (style
                    bits), Span (rich text run), TextStyle (inherited), Layout (flex, margins),
-                   DisplayList (quads with clip), Painter (tree -> list; an instance draws as mygo's Painter), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
+                   DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo, readOnly, onPaste/onTextKey hooks), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),

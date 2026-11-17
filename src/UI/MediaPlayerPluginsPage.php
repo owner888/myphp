@@ -376,7 +376,7 @@ JS;
         $st = new class { public int $tab = 0, $shown = -1; public ?\MyPHP\WebView $web = null; public bool $failed = false, $loading = false; };
         $close = function () use (&$sheet, $p, $st): void { $p->syncPreferences(); App::later(function () use (&$sheet, $st): void { $st->web?->destroy(); $sheet?->close(); }); };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: 600, height: 450,
-            content: Content::view(function (Context $c) use ($p, $close, $st): void { self::detailsView($c, $p, $close, $st); })));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::detailsView($c, $p, $close, $st), fills: true))));
     }
 
     /** The details' web view, made once, its page's messages its preferences' (the Settings tab's alone), its navigation kept to the plugin's pages but Help's. */
@@ -415,11 +415,11 @@ JS;
         return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>' . htmlspecialchars($p->name) . '</title></head><body>' . $body . '</body></html>';
     }
 
-    private static function detailsView(Context $c, Plugin $p, \Closure $close, object $st): void
+    private static function detailsView(Context $c, Plugin $p, \Closure $close, object $st): Node
     {
         $t = $c->theme;
         $k = MediaPlayerSettings::colors($t);
-        $c->column(0, 0, 1)->padding(16, 16, 16, 16)->background($k['page']);
+        $root = $c->column(0, 0, 1)->padding(16, 16, 16, 16)->background($k['page']);
           $c->row(0, 8)->alignItems(Node::START)->fillWidth();
             $c->column()->size(24, 24)->margin(4, 0, 0, 0)->center();
               MediaPlayerSettings::glyph($c, ['puzzlepiece.extension', 'puzzlepiece'], $t->text);
@@ -460,6 +460,7 @@ JS;
             if (MediaPlayerSettings::pushButton($c, Plugins::t('done'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
           $c->end();
         $c->end();
+        return $root;
     }
 
     /** IINA's tabs of the details (an NSSegmentedControl, textured): Settings, About, Help, each its symbol and name; the one clicked, else null. */

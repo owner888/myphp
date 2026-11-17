@@ -52,7 +52,7 @@ final class MediaPlayerFilters
         $v = self::$views[$k] ??= self::view($video);
         self::$windows[$k] = new Window(new WindowOptions(title: self::t($video ? 'iinaFilterVideoFilters' : 'iinaFilterAudioFilters'), width: self::WIDTH, height: self::HEIGHT,
             minWidth: 480, minHeight: 300, stateKey: "filters-$k",
-            content: Content::view(fn(Context $c) => self::build($c, $player(), $v))));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::build($c, $player(), $v), fills: true))));
     }
 
     /** The filters' windows open, and their sheets: they leave the menus the player's, as IINA's. @return list<Window> */
@@ -209,7 +209,7 @@ final class MediaPlayerFilters
         }
         [$w, $h] = match ($kind) { 'new' => [450, 300], 'save' => [403, 270], default => [393, 300] }; // IINA's widths; taller, for MyPHP's fields, and New Filter's parameters all in sight
         $v->sheetWindow = new Window(new WindowOptions(width: $w, height: $h, parent: $parent, modal: true,
-            content: Content::view(fn(Context $c) => self::sheet($c, $s, $v))));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::sheet($c, $s, $v), fills: true))));
     }
 
     /** The sheet open, closed. */

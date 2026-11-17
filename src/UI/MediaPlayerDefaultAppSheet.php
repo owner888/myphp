@@ -29,13 +29,13 @@ final class MediaPlayerDefaultAppSheet
         $sheet = null;
         $close = function () use (&$sheet): void { \MyPHP\App::later(function () use (&$sheet): void { $sheet?->close(); }); };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: self::WIDTH, height: self::HEIGHT, disableResize: true,
-            content: Content::view(function (Context $c) use ($state, $close, $parent): void { self::build($c, $state, $close, $parent); })));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::build($c, $state, $close, $parent), fills: true))));
     }
 
-    private static function build(Context $c, object $s, \Closure $close, ?Window $parent): void
+    private static function build(Context $c, object $s, \Closure $close, ?Window $parent): Node
     {
         $t = $c->theme;
-        $c->column(0, 8, 1)->padding(24, 24, 24, 24)->background(MediaPlayerSettings::colors($t)['page']);
+        $root = $c->column(0, 8, 1)->padding(24, 24, 24, 24)->background(MediaPlayerSettings::colors($t)['page']);
           $c->text(MediaPlayerSettings::tr($c, '$PleaseSelectTheMediaTypes'), 13, $t->text);
           $c->checkbox(MediaPlayerSettings::iina($c, 'sidebar.video'), $s->video);
           $c->checkbox(MediaPlayerSettings::iina($c, 'sidebar.audio'), $s->audio);
@@ -66,5 +66,6 @@ final class MediaPlayerDefaultAppSheet
             }
           $c->end();
         $c->end();
+        return $root;
     }
 }

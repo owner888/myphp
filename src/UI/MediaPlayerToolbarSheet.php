@@ -34,10 +34,10 @@ final class MediaPlayerToolbarSheet
             });
         };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: self::WIDTH, height: self::HEIGHT, disableResize: true,
-            content: Content::view(function (Context $c) use ($state, $done, $close): void { self::build($c, $state, $done, $close); }))); // shown as a sheet of the window in front
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::build($c, $state, $done, $close), fills: true)))); // shown as a sheet of the window in front
     }
 
-    private static function build(Context $c, object $s, Closure $done, Closure $close): void
+    private static function build(Context $c, object $s, Closure $done, Closure $close): Node
     {
         $t = $c->theme;
         $root = $c->column(0, 0, 1)->padding(20)->background(MediaPlayerSettings::colors($t)['page']);
@@ -98,6 +98,7 @@ final class MediaPlayerToolbarSheet
         } elseif ($c->drop($root, 'array', $value) && $value[0] === 'current') { // out of the box: taken out
             $s->buttons = array_values(array_filter($s->buttons, fn(int $b) => $b !== $value[1]));
         }
+        return $root;
     }
 
     /** The key of IINA's name of toolbar button $b: osc_toolbar.<key>, as the strings name it (OscToolbarFullScreen). */

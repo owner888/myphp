@@ -64,7 +64,7 @@ final class MediaPlayerInspector
         }
         self::$window = new Window(new WindowOptions(title: self::t('iinaInspectorWindowTitle'), width: self::WIDTH, height: self::HEIGHT + self::BAR,
             minWidth: self::WIDTH, minHeight: self::HEIGHT + self::BAR, stateKey: 'inspector', titleBarStyle: 'hiddenInset', vibrancy: 'hud',
-            content: Content::view(fn(Context $c) => self::build($c, $player()))));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::build($c, $player()), fills: true))));
     }
 
     /** The Inspector's window, null while none is open: a panel of the player last in front, which keeps the player's menus as IINA's utility panel does. */

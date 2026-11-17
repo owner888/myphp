@@ -32,7 +32,7 @@ final class MediaPlayerPluginStore
         $st = new class { public TextState $url; public bool $installing = false, $detailInstalling = false; public ?int $selected = null; public ?array $list = null; public ?string $error = null; public array $repos = []; public function __construct() { $this->url = new TextState(''); } };
         $close = function () use (&$sheet, $closed): void { App::later(function () use (&$sheet, $closed): void { $sheet?->close(); $closed(); }); };
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: 600, height: 500,
-            content: Content::view(function (Context $c) use ($st, $close, &$sheet): void { self::view($c, $st, $close, $sheet); })));
+            content: Content::view(static fn() => \Representable(static function (Context $c) use ($st, $close, &$sheet): Node { return self::view($c, $st, $close, $sheet); }, fills: true))));
         App::go(function () use ($st, &$sheet): void { // the community's list (IINA's GitHubService.fetchPluginList)
             try {
                 $list = json_decode(self::fetch(Plugins::COMMUNITY_LIST), true);
@@ -70,12 +70,12 @@ final class MediaPlayerPluginStore
         return str_starts_with($s, 'https://') ? $s : (preg_match(Plugins::GITHUB_REPO, $s) === 1 ? "https://github.com/$s" : '');
     }
 
-    private static function view(Context $c, object $st, Closure $close, ?Window &$sheet): void
+    private static function view(Context $c, object $st, Closure $close, ?Window &$sheet): Node
     {
         $t = $c->theme;
         $k = MediaPlayerSettings::colors($t);
         $rt = $c->runtime;
-        $c->column(0, 8, 1)->padding(20, 20, 16, 20)->background($k['page']);
+        $root = $c->column(0, 8, 1)->padding(20, 20, 16, 20)->background($k['page']);
           // The URL: owner/repo, Install (prominent; a spinner while installing).
           $c->row(0, 8)->fillWidth()->alignItems(Node::CENTER);
             $c->text(MediaPlayerSettings::tr($c, '$InputGithubURL'), 13, $t->text);
@@ -138,6 +138,7 @@ final class MediaPlayerPluginStore
             if (MediaPlayerSettings::pushButton($c, Plugins::t('done'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
           $c->end();
         $c->end();
+        return $root;
     }
 
     /** The plugin chosen: its name, identifier, description; its link and Install button and its repository where it is GitHub's, else IINA's word that it is not. */

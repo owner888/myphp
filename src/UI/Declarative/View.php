@@ -1247,7 +1247,7 @@ abstract class View
                     break;
                 case 'help': $whole->tooltip(Localized::string($a, $env)); break;
                 case 'label': $node->label(Localized::string($a, $env)); break;
-                case 'hint': $node->hint(Localized::string($a, $env)); break;
+                case 'hint': $node->description = Localized::string($a, $env); break;
                 case 'accessHidden': $whole->accessHidden = $a; break;
                 case 'accValue': $node->value(Localized::string($a, $env)); break;
                 case 'key':

@@ -33,7 +33,7 @@ final class MediaPlayerDevTool
         $st->list->followEnd = true;
         $w = null;
         $w = self::$windows[$key] = new Window(new WindowOptions(title: "DevTool: $title", width: 500, height: 400,
-            content: Content::view(function (Context $c) use ($tool, $st): void { self::view($c, $tool, $st); })));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => self::view($c, $tool, $st), fills: true))));
         $tool->changed = function () use (&$w): void { $w?->invalidate(); };
         $w->on('closed', function () use ($key, $tool): void { unset(self::$windows[$key]); $tool->changed = null; });
         $w->center();
@@ -45,11 +45,11 @@ final class MediaPlayerDevTool
         return $instance->plugin->name . ($instance->isGlobal ? ' (Global)' : '');
     }
 
-    private static function view(Context $c, DevTool $tool, object $st): void
+    private static function view(Context $c, DevTool $tool, object $st): Node
     {
         $t = $c->theme;
         $mono = Font::MONO;
-        $c->column(0, 0, 1)->background($t->dark ? 0x1e1e1e : 0xffffff);
+        $root = $c->column(0, 0, 1)->background($t->dark ? 0x1e1e1e : 0xffffff);
           $c->list($st->list, count($tool->entries), function (int $i) use ($c, $tool, $st, $t, $mono): void {
               $e = $tool->entries[$i];
               $c->key('e' . $e['id'])->row(0, 8)->fillWidth()->padding(4, 8, 4, 8)->alignItems(Node::START);
@@ -104,6 +104,7 @@ final class MediaPlayerDevTool
                 $st->recall++;
             }
         }
+        return $root;
     }
 
     /** A value, as IINA's ResultView shows it: a number in blue, a string in brown, a boolean in purple, null in gray; an array or an object its title, its members under it as it is clicked (an array's first 100). */

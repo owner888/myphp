@@ -753,6 +753,18 @@ function Breadcrumbs(array $path, int &$selection): D\Control
     return new D\Control('', static function (MyPHP\UI\Context $c) use ($path, &$selection): Node { return $c->breadcrumbs($path, $selection); });
 }
 
+/** Back and Forward buttons of a Router, with a right-click menu of history entries, as Finder's: HistoryButtons($this->router). */
+function HistoryButtons(MyPHP\UI\Router $router): D\Control
+{
+    return new D\Control('', static function (MyPHP\UI\Context $c) use ($router): Node {
+        $n = $c->row(0, 6);
+          $c->backButton($router);
+          $c->forwardButton($router);
+        $c->end();
+        return $n;
+    });
+}
+
 /** A field of a number between the ends of $in, Up, Down and its arrows stepping by $step, as AppKit's NSTextField with a number formatter and a stepper: NumberField('Copies', value: $this->copies, in: [1, 99]). */
 function NumberField(string $title, int|float &$value, array $in = [PHP_INT_MIN, PHP_INT_MAX], float $step = 1): D\Control
 {

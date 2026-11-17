@@ -74,10 +74,8 @@ HTML;
         if ($this->pane !== null && $this->window !== null && !$this->window->isDestroyed()) { return $this->pane; }
         $pane = null;
         $w = new Window(new WindowOptions(title: "Window — {$this->instance->plugin->name}", width: 600, height: 400, hidden: true,
-            content: Content::view(function (Context $c) use (&$pane): void {
-                $c->column(0, 0, 1);
-                  if ($pane !== null) { $c->webView($pane->view)->grow(1); }
-                $c->end();
+            content: Content::view(static function () use (&$pane) {
+                return $pane !== null ? \WebView($pane->view) : \EmptyView();
             })));
         $w->center();
         $w->on('close', function (CloseEvent $e) use ($w): void { // hidden, not gone: its page kept (IINA's isReleasedWhenClosed false); a quit closes it, as AppKit's terminate does not ask such a window

@@ -2,32 +2,25 @@
 // The window's view of the state main.php makes, $this in it (Content::file): saved, it hot reloads.
 declare(strict_types=1);
 
-use MyPHP\{App, Clipboard, DateOptions, Dialog, I18n, MessageOptions, NumberOptions, Style as DateStyle, Width, Window};
+use MyPHP\{App, Clipboard, DateOptions, Dialog, I18n, MessageOptions, NumberOptions, Style as DateStyle, Width};
 use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style as GlassStyle};
 use MyPHP\Text\Params;
 use MyPHP\Transfer\{Drop, DropOptions, Format};
-use MyPHP\UI\{Anchor, Oklch, BorderStyle, GradientStop, RadialGradient, ContentTransition, Context, Cursor, Direction, DraggableOptions, Easing, ElementTransition, Font as Face, Keyframe, KeyframeOptions, Key, LinearGradient, Menu, MeterLevels, Motion, Node, Painter, Pose, Route, Span, SpringOptions, SVG, TableColumn, TextState, Theme, Track, TransitionMotion, WideColor};
+use MyPHP\UI\{GradientStop, LinearGradient as UILinearGradient, Motion, Oklch, Painter, Path, RadialGradient as UIRadialGradient, WideColor};
 use MyPHP\UI\Markdown\Reveal;
-use MyPHP\UI\RichText\{Document, EditorOptions, FormatState, ListKind, RichText};
+use MyPHP\UI\RichText\{Document, EditorOptions, FormatState, ListKind};
 
 // The gallery in SwiftUI's views: a sidebar of pages beside the page chosen, under a toolbar going back and forward
-// through the history. What SwiftUI has a view of is that view; what only MyPHP's engine has (its bases, grids of
-// tracks, borders of each side, stripes, cursors, the outline table, the grid view, the theme-drawn menus, its motion
-// primitives) is built with the engine's builder in a representable, as an NSView is in SwiftUI.
-
-/** A part built with the engine's builder, as an NSView in a representable: what SwiftUI has no view of. */
-$legacy = fn(Closure $build) => Representable(function (Context $c) use ($build) {
-    $n = $c->column(0, 16)->alignSelf(Node::STRETCH);
-      $build($c);
-    $c->end();
-    return $n;
-});
+// through the history.
 
 /** A card: a titled panel. */
 $card = fn(string $title, View|array|null ...$body) => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
     $title === '' ? null : Text($title)->font(Font::system(size: 15, weight: Weight::bold)), ...$body,
 )->padding(18)->frame(maxWidth: INF, alignment: Alignment::topLeading)->background(Color::background)->cornerRadius(10)
     ->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator))->shadow(Color::black->opacity(0.06), radius: 1.5, y: 1);
+
+/** A responsive two-column grid of cards. */
+$cards = fn(View ...$items) => LazyVGrid(columns: [GridItem::adaptive(minimum: 320)], spacing: 16)(...$items);
 
 /** A label leading a control in a row. */
 $row = fn(string $label, float $width, View ...$views) => HStack(spacing: 12)(Text($label)->foregroundStyle(Color::secondary)->frame(width: $width, alignment: Alignment::leading), ...$views);
@@ -40,13 +33,13 @@ $sortedFiles = function (): array {
         }
     }
     $rows = $this->tableFiles;
-    $by = $this->table->sortBy ?? [];
-    usort($rows, function (TableFile $a, TableFile $b) use ($by): int { // stable, as PHP's sorts are; by each column in turn
+    $by = is_array($this->tableSort) ? $this->tableSort : ($this->tableSort !== null ? [$this->tableSort] : []);
+    usort($rows, function (TableFile $a, TableFile $b) use ($by): int {
         foreach ($by as $o) {
             $d = match ($o->column) {
-                'Name' => strcmp(strtolower($a->name), strtolower($b->name)),
-                'Kind' => strcmp($a->kind, $b->kind),
-                'Size' => $a->size - $b->size,
+                'Name', 'name' => strcmp(strtolower($a->name), strtolower($b->name)),
+                'Kind', 'kind' => strcmp($a->kind, $b->kind),
+                'Size', 'size' => $a->size - $b->size,
                 default => 0,
             };
             if ($d !== 0) { return $o->descending ? -$d : $d; }
@@ -58,523 +51,431 @@ $sortedFiles = function (): array {
 
 /**
  * A chat: messages of every height, which the list measures as they
- * show, the header of each day pinned at the top, older messages
- * loading above without moving those in view, and new ones followed
- * at the end.
+ * show, older messages loading above, and new ones followed at the end.
  */
-$chatCard = function (Context $c): void {
-    $t = $c->theme;
+$chatCard = function () use ($card): View {
     if ($this->messages === []) {
         for ($id = 0; $id < 200; $id++) { $this->messages[] = makeMessage($id); }
     }
-    // The rows: a header before each day's messages, [header, day, message].
     $items = [];
     foreach ($this->messages as $i => $m) {
-        if ($i === 0 || $m->day() !== $this->messages[$i - 1]->day()) { $items[] = [true, $m->day(), null]; }
-        $items[] = [false, $m->day(), $m];
+        if ($i === 0 || $m->day() !== $this->messages[$i - 1]->day()) { $items[] = ['id' => 'day ' . $m->day(), 'header' => true, 'day' => $m->day(), 'msg' => null]; }
+        $items[] = ['id' => 'msg ' . $m->id, 'header' => false, 'day' => $m->day(), 'msg' => $m];
     }
-    $this->chat->followEnd = true;
-    $this->chat->key = fn(int $i): int|string => $items[$i][0] ? 'day ' . $items[$i][1] : $items[$i][2]->id;
-    $this->chat->header = fn(int $i): bool => $items[$i][0];
-    card($c, 'Chat');
-      $c->row(0, 8);
-        $c->text(sprintf('%d messages of every height; older ones load above without moving those in view.', count($this->messages)), color: $t->textMuted)->grow(1);
-        if ($c->clicked($c->button('Load older'))) {
-            $first = $this->messages[0]->id;
-            $older = [];
-            for ($id = $first - 24; $id < $first; $id++) { $older[] = makeMessage($id); }
-            $this->messages = [...$older, ...$this->messages];
-        }
-        if (!$this->chat->atEnd && $c->clicked($c->button('Jump to latest'))) { $this->chat->scrollToEnd(); }
-      $c->end();
-      $c->list($this->chat, count($items), function (int $i) use ($c, $t, $items): void {
-          [$header, $day, $m] = $items[$i];
-          if ($header) {
-              $label = $day < 0 ? (new DateTimeImmutable())->modify("$day days")->format('l, F j') : 'Today';
-              $c->row(0, 0)->justify(Node::CENTER)->paddingY(6);
-                $c->row(0, 0, 0, $t->surface)->padding(3, 10)->radius(999)->border(1, $t->border);
-                  $c->text($label, 12, style: Face::BOLD);
-                $c->end();
-              $c->end();
-              return;
-          }
-          $c->row(0, 0)->padding(3, 12);
-            $bubble = $c->column(0, 0, 0, $t->surface)->maxWidthPercent(72)->padding(7, 12)->radius(14);
-            if ($m->mine) { $bubble->margin(0, 0, 0, Node::AUTO)->background($t->accent)->textColor($t->accentText); }
-              $c->text($m->text);
-            $c->end();
-          $c->end();
-      })->size(0, 380)->justify(Node::END)->paddingY(4)->border(1, $t->border)->radius(8);
-      $c->row(0, 8);
-        $input = $c->input($this->draft, 'Message', 0)->label('Message')->grow(1);
-        $empty = trim($this->draft->text) === '';
-        $send = $c->button('Send')->disabled($empty);
-        if (($c->clicked($send) || $c->submitted($input)) && !$empty) {
-            $last = end($this->messages);
-            $this->messages[] = new Message($last->id + 1, trim($this->draft->text), true);
-            $this->draft = new TextState('');
-        }
-      $c->end();
-    $c->end();
+    $empty = trim($this->draft) === '';
+    $send = function () use ($empty): void {
+        if ($empty) { return; }
+        $last = end($this->messages);
+        $this->messages[] = new Message($last->id + 1, trim($this->draft), true);
+        $this->draft = '';
+    };
+    return $card('Chat',
+        ScrollViewReader(fn(ScrollViewProxy $proxy) => VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+            HStack(spacing: 8)(
+                Text(verbatim: sprintf('%d messages of every height; older ones load above without moving those in view.', count($this->messages)))->foregroundStyle(Color::secondary),
+                Spacer(),
+                Button('Load older', action: function () {
+                    $first = $this->messages[0]->id;
+                    $older = [];
+                    for ($id = $first - 24; $id < $first; $id++) { $older[] = makeMessage($id); }
+                    $this->messages = [...$older, ...$this->messages];
+                }),
+                Button('Jump to latest', action: fn() => $proxy->scrollTo(array_last($items)['id'])),
+            ),
+            ScrollView()(LazyVStack(spacing: 6)(
+                Each($items, id: 'id')(function (array $row): View {
+                    if ($row['header']) {
+                        $day = $row['day'];
+                        $label = $day < 0 ? (new DateTimeImmutable())->modify("$day days")->format('l, F j') : 'Today';
+                        return HStack()(Spacer(), Text(verbatim: $label)->font(Font::caption)->bold()->padding(Edge::vertical, 3)->padding(Edge::horizontal, 10)->background(Color::secondarySystemBackground)->clipShape(Capsule())->overlay(Capsule()->stroke(Color::separator)), Spacer())->padding(Edge::vertical, 4);
+                    }
+                    /** @var Message $m */
+                    $m = $row['msg'];
+                    $bubble = Text(verbatim: $m->text)->foregroundStyle($m->mine ? Color::white : Color::primary)
+                        ->padding(Edge::vertical, 7)->padding(Edge::horizontal, 12)
+                        ->background($m->mine ? Color::accentColor : Color::secondarySystemBackground)
+                        ->cornerRadius(14)->frame(maxWidth: 460, alignment: $m->mine ? Alignment::trailing : Alignment::leading);
+                    return HStack()($m->mine ? Spacer() : null, $bubble, !$m->mine ? Spacer() : null)->padding(Edge::horizontal, 12);
+                }),
+            ))->defaultScrollAnchor(UnitPoint::bottom)->frame(height: 380)->cornerRadius(8)->overlay(RoundedRectangle(cornerRadius: 8)->stroke(Color::separator)),
+            HStack(spacing: 8)(
+                TextField('Message', text: $this->draft, prompt: 'Message')->labelsHidden()->onSubmit($send),
+                Button('Send', action: $send)->disabled($empty),
+            ),
+        )),
+    );
 };
 
 /**
- * What each kind of color paints (fills, gradients, stripes, text,
- * shadows) in the sRGB color nearest to an Oklch one, on the left, and
- * in the Oklch color itself, on the right: on a Display P3 screen the
- * right column shows the colors sRGB cannot (a gradient's end, as
- * stripes' ground, in its sRGB color in both).
+ * What each kind of color paints (fills, gradients, text, shadows) in the
+ * sRGB color nearest to an Oklch one, on the left, and in the Oklch color
+ * itself, on the right.
  */
-$wideColors = function (Context $c): void {
-    $t = $c->theme;
+$wideColors = function (): View {
     $vivid = Oklch::rgb(0.85, 0.3, 145); $warm = Oklch::rgb(0.7, 0.3, 30);
-    $c->text('Compare the columns on a Display P3 screen: the right one is more vivid.', 12, $t->textMuted);
-    // pair builds a sample twice, in sRGB and then in Oklch, in equal columns.
-    $pair = function (Closure $sample) use ($c): void {
-        $c->row(0, 12);
-          foreach ([false, true] as $wide) { $sample($wide)->basis(0)->grow(1); }
-        $c->end();
-    };
-    $box = function (string $label) use ($c): Node {
-        $n = $c->row(0, 0)->size(0, 30)->radius(6)->center();
-          $c->text($label, 12, 0x000000, Face::BOLD);
-        $c->end();
-        return $n;
-    };
-    $in = fn(bool $wide, int $color): int => $wide ? $color : WideColor::srgb($color); // the color, or its sRGB twin
-    $pair(fn(bool $wide) => $c->text($wide ? 'Oklch' : 'sRGB', 12, $t->textMuted, Face::BOLD));
-    $pair(fn(bool $wide) => $box('Fill')->background($in($wide, $vivid)));
-    $pair(fn(bool $wide) => $box('Gradient')->linearGradient(new LinearGradient($in($wide, $warm), 1, $in($wide, $vivid), 1, 90, oklab: true)));
-    $pair(fn(bool $wide) => $box('Stripes')->background(0xffffff)->stripes($in($wide, $vivid), 4, 6, 45));
-    $pair(function (bool $wide) use ($c, $in, $vivid): Node {
-        $n = $c->row(0, 0, 0, 0x141414)->size(0, 30)->radius(6)->center();
-          $c->text('Text', 14, $in($wide, $vivid), Face::BOLD);
-        $c->end();
-        return $n;
-    });
-    $pair(fn(bool $wide) => $box('Shadow')->margin(6)->background(0xffffff)->shadow(0, 4, 12, 0, $in($wide, $vivid)));
+    $in = fn(bool $wide, int $color): int => $wide ? $color : WideColor::srgb($color);
+    $pair = fn(Closure $sample) => HStack(spacing: 12)($sample(false)->frame(maxWidth: INF), $sample(true)->frame(maxWidth: INF));
+    $box = fn(string $label) => HStack()(Spacer(), Text($label)->font(Font::caption)->bold()->foregroundStyle(Color::black), Spacer())->frame(height: 30)->cornerRadius(6);
+    return VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+        Text('Compare the columns on a Display P3 screen: the right one is more vivid.')->font(Font::caption)->foregroundStyle(Color::secondary),
+        $pair(fn(bool $wide) => Text($wide ? 'Oklch' : 'sRGB')->font(Font::caption)->bold()->foregroundStyle(Color::secondary)),
+        $pair(fn(bool $wide) => $box('Fill')->background(Color::rgb($in($wide, $vivid)))),
+        $pair(fn(bool $wide) => $box('Gradient')->background(new UILinearGradient($in($wide, $warm), 1, $in($wide, $vivid), 1, 90, oklab: true))),
+        $pair(fn(bool $wide) => HStack()(Spacer(), Text('Text')->font(Font::system(size: 14, weight: Weight::bold))->foregroundStyle(Color::rgb($in($wide, $vivid))), Spacer())->frame(height: 30)->background(Color::rgb(0x141414))->cornerRadius(6)),
+        $pair(fn(bool $wide) => $box('Shadow')->background(Color::white)->shadow(Color::rgb($in($wide, $vivid)), radius: 6, y: 4)->padding(4)),
+    );
 };
 
-$styling = function (Context $c) use (&$wideColors): void {
-    $t = $c->theme;
-    $c->text('Grids, borders of each side, gradients, stripes, text decorations, and motion along easings.', color: $t->textMuted);
-    cards($c);
-      card($c, 'Grid');
-        $c->grid([Track::fit(), Track::fr(1), Track::fr(1)], 6);
-          $cell = function (string $s) use ($c, $t): Node {
-              $n = $c->row(0, 0, 0, $t->surface)->padding(8, 10)->radius(6);
-                $c->text($s, 12);
-              $c->end();
-              return $n;
-          };
-          $cell('columnSpan(-1)')->columnSpan(-1)->background($t->accent)->textColor($t->accentText);
-          $cell('Track::fit()')->rowSpan(2);
-          $cell('Track::fr(1)');
-          $cell('Track::fr(1)');
-          $cell('columnSpan(2)')->columnSpan(2)->justifySelf(Node::CENTER);
-        $c->end();
-      $c->end();
-      card($c, 'Borders');
-        $c->row(0, 0)->paddingY(6)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
-          $c->text('A header with a line below', style: Face::BOLD);
-        $c->end();
-        $c->row(0, 8, 0, $t->surface)->padding(8, 12)->borderWidth(0, 0, 0, 4)->borderColor($t->accent)->radius(0, 6, 6, 0);
-          $c->text('A note with an accent on its left');
-        $c->end();
-        $c->column(0, 0)->size(0, 56)->radius(8)->border(2, $t->border)->borderStyle(BorderStyle::Dashed)->center();
-          $c->text('Dashed, as a place to drop files', color: $t->textMuted);
-        $c->end();
-      $c->end();
-      card($c, 'Fills');
-        $blue = 0x2563eb; $yellow = 0xfacc15;
-        $bar = function (string $label) use ($c): Node {
-            $n = $c->row(0, 0)->size(0, 30)->paddingX(10)->radius(6)->alignItems(Node::CENTER);
-              $c->text($label, 12, 0xffffff, Face::BOLD);
-            $c->end();
-            return $n;
-        };
-        $bar('sRGB')->gradient($blue, $yellow, 90);
-        $bar('Oklab')->linearGradient(new LinearGradient($blue, 1, $yellow, 1, 90, oklab: true));
-        $bar('Stops at 40% and 60%')->linearGradient(new LinearGradient($blue, 1, $yellow, 1, 90, 0.4, 0.6));
-        $bar('Radial, from the right')->radialGradient(new RadialGradient(centerX: 0.9, centerY: 0.5, oklab: true, stops: [new GradientStop($yellow, 0), new GradientStop($blue, 1)]));
-        $c->row(0, 0, 0, $t->surface)->size(0, 30)->radius(6)->stripes($t->border, 4, 6, 45)->center();
-          $c->text('Stripes: unavailable', 12, $t->textMuted);
-        $c->end();
-      $c->end();
-      card($c, 'Wide colors (Oklch)');
-        $wideColors($c);
-      $c->end();
-      card($c, 'Text decorations');
-        $c->richText([new Span('Spell checkers mark '), new Span('mispeled', wavyUnderline: true, decorationColor: $t->danger), new Span(' words with waves.')]);
-        $c->richText([new Span('Search results '), new Span('stand out', background: 0xfacc15, backgroundAlpha: 0.45), new Span(' with a background.')]);
-        $c->text('Underlines of their own color and thickness')->underline()->decorationColor($t->accent)->decorationThickness(2);
-        $c->text('A highlight behind every line')->textBackground($t->selection);
-        $c->text(str_repeat('A line cut with an ellipsis of its own. ', 3))->singleLine()->ellipsis(' →');
-      $c->end();
-      card($c, 'Motion');
-        $c->row(0, 14)->alignItems(Node::CENTER);
-          $spin = $c->icon(glyph('loader'), 24, $t->accent);
-          $spin->rotate($c->loop($spin, 'spin', 1, Easing::linear(...)) * 360);
-          $pulse = $c->box(0, 14, $t->border)->grow(1)->radius(7);
-          $pulse->opacity(0.4 + 0.6 * $c->loop($pulse, 'pulse', 1.6, Easing::bounce(Easing::easeInOut(...))));
-        $c->end();
-        if ($c->clicked($c->button('Move along each easing'))) { $this->eased = !$this->eased; }
-        foreach (['Linear' => Easing::linear(...), 'EaseIn' => Easing::easeIn(...), 'EaseOut' => Easing::easeOut(...), 'EaseInOut' => Easing::easeInOut(...)] as $name => $ease) {
-            $track = $c->key($name)->row(0, 0)->size(0, 18)->alignItems(Node::CENTER);
-            $at = $c->animateWith($track, 'x', $this->eased ? 1 : 0, 0.9, $ease);
-              $c->text($name, 12, $t->textMuted)->size(70, 0);
-              $c->column(0, 0, 1)->size(0, 18);
-                $c->box(18, 18, $t->accent)->radius(9)->absolute()->leftPercent($at * 0.9);
-              $c->end();
-            $c->end();
-        }
-      $c->end();
-      card($c, 'Layout');
-        $c->row(0, 6)->reverse();
-          foreach (['1', '2', '3'] as $s) {
-              $c->row(0, 0, 0, $t->surface)->size(28, 28)->radius(6)->center();
-                $c->text($s);
-              $c->end();
-          }
-          $c->text('reverse()', 12, $t->textMuted)->margin(0, Node::AUTO, 0, 0);
-        $c->end();
-        $c->row(0, 6)->alignItems(Node::CENTER);
-          $c->text('margin(…, Node::AUTO) pushes to the end', 12, $t->textMuted);
-          $c->button('Save')->margin(0, 0, 0, Node::AUTO);
-        $c->end();
-        $c->row(0, 6)->alignItems(Node::CENTER);
-          $c->text('Inbox');
-          $c->row(0, 0, 0, $t->danger)->padding(1, 5)->radius(8)->top(-6);
-            $c->text('3', 10, 0xffffff, Face::BOLD);
-          $c->end();
-          $c->text('top(-6) moves a badge up', 12, $t->textMuted);
-        $c->end();
-      $c->end();
-      card($c, 'Scrolling both ways');
-        $c->scrollBoth(0, 0)->size(0, 150)->radius(6)->border(1, $t->border);
-          $c->grid(array_fill(0, 16, Track::fixed(56)), 4, pad: 6);
-            for ($i = 0; $i < 16 * 12; $i++) {
-                $c->row(0, 0, 0, $t->accent)->size(0, 28)->radius(4)->center()->alpha = 0.08 + 0.6 * ($i % 16) / 16 * intdiv($i, 16) / 12;
-                  $c->text(sprintf('%s%d', chr(ord('A') + $i % 16), intdiv($i, 16) + 1), 11);
-                $c->end();
-            }
-          $c->end();
-        $c->end();
-      $c->end();
-      card($c, 'Cursors');
-        $c->row(0, 6)->wrap(0);
-          foreach (['ResizeColumn' => Cursor::ResizeColumn, 'ResizeRow' => Cursor::ResizeRow, 'ResizeE' => Cursor::ResizeE, 'Copy' => Cursor::Copy, 'Alias' => Cursor::Alias,
-              'ContextMenu' => Cursor::ContextMenu, 'VerticalText' => Cursor::VerticalText, 'None' => Cursor::None] as $name => $cursor) {
-              $c->row(0, 0, 0, $t->surface)->padding(6, 10)->radius(6)->cursor($cursor);
-                $c->text($name, 12);
-              $c->end();
-          }
-        $c->end();
-      $c->end();
-    $c->end();
+$styling = function () use ($card, $cards, $wideColors): array {
+    $blue = 0x2563eb; $yellow = 0xfacc15;
+    $cell = fn(string $s) => Text(verbatim: $s)->font(Font::caption)->padding(Edge::vertical, 8)->padding(Edge::horizontal, 10)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::secondarySystemBackground)->cornerRadius(6);
+    $bar = fn(string $label, mixed $bg) => HStack()(Text($label)->font(Font::caption)->bold()->foregroundStyle(Color::white), Spacer())->padding(Edge::horizontal, 10)->frame(height: 30, maxWidth: INF)->background($bg)->cornerRadius(6);
+    return [
+        Text('Grids, borders, gradients, wide-gamut colors, text decorations, and motion along easings.')->foregroundStyle(Color::secondary),
+        $cards(
+            $card('Grid',
+                Grid(horizontalSpacing: 6, verticalSpacing: 6)(
+                    GridRow()(Text('gridCellColumns(3)')->font(Font::caption)->foregroundStyle(Color::white)->padding(Edge::vertical, 8)->padding(Edge::horizontal, 10)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::accentColor)->cornerRadius(6)->gridCellColumns(3)),
+                    GridRow()($cell('Col 1'), $cell('Col 2'), $cell('Col 3')),
+                    GridRow()($cell('Span 1'), Text('gridCellColumns(2)')->font(Font::caption)->padding(Edge::vertical, 8)->padding(Edge::horizontal, 10)->background(Color::secondarySystemBackground)->cornerRadius(6)->gridCellColumns(2)),
+                ),
+            ),
+            $card('Borders',
+                VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
+                    Text('A header with a line below')->bold(),
+                    Divider(),
+                ),
+                HStack(spacing: 0)(
+                    Rectangle()->fill(Color::accentColor)->frame(width: 4, height: 36),
+                    Text('A note with an accent on its left')->padding(Edge::vertical, 8)->padding(Edge::horizontal, 12)->frame(maxWidth: INF, alignment: Alignment::leading)->background(Color::secondarySystemBackground),
+                )->cornerRadius(6),
+                ZStack()(
+                    Canvas(function (GraphicsContext $g, CGSize $s) {
+                        $p = Path::roundedRect(1, 1, $s->width - 2, $s->height - 2, 8)->dash(0, 6, 4);
+                        $g->stroke($p, with: Color::separator, lineWidth: 2);
+                    }),
+                    Text('Dashed, as a place to drop files')->foregroundStyle(Color::secondary),
+                )->frame(height: 56, maxWidth: INF),
+            ),
+            $card('Fills',
+                $bar('sRGB', LinearGradient([Color::rgb($blue), Color::rgb($yellow)], startPoint: UnitPoint::leading, endPoint: UnitPoint::trailing)),
+                $bar('Oklab', new UILinearGradient($blue, 1, $yellow, 1, 90, oklab: true)),
+                $bar('Stops at 40% and 60%', new UILinearGradient($blue, 1, $yellow, 1, 90, 0.4, 0.6)),
+                $bar('Radial, from the right', new UIRadialGradient(centerX: 0.9, centerY: 0.5, oklab: true, stops: [new GradientStop($yellow, 0), new GradientStop($blue, 1)])),
+            ),
+            $card('Wide colors (Oklch)', $wideColors()),
+            $card('Text decorations',
+                Text([Text('Rich text mixes '), Text('highlighted')->background(Color::rgb(0xfacc15, 0.45)), Text(' and '), Text('underlined')->underline()->foregroundStyle(Color::accentColor), Text(' runs.')]),
+                Text('Underlines and strikethrough styles')->underline()->strikethrough(),
+                Text(verbatim: str_repeat('A line cut with an ellipsis when it does not fit. ', 3))->lineLimit(1),
+            ),
+            $card('Motion',
+                TimelineView()(function (TimelineViewContext $ctx) {
+                    $t = ($ctx->nanoseconds / 1_000_000_000);
+                    return HStack(spacing: 14)(
+                        Image(glyph('loader'))->foregroundStyle(Color::accentColor)->frame(width: 24, height: 24)->rotationEffect(fmod($t * 360, 360)),
+                        Capsule()->fill(Color::separator)->frame(height: 14, maxWidth: INF)->opacity(0.4 + 0.6 * (0.5 + 0.5 * sin($t * 4))),
+                    );
+                }),
+                Button('Move along each easing', action: fn() => $this->eased = !$this->eased),
+                Each(['Linear' => Animation::linear(0.9), 'EaseIn' => Animation::easeIn(0.9), 'EaseOut' => Animation::easeOut(0.9), 'EaseInOut' => Animation::easeInOut(0.9)])(
+                    fn(Animation $anim, string $name) => HStack(spacing: 8)(
+                        Text(verbatim: $name)->font(Font::caption)->foregroundStyle(Color::secondary)->frame(width: 70, alignment: Alignment::leading),
+                        GeometryReader(fn(GeometryProxy $g) => Circle()->fill(Color::accentColor)->frame(width: 18, height: 18)
+                            ->offset(x: $this->eased ? max(0, $g->size[0] - 18) : 0)->animation($anim, value: $this->eased)
+                        )->frame(height: 18),
+                    )->id($name)
+                ),
+            ),
+            $card('Layout',
+                HStack(spacing: 6)(
+                    Text('Spacer() pushes to the end')->font(Font::caption)->foregroundStyle(Color::secondary),
+                    Spacer(),
+                    Each(['3', '2', '1'])(fn(string $s) => Text(verbatim: $s)->frame(width: 28, height: 28)->background(Color::secondarySystemBackground)->cornerRadius(6)),
+                ),
+                HStack(spacing: 6)(
+                    Text('Spacer() before Save')->font(Font::caption)->foregroundStyle(Color::secondary),
+                    Spacer(),
+                    Button('Save'),
+                ),
+                HStack(spacing: 6)(
+                    Text('Inbox'),
+                    Text('3')->font(Font::system(size: 10, weight: Weight::bold))->foregroundStyle(Color::white)->padding(Edge::vertical, 1)->padding(Edge::horizontal, 5)->background(Color::red)->cornerRadius(8)->offset(y: -6),
+                    Text('offset(y: -6) moves a badge up')->font(Font::caption)->foregroundStyle(Color::secondary),
+                ),
+            ),
+            $card('Scrolling',
+                ScrollView(Axis::horizontal)(
+                    HStack(spacing: 6)(
+                        Each(range(1, 16))(fn(int $col) => VStack(spacing: 4)(
+                            Each(range(1, 4))(fn(int $r) => Text(verbatim: sprintf('%s%d', chr(ord('A') + $col - 1), $r))->font(Font::caption)
+                                ->frame(width: 56, height: 28)->background(Color::accentColor->opacity(0.12 + 0.5 * ($col / 16) * ($r / 4)))->cornerRadius(4))
+                        ))
+                    )->padding(6)
+                )->frame(height: 150)->cornerRadius(6)->overlay(RoundedRectangle(cornerRadius: 6)->stroke(Color::separator)),
+            ),
+        ),
+    ];
 };
 
-$drawing = function (Context $c): void {
-    $t = $c->theme;
-    $c->text('Node::draw paints with rectangles, shadows, paths and text. This drawing moves with the time of each frame, which paints it again without building the page.', color: $t->textMuted);
-    $c->box(0, 320, $t->surface)->radius(10)->draw(function (Painter $p, array $r) use ($t): void {
-        $p->animationFrame();
-        $phase = intdiv($p->now(), 1_000_000) % 4000 / 4000 * 2 * M_PI;
-        // Bars, in the left half of the box at most, 28 points apart where it is wide enough.
-        $step = min(28.0, ($r[2] / 2 - 24) / 12);
-        for ($i = 0; $i < 12; $i++) {
-            $h = 60 + 50 * sin($phase + $i * 0.6);
-            $p->fill([$r[0] + 24 + $i * $step, $r[1] + $r[3] - 24 - $h, $step * 0.65, $h], $t->accent, 4, 0.35 + 0.05 * $i);
-        }
-        // A sine wave, across what the bars leave, up to 300 points wide: it stays in the box at any width.
-        $x0 = $r[0] + 24 + 12 * $step + 16;
-        $len = min(300.0, $r[0] + $r[2] - 24 - $x0);
-        $wave = new Path();
-        for ($i = 0; $i <= 100; $i++) {
-            $x = $x0 + $i * $len / 100; $y = $r[1] + $r[3] / 2 + 60 * sin($phase * 2 + $i / 12);
-            $i === 0 ? $wave->moveTo($x, $y) : $wave->lineTo($x, $y);
-        }
-        $p->strokePath($wave, 3, $t->danger);
-        $p->fillPath((new Path())->circle($r[0] + $r[2] - 70, $r[1] + 70, 36), $t->accent);
-        $p->text($r[0] + 24, $r[1] + 20, "Animated at the display's rate", 14, $t->text);
-    });
-    card($c, 'Vector images');
-      $c->text('SVGs stay sharp at any size: icons in the color of the text, pictures in their own colors.', color: $t->textMuted);
-      $gold = 0xf5b400;
-      $c->row(0, 14)->alignItems(Node::CENTER);
-        foreach ([16, 24, 40] as $size) { $c->icon(glyph('star'), $size, $gold); }
-        // A button laid out as a row of its own children.
-        $done = $c->buttonBase()->padding($t->space(1.5), $t->space(3.5))->radius($t->radius)->background($t->accent)->textColor($t->accentText);
-        $done->gap = $t->space(1.5);
-          $c->icon(glyph('check'));
-          $c->text('Done')->singleLine();
-        $c->end();
-        if ($c->clicked($done)) { $c->toast('Done'); }
-        $c->image(glyph('badge'), 64, 64)->textColor($gold);
-        $c->image(glyph('badge'), 32, 32)->textColor($gold);
-      $c->end();
-    $c->end();
+$drawing = function () use ($card): array {
+    $gold = Color::rgb(0xf5b400);
+    return [
+        Text('Canvas paints with rectangles, shadows, paths and text. TimelineView animates the drawing at the display\'s rate.')->foregroundStyle(Color::secondary),
+        TimelineView()(fn(TimelineViewContext $ctx) => Canvas(function (GraphicsContext $g, CGSize $s) use ($ctx) {
+            $g->withPainter(function (Painter $p, array $r) use ($ctx): void {
+                $t = $p->theme();
+                $phase = intdiv($ctx->nanoseconds, 1_000_000) % 4000 / 4000 * 2 * M_PI;
+                $step = min(28.0, ($r[2] / 2 - 24) / 12);
+                for ($i = 0; $i < 12; $i++) {
+                    $h = 60 + 50 * sin($phase + $i * 0.6);
+                    $p->fill([$r[0] + 24 + $i * $step, $r[1] + $r[3] - 24 - $h, $step * 0.65, $h], $t->accent, 4, 0.35 + 0.05 * $i);
+                }
+                $x0 = $r[0] + 24 + 12 * $step + 16;
+                $len = min(300.0, $r[0] + $r[2] - 24 - $x0);
+                $wave = new Path();
+                for ($i = 0; $i <= 100; $i++) {
+                    $x = $x0 + $i * $len / 100; $y = $r[1] + $r[3] / 2 + 60 * sin($phase * 2 + $i / 12);
+                    $i === 0 ? $wave->moveTo($x, $y) : $wave->lineTo($x, $y);
+                }
+                $p->strokePath($wave, 3, $t->danger);
+                $p->fillPath((new Path())->circle($r[0] + $r[2] - 70, $r[1] + 70, 36), $t->accent);
+                $p->text($r[0] + 24, $r[1] + 20, "Animated at the display's rate", 14, $t->text);
+            });
+        })->frame(height: 320, maxWidth: INF)->background(Color::secondarySystemBackground)->cornerRadius(10)),
+        $card('Vector images',
+            Text('SVGs stay sharp at any size: icons in the color of the text, pictures in their own colors.')->foregroundStyle(Color::secondary),
+            HStack(spacing: 14)(
+                Each([16, 24, 40])(fn(int $size) => Image(glyph('star'))->foregroundStyle($gold)->frame(width: $size, height: $size)),
+                Button('Done', action: fn() => $this->toast = 'Done', label: HStack(spacing: 6)(Image(glyph('check')), Text('Done')))->buttonStyle(ButtonStyle::borderedProminent),
+                Image(glyph('badge'))->resizable()->foregroundStyle($gold)->frame(width: 64, height: 64),
+                Image(glyph('badge'))->resizable()->foregroundStyle($gold)->frame(width: 32, height: 32),
+            ),
+        ),
+    ];
 };
 
 /** Liquid Glass: a toolbar floating over content that scrolls under it, on a bar of glass, a scroll edge or a progressive blur, a tinted button, and a lens to drag around. */
-$glassPage = function (Context $c): void {
-    $t = $c->theme;
-    $c->text("The glass plugin's Liquid Glass, a material, as macOS draws it: what is under it shows through, frosted and bent along its edges. Scroll under the toolbar, and drag the lens.", color: $t->textMuted);
-    $c->row(0, 16)->alignItems(Node::CENTER)->wrap(0);
-      $c->segmented(['Regular', 'Clear'], $this->glassStyle)->label('Glass');
-      $c->segmented(['Glass bar', 'Soft edge', 'Hard edge', 'Progressive blur'], $this->glassEdge)->label('Under the toolbar');
-    $c->end();
+$glassPage = function (): array {
     $style = $this->glassStyle === 1 ? GlassStyle::Clear : GlassStyle::Regular;
     $tiles = [0xef4444, 0xf59e0b, 0x10b981, 0x06b6d4, 0x6366f1, 0xec4899];
-    $c->column(0, 0)->size(0, 420)->radius(12)->clip()->border(1, $t->border);
-      // What shows through: photos and text, which start below the toolbar, 64 points down, and scroll under it, with the scroll bar below what floats over the content.
-      $bars = $this->glassEdge === 3 ? 88 : 64;
-      $c->scroll(0, 12, 1)->fill()->padding(76, 16, 16)->scrollbarInsets($bars, 0, 0);
-        for ($i = 0; $i < 12; $i++) {
-            $c->row(0, 14);
-              $c->box(180, 96, 0)->radius(12)->gradient($tiles[$i % 6], $tiles[($i + 2) % 6], 135);
-              $c->column(0, 4, 1);
-                $c->text(sprintf('Photo %d', $i + 1), style: Face::BOLD);
-                $c->text('Glass bends the light along its rim, and frosts what is under its middle.', color: $t->textMuted);
-              $c->end();
-            $c->end();
-        }
-      $c->end();
-      // A toolbar of buttons floating on glass, or over a scroll edge as macOS's, which fades the content into the background or frosts it, or over a blur, the stronger the nearer the top.
-      if ($this->glassEdge > 0) {
-          $edge = $c->column(0, 0)->absolute()->top(0)->left(0)->right(0)->passThrough();
-          match ($this->glassEdge) {
-              1 => $edge->size(0, 74)->material(new ScrollEdge()),
-              2 => $edge->size(0, 64)->material(new ScrollEdge(hard: true)),
-              3 => $edge->size(0, 88)->material(new Blur(6, new LinearGradient(0x000000, 1, 0x000000, 0, 180, 0.3, 1))),
-          };
-          $c->end();
-      }
-      $bar = $c->row(0, 6)->absolute()->top(12)->left(12)->right(12)->padding(6, 8)->alignItems(Node::CENTER)->radius(26);
-      $this->glassEdge === 0 ? $bar->material(new Glass($style)) : $bar->passThrough();
-        foreach (['chevron', 'star', 'check'] as $ic) {
-            $b = $c->row(0, 0)->size(40, 40)->radius(20)->center()->material(new Glass($style, interactive: true));
-              $c->icon(glyph($ic), 18);
-            $c->end();
-            if ($c->clicked($b)) { $c->toast('Clicked'); }
-        }
-        $c->box(0, 0, 0)->grow(1)->alpha = 0.0;
-        $done = $c->row(0, 0)->padding(8, 16)->radius(20)->material(new Glass($style, $t->accent, interactive: true));
-          $c->text('Done', color: $t->accentText, style: Face::BOLD);
-        $c->end();
-        if ($c->clicked($done)) { $c->toast('Done'); }
-      $c->end();
-      // A lens to drag over what is under it.
-      $lens = $c->column(0, 0)->absolute()->left($this->lens[0])->top($this->lens[1])->size(110, 110)->radius(55)->material(new Glass($style, interactive: true));
-      $c->end();
-      if (($d = $c->dragged($lens)) !== null) {
-          $this->lens = [max(0.0, $this->lens[0] + $d[0]), max(0.0, $this->lens[1] + $d[1])];
-      }
-    $c->end();
+    $barH = $this->glassEdge === 3 ? 88 : ($this->glassEdge === 1 ? 74 : 64);
+    $toolbar = HStack(spacing: 6)(
+        Each(['chevron', 'star', 'check'])(fn(string $ic) => Button($ic, action: fn() => $this->toast = 'Clicked', label: Image(glyph($ic)))
+            ->buttonStyle(ButtonStyle::plain)->frame(width: 40, height: 40)->cornerRadius(20)->glassEffect(new Glass($style, interactive: true))),
+        Spacer(),
+        Button('Done', action: fn() => $this->toast = 'Done')->buttonStyle(ButtonStyle::plain)->bold()->foregroundStyle(Color::white)
+            ->padding(Edge::vertical, 8)->padding(Edge::horizontal, 16)->cornerRadius(20)->glassEffect(new Glass($style, interactive: true), tint: Color::accentColor),
+    )->padding(Edge::vertical, 6)->padding(Edge::horizontal, 8)->cornerRadius(26);
+    if ($this->glassEdge === 0) {
+        $toolbar = $toolbar->glassEffect(new Glass($style));
+    }
+    return [
+        Text("The glass plugin's Liquid Glass, a material, as macOS draws it: what is under it shows through, frosted and bent along its edges. Scroll under the toolbar, and drag the lens.")->foregroundStyle(Color::secondary),
+        HStack(spacing: 16)(
+            Picker('Glass', selection: $this->glassStyle)(Text('Regular')->tag(0), Text('Clear')->tag(1))->pickerStyle(PickerStyle::segmented)->labelsHidden()->frame(width: 180),
+            Picker('Under the toolbar', selection: $this->glassEdge)(Text('Glass bar')->tag(0), Text('Soft edge')->tag(1), Text('Hard edge')->tag(2), Text('Progressive blur')->tag(3))->pickerStyle(PickerStyle::segmented)->labelsHidden()->frame(width: 420),
+        ),
+        ZStack(alignment: Alignment::topLeading)(
+            ScrollView()(
+                VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+                    Each(range(0, 11))(fn(int $i) => HStack(spacing: 14)(
+                        LinearGradient([Color::rgb($tiles[$i % 6]), Color::rgb($tiles[($i + 2) % 6])], angle: 135)->frame(width: 180, height: 96)->cornerRadius(12),
+                        VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                            Text(verbatim: sprintf('Photo %d', $i + 1))->bold(),
+                            Text('Glass bends the light along its rim, and frosts what is under its middle.')->foregroundStyle(Color::secondary),
+                        )->frame(maxWidth: INF, alignment: Alignment::leading),
+                    )),
+                )->padding(Edge::top, 76)->padding(Edge::horizontal, 16)->padding(Edge::bottom, 16),
+            ),
+            $this->glassEdge > 0 ? Color(Color::clear)->frame(maxWidth: INF, height: $barH)->allowsHitTesting(false)->glassEffect(match ($this->glassEdge) {
+                1 => new ScrollEdge(),
+                2 => new ScrollEdge(hard: true),
+                default => new Blur(6, new UILinearGradient(0x000000, 1, 0x000000, 0, 180, 0.3, 1)),
+            }) : null,
+            $toolbar->padding(12),
+            Circle()->fill(Color::clear)->frame(width: 110, height: 110)->glassEffect(new Glass($style, interactive: true))
+                ->offset(x: $this->lens[0], y: $this->lens[1])
+                ->gesture(DragGesture(minimumDistance: 0)->onChanged(function (DragGestureValue $v) {
+                    $this->lens = [max(0.0, $v->location->x - 55), max(0.0, $v->location->y - 55)];
+                })),
+        )->frame(height: 420, maxWidth: INF)->cornerRadius(12)->overlay(RoundedRectangle(cornerRadius: 12)->stroke(Color::separator)),
+    ];
 };
 
-$motion = function (Context $c): void {
-    $t = $c->theme;
-    // The items move in, collapse out, and slide to their places; the tiles move into their detail view and back.
-    $itemMotion = new ElementTransition(0.25, Easing::easeInOut(...), enter: new TransitionMotion(collapse: true, scale: 0.9), exit: new TransitionMotion(collapse: true, scale: 0.9));
-    $tileMotion = fn(int $i) => new ElementTransition(animation: new Animation(spring: new SpringOptions(0.45, 0.12)), match: "tile $i");
+$motion = function () use ($card, $cards): array {
     $flingStyles = [Animation::smooth(), Animation::snappy(), Animation::bouncy()];
-    cards($c);
-      card($c, 'Transforms and interruptible springs');
-        $c->text('Click repeatedly while moving. Edit the transformed field or open its anchored panel.', 12, $t->textMuted);
-        if ($c->clicked($c->button('Retarget the spring'))) { $this->motionTarget = !$this->motionTarget; }
-        $stage = $c->key('transform-stage')->column(0, 0)->size(0, 220)->radius(10)->border(1, $t->border)->clip();
-        $pose = $c->spring($stage, 'pose', $this->motionTarget ? 1 : 0, new SpringOptions(damping: 14));
-          $c->key('transformed-card')->column(12, 8, 0, $t->surface)->absolute()->left(35)->top(45)->size(185, 125)->radius(10)->border(1, $t->border)
-              ->scale(0.95 + 0.1 * $pose, 1)->rotate(-8 + 16 * $pose)->translate(65 * $pose, 0);
-            $c->text('Nested interactive content', 12, style: Face::BOLD);
-            $c->input($this->motionText, 'Type here', 155);
-            $anchor = $c->button('Open a popover');
-            if ($c->clicked($anchor)) { $this->transformPopover = !$this->transformPopover; }
-            $c->popover($anchor, $this->transformPopover, fn() => $c->text('I follow the transformed anchor.'));
-          $c->end();
-        $c->end();
-      $c->end();
-      card($c, 'Keyframe sequences');
-        $c->text('Replay during a sequence to interrupt it continuously. Motion follows the desktop preference.', 12, $t->textMuted);
-        if ($c->clicked($c->button('Replay the sequence'))) { $this->motionRun++; }
-        $stage = $c->key('sequence-stage')->column(0, 0)->size(0, 220)->radius(10)->border(1, $t->border)->clip();
-        $progress = $c->keyframes($stage, 'pose', [
-            new Keyframe(0, 0), new Keyframe(0.25, 1, Easing::easeOut(...)),
-            new Keyframe(0.65, 0.4, Easing::easeInOut(...)), new Keyframe(1, 0, Easing::easeInOut(...)),
-        ], new KeyframeOptions(run: $this->motionRun));
-          $c->row(0, 0, 0, $t->accent)->absolute()->left(40)->top(80)->size(160, 55)->center()->radius(8)
-              ->scale(1 + 0.08 * $progress, 1 + 0.08 * $progress)->rotate(12 * $progress)->translate(80 * $progress, 0);
-            $c->text('Four timed keyframes', 12, $t->accentText, Face::BOLD);
-          $c->end();
-        $c->end();
-      $c->end();
-    $c->end();
-
-    cards($c);
-      card($c, 'Flings that land');
-        $c->text("Throw the card (draggable): a spring takes over at the pointer's velocity, to the side the throw carries it to.", 12, $t->textMuted);
-        $c->segmented(['Smooth', 'Snappy', 'Bouncy'], $this->flingStyle);
-        $travel = 200;
-        $c->key('fling-track')->column(0, 0)->size(0, 110)->radius(10)->border(1, $t->border)->clip();
-          $thrown = $c->key('fling-card')->row(0, 0, 0, $t->accent)->absolute()->left(16)->top(24)->size(90, 60)->center()->radius(10);
-          // Under the pointer, a little past either end, and to the side the throw carries it to once let go.
-          $c->draggable($thrown, $this->fling, new DraggableOptions(Node::HORIZONTAL, [0, 0, $travel, 0], snap: Motion::nearest([0, 0], [$travel, 0]), animation: $flingStyles[$this->flingStyle]));
-          $dragging = $c->dragging($thrown);
-          $thrown->animatePose($dragging ? new Pose(scale: 1.06) : new Pose(), Animation::snappy())->cursor($dragging ? Cursor::Grabbing : Cursor::Grab);
-            $c->text('Throw me', 12, $t->accentText, Face::BOLD);
-          $c->end();
-        $c->end();
-      $c->end();
-      card($c, 'Shared elements');
-        $c->text('A tile opens into its detail view from where it was, and goes back to its place.', 12, $t->textMuted);
-        $c->key('tile-stage')->column(12, 0)->size(0, 190)->radius(10)->border(1, $t->border)->clip();
-          if ($this->tileOpen === 0) {
-              $c->row(0, 12);
-                foreach (array_slice(MOTION_COLORS, 0, 3) as $i => $col) {
-                    $tile = $c->key("tile $i")->box(64, 64, $col)->radius(12)->cursor(Cursor::Pointer);
-                    $c->transition($tile, $tileMotion($i));
-                    if ($c->clicked($tile)) { $this->tileOpen = $i + 1; }
-                }
-              $c->end();
-          } else {
-              $i = $this->tileOpen - 1;
-              $c->column(0, 10);
-                $c->transition($c->key('hero')->box(240, 120, MOTION_COLORS[$i])->radius(16), $tileMotion($i));
-                $c->row(0, 10)->alignItems(Node::CENTER);
-                  $c->text(sprintf('Tile %d', $i + 1), style: Face::BOLD)->grow(1);
-                  if ($c->clicked($c->button('Back'))) { $this->tileOpen = 0; }
-                $c->end();
-              $c->end();
-          }
-        $c->end();
-      $c->end();
-    $c->end();
-
-    cards($c);
-      card($c, 'Cards that turn over');
-        $c->text('Turned in 3D and seen in perspective, each face hides while it is turned away.', 12, $t->textMuted);
-        $stage = $c->key('flip-stage')->column(0, 0)->size(0, 150)->center();
-        $turn = $c->animateTo($stage, 'turn', $this->cardFlipped ? 180 : 0, new Animation(spring: new SpringOptions(0.6, 0.15)));
-          $c->key('flip-card')->column(0, 0)->size(200, 120);
-            $front = $c->key('front')->column(0, 4, 0, $t->surface)->absolute()->fill()->center()->radius(14)->border(1, $t->border)->shadow(0, 4, 16, 0, 0x000000, 0.12)
-                ->rotateY($turn)->perspective(800)->backfaceHidden();
-              $c->text('Front', style: Face::BOLD);
-              $c->text('Click to turn over', 12, $t->textMuted);
-            $c->end();
-            $back = $c->key('back')->column(0, 0, 0, $t->accent)->absolute()->fill()->center()->radius(14)->rotateY($turn + 180)->perspective(800)->backfaceHidden();
-              $c->text('Back', color: $t->accentText, style: Face::BOLD);
-            $c->end();
-            if ($c->clicked($front) || $c->clicked($back)) { $this->cardFlipped = !$this->cardFlipped; }
-          $c->end();
-        $c->end();
-      $c->end();
-      card($c, 'Counters, check marks and lifts');
-        $c->text('Digits roll as they change, a check mark draws itself in, and tiles lift in frames that only paint.', 12, $t->textMuted);
-        $c->row(0, 16)->wrap(0)->gapY(8)->alignItems(Node::CENTER);
-          if ($c->clicked($c->button('−'))) { $this->counter--; $this->countDown = true; }
-          $c->text((string)$this->counter, 32, style: Face::BOLD)->size(80, 0)->textAlign(Node::CENTER)->contentTransition(new ContentTransition(numeric: true, down: $this->countDown));
-          if ($c->clicked($c->button('+'))) { $this->counter++; $this->countDown = false; }
-          $check = $c->key('check')->box(36, 36, 0)->radius(8)->border(2, $t->border)->cursor(Cursor::Pointer);
-          $check->color = null;
-          $drawn = $c->animateTo($check, 'drawn', $this->taskDone ? 1 : 0, Animation::smooth());
-          $check->draw(function (Painter $p, array $r) use ($drawn, $t): void {
-              $mark = (new Path())->moveTo($r[0] + 9, $r[1] + 19)->lineTo($r[0] + 15, $r[1] + 25)->lineTo($r[0] + 27, $r[1] + 11);
-              $p->strokePath($mark->trim(0, $drawn), 3, $t->accent);
-          });
-          if ($c->clicked($check)) { $this->taskDone = !$this->taskDone; }
-        $c->end();
-        $c->row(0, 10);
-          foreach (array_slice(MOTION_COLORS, 0, 4) as $i => $col) {
-              $tile = $c->key("lift $i")->box(56, 40, $col)->radius(8);
-              $tile->animatePose($c->hovered($tile) ? new Pose(y: -6, scale: 1.06) : new Pose(), Animation::snappy());
-          }
-        $c->end();
-      $c->end();
-    $c->end();
-
-    $c->text('Transitions move nodes where the layout puts them, and in and out as they come and go. F12 (Alt+Cmd+I) opens the inspector of the window\'s nodes.', color: $t->textMuted);
-    cards($c);
-      card($c, 'A list that moves');
-        $c->row(0, 8)->wrap(0)->gapY(8);
-          if ($c->clicked($c->button('Add'))) {
-              $this->nextItem++;
-              $at = $this->items === [] ? 0 : $this->nextItem % (count($this->items) + 1);
-              array_splice($this->items, $at, 0, [new MotionItem($this->nextItem, "Item {$this->nextItem}")]);
-          }
-          if ($c->clicked($c->button('Shuffle')->disabled(count($this->items) < 2))) {
-              // Shuffle until the order changes, so that each click moves the items.
-              $before = $this->items;
-              while ($this->items === $before) { shuffle($this->items); }
-          }
-          if ($c->clicked($c->button('Sort')->disabled(count($this->items) < 2))) {
-              usort($this->items, fn(MotionItem $a, MotionItem $b) => $a->id <=> $b->id);
-          }
-        $c->end();
-        // Each row has the same transition, so that the rows move in step, and the column grows and shrinks with them; the lines between the rows come with the column.
-        $col = $c->column(0, 0)->radius(8)->border(1, $t->border)->clip()->dividers(1, $t->border);
-        $c->transition($col, new ElementTransition(0.25, Easing::easeInOut(...), size: true));
-          $removed = -1;
-          foreach ($this->items as $it) {
-              $row = $c->key("item {$it->id}")->row(0, 10, 0, $t->background)->padding(8, 10)->alignItems(Node::CENTER);
-              $c->transition($row, $itemMotion);
-                $c->box(10, 10, MOTION_COLORS[$it->id % count(MOTION_COLORS)])->radius(5);
-                $c->text($it->name)->grow(1);
-                if ($c->clicked($c->button('Remove'))) { $removed = $it->id; } // once the loop over the items is done
-              $c->end();
-          }
-          if ($removed >= 0) { $this->items = array_values(array_filter($this->items, fn(MotionItem $o) => $o->id !== $removed)); }
-        $c->end();
-        if ($this->items === []) { $c->text('No items: add some.', color: $t->textMuted); }
-      $c->end();
-      card($c, 'A panel that opens');
-        if ($c->clicked($c->button('Toggle the panel'))) { $this->panelOpen = !$this->panelOpen; }
-        $c->row(0, 0)->size(0, 120)->radius(8)->border(1, $t->border)->clip();
-          // The panel lays out its content at each width on the way; the content beside it moves with it.
-          $panel = $c->column(10, 8, 0, $t->surface)->size($this->panelOpen ? 160 : 48, 0)->shrink(0)->clipX();
-          $c->transition($panel, new ElementTransition(ease: Easing::easeInOut(...), size: true));
-            foreach (['Overview', 'Styling', 'Drawing'] as $p) {
-                $c->row(0, 8)->alignItems(Node::CENTER);
-                  $c->icon(pageIcon($p), 18)->shrink(0);
-                  $c->text($p)->singleLine();
-                $c->end();
-            }
-          $c->end();
-          $beside = $c->column(12, 0, 1);
-          $c->transition($beside, new ElementTransition(ease: Easing::easeInOut(...)));
-            $c->text('The content beside the panel.', color: $t->textMuted);
-          $c->end();
-        $c->end();
-      $c->end();
-      card($c, 'Colors that fade');
-        $c->text('Their backgrounds and borders fade as the pointer comes and goes.', 12, $t->textMuted);
-        $c->row(0, 10);
-          foreach (array_slice(MOTION_COLORS, 0, 3) as $i => $col) {
-              $tile = $c->key("fade $i")->box(64, 48, $col)->radius(8)->border(2, $t->border);
-              $tile->background($col, 0.15);
-              if ($c->hovered($tile)) { $tile->background($col)->borderColor(Theme::mix($col, 0x000000, 0.3)); }
-              $c->transition($tile, new ElementTransition(0.15, colors: true));
-          }
-        $c->end();
-      $c->end();
-      card($c, 'Attached');
-        $c->text('attach() puts a point of a node on a point of its parent.', 12, $t->textMuted);
-        $c->row(0, 24)->paddingY(8);
-          foreach (['Ada Lovelace', 'Alan Turing'] as $i => $name) {
-              $c->column(0, 0);
-                $c->avatar($name);
-                $c->row(0, 0, 0, $t->danger)->padding(1, 5)->radius(8)->attach(Anchor::TopRight, Anchor::Center);
-                  $c->text((string)(3 + $i * 9), 10, 0xffffff, Face::BOLD);
-                $c->end();
-              $c->end();
-          }
-          $c->column(0, 0, 0, $t->surface)->size(120, 64)->radius(8);
-            $c->text('Bottom right', 11, $t->textMuted)->attach(Anchor::BottomRight, Anchor::BottomRight)->right(6)->bottom(4);
-            $c->text('Center', 11)->attach(Anchor::Center, Anchor::Center);
-          $c->end();
-        $c->end();
-      $c->end();
-    $c->end();
+    $travel = 200.0;
+    return [
+        $cards(
+            $card('Transforms and interruptible springs',
+                Text('Click repeatedly while moving. Edit the transformed field or open its anchored panel.')->font(Font::caption)->foregroundStyle(Color::secondary),
+                Button('Retarget the spring', action: fn() => withAnimation(Animation::spring(duration: 0.55, bounce: 0.25), fn() => $this->motionTarget = !$this->motionTarget)),
+                ZStack(alignment: Alignment::topLeading)(
+                    VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+                        Text('Nested interactive content')->font(Font::caption)->bold(),
+                        TextField('Type here', text: $this->motionText, prompt: 'Type here')->labelsHidden()->frame(width: 155),
+                        Button('Open a popover', action: fn() => $this->transformPopover = !$this->transformPopover)
+                            ->popover(isPresented: $this->transformPopover, content: fn() => Text('I follow the transformed anchor.')->padding(10)),
+                    )->padding(12)->frame(width: 185, height: 125)->background(Color::secondarySystemBackground)->cornerRadius(10)->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator))
+                        ->scaleEffect($this->motionTarget ? 1.05 : 0.95)
+                        ->rotationEffect($this->motionTarget ? 8 : -8)
+                        ->offset(x: 35 + ($this->motionTarget ? 65 : 0), y: 45)
+                        ->animation(Animation::spring(duration: 0.55, bounce: 0.25), value: $this->motionTarget),
+                )->frame(height: 220, maxWidth: INF)->cornerRadius(10)->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator)),
+            ),
+            $card('Keyframe sequences',
+                Text('Replay during a sequence to interrupt it continuously. Motion follows the desktop preference.')->font(Font::caption)->foregroundStyle(Color::secondary),
+                Button('Replay the sequence', action: fn() => $this->motionRun++),
+                ZStack(alignment: Alignment::topLeading)(
+                    KeyframeAnimator(
+                        initialValue: 0.0,
+                        trigger: $this->motionRun,
+                        content: fn(float $p) => HStack()(Spacer(), Text('Four timed keyframes')->font(Font::caption)->bold()->foregroundStyle(Color::white), Spacer())
+                            ->frame(width: 160, height: 55)->background(Color::accentColor)->cornerRadius(8)
+                            ->scaleEffect(1 + 0.08 * $p)->rotationEffect(12 * $p)->offset(x: 40 + 80 * $p, y: 80),
+                        keyframes: [
+                            LinearKeyframe(1.0, 0.25, UnitCurve::easeOut),
+                            LinearKeyframe(0.4, 0.40, UnitCurve::easeInOut),
+                            LinearKeyframe(0.0, 0.35, UnitCurve::easeInOut),
+                        ],
+                    ),
+                )->frame(height: 220, maxWidth: INF)->cornerRadius(10)->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator)),
+            ),
+            $card('Flings that land',
+                Text("Throw the card (DragGesture): a spring takes over at the pointer's velocity, to the side the throw carries it to.")->font(Font::caption)->foregroundStyle(Color::secondary),
+                Picker('Fling', selection: $this->flingStyle)(Text('Smooth')->tag(0), Text('Snappy')->tag(1), Text('Bouncy')->tag(2))->pickerStyle(PickerStyle::segmented)->labelsHidden(),
+                ZStack(alignment: Alignment::topLeading)(
+                    HStack()(Spacer(), Text('Throw me')->font(Font::caption)->bold()->foregroundStyle(Color::white), Spacer())
+                        ->frame(width: 90, height: 60)->background(Color::accentColor)->cornerRadius(10)
+                        ->offset(x: 16 + max(0.0, min($travel, $this->flingX + $this->flingDrag)), y: 24)
+                        ->gesture(DragGesture(minimumDistance: 0)
+                            ->onChanged(fn(DragGestureValue $v) => $this->flingDrag = $v->translation->width)
+                            ->onEnded(function (DragGestureValue $v) use ($travel, $flingStyles) {
+                                $end = $this->flingX + $v->predictedEndTranslation->width;
+                                $this->flingX = max(0.0, min($travel, $this->flingX + $v->translation->width));
+                                $this->flingDrag = 0.0;
+                                withAnimation($flingStyles[$this->flingStyle], fn() => $this->flingX = $end >= $travel / 2 ? $travel : 0.0);
+                            })),
+                )->frame(height: 110, maxWidth: INF)->cornerRadius(10)->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator)),
+            ),
+            $card('Shared elements',
+                Text('A tile opens into its detail view from where it was, and goes back to its place.')->font(Font::caption)->foregroundStyle(Color::secondary),
+                ZStack(alignment: Alignment::topLeading)(
+                    $this->tileOpen === 0
+                        ? HStack(spacing: 12)(
+                            Each(array_slice(MOTION_COLORS, 0, 3))(fn(int $col, int $i) => RoundedRectangle(cornerRadius: 12)->fill(Color::rgb($col))->frame(width: 64, height: 64)
+                                ->matchedGeometryEffect(id: "tile $i", in: 'tiles')
+                                ->onTapGesture(fn() => withAnimation(Animation::spring(duration: 0.45, bounce: 0.12), fn() => $this->tileOpen = $i + 1)))
+                        )->padding(12)
+                        : VStack(alignment: HorizontalAlignment::leading, spacing: 10)(
+                            RoundedRectangle(cornerRadius: 16)->fill(Color::rgb(MOTION_COLORS[$this->tileOpen - 1]))->frame(width: 240, height: 120)
+                                ->matchedGeometryEffect(id: 'tile ' . ($this->tileOpen - 1), in: 'tiles'),
+                            HStack(spacing: 10)(
+                                Text(verbatim: sprintf('Tile %d', $this->tileOpen))->bold(),
+                                Spacer(),
+                                Button('Back', action: fn() => withAnimation(Animation::spring(duration: 0.45, bounce: 0.12), fn() => $this->tileOpen = 0)),
+                            ),
+                        )->padding(12),
+                )->frame(height: 190, maxWidth: INF)->cornerRadius(10)->overlay(RoundedRectangle(cornerRadius: 10)->stroke(Color::separator)),
+            ),
+            $card('Cards that turn over',
+                Text('Turned in 3D and seen in perspective, each face shows as it turns.')->font(Font::caption)->foregroundStyle(Color::secondary),
+                ZStack()(
+                    VStack(spacing: 4)(
+                        Text($this->cardFlipped ? 'Back' : 'Front')->bold()->foregroundStyle($this->cardFlipped ? Color::white : Color::primary),
+                        $this->cardFlipped ? null : Text('Click to turn over')->font(Font::caption)->foregroundStyle(Color::secondary),
+                    )->frame(width: 200, height: 120)->background($this->cardFlipped ? Color::accentColor : Color::secondarySystemBackground)->cornerRadius(14)
+                        ->overlay(RoundedRectangle(cornerRadius: 14)->stroke(Color::separator))->shadow(Color::black->opacity(0.12), radius: 8, y: 4)
+                        ->rotation3DEffect($this->cardFlipped ? 180 : 0, axis: [0, 1, 0])
+                        ->animation(Animation::spring(duration: 0.6, bounce: 0.15), value: $this->cardFlipped)
+                        ->onTapGesture(fn() => $this->cardFlipped = !$this->cardFlipped),
+                )->frame(height: 150, maxWidth: INF),
+            ),
+            $card('Counters, check marks and lifts',
+                Text('Digits update, a check mark toggles, and tiles lift on hover.')->font(Font::caption)->foregroundStyle(Color::secondary),
+                HStack(spacing: 16)(
+                    Button('−', action: function () { $this->counter--; $this->countDown = true; }),
+                    Text(verbatim: (string)$this->counter)->font(Font::system(size: 32, weight: Weight::bold))->frame(width: 80),
+                    Button('+', action: function () { $this->counter++; $this->countDown = false; }),
+                    Button('Check', action: fn() => withAnimation(Animation::smooth(), fn() => $this->taskDone = !$this->taskDone),
+                        label: ZStack()(
+                            RoundedRectangle(cornerRadius: 8)->stroke(Color::separator, lineWidth: 2)->frame(width: 36, height: 36),
+                            $this->taskDone ? Image(glyph('check'))->foregroundStyle(Color::accentColor)->transition(AnyTransition::scale()) : null,
+                        ))->buttonStyle(ButtonStyle::plain),
+                ),
+                HStack(spacing: 10)(
+                    Each(array_slice(MOTION_COLORS, 0, 4))(function (int $col, int $i) {
+                        $over = $this->hoveredTile[$i] ?? false;
+                        return RoundedRectangle(cornerRadius: 8)->fill(Color::rgb($col))->frame(width: 56, height: 40)
+                            ->scaleEffect($over ? 1.06 : 1.0)->offset(y: $over ? -6 : 0)->animation(Animation::snappy(), value: $over)
+                            ->onHover(fn(bool $h) => $this->hoveredTile[$i] = $h)->id("lift $i");
+                    }),
+                ),
+            ),
+        ),
+        Text('Transitions move views where the layout puts them, and in and out as they come and go. F12 (Alt+Cmd+I) opens the inspector of the window\'s nodes.')->foregroundStyle(Color::secondary),
+        $cards(
+            $card('A list that moves',
+                HStack(spacing: 8)(
+                    Button('Add', action: fn() => withAnimation(Animation::easeInOut(0.25), function () {
+                        $this->nextItem++;
+                        $at = $this->items === [] ? 0 : $this->nextItem % (count($this->items) + 1);
+                        array_splice($this->items, $at, 0, [new MotionItem($this->nextItem, "Item {$this->nextItem}")]);
+                    })),
+                    Button('Shuffle', action: fn() => withAnimation(Animation::easeInOut(0.25), function () {
+                        $before = $this->items;
+                        while ($this->items === $before) { shuffle($this->items); }
+                    }))->disabled(count($this->items) < 2),
+                    Button('Sort', action: fn() => withAnimation(Animation::easeInOut(0.25), function () {
+                        usort($this->items, fn(MotionItem $a, MotionItem $b) => $a->id <=> $b->id);
+                    }))->disabled(count($this->items) < 2),
+                ),
+                VStack(spacing: 0)(
+                    Each($this->items, id: 'id')(fn(MotionItem $it) => HStack(spacing: 10)(
+                        Circle()->fill(Color::rgb(MOTION_COLORS[$it->id % count(MOTION_COLORS)]))->frame(width: 10, height: 10),
+                        Text(verbatim: $it->name),
+                        Spacer(),
+                        Button('Remove', action: fn() => withAnimation(Animation::easeInOut(0.25), function () use ($it) {
+                            $this->items = array_values(array_filter($this->items, fn(MotionItem $o) => $o->id !== $it->id));
+                        })),
+                    )->padding(Edge::vertical, 8)->padding(Edge::horizontal, 10)->transition(AnyTransition::scale(0.9)->combined(AnyTransition::opacity()))),
+                )->cornerRadius(8)->overlay(RoundedRectangle(cornerRadius: 8)->stroke(Color::separator)),
+                $this->items === [] ? Text('No items: add some.')->foregroundStyle(Color::secondary) : null,
+            ),
+            $card('A panel that opens',
+                Button('Toggle the panel', action: fn() => withAnimation(Animation::easeInOut(0.25), fn() => $this->panelOpen = !$this->panelOpen)),
+                HStack(spacing: 0)(
+                    VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+                        Each(['Overview', 'Styling', 'Drawing'])(fn(string $p) => HStack(spacing: 8)(
+                            Image(pageIcon($p))->frame(width: 18, height: 18),
+                            $this->panelOpen ? Text(verbatim: $p)->lineLimit(1) : null,
+                        )),
+                    )->padding(10)->frame(width: $this->panelOpen ? 160 : 48, maxHeight: INF, alignment: Alignment::topLeading)->background(Color::secondarySystemBackground),
+                    VStack(alignment: HorizontalAlignment::leading)(
+                        Text('The content beside the panel.')->foregroundStyle(Color::secondary),
+                    )->padding(12)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading),
+                )->frame(height: 120)->cornerRadius(8)->overlay(RoundedRectangle(cornerRadius: 8)->stroke(Color::separator)),
+            ),
+            $card('ZStack alignments',
+                Text('ZStack places badges and labels on any corner of a view.')->font(Font::caption)->foregroundStyle(Color::secondary),
+                HStack(spacing: 24)(
+                    Each(['Ada Lovelace', 'Alan Turing'])(fn(string $name, int $i) => ZStack(alignment: Alignment::topTrailing)(
+                        Avatar($name),
+                        Text(verbatim: (string)(3 + $i * 9))->font(Font::system(size: 10, weight: Weight::bold))->foregroundStyle(Color::white)
+                            ->padding(Edge::vertical, 1)->padding(Edge::horizontal, 5)->background(Color::red)->cornerRadius(8)->offset(x: 6, y: -4),
+                    )),
+                    ZStack(alignment: Alignment::bottomTrailing)(
+                        ZStack()(
+                            RoundedRectangle(cornerRadius: 8)->fill(Color::secondarySystemBackground),
+                            Text('Center')->font(Font::caption),
+                        ),
+                        Text('Bottom right')->font(Font::caption)->foregroundStyle(Color::secondary)->padding(Edge::trailing, 6)->padding(Edge::bottom, 4),
+                    )->frame(width: 120, height: 64),
+                )->padding(Edge::vertical, 8),
+            ),
+        ),
+    ];
 };
 
 /** Streams the sample in, a few bytes at a time, at the uneven pace of a language model's tokens. */
@@ -639,8 +540,11 @@ $overview = fn() => [
     ),
 ];
 
-$controls = function () use ($card, $legacy, $row) {
+$controls = function () use ($card, $row) {
     $path = ['Macintosh HD', 'Users', 'ada', 'Documents', 'Reports'];
+    if ($this->tasks === []) {
+        $this->tasks = [new GalleryTask('Write the docs'), new GalleryTask('Fix the layout'), new GalleryTask('Ship it'), new GalleryTask('Plan the release', true)];
+    }
     return [
     $card('Choices',
         Toggle('I agree to the terms', isOn: $this->agree)->toggleStyle(ToggleStyle::checkbox),
@@ -657,35 +561,26 @@ $controls = function () use ($card, $legacy, $row) {
         TokenField('Tags', tokens: $this->tags, suggestions: ['design', 'native', 'performance', 'php', 'release', 'typescript'])->labelsHidden(),
         Text('Type to filter; Up and Down move, Enter chooses. In the tags, Enter or a comma adds a tag, and Backspace takes out the last.')->foregroundStyle(Color::secondary),
     ),
-    $legacy(function (Context $c): void {
-        $t = $c->theme;
-    card($c, 'Drag and drop');
-      if ($this->tasks === []) {
-          $this->tasks = [new GalleryTask('Write the docs'), new GalleryTask('Fix the layout'), new GalleryTask('Ship it'), new GalleryTask('Plan the release', true)];
-      }
-      $c->row(0, 12)->alignItems(Node::START);
-        foreach (['To do', 'Done'] as $col => $title) {
-            $done = $col === 1;
-            $bin = $c->column(10, 6, 1, $t->surface)->basis(0)->radius(8)->minHeight(150)->border(1, $t->border)->label($title);
-            $task = null;
-            if ($c->drop($bin, GalleryTask::class, $task)) { $task->done = $done; }
-            if ($c->dragOver($bin, GalleryTask::class, $task) && $task->done !== $done) { $bin->border(2, $t->accent); }
-              $c->text($title)->fontWeight(600);
-              foreach ($this->tasks as $task) {
-                  if ($task->done !== $done) { continue; }
-                  $row = $c->key($task->name)->row(0, 0, 0, $t->background)->padding(7, 10)->radius(6)->border(1, $t->border)->cursor(Cursor::Pointer);
-                  $c->drag($row, $task);
-                    $c->text($task->name);
-                  $c->end();
-              }
-            $c->end();
-        }
-      $c->end();
-      $c->text('Drag a task to the other column; Escape gives up.', 12, $t->textMuted);
-    $c->end();
-    }),
+    $card('Drag and drop',
+        HStack(alignment: VerticalAlignment::top, spacing: 12)(
+            Each(['To do', 'Done'])(function (string $title, int $col): View {
+                $done = $col === 1;
+                $filtered = array_values(array_filter($this->tasks, fn(GalleryTask $t) => $t->done === $done));
+                return VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
+                    Text($title)->bold(),
+                    Each($filtered, id: 'name')(fn(GalleryTask $task) => Text(verbatim: $task->name)
+                        ->padding(Edge::vertical, 7)->padding(Edge::horizontal, 10)->frame(maxWidth: INF, alignment: Alignment::leading)
+                        ->background(Color::background)->cornerRadius(6)->overlay(RoundedRectangle(cornerRadius: 6)->stroke(Color::separator))
+                        ->draggable($task->name, value: $task)),
+                )->padding(10)->frame(minHeight: 150, maxWidth: INF, alignment: Alignment::topLeading)
+                    ->background(Color::secondarySystemBackground)->cornerRadius(8)->overlay(RoundedRectangle(cornerRadius: 8)->stroke(Color::separator))
+                    ->accessibilityLabel($title)
+                    ->dropDestination(for: GalleryTask::class, action: function (GalleryTask $t) use ($done): void { $t->done = $done; });
+            }),
+        ),
+        Text('Drag a task to the other column; Escape gives up.')->font(Font::caption)->foregroundStyle(Color::secondary),
+    ),
     $card('Groups and paths',
-        // A toggle of toggles: mixed while some are on; switching it switches them all.
         Toggle('Notifications', sources: [&$this->notifyMail, &$this->notifyCalendar, &$this->notifyMessages]),
         VStack(alignment: HorizontalAlignment::leading, spacing: 6)(Toggle('Mail', isOn: $this->notifyMail), Toggle('Calendar', isOn: $this->notifyCalendar), Toggle('Messages', isOn: $this->notifyMessages))->padding(Edge::leading, 20),
         Breadcrumbs(array_slice($path, 0, $this->pathDepth + 1), selection: $this->pathAt)->onChange(of: $this->pathAt, action: fn() => $this->pathDepth = $this->pathAt),
@@ -696,7 +591,6 @@ $controls = function () use ($card, $legacy, $row) {
             Toggle('Verbose logging', isOn: $this->verbose),
             Text('The arrow turns and the content grows into view, at once where the desktop asks for less motion.')->foregroundStyle(Color::secondary),
         )),
-        // An accordion: groups in a box, each opening by itself.
         GroupBox()(VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
             DisclosureGroup('General', isExpanded: $this->sections[0])(Text('Startup, appearance and updates.')),
             Divider(),
@@ -719,7 +613,6 @@ $controls = function () use ($card, $legacy, $row) {
             VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
                 $row('Time', 48, DatePicker('Meeting', selection: $this->meeting, displayedComponents: [DatePickerComponents::hourAndMinute])->labelsHidden()),
                 $row('Tint', 48, ColorPicker('Tint', selection: $this->tint, supportsOpacity: true, opacity: $this->tintAlpha)->labelsHidden()),
-                // A day picked in the popover closes it; browsing the months does not.
                 $row('Due', 48, Button($this->due->format('M j'), action: fn() => $this->dueOpen = !$this->dueOpen)
                     ->popover(isPresented: $this->dueOpen, content: fn() => DatePicker('Due', selection: $this->due, displayedComponents: [DatePickerComponents::date])->datePickerStyle(DatePickerStyle::graphical)->labelsHidden()
                         ->onChange(of: $this->due, action: fn() => $this->dueOpen = false)->padding(8))),
@@ -745,24 +638,19 @@ $controls = function () use ($card, $legacy, $row) {
         ),
         Text('Tab moves the focus; Enter or Space presses the focused button.')->foregroundStyle(Color::secondary),
     ),
-    $legacy(function (Context $c): void {
-        $t = $c->theme;
-    card($c, 'Toolbar');
-      $c->toolbar(function () use ($c): void {
-          $c->button('New');
-          $c->button('Open');
-          $c->toggleGroup(function () use ($c): void {
-              $c->toggle($this->bold, 'Bold');
-              $c->toggle($this->italic, 'Italic');
-              $c->toggle($this->underline, 'Underline');
-          })->label('Style');
-          $c->segmented(['List', 'Grid', 'Columns'], $this->layout)->label('View');
-          $c->spacer();
-          $c->toggle($this->inspector, 'Inspector');
-      })->label('Document')->border(1, $t->border)->radius(8);
-      $c->text('Tab stops once in the toolbar, and the arrows move between its controls. Narrow the window: what does not fit goes into the » menu.', color: $t->textMuted);
-    $c->end();
-    }),
+    $card('Toolbar',
+        HStack(spacing: 6)(
+            Button('New'),
+            Button('Open'),
+            Toggle('Bold', isOn: $this->bold)->toggleStyle(ToggleStyle::button),
+            Toggle('Italic', isOn: $this->italic)->toggleStyle(ToggleStyle::button),
+            Toggle('Underline', isOn: $this->underline)->toggleStyle(ToggleStyle::button),
+            Picker('View', selection: $this->layout)(Text('List')->tag(0), Text('Grid')->tag(1), Text('Columns')->tag(2))->pickerStyle(PickerStyle::segmented)->labelsHidden()->frame(width: 210),
+            Spacer(),
+            Toggle('Inspector', isOn: $this->inspector)->toggleStyle(ToggleStyle::button),
+        )->buttonStyle(ButtonStyle::borderless)->padding(6)->cornerRadius(8)->overlay(RoundedRectangle(cornerRadius: 8)->stroke(Color::separator)),
+        Text('Toggles and segmented controls in a toolbar row.')->foregroundStyle(Color::secondary),
+    ),
     $card('Tabs and panes',
         Picker('Tab', selection: $this->tab)(Text('Files')->tag(0), Text('Search')->tag(1), Text('History')->tag(2))->pickerStyle(PickerStyle::segmented)->labelsHidden(),
         HSplitView()(
@@ -771,53 +659,76 @@ $controls = function () use ($card, $legacy, $row) {
             Text('Drag the divider, or focus it and press the arrows.')->foregroundStyle(Color::secondary)->padding(10)->frame(maxWidth: INF, maxHeight: INF, alignment: Alignment::topLeading),
         )->frame(height: 140)->cornerRadius(6)->overlay(RoundedRectangle(cornerRadius: 6)->stroke(Color::separator)),
     ),
-    $legacy(function (Context $c): void {
-        $t = $c->theme;
-    card($c, 'Built on bases');
-      $c->text('Bases are the widgets without their look: the pointer, the keys, the focus and accessibility, styled here anew.', color: $t->textMuted);
-      $c->row(0, 16)->wrap(0);
-        // A segmented control on tabsBase.
-        $tabs = $c->tabsBase($this->period, 3);
-        $tabs->list->padding(3)->radius(999)->background($t->surface);
-          foreach (['Day', 'Week', 'Month'] as $i => $name) {
-              $seg = $tabs->tab($i)->padding(5, 14)->radius(999);
-              if ($i === $this->period) { $seg->background($t->background)->shadow(0, 1, 2, 0, 0x000000, 0.15); }
-                $c->text($name);
-              $c->end();
-          }
-        $c->end();
-        // A pill that toggles, on switchBase.
-        $pill = $c->switchBase($this->pinned)->padding(5, 12)->radius(999)->border(1, $t->border);
-        $pill->gap = 6;
-        if ($this->pinned) { $pill->background($t->accent)->textColor($t->accentText)->border(1, $t->accent); }
-          $c->icon(glyph('star'));
-          $c->text('Starred');
-        $c->end();
-        // A select with check marks, on selectBase.
-        $sel = $c->selectBase($this->fruit);
-        $sel->trigger->padding(6, 10)->radius(8)->border(1, $t->border)->gap = 6;
-          $c->text($this->fruit);
-          $c->icon(glyph('chevron'), null, $t->textMuted);
-        $c->end();
-        $sel->popup(function (Node $panel) use ($c, $t, $sel): void {
-            $panel->margin(4, 0, 0, 0)->padding(4)->radius(10)->background($t->background)->border(1, $t->border)->shadow(0, 8, 24, 0, 0x000000, 0.15);
-            foreach (['Apple', 'Banana', 'Cherry', 'Durian'] as $fruit) {
-                $item = $sel->item($fruit)->padding(6, 10)->radius(6);
-                $item->gap = 8;
-                if ($item->highlighted) { $item->background($t->accent)->textColor($t->accentText); }
-                  $c->icon(glyph('check'))->opacity($fruit === $this->fruit ? 1 : 0);
-                  $c->text($fruit);
-                $c->end();
-            }
-        });
-      $c->end();
-    $c->end();
-    }),
+    $card('Custom-styled controls',
+        Text('Views styled with modifiers: pills, segmented tabs and menus of your own look.')->foregroundStyle(Color::secondary),
+        HStack(spacing: 16)(
+            HStack(spacing: 2)(
+                Each(['Day', 'Week', 'Month'])(fn(string $name, int $i) => Button($name, action: fn() => $this->period = $i)
+                    ->buttonStyle(ButtonStyle::plain)->padding(Edge::vertical, 5)->padding(Edge::horizontal, 14)
+                    ->background($i === $this->period ? Color::background : Color::clear)->clipShape(Capsule()))
+            )->padding(3)->background(Color::secondarySystemBackground)->clipShape(Capsule()),
+            Button('Starred', action: fn() => $this->pinned = !$this->pinned, label: HStack(spacing: 6)(Image(glyph('star')), Text('Starred')))
+                ->buttonStyle(ButtonStyle::plain)->foregroundStyle($this->pinned ? Color::white : Color::primary)
+                ->padding(Edge::vertical, 5)->padding(Edge::horizontal, 12)->background($this->pinned ? Color::accentColor : Color::clear)
+                ->clipShape(Capsule())->overlay(Capsule()->stroke($this->pinned ? Color::accentColor : Color::separator)),
+            Picker('Fruit', selection: $this->fruit)(Each(['Apple', 'Banana', 'Cherry', 'Durian'])(fn(string $f) => Text($f)->tag($f)))->labelsHidden()->frame(width: 140),
+        ),
+    ),
     ];
 };
 
-/** The text page: the engine's fields, forms, editors and find bar, as NSViews in representables. */
-$text = fn() => [$legacy(fn(Context $c) => $this->text($c))];
+/** The text page: fields, forms, editors, find navigator and typography. */
+$text = function () use ($card, $row): array {
+    $sampleText = 'The quick brown fox jumps over the lazy dog. The dog sleeps; the fox runs on.';
+    $q = $this->findQuery;
+    $matches = $q === '' ? 0 : substr_count(strtolower($sampleText), strtolower($q));
+    $invalid = $this->email !== '' && !str_contains($this->email, '@') ? 'Enter an email address, such as ada@example.com.' : '';
+    return [
+        $card('Form',
+            $row('Name', 90, TextField('Name', text: $this->name, prompt: 'Ada Lovelace')->labelsHidden()),
+            $row('Email', 90, VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                TextField('Email', text: $this->email, prompt: 'ada@example.com')->labelsHidden()->onSubmit(fn() => $this->dialog = true),
+                Text($invalid !== '' ? $invalid : 'Enter opens a dialog.')->font(Font::caption)->foregroundStyle($invalid !== '' ? Color::red : Color::secondary),
+            )),
+            $row('About you', 90, VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                TextEditor(text: $this->bio)->frame(height: 110),
+                Text(verbatim: sprintf('%d characters', mb_strlen($this->bio)))->font(Font::caption)->foregroundStyle(Color::secondary),
+            )),
+            GroupBox('Optional')(VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+                $row('Birthday', 80, DatePicker('Birthday', selection: $this->birthday, displayedComponents: [DatePickerComponents::date])->labelsHidden()),
+                $row('Updates', 80, Toggle('Send me the newsletter', isOn: $this->news)->toggleStyle(ToggleStyle::checkbox)),
+            )),
+        ),
+        $card('Find',
+            VStack(alignment: HorizontalAlignment::leading, spacing: 8)(
+                !$this->finding ? Button('Find…', action: fn() => $this->finding = true) : null,
+                Text($sampleText),
+            )->findNavigator(isPresented: $this->finding, text: $this->findQuery, matches: $matches, current: $this->findAt),
+        ),
+        $card('Typography',
+            Text('Display 28')->font(Font::system(size: 28, weight: Weight::bold)),
+            Text('Italic, underlined and struck through')->italic()->underline()->strikethrough(),
+            Text([
+                Text('Rich text mixes '), Text('bold')->bold(), Text(', '),
+                Text('colored')->foregroundStyle(Color::accentColor), Text(', '), Text('large')->font(Font::system(size: 20)),
+                Text(' and '), Text('underlined')->underline(), Text(' runs in one paragraph.'),
+            ]),
+            Text('Monospace: function main() {}')->monospaced(),
+            Text('SPACED CAPITALS')->font(Font::caption)->bold()->foregroundStyle(Color::secondary),
+            Text('Tabular digits: 1,111.11 / 8,888.88')->monospaced(),
+            Text('Mixed scripts: English, Ελληνικά, Русский, 日本語, 한국어, العربية, עברית, हिन्दी 🎉')->textSelection(TextSelectability::enabled),
+            Text(verbatim: str_repeat('Long text wraps to the width it gets. ', 6))->foregroundStyle(Color::secondary),
+            Text(verbatim: str_repeat('A single line that ends with an ellipsis when it does not fit. ', 4))->lineLimit(1),
+        ),
+        $card('Text selection',
+            VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
+                Text('Drag from this paragraph into the next, then copy the selected text.'),
+                Text([Text('Each paragraph keeps its own layout. '), Text('They share one selection.')->bold()]),
+                Text('This hint is excluded from selection.')->foregroundStyle(Color::secondary)->textSelection(TextSelectability::disabled),
+            )->textSelection(TextSelectability::enabled),
+        ),
+    ];
+};
 
 /** A rich text editor with a toolbar formatting its selection, which shows the selection's formats; its buttons leave the focus in the editor. */
 $richText = function () {
@@ -853,18 +764,34 @@ $richText = function () {
     ];
 };
 
-/** 10,000 rows, filtered; a row opens in a page of its own. Then the chat, the tree, the table, the outline and the grid view, the engine's. */
-$list = function () use ($legacy, &$chatCard, &$sortedFiles) {
+/** 10,000 rows, filtered; a row opens in a page of its own. Then the chat, the tree, the table, the outline and the grid view. */
+$list = function () use ($card, &$chatCard, &$sortedFiles) {
     $rows = [];
     for ($i = 0; $i < 10000; $i++) { if ($this->filterText === '' || str_contains((string)$i, $this->filterText)) { $rows[] = $i; } }
     $open = fn(int $n) => $this->router->push("/list/$n");
+    $files = $sortedFiles();
+    if ($this->swatchOrder === []) { $this->swatchOrder = range(0, 9999); }
+    $treeFile = function (string $path, ?Closure $children = null) use (&$treeFile): View {
+        if ($children === null) {
+            return Button(basename($path), action: fn() => $this->leaf = $path)->buttonStyle(ButtonStyle::plain)
+                ->fontWeight($this->leaf === $path ? Weight::semibold : Weight::regular)
+                ->foregroundStyle($this->leaf === $path ? Color::accentColor : Color::primary);
+        }
+        $this->tree[$path] ??= false;
+        return DisclosureGroup(basename($path), isExpanded: $this->tree[$path])(VStack(alignment: HorizontalAlignment::leading, spacing: 4)(...$children()));
+    };
+    $outlineData = [
+        ['id' => 'f1', 'name' => 'Folder 001', 'children' => [['id' => 'f1-1', 'name' => 'File 001.php'], ['id' => 'f1-2', 'name' => 'File 002.php']]],
+        ['id' => 'f2', 'name' => 'Folder 002', 'children' => [['id' => 'f2-1', 'name' => 'Notes.md'], ['id' => 'f2-2', 'name' => 'Diagram.svg']]],
+        ['id' => 'f3', 'name' => 'README.md'],
+    ];
     return [
         TextField('Filter', text: $this->filterText, prompt: 'Filter 10,000 rows'),
         ScrollViewReader(fn(ScrollViewProxy $proxy) => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
             HStack(spacing: 12)(
                 Text(verbatim: sprintf('%d rows; only those in view are built. Pick one with a click or the arrows, open it with a double click or Enter; right-click one for its menu.', count($rows)))->foregroundStyle(Color::secondary),
                 Spacer(),
-                Button('Show picked', action: fn() => $proxy->scrollTo($this->picked))->disabled(!in_array($this->picked, $rows, true)), // the row may not be built: the list scrolls to it all the same
+                Button('Show picked', action: fn() => $proxy->scrollTo($this->picked))->disabled(!in_array($this->picked, $rows, true)),
             ),
             ListView($rows, selection: $this->picked)(fn(int $n) => HStack(spacing: 10)(
                 Text(verbatim: "Row $n" . (($this->starred[$n] ?? false) ? '  ★' : '')),
@@ -879,83 +806,37 @@ $list = function () use ($legacy, &$chatCard, &$sortedFiles) {
                 }, primaryAction: fn(array $ids) => $open($ids[0]))
                 ->frame(height: 420)->overlay(RoundedRectangle(cornerRadius: 8)->stroke(Color::separator)),
         )),
-        $legacy(function (Context $c) use (&$chatCard, &$sortedFiles): void {
-            $t = $c->theme;
-    $chatCard($c);
-    $c->row(0, 18)->wrap(0)->gapY(18)->alignItems(Node::STRETCH);
-      card($c, 'Tree')->size(220, 260);
-        $item = function (string $path, string $label, ?Closure $children = null) use ($c): void {
-            $open = null;
-            if ($children !== null) { $open = $this->tree[$path] ?? false; }
-            $n = $c->treeItem($label, $open, $children, $this->leaf === $path);
-            if ($children !== null) { $this->tree[$path] = $open; }
-            if ($c->clicked($n)) { $this->leaf = $path; }
-        };
-        $c->tree(function () use ($item): void {
-            $item('src', 'src', function () use ($item): void {
-                $item('src/App.php', 'App.php');
-                $item('src/UI', 'UI', fn() => $item('src/UI/Context.php', 'Context.php'));
-            });
-            $item('composer.json', 'composer.json');
-        });
-      $c->end();
-      card($c, 'Table')->basis(360)->grow(1)->size(0, 260);
-        $cols = [new TableColumn('Name', sortable: true), new TableColumn('Kind', 120, sortable: true), new TableColumn('Size', 90, align: Node::END, sortable: true)];
-        // Several files chosen by their ids, the one last chosen opening; typing a name goes to it. The names are renamed in place.
-        $this->table->sortBy ??= []; // Cmd-click a header to sort by it after the others
-        $files = $sortedFiles();
-        $this->table->key = fn(int $i): int => $files[$i]->id;
-        $this->table->label = fn(int $i): string => $files[$i]->name;
-        $this->table->selected ??= -1;
-        $this->table->selection ??= $this->chosen;
-        $c->table($this->table, $cols, count($files), function (int $row, int $col) use ($c, $files): void {
-            $f = $files[$row];
-            match ($col) {
-                0 => $c->editableText($f->name),
-                1 => $c->text($f->kind)->singleLine(),
-                2 => $c->text("{$f->size} KB"),
-            };
-        })->grow(1);
-        if ($this->table->submitted() && $this->table->selected >= 0) { $c->toast('Opened ' . $files[$this->table->selected]->name); }
-        $c->text(sprintf('%d chosen. Shift-click or Cmd-click to choose several; type a name to go to it; Return renames. Click a header to sort, Cmd-click to sort by several; drag a header to move it, its edge to resize it.', $this->chosen->count()), 12, $t->textMuted);
-      $c->end();
-    $c->end();
-    card($c, 'Outline')->size(0, 340);
-      // 100 folders of 100 files, in the order the Name column sorts.
-      $this->outline->list->selected ??= -1;
-      $descending = $this->outline->list->sort?->descending ?? false;
-      $names = function (string $prefix, int $n) use ($descending): array {
-          $items = [];
-          for ($i = 0; $i < $n; $i++) { $items[] = sprintf('%s %03d', $prefix, $descending ? $n - $i : $i + 1); }
-          return $items;
-      };
-      $children = fn(string $item): ?array => !str_starts_with($item, 'Folder') || str_contains($item, '/') ? null : $names("$item/File", 100);
-      $c->outlineTable($this->outline, [new TableColumn('Name', sortable: true), new TableColumn('Kind', 110)], $names('Folder', 100), $children, function (string $item, int $col) use ($c, $children): void {
-          match (true) {
-              $col === 0 => $c->text(substr($item, (int)strrpos('/' . $item, '/')))->singleLine(),
-              $children($item) !== null => $c->text('Folder'),
-              default => $c->text('Document'),
-          };
-      })->grow(1);
-      $c->text('10,100 items, built only as they show. Right and Left open and close the item chosen, and Option-click or Option with them all inside.', 12, $t->textMuted);
-    $c->end();
-    card($c, 'Grid view')->size(0, 380);
-      // 10,000 swatches, as many columns as fit, several chosen by their numbers, in the order the user drags them to.
-      if ($this->swatchOrder === []) { $this->swatchOrder = range(0, 9999); }
-      $g = $this->swatches;
-      $g->key = fn(int $i): int => $this->swatchOrder[$i];
-      $g->selects = true;
-      $g->selection = $this->swatchesChosen;
-      $g->label = fn(int $i): string => 'Swatch ' . $this->swatchOrder[$i];
-      $g->reorder = function (array $items, int $to): void { $this->swatchOrder = reorder($this->swatchOrder, $items, $to); };
-      $c->gridView($g, count($this->swatchOrder), 96, 96, function (int $i) use ($c): void {
-          $n = $this->swatchOrder[$i];
-          $c->box(0, 0, hsl(($n % 36) * 10, 0.6, 0.65))->grow(1)->margin(6)->radius(6);
-          $c->text((string)$n, 12)->alignSelf(Node::CENTER)->margin(0, 0, 4);
-      })->grow(1);
-      $c->text(sprintf('%d chosen of 10,000, built only as they show. The arrows move in both directions; Shift and Cmd choose several, and dragging moves them.', $this->swatchesChosen->count()), 12, $t->textMuted);
-    $c->end();
-        }),
+        $chatCard(),
+        HStack(alignment: VerticalAlignment::top, spacing: 18)(
+            $card('Tree',
+                VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
+                    $treeFile('src', fn() => [$treeFile('src/App.php'), $treeFile('src/UI', fn() => [$treeFile('src/UI/Context.php')])]),
+                    $treeFile('composer.json'),
+                ),
+            )->frame(width: 220, height: 260),
+            $card('Table',
+                Table($files, id: 'id', selection: $this->chosen, sortOrder: $this->tableSort)(
+                    TableColumn('Name', fn(TableFile $f) => EditableText(text: $f->name), value: 'name')->width(min: 140),
+                    TableColumn('Kind', value: 'kind')->width(ideal: 120),
+                    TableColumn('Size', fn(TableFile $f) => Text(verbatim: "{$f->size} KB")->foregroundStyle(Color::secondary), value: 'size')->width(ideal: 90)->alignment(HorizontalAlignment::trailing),
+                )->contextMenu(primaryAction: function (array $ids) use ($files) {
+                    foreach ($files as $f) { if ($f->id === ($ids[0] ?? -1)) { $this->toast = 'Opened ' . $f->name; } }
+                })->frame(height: 170),
+                Text(verbatim: sprintf('%d chosen. Shift-click or Cmd-click to choose several; double-click a name to rename; click a header to sort.', count($this->chosen)))->font(Font::caption)->foregroundStyle(Color::secondary),
+            )->frame(height: 260),
+        ),
+        $card('Outline',
+            OutlineGroup($outlineData, children: 'children', id: 'id')(fn(array $item) => Label($item['name'], image: glyph(isset($item['children']) ? 'chevron' : 'check'))),
+        ),
+        $card('Grid view',
+            LazyVGrid(columns: [GridItem::adaptive(minimum: 96)], selection: $this->swatchesChosen)(
+                Each($this->swatchOrder, id: fn(int $n) => $n)(fn(int $n) => VStack(spacing: 4)(
+                    RoundedRectangle(cornerRadius: 6)->fill(Color::rgb(hsl(($n % 36) * 10, 0.6, 0.65)))->frame(width: 84, height: 64),
+                    Text(verbatim: (string)$n)->font(Font::caption),
+                )->padding(4)),
+            )->frame(height: 300),
+            Text(verbatim: sprintf('%d chosen of 10,000, built only as they show. The arrows move in both directions; Shift and Cmd choose several.', count($this->swatchesChosen)))->font(Font::caption)->foregroundStyle(Color::secondary),
+        ),
     ];
 };
 
@@ -1041,41 +922,28 @@ $overlays = fn() => [
     $card('Overlays', HStack(spacing: 10)(
         Button('Open dialog', action: fn() => $this->dialog = true)->buttonStyle(ButtonStyle::borderedProminent),
         Menu('Menu')(Button('New file'), Button('Open…'), Button('Save as…')),
-        $legacy(function (Context $c): void {
-            $t = $c->theme;
-            $c->row(0, 10)->alignItems(Node::CENTER);
-        // A menu drawn in the window, with the theme's look, rather than the system's: on a right-click, and below the card's ⋯ button.
-        $cardMenu = function (Menu $m): void {
-            if ($m->item('Duplicate')->shortcut(Key::COMMAND, Key::D)->chosen()) { $this->cardDid = 'Duplicated'; }
-            if ($m->item('Pinned')->checked($this->cardPinned)->chosen()) { $this->cardPinned = !$this->cardPinned; }
-            $m->submenu('Zoom', function (Menu $m): void {
-                foreach (['Small', 'Medium', 'Large'] as $z) {
-                    if ($m->item($z)->radio($this->cardZoom === $z)->chosen()) { $this->cardZoom = $z; }
-                }
-            });
-            $m->separator();
-            if ($m->item('Delete')->disabled($this->cardPinned)->chosen()) { $this->cardDid = 'Deleted'; }
-        };
-        $card = $c->row(0, 4)->alignItems(Node::CENTER)->padding(2, 2, 2, 12)->radius($t->radius)->border(1, $t->border)->focusable()->label('Card');
-        $card->popoverMenu($cardMenu);
-          $c->text($this->cardDid !== '' ? $this->cardDid : 'Right-click me');
-          $more = $c->buttonBase()->label('More')->padding(4)->radius($t->radius);
-          if ($c->hovered($more)) { $more->background($t->surfaceHover); }
-            $c->icon(glyph('dots'));
-          $c->end();
-          $more->popoverMenuButton($cardMenu);
-        $c->end();
-        if ($c->clicked($c->button('Delete a note'))) {
-            $this->notes--;
-            $c->toastAction('Note deleted', 'Undo', function (): void { $this->notes++; });
-        }
-            $c->end();
-        }),
+        HStack(spacing: 6)(
+            Text(verbatim: $this->cardDid !== '' ? $this->cardDid : 'Right-click me'),
+            Menu('⋯')(
+                Button('Duplicate', action: fn() => $this->cardDid = 'Duplicated')->keyboardShortcut('d'),
+                Toggle('Pinned', isOn: $this->cardPinned),
+                Picker('Zoom', selection: $this->cardZoom)(Each(['Small', 'Medium', 'Large'])(fn(string $z) => Text($z)->tag($z))),
+                Divider(),
+                Button('Delete', role: ButtonRole::destructive, action: fn() => $this->cardDid = 'Deleted')->disabled($this->cardPinned),
+            ),
+        )->padding(Edge::vertical, 4)->padding(Edge::horizontal, 10)->cornerRadius(6)->overlay(RoundedRectangle(cornerRadius: 6)->stroke(Color::separator))
+            ->contextMenu(
+                Button('Duplicate', action: fn() => $this->cardDid = 'Duplicated')->keyboardShortcut('d'),
+                Toggle('Pinned', isOn: $this->cardPinned),
+                Divider(),
+                Button('Delete', role: ButtonRole::destructive, action: fn() => $this->cardDid = 'Deleted')->disabled($this->cardPinned),
+            ),
+        Button('Delete a note', action: function () { $this->notes--; $this->toast = 'Note deleted'; }),
         Button('Hover me')->help('Tooltips show after the pointer rests a moment.'),
         Button('Alert', action: fn() => $this->alert = true),
-        Button('Native dialog', action: fn() => App::later(fn() => Dialog::message(new MessageOptions(parent: $this->win, message: 'Native dialogs work from MyPHP UI windows too.')))), // after the click, not in it: the dialog runs its own loop
+        Button('Native dialog', action: fn() => App::later(fn() => Dialog::message(new MessageOptions(parent: $this->win, message: 'Native dialogs work from MyPHP UI windows too.')))),
     )),
-    Text(verbatim: sprintf('%d notes. Undo in the toast brings a deleted one back.', $this->notes))->font(Font::caption)->foregroundStyle(Color::secondary),
+    Text(verbatim: sprintf('%d notes.', $this->notes))->font(Font::caption)->foregroundStyle(Color::secondary),
 ];
 
 /** A menu of languages, as an app's settings would have one, numbers and dates in the language the window shows and the user's regional formats, and controls that say MyPHP's own strings in it. */
@@ -1143,7 +1011,7 @@ $listRow = function (int $n) use ($card, $row) {
 };
 
 /** The page at $path: its title and its views. @return array{0: string, 1: list<mixed>} */
-$page = function (string $path) use ($legacy, $overview, $controls, $text, $richText, $list, $charts, $markdownPage, $overlays, $languages, $listRow, &$styling, &$drawing, &$glassPage, &$motion) {
+$page = function (string $path) use ($overview, $controls, $text, $richText, $list, $charts, $markdownPage, $overlays, $languages, $listRow, &$styling, &$drawing, &$glassPage, &$motion) {
     if (preg_match('~^/list/(\d+)$~', $path, $m) === 1 && (int)$m[1] < 10000) { return ["Row {$m[1]}", $listRow((int)$m[1])]; }
     $title = pageOf($path);
     return [$title === '' ? 'Not found' : $title, match ($title) {
@@ -1154,11 +1022,11 @@ $page = function (string $path) use ($legacy, $overview, $controls, $text, $rich
         'List' => $list(),
         'Charts' => $charts(),
         'Markdown' => $markdownPage(),
-        'Styling' => [$legacy(fn(Context $c) => $styling($c))],
-        'Drawing' => [$legacy(fn(Context $c) => $drawing($c))],
-        'Glass' => [$legacy(fn(Context $c) => $glassPage($c))],
+        'Styling' => $styling(),
+        'Drawing' => $drawing(),
+        'Glass' => $glassPage(),
         'Overlays' => $overlays(),
-        'Motion' => [$legacy(fn(Context $c) => $motion($c))],
+        'Motion' => $motion(),
         'Languages' => $languages(),
         default => [],
     }];
@@ -1181,8 +1049,7 @@ return function () use ($page) {
         )->navigationSplitViewColumnWidth(200),
         detail: VStack(spacing: 0)(
             HStack(spacing: 6)(
-                // The history's buttons, as Finder's: a right click lists the pages before, or after, to go several at once. SwiftUI has none; the engine's are in a representable.
-                Representable(function (Context $c) { $n = $c->row(0, 6); $c->backButton($this->router); $c->forwardButton($this->router); $c->end(); return $n; }),
+                HistoryButtons($this->router),
                 Breadcrumbs($crumbs, selection: $this->crumb)->accessibilityLabel('Path')->onChange(of: $this->crumb, action: function ($old, $new) use ($crumbs) { if ($new === 0) { $this->router->push(pagePath($crumbs[0])); } $this->crumb = -1; }),
                 Spacer(),
                 Text(verbatim: $this->now->format('H:i:s'))->font(Font::caption)->foregroundStyle(Color::secondary)->monospaced(),

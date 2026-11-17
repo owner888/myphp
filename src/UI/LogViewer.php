@@ -40,7 +40,7 @@ final class LogViewer
             return;
         }
         self::$window = new Window(new WindowOptions(title: 'Log Viewer', width: 800, height: 500, minWidth: 800, minHeight: 500, stateKey: 'log viewer', titleBarStyle: 'hiddenInset',
-            content: Content::view(fn(Context $c) => $c->logViewer())));
+            content: Content::view(static fn() => \Representable(static fn(Context $c) => $c->logViewer(), fills: true))));
     }
 
     public static function build(Context $c): Node

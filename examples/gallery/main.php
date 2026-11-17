@@ -11,9 +11,8 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\Plugins\Glass\Glass;
-use MyPHP\UI\{Content, Context, Font, GridState, Key, ListState, Motion, Node, OutlineState, Router, Selection, Span, SVG, TextState};
-use MyPHP\UI\Markdown\{Markdown, Options as MarkdownOptions, RevealUnit};
+use MyPHP\UI\{Content, Router, SVG};
+use MyPHP\UI\Markdown\{Options as MarkdownOptions, RevealUnit};
 use MyPHP\UI\RichText\{Attributes, Document, ListKind, Paragraph, ParagraphStyle, Run, Text as RichTextText};
 
 // MyPHP, and its declarative views (VStack, Text…): loaded already in a phone's app, whose launcher loads them
@@ -170,21 +169,6 @@ function hsl(float $h, float $s, float $l): int
     return (int)(($r + $m) * 255) << 16 | (int)(($g + $m) * 255) << 8 | (int)(($b + $m) * 255);
 }
 
-/** A grid of cards: two to a row where the window leaves room for two of 300 points beside the sidebar, else one, as at the narrowest window. */
-function cards(Context $c): Node
-{
-    return $c->grid($c->width >= 880 ? 2 : 1, 16);
-}
-
-/** A card: a titled panel, built in until end(). */
-function card(Context $c, string $title): Node
-{
-    $t = $c->theme;
-    $n = $c->column(18, 12, 0, $t->background)->radius(10)->border(1, $t->border)->shadow(0, 1, 3, 0, 0x000000, 0.06);
-    if ($title !== '') { $c->text($title, 15, style: Font::BOLD); }
-    return $n;
-}
-
 // The charts of the Charts page.
 const CHART_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** The series' colors, in light and dark windows alike. */
@@ -240,11 +224,8 @@ const MARKDOWN_SAMPLE = "## Streaming Markdown\n\n"
     . "   - [ ] take over the world\n\n"
     . "> Text can be selected across blocks, and copied as text or, from the context menu, as Markdown.\n\n"
     . "```php\n"
-    . "// stream() shows a reply as it comes, and view() once it is done.\n"
-    . "function message(Context \$c, Message \$m): void\n"
-    . "{\n"
-    . "    \$m->done ? Markdown::view(\$c, \$m->text, \$app->md) : Markdown::stream(\$c, \$m->text, \$app->md);\n"
-    . "}\n"
+    . "// Markdown() streams a reply while it comes in, and shows it complete once done.\n"
+    . "Markdown(\$m->text, \$app->md, streaming: !\$m->done)\n"
     . "```\n\n"
     . "| Renderer | Streaming | Selection |\n"
     . "|---|:-:|---|\n"
@@ -303,8 +284,9 @@ final class Gallery
     public Router $router;
     /** Lays the gallery out right to left, as an app in Arabic or Hebrew is. */
     public bool $rtl = false;
-    /** The text of the fields the declarative views bind: the search field, the city, the list's filter, the chat's draft. */
+    /** The text of the fields the declarative views bind: the search field, the city, the list's filter, the chat's draft, and the Text page's fields. */
     public string $searchText = '', $cityText = '', $filterText = '';
+    public string $name = '', $email = '', $bio = '', $findQuery = '', $draft = '', $motionText = '';
     /** The toast showing, the crumb of the path clicked (-1 for none), and whether files are dragged over the drop well. */
     public ?string $toast = null;
     public int $crumb = -1;
@@ -316,13 +298,15 @@ final class Gallery
     public int $size = 1;
     public string $plan = 'Pro';
     public float $volume = 35;
-    public TextState $name, $email, $bio, $findQuery, $draft, $motionText;
     public int $picked = -1;
     /** @var array<int, bool> */
     public array $starred = [];
     public int $tab = 0;
     public float $copies = 1;
-    public Selection $chosen;
+    /** @var list<int> the table's chosen row ids */
+    public array $chosen = [];
+    /** @var mixed the table's sort order */
+    public mixed $tableSort = null;
     /** @var array<string, bool> the tree's folders open */
     public array $tree = ['src' => true];
     public string $leaf = '';
@@ -350,7 +334,7 @@ final class Gallery
     public bool $panelOpen = false, $motionTarget = false, $transformPopover = false;
     public int $motionRun = 0;
     /** The card thrown on the Motion page: where it rests, and the spring it lands with; and the tile open, 1 + its index, 0 for none. */
-    public ?array $fling = null;
+    public float $flingX = 0.0, $flingDrag = 0.0;
     public int $flingStyle = 0, $tileOpen = 0;
     /** The card turned over, the counter, and the task done on the Motion page. */
     public bool $cardFlipped = false, $countDown = false, $taskDone = false;
@@ -380,16 +364,15 @@ final class Gallery
     public int $stars = 4;
     public float $battery = 35, $quality = 75, $priceLow = 100, $priceHigh = 350;
     public ?Document $note = null;
-    /** The grid of swatches, the one last chosen, those chosen, and their order; the tasks dragged between two columns. */
-    public GridState $swatches;
-    public Selection $swatchesChosen;
+    /** The grid of swatches, those chosen, and their order; the tasks dragged between two columns. */
+    /** @var list<int> */
+    public array $swatchesChosen = [];
     /** @var list<int> */
     public array $swatchOrder = [];
     /** @var list<GalleryTask> */
     public array $tasks = [];
-    /** The outline and its order. */
-    public OutlineState $outline;
-    public ListState $chat, $table;
+    /** @var array<int, bool> hovered state of motion tiles */
+    public array $hoveredTile = [];
     /** @var list<Message> */
     public array $messages = [];
     public GalleryCharts $chart;
@@ -398,70 +381,13 @@ final class Gallery
     {
         $this->router = new Router($path);
         $this->md = new MarkdownDemo();
-        foreach (['name', 'email', 'bio', 'findQuery', 'draft', 'motionText'] as $f) { $this->$f = new TextState(''); }
-        $this->chosen = new Selection();
         $this->birthday = new DateTimeImmutable('1815-12-10 00:00', new \DateTimeZone('UTC'));
         $this->now = new DateTimeImmutable();
         $this->meeting = new DateTimeImmutable('2026-10-15 09:30');
         $this->due = new DateTimeImmutable('2026-10-29 00:00');
         $this->items = [new MotionItem(1, 'Item 1'), new MotionItem(2, 'Item 2'), new MotionItem(3, 'Item 3')];
-        $this->swatches = new GridState();
-        $this->swatchesChosen = new Selection();
-        $this->outline = new OutlineState();
-        $this->chat = new ListState(); $this->table = new ListState();
         $this->chart = new GalleryCharts();
     }
-
-    public function text(Context $c): void
-    {
-        $t = $c->theme;
-        card($c, 'Form');
-          $c->form(function () use ($c): void {
-              $c->field('Name', fn() => $c->input($this->name, 'Ada Lovelace', 0));
-              $invalid = $this->email->text !== '' && !str_contains($this->email->text, '@') ? 'Enter an email address, such as ada@example.com.' : '';
-              $c->field('Email', function () use ($c): void {
-                  if ($c->submitted($c->input($this->email, 'ada@example.com', 0))) { $this->dialog = true; }
-              }, 'Enter opens a dialog.', $invalid);
-              $c->field('About you', fn() => $c->textarea($this->bio, 'Multiple lines, with undo, selection and input methods.', 0, 110), sprintf('%d characters', mb_strlen($this->bio->text)));
-              $c->fieldset('Optional', function () use ($c): void {
-                  $c->field('Birthday', fn() => $c->dateInput($this->birthday));
-                  $c->field('Updates', fn() => $c->checkbox('Send me the newsletter', $this->news));
-              });
-          });
-        $c->end();
-        card($c, 'Find');
-          $text = 'The quick brown fox jumps over the lazy dog. The dog sleeps; the fox runs on.';
-          $q = $this->findQuery->text;
-          $matches = $q === '' ? 0 : substr_count(strtolower($text), strtolower($q));
-          if ($c->shortcut('f', Key::COMMAND)) { $this->finding = true; }
-          if (!$this->finding && $c->clicked($c->button('Find…'))) { $this->finding = true; }
-          $c->findBar($this->finding, $this->findQuery, $matches, $this->findAt)?->radius(8);
-          $c->text($text);
-        $c->end();
-        card($c, 'Typography');
-          $c->text('Display 28', 28, style: Font::BOLD);
-          $c->text('Italic, underlined and struck through')->italic()->underline()->strikethrough();
-          $c->richText([
-              new Span('Rich text mixes '), new Span('bold', weight: 700), new Span(', '),
-              new Span('colored', color: $t->accent), new Span(', '), new Span('large', 20),
-              new Span(' and '), new Span('underlined', underline: true), new Span(' runs in one paragraph.'),
-          ]);
-          $c->text('Monospace: function main() {}')->font('monospace');
-          $c->text('SPACED CAPITALS', 12, $t->textMuted, Font::BOLD)->letterSpacing(2);
-          $c->text('Tabular digits: 1,111.11 / 8,888.88')->fontFeatures('tnum');
-          $c->text('Mixed scripts: English, Ελληνικά, Русский, 日本語, 한국어, العربية, עברית, हिन्दी 🎉')->selectable();
-          $c->text(str_repeat('Long text wraps to the width it gets. ', 6), color: $t->textMuted);
-          $c->text(str_repeat('A single line that ends with an ellipsis when it does not fit. ', 4))->singleLine();
-        $c->end();
-        card($c, 'Text selection');
-          $c->column(0, 12)->selectable();
-            $c->text('Drag from this paragraph into the next, then copy the selected text.');
-            $c->richText([new Span('Each paragraph keeps its own layout. '), new Span('They share one selection.', weight: 700)]);
-            $c->text('This hint is excluded from selection.', color: $t->textMuted)->unselectable();
-          $c->end();
-        $c->end();
-    }
-
 }
 
 $s = new Gallery();

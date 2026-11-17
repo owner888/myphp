@@ -19,12 +19,18 @@ final class Content
     /** A window's view: fn() => VStack()(…), as a view file returns it. @param Closure(): mixed $view */
     public static function view(Closure $view): self
     {
-        return new self(self::takesContext($view) ? $view : static fn(Context $c) => self::render($view, $c)); // the window calls it with its Context: a declarative view rendered into it
+        return new self(static fn(Context $c) => self::render($view, $c)); // the window calls it with its Context: a declarative view rendered into it
+    }
+
+    /** An engine-internal window content built directly into a Context (PopoverKept). @internal @param Closure(Context): void $build */
+    public static function engine(Closure $build): self
+    {
+        return new self($build);
     }
 
     /**
-     * The view of the file at $path, which returns it: `return function
-     * (Context $c): void { … };`, run bound to $state (ViewFile): in it, and
+     * The view of the file at $path, which returns it: `return fn() =>
+     * VStack()(…);`, run bound to $state (ViewFile): in it, and
      * in the closures it makes, `$this` is $state, private members and
      * `self::` included, so the state stays in the app's class and its view
      * in the file; $c->state is $state for the files of a Router's pages.
@@ -49,10 +55,6 @@ final class Content
      */
     public static function render(Closure $view, Context $c): void
     {
-        if (self::takesContext($view)) { // the engine's own builder, the framework's @internal
-            $view($c);
-            return;
-        }
         require_once __DIR__ . '/Declarative/functions.php';
         if ($c->runtime !== null) {
             Reactive\Observer::bindRoot($c->runtime->rootScope(), $view, $c->state);
@@ -70,15 +72,5 @@ final class Content
             $c->safeArea = [0.0, 0.0, 0.0, 0.0];
             Declarative\View::renderAll($c, Declarative\Env::root($c), $root);
         })->alignItems(Node::CENTER)->justify(Node::CENTER);
-    }
-
-    /** @var \WeakMap<Closure, bool>|null */
-    private static ?\WeakMap $takes = null;
-
-    /** Whether view $fn builds with a Context (the engine's builder) rather than returning a View. */
-    private static function takesContext(Closure $fn): bool
-    {
-        self::$takes ??= new \WeakMap();
-        return self::$takes[$fn] ??= (($p = new \ReflectionFunction($fn)->getParameters()[0] ?? null) !== null && ($t = $p->getType()) instanceof \ReflectionNamedType && $t->getName() === Context::class);
     }
 }
