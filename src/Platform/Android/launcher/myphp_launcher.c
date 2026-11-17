@@ -269,6 +269,19 @@ int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics,
     return (int)len;
 }
 
+/* The INI the app runs with, as php_embed's defaults (ini_defaults, read as its configuration starts): ini_entries set
+ * before php_embed_init are lost, as it sets them to its own HARDCODED_INI, and FFI was off ("FFI API is restricted by
+ * the ffi.enable configuration directive") on a PHP whose php_embed.c was not patched. */
+static void myphp_ini_defaults(HashTable *configuration_hash)
+{
+    static const char *const ini[][2] = {{"ffi.enable", "1"}, {"opcache.enable", "1"}, {"opcache.enable_cli", "1"}};
+    for (size_t i = 0; i < sizeof ini / sizeof ini[0]; i++) {
+        zval v;
+        ZVAL_NEW_STR(&v, zend_string_init(ini[i][1], strlen(ini[i][1]), 1));
+        zend_hash_str_update(configuration_hash, ini[i][0], strlen(ini[i][0]), &v);
+    }
+}
+
 static void* php_worker_thread(void *arg) {
     LOGI("PHP thread starting...");
 
@@ -289,7 +302,7 @@ static void* php_worker_thread(void *arg) {
 
     php_embed_module.ub_write = myphp_ub_write;
     php_embed_module.log_message = myphp_log_message;
-    php_embed_module.ini_entries = "ffi.enable=1\nopcache.enable=1\nopcache.enable_cli=1\n";
+    php_embed_module.ini_defaults = myphp_ini_defaults;
 
     char *argv[] = {"myphp", NULL};
     int argc = 1;

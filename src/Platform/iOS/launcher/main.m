@@ -1082,6 +1082,19 @@ static void myphp_log_message(const char *message, int syslog_type_int) {
     os_log_error(OS_LOG_DEFAULT, "[myphp-ios] %{public}s", message);
 }
 
+/* The INI the app runs with, as php_embed's defaults (ini_defaults, read as its configuration starts): ini_entries set
+ * before php_embed_init are lost, as it sets them to its own HARDCODED_INI, and FFI was off ("FFI API is restricted by
+ * the ffi.enable configuration directive") on a PHP whose php_embed.c was not patched. */
+static void myphp_ini_defaults(HashTable *configuration_hash)
+{
+    static const char *const ini[][2] = {{"ffi.enable", "1"}, {"memory_limit", "512M"}};
+    for (size_t i = 0; i < sizeof ini / sizeof ini[0]; i++) {
+        zval v;
+        ZVAL_NEW_STR(&v, zend_string_init(ini[i][1], strlen(ini[i][1]), 1));
+        zend_hash_str_update(configuration_hash, ini[i][0], strlen(ini[i][0]), &v);
+    }
+}
+
 static void* php_worker_thread(void *arg) {
     os_log(OS_LOG_DEFAULT, "[myphp-ios] PHP worker thread starting...");
 
@@ -1102,7 +1115,7 @@ static void* php_worker_thread(void *arg) {
         os_log(OS_LOG_DEFAULT, "[myphp-ios] Initializing PHP Embed SAPI on iOS...");
         php_embed_module.ub_write = myphp_ub_write;
         php_embed_module.log_message = myphp_log_message;
-        php_embed_module.ini_entries = "ffi.enable=1\nmemory_limit=512M\n";
+        php_embed_module.ini_defaults = myphp_ini_defaults;
         php_embed_init(1, php_argv);
 
         NSString *appPhp = [bundlePath stringByAppendingPathComponent:@"app.php"];

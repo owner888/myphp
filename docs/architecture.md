@@ -8969,6 +8969,21 @@ changed, which no hot reload can take.
   so is the menu here: kept (`App::menu()`), installed nowhere (the phone
   backends' `setApplicationMenu` is empty), and `refreshMenus` leaves the
   Dock, which a phone has not, alone.
+- On iOS an app built on a PHP runtime built from source showed a black
+  screen: "FFI API is restricted by the ffi.enable configuration
+  directive". The launchers set `php_embed_module.ini_entries` (FFI on,
+  and on iOS memory_limit=512M) before `php_embed_init`, which sets them
+  to its own `HARDCODED_INI`: they were lost, and FFI was on only where
+  `build-android-php.sh` had patched `HARDCODED_INI` in the php-src both
+  scripts build from (the prebuilt runtimes, a machine that built
+  Android's first). Rule: the launchers give their INI as php_embed's
+  defaults (`ini_defaults`, the hook its comment names, read as its
+  configuration starts, under an INI file, which a phone has not), so
+  FFI is on whatever php-src they link; `tests/embed_ini_test.php` checks
+  both, and `package-ios-app.sh` refuses a libphp.a without ext-ffi.
+  `build-android-php.sh` no longer patches `HARDCODED_INI` (a `sed` of
+  its exact text, which a PHP of other text would have left undone
+  without a word); the test checks that no script patches php_embed.c.
 - On iOS every HTTP request failed: "cannot load libcurl (the app's own):
   Failed resolving C function 'curl_easy_init'". Cause: `Curl::ffi()`
   finds libcurl in the app's own process there (FFI::cdef without a

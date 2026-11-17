@@ -28,6 +28,12 @@ echo "==> Entry file: ${ENTRY}"
 
 # 1. The PHP runtime (libffi, OpenSSL, libcurl.a, libphp.a), built once, and again when its script changed
 "${ROOT_DIR}/scripts/build-ios-php.sh"
+# A runtime without ext-ffi runs no app (all of myphp is FFI): refused here rather than at the app's first line. That FFI
+# is on is the launcher's (main.m's ini_defaults; tests/embed_ini_test.php).
+if ! xcrun nm -g "${BUILD_DIR}/libs/libphp.a" 2>/dev/null | grep ' _ffi_module_entry$' > /dev/null; then
+    echo "error: ${BUILD_DIR}/libs/libphp.a has no ext-ffi (ffi_module_entry): delete it to build it again" >&2
+    exit 1
+fi
 
 APP_DIR="${OUT_DIR}/${APP_NAME}.app"
 # Only what this script makes: myphp build passes the project's whole output directory, where the other platforms' apps are.
