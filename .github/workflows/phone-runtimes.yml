@@ -2,7 +2,10 @@ name: Phone Runtimes
 
 # Builds and publishes the prebuilt Android arm64, iOS arm64, and iOS Simulator arm64
 # PHP 8.5 embed runtime archives (tag: runtime-php-<version>) so `myphp run` and
-# `myphp build` download them in seconds instead of compiling from source.
+# `myphp build` download them in seconds instead of compiling from source; and the
+# static PHP of each desktop platform (micro.sfx), which the apps `myphp build`
+# makes carry: one of another platform than the building machine's can only be
+# downloaded.
 on:
   workflow_dispatch:
     inputs:
@@ -10,6 +13,11 @@ on:
         description: "PHP version to build"
         default: "8.5.12"
         required: true
+      targets:
+        description: "What to build"
+        type: choice
+        options: [all, phones, desktop]
+        default: all
   push:
     tags: ["runtime-php-*"]
 
@@ -18,6 +26,7 @@ permissions:
 
 jobs:
   build-runtimes:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.targets != 'desktop' }}
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -50,3 +59,46 @@ jobs:
             gh release create "$TAG" --title "Prebuilt Phone PHP Runtimes (${MYPHP_PHONE_PHP_VERSION})" --notes "Prebuilt Android arm64, iOS arm64, and iOS Simulator arm64 PHP embed runtimes."
           fi
           gh release upload "$TAG" dist-runtimes/*.tar.gz dist-runtimes/SHA256SUMS --clobber
+
+  # The static PHP of the desktop platforms, each built on a machine of its own system and architecture by
+  # `myphp micro`, as a developer's machine builds it, and published under the name `myphp build` asks for.
+  micro:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.targets != 'phones' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, platform: darwin-arm64 }
+          - { runner: macos-15-intel, platform: darwin-amd64 }
+          - { runner: ubuntu-24.04, platform: linux-amd64 }
+          - { runner: ubuntu-24.04-arm, platform: linux-arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      MYPHP_PHONE_PHP_VERSION: ${{ inputs.php_version || '8.5.12' }}
+      MYPHP_BUILD_FROM_SOURCE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      # The PHP that runs bin/myphp: 8.4 or later, with FFI (the tests' job has the same).
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: ffi, mbstring, curl, openssl, dom, xml, zip, phar
+          ini-values: ffi.enable=1
+          coverage: none
+      - name: Build micro.sfx
+        run: php -d ffi.enable=1 bin/myphp micro
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="runtime-php-${MYPHP_PHONE_PHP_VERSION}"
+          VERSION="$(php -r 'preg_match("/^const MICRO_PHP = \x27([0-9.]+)\x27/m", file_get_contents("bin/myphp"), $m); echo $m[1];')"
+          test -n "$VERSION"
+          ASSET="myphp-micro-${{ matrix.platform }}-php-${VERSION}.sfx"
+          cp "$HOME/.myphp/micro.sfx" "$ASSET"
+          ls -l "$ASSET"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Prebuilt PHP Runtimes (${MYPHP_PHONE_PHP_VERSION})" --notes "Prebuilt PHP runtimes of the phones and static PHP of the desktops." || gh release view "$TAG" >/dev/null
+          fi
+          gh release upload "$TAG" "$ASSET" --clobber
