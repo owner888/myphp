@@ -7991,6 +7991,14 @@ source by reference, and the mesh's vertex and index bytes are readonly
 properties ("Cannot indirectly modify readonly property"); it copies from
 locals of them.
 
+The plugins' native libraries (SQLite's, libghostty-vt: six platforms each)
+were downloaded from mygo's releases, as the manifests copied from it said:
+a build that depended on another's repository, and printed its address.
+They are on MyPHP's releases now, the same files under the same tags
+(`sqlite-3.53.4-1`, `libghostty-vt-befcdfd2c3a1`), SQLite's renamed
+`myphp-sqlite3-*`; the SHA-256 of each is unchanged, so what machines have
+cached stays good. `plugin_manifests_test` holds every manifest to it.
+
 `myphp build -platform darwin/arm64,android/arm64,ios/arm64` left only the
 iOS app: the summary listed the .app, the .dmg and the APK at 0 KB, for
 they were gone. `scripts/package-ios-app.sh` began with `rm -rf` of its
@@ -8926,9 +8934,31 @@ changed, which no hot reload can take.
   the native side starts with, so nothing changes for it. On the Mac a
   password with the keyboard in the key window turns secure event input
   on, as NSSecureTextField does, and off at once on blur (a frame that
-  draws nothing runs no afterFrame) and on close. iOS keeps corrections
-  off: its document is the composition alone, so the keyboard's
-  corrections would replace the wrong text.
+  draws nothing runs no afterFrame) and on close.
+- iOS's keyboard never corrected, predicted or capitalized by the text
+  typed: the view's UITextInput document was the composition alone, so
+  corrections were off (they would have replaced the wrong text), and
+  `autocorrectionDisabled()` was how every field was. Rule: the document
+  is the field's text. `iOS\Window::document` tells the launcher the
+  text of the field with the keyboard and its selection, in UTF-16 units,
+  whenever they change (`myphp_ios_set_text_document`), none for a
+  SecureField or a view taking its own input (`TextInputClient`); the
+  view keeps it, with what an input method marks inside it, and does to
+  it at once what the keyboard does, as the keyboard reads it back at
+  once; each edit goes to PHP as an input event, two of them new: a
+  range replaced (a correction, a prediction, a smart quote:
+  `Window::replace`, an undo step of its own) and a range selected (the
+  space bar's drag: `Window::select`). PHP's document is taken only once
+  PHP has taken every event the view queued (`acked` against the count
+  it pushed) and not while text is marked, which PHP's text has not, so
+  a frame told before the keyboard's last edits does not undo them; the
+  view tells the keyboard what changed (textWillChange,
+  selectionDidChange). Corrections, spelling and smart punctuation are
+  UIKit's defaults with a document, as a UITextField's, corrections and
+  spelling off for `autocorrectionDisabled()` (keyboardTraits' sixth
+  value, UITextAutocorrectionTypeNo), all off without one.
+  `tests/ios_document_test.php`. Android's input connection still sees
+  the composition alone.
 - Ten declarative modifiers were accepted and did nothing (`return
   $this`): zIndex, scrollIndicators, scrollDismissesKeyboard,
   accessibilityHidden, listRowBackground, listRowInsets,
