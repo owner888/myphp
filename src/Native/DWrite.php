@@ -37,7 +37,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
     /** @var array<int, bool> whether each face's glyphs are in color */
     private array $colorFaces = [];
     private ?DWriteEngine $engine = null;
-    private ?CData $glyphIdxBuf = null, $glyphAdvBuf = null, $glyphRunBuf = null, $glyphOutBuf = null, $rectBuf = null;
+    private ?CData $glyphIdxBuf = null, $glyphAdvBuf = null, $glyphRunBuf = null, $rectBuf = null;
 
     public function __construct(private float $scale)
     {
@@ -334,8 +334,7 @@ final class DWrite implements \MyPHP\Platform\Fonts
         $run->glyphIndices = $f->cast('const uint16_t *', FFI::addr($index[0]));
         $run->glyphAdvances = $f->cast('const float *', FFI::addr($advance[0]));
         $mode = $this->aliased ? 1 : 5; // DWRITE_RENDERING_MODE_ALIASED, NATURAL_SYMMETRIC
-        $out = $this->glyphOutBuf ??= $f->new('void *');
-        $out->cdata = null;
+        $out = $f->new('void *'); // a new one each time: a pointer's CData has no cdata to clear it by, and a kept one would hold the last analysis
         if ($this->factory2 !== null) { // IDWriteFactory2's: grayscale coverage; IDWriteFactory3's takes Windows 10's modes too
             $fac = $f->cast('IDWriteFactory23 *', $this->factory3 ?? $this->factory2);
             $make = $this->factory3 !== null ? $fac->v->CreateGlyphRunAnalysis3 : $fac->v->CreateGlyphRunAnalysis;

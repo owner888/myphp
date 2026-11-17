@@ -268,10 +268,11 @@ final class D3dRenderPass
         $semUv   = $f->new('char[9]'); FFI::memcpy($semUv,   "TEXCOORD\0", 9);
         $semCol  = $f->new('char[6]'); FFI::memcpy($semCol,  "COLOR\0",    6);
 
-        $elems[0]->SemanticName = $semPos;  $elems[0]->Format = self::FORMAT_R32G32B32_FLOAT;    $elems[0]->AlignedByteOffset = 0;
-        $elems[1]->SemanticName = $semNorm; $elems[1]->Format = self::FORMAT_R32G32B32_FLOAT;    $elems[1]->AlignedByteOffset = 12;
-        $elems[2]->SemanticName = $semUv;   $elems[2]->Format = self::FORMAT_R32G32_FLOAT;       $elems[2]->AlignedByteOffset = 24;
-        $elems[3]->SemanticName = $semCol;  $elems[3]->Format = self::FORMAT_R32G32B32A32_FLOAT; $elems[3]->AlignedByteOffset = 32;
+        // A pointer field takes a pointer: FFI refuses the array itself ("assign of owned C pointer"). The arrays live till the layout is made.
+        $elems[0]->SemanticName = $f->cast('const char *', FFI::addr($semPos[0]));  $elems[0]->Format = self::FORMAT_R32G32B32_FLOAT;    $elems[0]->AlignedByteOffset = 0;
+        $elems[1]->SemanticName = $f->cast('const char *', FFI::addr($semNorm[0])); $elems[1]->Format = self::FORMAT_R32G32B32_FLOAT;    $elems[1]->AlignedByteOffset = 12;
+        $elems[2]->SemanticName = $f->cast('const char *', FFI::addr($semUv[0]));   $elems[2]->Format = self::FORMAT_R32G32_FLOAT;       $elems[2]->AlignedByteOffset = 24;
+        $elems[3]->SemanticName = $f->cast('const char *', FFI::addr($semCol[0]));  $elems[3]->Format = self::FORMAT_R32G32B32A32_FLOAT; $elems[3]->AlignedByteOffset = 32;
 
         $this->inputLayout = $this->make(
             fn($out) => ($d->v->CreateInputLayout)($d, FFI::addr($elems[0]), 4, $vsCode, strlen($vsCode), $out),
