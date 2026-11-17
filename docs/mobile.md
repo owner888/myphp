@@ -73,8 +73,9 @@ A field says which keyboard it wants as SwiftUI's does:
 (the system offers the code from a message), `->submitLabel(SubmitLabel::send)` (Return still
 submits, `->onSubmit`), `->textInputAutocapitalization(TextInputAutocapitalization::never)`,
 `->autocorrectionDisabled()`. A `SecureField` is the system's secure entry: no predictions,
-a password's autofill. On iOS the keyboard never corrects or suggests words in a field, as
-it sees only what is being composed, not the field's text.
+a password's autofill. On iOS the keyboard reads the field's text, as a UITextField's: it
+corrects, suggests words and capitalizes sentences by what is typed, unless
+`->autocorrectionDisabled()`; on Android it sees only what is being composed.
 
 ## Pages, tabs and Back
 

@@ -41,6 +41,10 @@ final class Window implements Platform\Window
     private bool $keyboardVisible = false;
     /** What the keyboard was last told of the field it types into (TextInputTraits::key): told again when it changes. */
     private string $traitsKey = '';
+    /** The input events taken from the launcher since the start, which it compares with those it queued (myphp_ios_set_text_document's acked). */
+    private int $inputTaken = 0;
+    /** What the keyboard was last told of the field's text (document()), as a string that changes when any of it does. */
+    private ?string $documentKey = null;
     private $view = null;
     private ?Metal $metal = null;
     /** The launcher's view over the materials, in which what their nodes hold paints (Runtime::$overLayer), adopted as it is first needed; whether it shows anything; the materials as last given to the launcher. */
@@ -140,14 +144,15 @@ final class Window implements Platform\Window
 
             $iev = $this->inputEv ??= $f->new('MyphpInputEvent');
             while ($f->myphp_ios_poll_input_event(\FFI::addr($iev)) > 0) {
-                if ((int)$iev->type === 0) {
-                    $str = \FFI::string($iev->text);
-                    $this->onImeCommit($str);
-                } elseif ((int)$iev->type === 1) {
-                    $this->onBackspace();
-                } elseif ((int)$iev->type === 2) {
-                    $this->onImeCompose(\FFI::string($iev->text));
-                }
+                $this->inputTaken++;
+                match ((int)$iev->type) {
+                    0 => $this->onImeCommit(\FFI::string($iev->text)),
+                    1 => $this->onBackspace(),
+                    2 => $this->onImeCompose(\FFI::string($iev->text)),
+                    3 => $this->onReplace((int)$iev->from, (int)$iev->to, \FFI::string($iev->text)),
+                    4 => $this->onSelect((int)$iev->from, (int)$iev->to),
+                    default => null,
+                };
             }
 
             // VoiceOver asked for the elements: the frames describe themselves from now on; what it does to them, as AccessNode actions
@@ -211,6 +216,44 @@ final class Window implements Platform\Window
             $input->push(['insert', $text]);
         }
         $this->requestFrame();
+    }
+
+    /**
+     * The keyboard replaced the text from $from to $to (UTF-16 offsets in
+     * the document it was told, document()) with $text: a correction, a
+     * prediction taken, a smart quote. As typed: an undo step of its own.
+     */
+    public function onReplace(int $from, int $to, string $text): void
+    {
+        self::replace($this->w->input, $from, $to, $text);
+        $this->requestFrame();
+    }
+
+    /** The keyboard selected the text from $from to $to (UTF-16 offsets in the document), as its cursor moved by the space bar's drag. */
+    public function onSelect(int $from, int $to): void
+    {
+        self::select($this->w->input, $from, $to);
+        $this->requestFrame();
+    }
+
+    /** onReplace's edit of the field with the keyboard, or of the view taking its own input. */
+    public static function replace(?\MyPHP\UI\Input $input, int $from, int $to, string $text): void
+    {
+        if ($input?->client !== null) {
+            $input->client->replaceText(new TextInputRange($from, $to), $text);
+        } elseif (($f = $input?->focus) !== null) {
+            self::select($input, $from, $to);
+            $f->insert($text);
+        }
+    }
+
+    /** onSelect's selection in the field with the keyboard. */
+    public static function select(?\MyPHP\UI\Input $input, int $from, int $to): void
+    {
+        if (($f = $input?->focus) !== null) {
+            $f->setCursor(TextState::byteIndex($f->text, $from));
+            $f->setCursor(TextState::byteIndex($f->text, $to), true);
+        }
     }
 
     public function onBackspace(): void
@@ -456,8 +499,13 @@ final class Window implements Platform\Window
         $focus = $this->w->input?->focus;
         if (($key = TextInputTraits::key($focus)) !== $this->traitsKey) {
             $this->traitsKey = $key;
-            [$keyboard, $returnKey, $caps, $secure, $content] = self::keyboardTraits($focus);
-            iOS::ffi()->myphp_ios_set_text_traits($keyboard, $returnKey, $caps, $secure, $content);
+            [$keyboard, $returnKey, $caps, $secure, $content, $correction] = self::keyboardTraits($focus);
+            iOS::ffi()->myphp_ios_set_text_traits($keyboard, $returnKey, $caps, $secure, $content, $correction);
+        }
+        [$on, $text, $from, $to] = self::document($this->w->input);
+        if (($key = "$on\0$from\0$to\0{$this->inputTaken}\0$text") !== $this->documentKey) {
+            $this->documentKey = $key;
+            iOS::ffi()->myphp_ios_set_text_document($on, $text, $from, $to, $this->inputTaken);
         }
         $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
         if ($hasInputFocus && !$this->keyboardVisible) {
@@ -613,8 +661,10 @@ final class Window implements Platform\Window
      * UITextAutocapitalizationType, whether it is secure entry (a
      * SecureField's), and the name of its TextContentType case, which the
      * launcher turns into UIKit's UITextContentType (null: none). A
-     * TextField's keyboardType() cases are UIKeyboardType's, in its order.
-     * @return array{0: int, 1: int, 2: int, 3: int, 4: ?string}
+     * TextField's keyboardType() cases are UIKeyboardType's, in its order;
+     * then its UITextAutocorrectionType: UIKit's default, which corrects,
+     * or No for autocorrectionDisabled().
+     * @return array{0: int, 1: int, 2: int, 3: int, 4: ?string, 5: int}
      */
     public static function keyboardTraits(?TextState $f): array
     {
@@ -630,7 +680,26 @@ final class Window implements Platform\Window
             \TextInputAutocapitalization::characters => 3,
         };
         $keyboard = $t?->keyboard === null ? 0 : array_search($t->keyboard, \KeyboardType::cases(), true);
-        return [$keyboard, $returnKey, $caps, (int)($f?->password ?? false), $t?->contentType?->name];
+        return [$keyboard, $returnKey, $caps, (int)($f?->password ?? false), $t?->contentType?->name, ($t?->autocorrectionDisabled ?? false) ? 1 : 0];
+    }
+
+    /**
+     * What the keyboard reads as the document (the launcher's UITextInput),
+     * so that it corrects, predicts and capitalizes by the text typed: the
+     * text of the field with the keyboard, its selection in UTF-16 units
+     * (from, to); none (on 0) for a secure field, whose text the keyboard
+     * does not read, for a view taking its own input (a TextInputClient),
+     * or with no field: the keyboard then reads what is composed alone.
+     * @return array{0: int, 1: string, 2: int, 3: int}
+     */
+    public static function document(?\MyPHP\UI\Input $input): array
+    {
+        $f = $input?->focus;
+        if ($f === null || $f->password || $input->client !== null) {
+            return [0, '', 0, 0];
+        }
+        [$a, $b] = $f->selection();
+        return [1, $f->text, TextState::utf16Index($f->text, $a), TextState::utf16Index($f->text, $b)];
     }
 
     /** Tells the text input where the caret of the field taking the keyboard is, in the view: a hardware keyboard's candidates show by it (as Linux\Window::placeCaret). */

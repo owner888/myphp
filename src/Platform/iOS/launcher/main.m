@@ -21,7 +21,8 @@ typedef struct {
 } MyphpTouchEvent;
 
 typedef struct {
-    int type; // 0: insert text, 1: backspace, 2: the text being composed ("" none)
+    int type; // 0: insert text, 1: backspace, 2: the text being composed ("" none), 3: text replacing from..to, 4: from..to selected
+    int from, to; // 3 and 4: UTF-16 offsets in the document (myphp_ios_set_text_document)
     char text[256];
 } MyphpInputEvent;
 
@@ -116,11 +117,17 @@ static void push_touch_event(int type, float x, float y, double ts) {
     pthread_mutex_unlock(&g_touch_mutex);
 }
 
-static void push_input_event(int type, const char *text) {
+// The input events queued since the start, which PHP counts as it takes them: it tells the document again once it has
+// taken all (myphp_ios_set_text_document's acked), and one it tells before that is not of what the keyboard did.
+static int g_input_pushed = 0;
+
+static void push_input_event_at(int type, int from, int to, const char *text) {
     pthread_mutex_lock(&g_input_mutex);
     int next = (g_input_head + 1) % INPUT_QUEUE_SIZE;
     if (next != g_input_tail) {
         g_input_queue[g_input_head].type = type;
+        g_input_queue[g_input_head].from = from;
+        g_input_queue[g_input_head].to = to;
         if (text) {
             strncpy(g_input_queue[g_input_head].text, text, sizeof(g_input_queue[g_input_head].text) - 1);
             g_input_queue[g_input_head].text[sizeof(g_input_queue[g_input_head].text) - 1] = '\0';
@@ -128,8 +135,20 @@ static void push_input_event(int type, const char *text) {
             g_input_queue[g_input_head].text[0] = '\0';
         }
         g_input_head = next;
+        g_input_pushed++;
     }
     pthread_mutex_unlock(&g_input_mutex);
+}
+
+static void push_input_event(int type, const char *text) {
+    push_input_event_at(type, 0, 0, text);
+}
+
+static int input_pushed(void) {
+    pthread_mutex_lock(&g_input_mutex);
+    int n = g_input_pushed;
+    pthread_mutex_unlock(&g_input_mutex);
+    return n;
 }
 
 static void push_open_url_event(const char *url) {
@@ -1018,6 +1037,7 @@ static UIReturnKeyType g_return_key = UIReturnKeyDefault;
 static UITextAutocapitalizationType g_autocapitalization = UITextAutocapitalizationTypeSentences;
 static BOOL g_secure_entry = NO;
 static UITextContentType g_content_type = nil;
+static UITextAutocorrectionType g_autocorrection = UITextAutocorrectionTypeDefault; // autocorrectionDisabled(): No
 
 // TextContentType's cases, by name, as UIKit's content types
 static UITextContentType myphp_content_type(NSString *name) {
@@ -1036,7 +1056,7 @@ static UITextContentType myphp_content_type(NSString *name) {
     return name ? types[name] : nil;
 }
 
-void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalization, int secure, const char *content_type) {
+void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalization, int secure, const char *content_type, int autocorrection) {
     NSString *content = content_type ? [NSString stringWithUTF8String:content_type] : nil; // copied before PHP's string goes
     dispatch_async(dispatch_get_main_queue(), ^{
         g_keyboard_type = (UIKeyboardType)keyboard;
@@ -1044,6 +1064,7 @@ void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalizat
         g_autocapitalization = (UITextAutocapitalizationType)autocapitalization;
         g_secure_entry = secure != 0;
         g_content_type = myphp_content_type(content);
+        g_autocorrection = (UITextAutocorrectionType)autocorrection;
         if (g_view && [g_view isFirstResponder]) {
             [g_view reloadInputViews];
         }
@@ -1145,10 +1166,16 @@ static void* php_worker_thread(void *arg) {
     return NULL;
 }
 
-// UITextInput for the input methods that compose (Chinese, Japanese): the view's document is the
-// marked text alone, as Android's BaseInputConnection sees it, which the keyboard edits in place
-// (input event 2: the marked text, "" unmarked) until it commits (insertText: event 0). The window's
-// own text is PHP's (UI\TextState), which the keyboard never reads.
+// UITextInput: the view's document is the text of the field with the keyboard, as PHP tells it
+// (myphp_ios_set_text_document: UI\TextState's text and selection), so that the keyboard corrects, predicts,
+// capitalizes and composes by what is typed, as in a UITextField; the text it marks while an input method composes
+// (Chinese, Japanese) is in it too, which PHP's text has not until it commits. What the keyboard does to it is done here
+// at once, as the keyboard reads it back at once, and goes to PHP as input events (0 insert, 1 backspace, 2 the marked
+// text, 3 a range replaced, 4 a range selected), which PHP applies to the field; PHP tells the document again once it
+// has taken them, and that is the document then. With no document (g_doc_on NO: a secure field, a view taking its own
+// input, none) the document is the marked text alone, and corrections are off.
+static BOOL g_doc_on = NO;
+
 @interface MyphpTextPosition : UITextPosition
 @property (nonatomic, assign) NSInteger index;
 + (instancetype)at:(NSInteger)i;
@@ -1174,15 +1201,16 @@ static void* php_worker_thread(void *arg) {
 @end
 
 @interface MyphpMetalView : MTKView <UITextInput>
-@property (nonatomic, strong) NSMutableString *marked;   // the text being composed
-@property (nonatomic, assign) NSRange markedSelection;    // the keyboard's selection in it
+@property (nonatomic, strong) NSMutableString *doc;     // the document: the field's text, with the marked text in it
+@property (nonatomic, assign) NSRange sel;              // the selection in it
+@property (nonatomic, assign) NSRange marked;           // the marked text in it (length 0: none)
 @property (nonatomic, strong) UITextInputStringTokenizer *tokenizerObject;
+- (void)takeDocument:(NSString *)text on:(BOOL)on from:(NSInteger)from to:(NSInteger)to acked:(int)acked;
 @end
 
 @implementation MyphpMetalView
 @synthesize inputDelegate = _inputDelegate;
 @synthesize markedTextStyle = _markedTextStyle;
-@synthesize selectedTextRange = _selectedTextRange;
 
 - (BOOL)canBecomeFirstResponder {
     return YES;
@@ -1193,19 +1221,69 @@ static void* php_worker_thread(void *arg) {
     return [super resignFirstResponder];
 }
 
-- (NSMutableString *)markedBuffer {
-    if (!_marked) _marked = [NSMutableString string];
-    return _marked;
+- (NSMutableString *)docText {
+    if (!_doc) _doc = [NSMutableString string];
+    return _doc;
 }
 
+- (BOOL)hasMarked {
+    return _marked.length > 0;
+}
+
+// A range of the document's, kept within it
+- (NSRange)clamp:(MyphpTextRange *)r {
+    NSInteger n = (NSInteger)[self docText].length;
+    NSInteger a = MAX(0, MIN(r.from, n)), b = MAX(a, MIN(r.to, n));
+    return NSMakeRange((NSUInteger)a, (NSUInteger)(b - a));
+}
+
+// The marked text goes, uncommitted (the keyboard went)
 - (void)clearMarked {
-    [[self markedBuffer] setString:@""];
-    self.markedSelection = NSMakeRange(0, 0);
+    if ([self hasMarked]) {
+        [[self docText] deleteCharactersInRange:_marked];
+        _sel = NSMakeRange(_marked.location, 0);
+    }
+    _marked = NSMakeRange(0, 0);
+    [self settle];
+}
+
+// With no document, what was committed leaves it: it holds the marked text alone
+- (void)settle {
+    if (!g_doc_on && ![self hasMarked]) {
+        [[self docText] setString:@""];
+        _sel = NSMakeRange(0, 0);
+    }
 }
 
 - (void)composeChanged {
-    push_input_event(2, [[self markedBuffer] UTF8String]);
+    push_input_event(2, [[[self docText] substringWithRange:_marked] UTF8String]);
     g_needs_render = 1;
+}
+
+// PHP's document (myphp_ios_set_text_document): taken only once PHP has taken every input event pushed, and not while
+// text is marked, which PHP's text has not; the keyboard is told what changed.
+- (void)takeDocument:(NSString *)text on:(BOOL)on from:(NSInteger)from to:(NSInteger)to acked:(int)acked {
+    if (acked != input_pushed() || [self hasMarked]) {
+        return;
+    }
+    BOOL was = g_doc_on;
+    g_doc_on = on;
+    NSString *t = on ? text : @"";
+    NSInteger n = (NSInteger)t.length;
+    NSInteger a = MAX(0, MIN(from, n)), b = MAX(a, MIN(to, n));
+    NSRange sel = NSMakeRange((NSUInteger)a, (NSUInteger)(b - a));
+    BOOL textChanged = ![[self docText] isEqualToString:t], selChanged = !NSEqualRanges(sel, _sel);
+    if (textChanged || selChanged) {
+        if (textChanged) [_inputDelegate textWillChange:self];
+        if (selChanged) [_inputDelegate selectionWillChange:self];
+        [[self docText] setString:t];
+        _sel = sel;
+        if (selChanged) [_inputDelegate selectionDidChange:self];
+        if (textChanged) [_inputDelegate textDidChange:self];
+    }
+    if (was != on && [self isFirstResponder]) {
+        [self reloadInputViews]; // corrections on or off
+    }
 }
 
 // UIKeyInput
@@ -1214,83 +1292,132 @@ static void* php_worker_thread(void *arg) {
 }
 
 - (void)insertText:(NSString *)text {
-    if ([self markedBuffer].length > 0) { [self clearMarked]; } // the composition commits as this text
+    NSString *t = text ?: @"";
+    NSRange at = [self hasMarked] ? _marked : _sel; // the composition commits as this text
+    [[self docText] replaceCharactersInRange:at withString:t];
+    _sel = NSMakeRange(at.location + t.length, 0);
+    _marked = NSMakeRange(0, 0);
     if (text) {
         push_input_event(0, [text UTF8String]);
     }
+    [self settle];
     g_needs_render = 1;
 }
 
 - (void)deleteBackward {
-    if ([self markedBuffer].length > 0) { // a backspace inside the composition edits it, not the field
-        NSMutableString *m = [self markedBuffer];
-        NSRange sel = self.markedSelection;
-        if (sel.length == 0 && sel.location > 0) { sel = [m rangeOfComposedCharacterSequenceAtIndex:sel.location - 1]; }
-        if (sel.length > 0) { [m deleteCharactersInRange:sel]; self.markedSelection = NSMakeRange(sel.location, 0); }
+    NSMutableString *d = [self docText];
+    NSRange r = _sel;
+    if ([self hasMarked]) { // a backspace inside the composition edits it, not the field
+        if (r.length == 0 && r.location > _marked.location) { r = [d rangeOfComposedCharacterSequenceAtIndex:r.location - 1]; }
+        if (r.length > 0 && r.location >= _marked.location && NSMaxRange(r) <= NSMaxRange(_marked)) {
+            [d deleteCharactersInRange:r];
+            _marked.length -= r.length;
+            _sel = NSMakeRange(r.location, 0);
+        }
         [self composeChanged];
+        [self settle];
         return;
+    }
+    if (r.length == 0 && r.location > 0) { r = [d rangeOfComposedCharacterSequenceAtIndex:r.location - 1]; }
+    if (r.length > 0 && NSMaxRange(r) <= d.length) {
+        [d deleteCharactersInRange:r];
+        _sel = NSMakeRange(r.location, 0);
     }
     push_input_event(1, NULL);
     g_needs_render = 1;
 }
 
-// UITextInput: the marked text
+// UITextInput: the marked text, in the document where it is typed
 - (UITextRange *)markedTextRange {
-    return [self markedBuffer].length == 0 ? nil : [MyphpTextRange from:0 to:[self markedBuffer].length];
+    return [self hasMarked] ? [MyphpTextRange from:_marked.location to:NSMaxRange(_marked)] : nil;
 }
 
 - (void)setMarkedText:(NSString *)markedText selectedRange:(NSRange)selectedRange {
+    NSString *m = markedText ?: @"";
     [_inputDelegate textWillChange:self];
-    [[self markedBuffer] setString:markedText ?: @""];
-    self.markedSelection = NSMakeRange(MIN(selectedRange.location, [self markedBuffer].length), MIN(selectedRange.length, [self markedBuffer].length - MIN(selectedRange.location, [self markedBuffer].length)));
+    NSRange at = [self hasMarked] ? _marked : _sel; // a selection is replaced by what is composed, as PHP's setMarked does
+    [[self docText] replaceCharactersInRange:at withString:m];
+    _marked = NSMakeRange(at.location, m.length);
+    NSUInteger loc = MIN(selectedRange.location, m.length);
+    _sel = NSMakeRange(at.location + loc, MIN(selectedRange.length, m.length - loc));
     [_inputDelegate textDidChange:self];
     [self composeChanged];
+    [self settle];
 }
 
 - (void)unmarkText {
-    if ([self markedBuffer].length > 0) { // what was composed stays as typed
+    if ([self hasMarked]) { // what was composed stays as typed
         [_inputDelegate textWillChange:self];
-        NSString *text = [[self markedBuffer] copy];
-        [self clearMarked];
+        NSString *text = [[self docText] substringWithRange:_marked];
+        _sel = NSMakeRange(NSMaxRange(_marked), 0);
+        _marked = NSMakeRange(0, 0);
         [_inputDelegate textDidChange:self];
         push_input_event(2, "");
         push_input_event(0, [text UTF8String]);
+        [self settle];
         g_needs_render = 1;
     }
 }
 
 - (UITextRange *)selectedTextRange {
-    return [MyphpTextRange from:self.markedSelection.location to:self.markedSelection.location + self.markedSelection.length];
+    return [MyphpTextRange from:_sel.location to:NSMaxRange(_sel)];
 }
 
 - (void)setSelectedTextRange:(UITextRange *)range {
     MyphpTextRange *r = (MyphpTextRange *)range;
-    if (r) {
+    if (!r) return;
+    NSRange sel = [self clamp:r];
+    if ([self hasMarked] && sel.location >= _marked.location && NSMaxRange(sel) <= NSMaxRange(_marked)) {
         [_inputDelegate selectionWillChange:self];
-        self.markedSelection = NSMakeRange(r.from, r.to - r.from);
+        _sel = sel; // within the composition: the input method's own, PHP shows the composition whole
         [_inputDelegate selectionDidChange:self];
+        return;
+    }
+    [self unmarkText];
+    [_inputDelegate selectionWillChange:self];
+    _sel = [self clamp:r];
+    [_inputDelegate selectionDidChange:self];
+    if (g_doc_on) {
+        push_input_event_at(4, (int)_sel.location, (int)NSMaxRange(_sel), NULL);
+        g_needs_render = 1;
     }
 }
 
 - (NSString *)textInRange:(UITextRange *)range {
     MyphpTextRange *r = (MyphpTextRange *)range;
-    NSMutableString *m = [self markedBuffer];
-    if (!r || r.from < 0 || r.to > (NSInteger)m.length) return @"";
-    return [m substringWithRange:NSMakeRange(r.from, r.to - r.from)];
+    if (!r) return @"";
+    return [[self docText] substringWithRange:[self clamp:r]];
 }
 
 - (void)replaceRange:(UITextRange *)range withText:(NSString *)text {
     MyphpTextRange *r = (MyphpTextRange *)range;
-    NSMutableString *m = [self markedBuffer];
-    if (!r || r.from < 0 || r.to > (NSInteger)m.length) return;
-    [m replaceCharactersInRange:NSMakeRange(r.from, r.to - r.from) withString:text ?: @""];
-    self.markedSelection = NSMakeRange(r.from + (text ? text.length : 0), 0);
-    [self composeChanged];
+    if (!r) return;
+    NSString *t = text ?: @"";
+    NSRange at = [self clamp:r];
+    if ([self hasMarked] && at.location >= _marked.location && NSMaxRange(at) <= NSMaxRange(_marked)) { // within the composition
+        [[self docText] replaceCharactersInRange:at withString:t];
+        _marked.length = _marked.length - at.length + t.length;
+        _sel = NSMakeRange(at.location + t.length, 0);
+        [self composeChanged];
+        [self settle];
+        return;
+    }
+    [self unmarkText]; // a correction elsewhere commits what is composed first; offsets in the document stay
+    at = [self clamp:r];
+    [[self docText] replaceCharactersInRange:at withString:t];
+    _sel = NSMakeRange(at.location + t.length, 0);
+    if (g_doc_on) {
+        push_input_event_at(3, (int)at.location, (int)NSMaxRange(at), [t UTF8String]); // a correction, a prediction, a smart quote
+    } else {
+        push_input_event(0, [t UTF8String]);
+    }
+    [self settle];
+    g_needs_render = 1;
 }
 
-// Positions and ranges, over the marked text
+// Positions and ranges, over the document
 - (UITextPosition *)beginningOfDocument { return [MyphpTextPosition at:0]; }
-- (UITextPosition *)endOfDocument { return [MyphpTextPosition at:[self markedBuffer].length]; }
+- (UITextPosition *)endOfDocument { return [MyphpTextPosition at:(NSInteger)[self docText].length]; }
 
 - (UITextRange *)textRangeFromPosition:(UITextPosition *)fromPosition toPosition:(UITextPosition *)toPosition {
     return [MyphpTextRange from:((MyphpTextPosition *)fromPosition).index to:((MyphpTextPosition *)toPosition).index];
@@ -1298,7 +1425,7 @@ static void* php_worker_thread(void *arg) {
 
 - (UITextPosition *)positionFromPosition:(UITextPosition *)position offset:(NSInteger)offset {
     NSInteger i = ((MyphpTextPosition *)position).index + offset;
-    if (i < 0 || i > (NSInteger)[self markedBuffer].length) return nil;
+    if (i < 0 || i > (NSInteger)[self docText].length) return nil;
     return [MyphpTextPosition at:i];
 }
 
@@ -1326,7 +1453,7 @@ static void* php_worker_thread(void *arg) {
 
 - (UITextRange *)characterRangeByExtendingPosition:(UITextPosition *)position inDirection:(UITextLayoutDirection)direction {
     NSInteger i = ((MyphpTextPosition *)position).index;
-    return (direction == UITextLayoutDirectionLeft || direction == UITextLayoutDirectionUp) ? [MyphpTextRange from:0 to:i] : [MyphpTextRange from:i to:[self markedBuffer].length];
+    return (direction == UITextLayoutDirectionLeft || direction == UITextLayoutDirectionUp) ? [MyphpTextRange from:0 to:i] : [MyphpTextRange from:i to:(NSInteger)[self docText].length];
 }
 
 - (NSWritingDirection)baseWritingDirectionForPosition:(UITextPosition *)position inDirection:(UITextStorageDirection)direction {
@@ -1344,19 +1471,20 @@ static void* php_worker_thread(void *arg) {
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range { return range.end; }
 - (UITextRange *)characterRangeAtPoint:(CGPoint)point { return nil; }
 
-// UITextInputTraits: what the field with the keyboard asks (myphp_ios_set_text_traits). Corrections and spelling stay
-// off whatever it asks: the keyboard sees the composition alone as the document, not the field's text, so its
-// corrections would replace the wrong text (autocorrectionDisabled() is how every field already is here).
+// UITextInputTraits: what the field with the keyboard asks (myphp_ios_set_text_traits). Corrections, spelling and smart
+// punctuation are UIKit's defaults, as a UITextField's, where the keyboard reads the field's text (g_doc_on), and
+// autocorrectionDisabled() turns corrections and spelling off; off where it reads the marked text alone, as its
+// corrections would replace the wrong text.
 - (UIKeyboardType)keyboardType { return g_keyboard_type; }
 - (UIReturnKeyType)returnKeyType { return g_return_key; }
 - (UITextAutocapitalizationType)autocapitalizationType { return g_autocapitalization; }
 - (BOOL)isSecureTextEntry { return g_secure_entry; }
 - (UITextContentType)textContentType { return g_content_type; }
-- (UITextAutocorrectionType)autocorrectionType { return UITextAutocorrectionTypeNo; }
-- (UITextSpellCheckingType)spellCheckingType { return UITextSpellCheckingTypeNo; }
-- (UITextSmartQuotesType)smartQuotesType { return UITextSmartQuotesTypeNo; }
-- (UITextSmartDashesType)smartDashesType { return UITextSmartDashesTypeNo; }
-- (UITextSmartInsertDeleteType)smartInsertDeleteType { return UITextSmartInsertDeleteTypeNo; }
+- (UITextAutocorrectionType)autocorrectionType { return g_doc_on ? g_autocorrection : UITextAutocorrectionTypeNo; }
+- (UITextSpellCheckingType)spellCheckingType { return g_doc_on && g_autocorrection != UITextAutocorrectionTypeNo ? UITextSpellCheckingTypeDefault : UITextSpellCheckingTypeNo; }
+- (UITextSmartQuotesType)smartQuotesType { return g_doc_on ? UITextSmartQuotesTypeDefault : UITextSmartQuotesTypeNo; }
+- (UITextSmartDashesType)smartDashesType { return g_doc_on ? UITextSmartDashesTypeDefault : UITextSmartDashesTypeNo; }
+- (UITextSmartInsertDeleteType)smartInsertDeleteType { return g_doc_on ? UITextSmartInsertDeleteTypeDefault : UITextSmartInsertDeleteTypeNo; }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     NSMutableSet<UIPress *> *pass = nil;
@@ -1383,7 +1511,7 @@ static void* php_worker_thread(void *arg) {
             [self insertText:@"\n"];
             continue;
         }
-        if ([self markedBuffer].length == 0 && k.characters.length > 0) {
+        if (![self hasMarked] && k.characters.length > 0) {
             unichar c = [k.characters characterAtIndex:0];
             if (c >= 0x20 && c != 0x7F && !(c >= 0xF700 && c <= 0xF8FF)) {
                 [self insertText:k.characters];
@@ -1456,6 +1584,19 @@ static void* php_worker_thread(void *arg) {
     }
 }
 @end
+
+// The text of the field with the keyboard, which the keyboard reads (the view's UITextInput document): on 0 for none
+// (a secure field, a view taking its own input, none has the keyboard); from and to its selection in UTF-16 units;
+// acked the input events PHP has taken (input_pushed), so that a document told before the keyboard's last edits
+// reached the field is not taken. PHP's iOS\Window::document, each frame it changed.
+void myphp_ios_set_text_document(int on, const char *text, int from, int to, int acked) {
+    NSString *t = on && text ? ([NSString stringWithUTF8String:text] ?: @"") : @""; // copied before PHP's string goes
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (g_view) {
+            [(MyphpMetalView *)g_view takeDocument:t on:on != 0 from:from to:to acked:acked];
+        }
+    });
+}
 
 // ---- Accessibility: VoiceOver reads PHP's frames ---------------------------
 // PHP gives the elements a screen reader moves through as JSON whenever they change (UI\AccessElements, through

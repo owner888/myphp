@@ -48,14 +48,14 @@ check(TextInputTraits::key($a) !== TextInputTraits::key(new TextState('')), 'and
 same('', TextInputTraits::key(null), 'none with no field');
 
 // No field, or one that asks nothing: what each native side starts with, so that nothing changes for it.
-same([0, 0, 2, 0, null], IOSWindow::keyboardTraits(null), 'iOS: the default keyboard and Return key, sentences capitalized, as the launcher starts');
+same([0, 0, 2, 0, null, 0], IOSWindow::keyboardTraits(null), 'iOS: the default keyboard and Return key, sentences capitalized, as the launcher starts');
 same([0x1, 6 | 0x2000000], AndroidWindow::editorInfo(null), 'Android: text, Done, never full screen, as MyphpActivity starts');
 same(0, WindowsWindow::inputScope(null), 'Windows: IS_DEFAULT');
 same([0, 0], LinuxWindow::inputPurpose(null), 'Linux: a free form, no hints');
 $java = (string)file_get_contents(__DIR__ . '/../bin/template/android/src/com/owner888/myphp/MyphpActivity.java');
 check(str_contains($java, 'sInputType = InputType.TYPE_CLASS_TEXT;') && str_contains($java, 'sImeOptions = EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_FULLSCREEN;'), 'MyphpActivity starts as editorInfo(null)');
 $m = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/launcher/main.m');
-check(str_contains($m, 'g_keyboard_type = UIKeyboardTypeDefault;') && str_contains($m, 'g_autocapitalization = UITextAutocapitalizationTypeSentences;'), 'the launcher starts as keyboardTraits(null)');
+check(str_contains($m, 'g_keyboard_type = UIKeyboardTypeDefault;') && str_contains($m, 'g_autocapitalization = UITextAutocapitalizationTypeSentences;') && str_contains($m, 'g_autocorrection = UITextAutocorrectionTypeDefault;'), 'the launcher starts as keyboardTraits(null)');
 foreach (\TextContentType::cases() as $case) {
     check(str_contains($m, "@\"{$case->name}\": UITextContentType"), "the launcher knows TextContentType::{$case->name}");
 }
@@ -63,13 +63,13 @@ foreach (\TextContentType::cases() as $case) {
 // iOS: KeyboardType's cases are UIKeyboardType's, in its order; the Return key, capitalization, secure entry, content type.
 same(['default', 'asciiCapable', 'numbersAndPunctuation', 'URL', 'numberPad', 'phonePad', 'namePhonePad', 'emailAddress', 'decimalPad', 'twitter', 'webSearch'],
     array_map(fn($c) => $c->name, \KeyboardType::cases()), 'KeyboardType in UIKeyboardType\'s order (0 to 10)');
-same([7, 4, 0, 0, 'emailAddress'], IOSWindow::keyboardTraits($email), 'iOS: an email address\'s keyboard, Next, never capitalized');
+same([7, 4, 0, 0, 'emailAddress', 1], IOSWindow::keyboardTraits($email), 'iOS: an email address\'s keyboard, Next, never capitalized, not corrected (UITextAutocorrectionTypeNo)');
 $h->frame(2);
 $v->swap = false; $h->frame(2);
-same([4, 0, 2, 1, null], IOSWindow::keyboardTraits($h->byLabel('PIN')?->edit), 'iOS: a PIN\'s number pad, secure entry');
+same([4, 0, 2, 1, null, 0], IOSWindow::keyboardTraits($h->byLabel('PIN')?->edit), 'iOS: a PIN\'s number pad, secure entry');
 $done = new TextState(''); $done->traits = new TextInputTraits(submitLabel: \SubmitLabel::done);
 $send = new TextState(''); $send->traits = new TextInputTraits(submitLabel: \SubmitLabel::send, autocapitalization: \TextInputAutocapitalization::characters);
-same([[0, 9, 2, 0, null], [0, 7, 3, 0, null]], [IOSWindow::keyboardTraits($done), IOSWindow::keyboardTraits($send)], 'iOS: Done is UIReturnKeyDone (9), Send 7, all characters 3');
+same([[0, 9, 2, 0, null, 0], [0, 7, 3, 0, null, 0]], [IOSWindow::keyboardTraits($done), IOSWindow::keyboardTraits($send)], 'iOS: Done is UIReturnKeyDone (9), Send 7, all characters 3');
 
 // Android: the class and its variation, the text flags, the Return key's action.
 same([0x1 | 0x20 | 0x80000, 5 | 0x2000000], AndroidWindow::editorInfo($email), 'Android: an email address, no suggestions, Next');
