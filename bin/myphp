@@ -3418,7 +3418,7 @@ function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, 
             $ok || fail("could not copy the changed files into $app (run-as: the app myphp run built is debuggable; run it again if it was built otherwise)");
         }
         if ($restart) {
-            $step(['adb', '-s', $dev->id, 'shell', 'am', 'start', '-S', '-n', "$app/.MyphpActivity"]) === 0 || fail('could not start the app again');
+            $step(['adb', '-s', $dev->id, 'shell', 'am', 'start', '-S', '-n', "$app/com.owner888.myphp.MyphpActivity"]) === 0 || fail('could not start the app again');
         }
         return;
     }
@@ -3458,6 +3458,7 @@ function runCommand(array $args): void
         $out = path($dir, $c['out']);
         is_dir($out) || mkdir($out, 0755, true);
         $name = orElse($c['name'], 'app');
+        $bundleId = orElse($c['identifier'] ?? null, ANDROID_PACKAGE);
         logf("building $name for Android");
         $apk = "$out/$name.apk";
         $script = FRAMEWORK . '/scripts/package-android-apk.sh';
@@ -3471,12 +3472,12 @@ function runCommand(array $args): void
 
         $say("Launching application...");
         $step(['adb', '-s', $targetDev->id, 'logcat', '-c']); // cleared before the start: a crash in the first moments is in the log
-        $step(['adb', '-s', $targetDev->id, 'shell', 'am', 'start', '-n', ANDROID_PACKAGE . '/.MyphpActivity']) === 0 || fail("Failed to start activity");
+        $step(['adb', '-s', $targetDev->id, 'shell', 'am', 'start', '-n', "$bundleId/com.owner888.myphp.MyphpActivity"]) === 0 || fail("Failed to start activity");
 
         logf("$name is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
         // the launcher (MyPHP), the activity (MyPHP_Java), Java crashes, native crashes (DEBUG: the tombstone's lines)
         streamLog("adb -s {$targetDev->id} logcat -v threadtime -s MyPHP:V MyPHP_Java:V AndroidRuntime:E DEBUG:I", 'android', $all,
-            phoneHot($targetDev, ANDROID_PACKAGE, $name, fn() => phoneFiles($dir, 'android', ''), $seen, $step));
+            phoneHot($targetDev, $bundleId, $name, fn() => phoneFiles($dir, 'android', ''), $seen, $step));
     } elseif ($targetDev->platform === 'ios') {
         // 2. iOS Workflow
         if ($targetDev->type === 'simulator') {

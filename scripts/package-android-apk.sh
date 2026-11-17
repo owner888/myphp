@@ -60,8 +60,25 @@ rm -rf "$WORK_DIR"
 mkdir -p "${WORK_DIR}/gen" "${WORK_DIR}/classes" "${WORK_DIR}/dex" "${WORK_DIR}/staging"
 
 # 1. Prepare and compile resources (supports custom project resources/icon.png as Adaptive Icon foreground)
+BUNDLE_ID="com.owner888.myphp"
+APP_LABEL="${APP_NAME:-MyPHP}"
+APP_VERSION="1.0.0"
+VERSION_CODE="1"
+if [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/myphp.json" ]; then
+    BUNDLE_ID="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["identifier"] ?? "com.owner888.myphp";' "${PROJECT_DIR}/myphp.json")"
+    APP_LABEL="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["name"] ?? $c["displayName"] ?? $argv[2];' "${PROJECT_DIR}/myphp.json" "$APP_LABEL")"
+    APP_VERSION="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["version"] ?? "1.0.0";' "${PROJECT_DIR}/myphp.json")"
+    VERSION_CODE="$(php -r '$v = $argv[1]; if (preg_match("/^(\d+)\.(\d+)\.(\d+)/", $v, $m)) { echo ($m[1] * 10000 + $m[2] * 100 + $m[3]); } else { echo "1"; }' "$APP_VERSION")"
+fi
+echo "==> App Identity: package=${BUNDLE_ID} label=${APP_LABEL} version=${APP_VERSION} (${VERSION_CODE})"
+
 mkdir -p "${WORK_DIR}/res"
 cp -R "${TEMPLATE_DIR}/res/"* "${WORK_DIR}/res/"
+php -r '
+$f = $argv[1];
+$label = htmlspecialchars($argv[2], ENT_XML1 | ENT_QUOTES, "UTF-8");
+file_put_contents($f, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n    <string name=\"app_name\">{$label}</string>\n</resources>\n");
+' "${WORK_DIR}/res/values/strings.xml" "$APP_LABEL"
 if [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/resources/icon.png" ]; then
     echo "==> Using custom app icon from ${PROJECT_DIR}/resources/icon.png..."
     rm -f "${WORK_DIR}/res/drawable/ic_launcher_foreground.xml"
@@ -82,6 +99,9 @@ if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
 "$AAPT2" link $DEBUG_MODE \
     -I "$PLATFORM_JAR" \
     --manifest "${WORK_DIR}/AndroidManifest.xml" \
+    --rename-manifest-package "$BUNDLE_ID" \
+    --version-name "$APP_VERSION" \
+    --version-code "$VERSION_CODE" \
     --java "${WORK_DIR}/gen" \
     -o "${WORK_DIR}/base.apk" \
     "${WORK_DIR}/res.zip" \
@@ -180,7 +200,11 @@ rm -f "${WORK_DIR}/aligned.apk"
 # Check alignment
 "$ZIPALIGN" -c -v 4 "${WORK_DIR}/aligned.apk" | grep -i "resources.arsc" || true
 
-# 8. Setup Keystore (supports production release keystore via env vars)
+# 8. Setup Keystore (supports production release keystore via env vars or ANDROID_KEYSTORE_BASE64)
+if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -z "${ANDROID_KEYSTORE_PATH:-}" ]; then
+    ANDROID_KEYSTORE_PATH="${WORK_DIR}/release.keystore"
+    php -r 'file_put_contents($argv[1], base64_decode($argv[2]));' "$ANDROID_KEYSTORE_PATH" "$ANDROID_KEYSTORE_BASE64"
+fi
 KEYSTORE="${ANDROID_KEYSTORE_PATH:-${BUILD_DIR}/debug.keystore}"
 KEYSTORE_PASS="${ANDROID_KEYSTORE_PASS:-android}"
 KEY_ALIAS="${ANDROID_KEY_ALIAS:-androiddebugkey}"

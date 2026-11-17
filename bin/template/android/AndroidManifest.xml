@@ -32,7 +32,7 @@
         android:hasCode="true"
         android:theme="@style/AppTheme">
         <activity
-            android:name=".MyphpActivity"
+            android:name="com.owner888.myphp.MyphpActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|navigation"
             android:windowSoftInputMode="adjustNothing">
