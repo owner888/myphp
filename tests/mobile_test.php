@@ -390,3 +390,41 @@ $p = $h->rt->materialPlaces[0];
 same(['glass', 28.0], [$p['material'], $p['radius']], 'glass, rounded as the capsule');
 same([], $over->holes, 'and the view over them has no hole either');
 check($over->n > 0, 'the tabs\' icons and labels paint in the view over the glass');
+
+// A window's root view keeps to the safe area, its background reaching on to the window's edges where the view
+// touches it, as SwiftUI's background(_:ignoresSafeAreaEdges:); ignoresSafeArea() takes the view itself there.
+require_once __DIR__ . '/../src/UI/Declarative/functions.php';
+$phone = function (\Closure $body, float $keyboard = 0.0): Headless {
+    $h = new Headless(function (Context $c) use ($body, $keyboard): void {
+        $c->windowSafeArea = $c->safeArea = [59.0, 0.0, 34.0, 0.0]; $c->keyboard = $keyboard;
+        \MyPHP\UI\Content::render($body, $c);
+    }, 393, 852);
+    $h->frame(2);
+    return $h;
+};
+/** The quads of $h's frame filled with $rgb: [x, y, w, h] each. */
+$filled = function (Headless $h, int $rgb): array {
+    $list = $h->paint(); $out = [];
+    $want = [($rgb >> 16 & 255) / 255, ($rgb >> 8 & 255) / 255, ($rgb & 255) / 255];
+    for ($i = 0; $i < $list->n; $i++) {
+        $q = []; for ($j = 0; $j < 8; $j++) { $q[] = $list->buf[$i * 16 + $j]; }
+        if (abs($q[4] - $want[0]) + abs($q[5] - $want[1]) + abs($q[6] - $want[2]) < 0.01 && $q[7] > 0) { $out[] = array_slice($q, 0, 4); }
+    }
+    return $out;
+};
+$h = $phone(fn() => VStack()(Text('Page')->accessibilityLabel('page'))->frame(maxWidth: INF, maxHeight: INF)->background(\Color::rgb(0x123456)));
+same([[0.0, 0.0, 393.0, 852.0], true], [$filled($h, 0x123456)[0] ?? null, $h->rect($h->byLabel('page'))[1] >= 59.0], 'a page\'s background fills the window, its content in the safe area');
+$h = $phone(fn() => VStack()(Text('Page'))->frame(maxWidth: INF, maxHeight: INF)->background(\Color::rgb(0x123456), ignoresSafeAreaEdges: \Edge::top));
+same([0.0, 0.0, 393.0, 818.0], $filled($h, 0x123456)[0] ?? null, 'on the sides it names only');
+$h = $phone(fn() => VStack()(Text('Page'))->frame(maxWidth: INF, maxHeight: INF)->background(\Color::rgb(0x123456), ignoresSafeAreaEdges: null));
+same([0.0, 59.0, 393.0, 759.0], $filled($h, 0x123456)[0] ?? null, 'on none: the safe area\'s');
+$h = $phone(fn() => Text('Small')->padding(10)->background(\Color::rgb(0x123456)));
+same(true, ($filled($h, 0x123456)[0][1] ?? 0) > 59.0 && ($filled($h, 0x123456)[0][3] ?? 852) < 100.0, 'a background that does not touch the safe area\'s edge stays its view\'s');
+$h = $phone(fn() => VStack()(Text('Page'))->frame(maxWidth: INF, maxHeight: INF)->background(\Color::rgb(0x123456)), 300.0);
+same([0.0, 0.0, 393.0, 852.0], $filled($h, 0x123456)[0] ?? null, 'under the keyboard too');
+$h = $phone(fn() => ZStack()(Color(\Color::rgb(0x123456))->ignoresSafeArea()->accessibilityLabel('fill'), Text('Over')->accessibilityLabel('over')));
+same([[0.0, 0.0, 393.0, 852.0], true], [$h->rect($h->byLabel('fill')), $h->rect($h->byLabel('over'))[1] >= 59.0], 'ignoresSafeArea: the view takes the window, the others keep to the safe area');
+$h = $phone(fn() => ZStack()(Color(\Color::rgb(0x123456))->ignoresSafeArea(edges: \Edge::bottom)->accessibilityLabel('fill')));
+same([0.0, 59.0, 393.0, 793.0], $h->rect($h->byLabel('fill')), 'on the sides it names');
+$h = $phone(fn() => ZStack()(Color(\Color::rgb(0x123456))->ignoresSafeArea(\SafeAreaRegions::container)->accessibilityLabel('fill')), 300.0);
+same([0.0, 0.0, 393.0, 552.0], $h->rect($h->byLabel('fill')), 'the container\'s alone stops at the keyboard');

@@ -254,6 +254,7 @@ trait ContextBase
         $n = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 0, '', null, $t->fontSize, $t->text));
         $n->edit = $state; $n->bare = true; $n->changed = $state->editedSinceBuilt();
         $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout
+        $state->password = false; // until password() says otherwise, this frame, as input()'s
         $n->padding(0)->minWidth($t->space(20))->minHeight(0); // no padding of its own, not a field's text inset taken back (an inset of -FIELD_INSET drew the text left of a padding the app gives it)
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;

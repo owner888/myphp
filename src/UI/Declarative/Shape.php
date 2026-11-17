@@ -43,7 +43,7 @@ final class Shape extends View
             $g = $this->stroke[0] instanceof LinearGradientView ? $this->stroke[0]->toGradient($env) : $this->stroke[0];
             $n->border($this->stroke[1])->borderLinearGradient($g);
         }
-        elseif ($this->stroke !== null && $this->stroke[0]->alpha > 0) { $n->border($this->stroke[1], $this->stroke[0]->rgb($env)); if ($this->stroke[2]) { $n->borderStyle(\MyPHP\UI\BorderStyle::Dashed); } }
+        elseif ($this->stroke !== null && $this->stroke[0]->alpha > 0) { $n->border($this->stroke[1], $this->stroke[0]->rgb($env), $this->stroke[0]->alpha); if ($this->stroke[2]) { $n->borderStyle(\MyPHP\UI\BorderStyle::Dashed); } }
         $this->clip($n);
         return $n;
     }

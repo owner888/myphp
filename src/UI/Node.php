@@ -66,6 +66,8 @@ final class Node
     public bool $bordered = false;
     public ?int $borderColor = null;
     public float $borderWidth = 1.0;
+    /** How much of the border's color shows, from 0 to 1 (border()'s $alpha): under 1, what is below it shows through, its own background included. */
+    public float $borderAlpha = 1.0;
     /** @var list<array{0: float, 1: float, 2: float, 3: float, 4: int, 5: float, 6: bool}> the box shadows, outside (shadow) and inside (insetShadow), in the order added: x, y, blur, spread, color, alpha, inset */
     public array $shadows = [];
     /** Padding across (top and bottom) and along (left and right) when they differ from $pad: set by padding(); null means $pad. */
@@ -80,6 +82,17 @@ final class Node
     public float $shrink = 1.0;
     /** The opacity of the background (background()). */
     public float $bgAlpha = 1.0;
+    /**
+     * The window's safe area this node reaches into, as SwiftUI's: [the insets where it starts, how far into it on
+     * each side], top, right, bottom and left. $bleed is its background's (background(ignoresSafeAreaEdges:)): a
+     * side of the node that touches the safe area's edge has its color or gradient painted on to the window's, by
+     * $bleedBy, the layout's answer. $ignoresSafeArea is the node's own (ignoresSafeArea()): the layout gives it
+     * that room, what is inside it laid out there.
+     * @var ?array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float, 2: float, 3: float}}
+     */
+    public ?array $bleed = null, $ignoresSafeArea = null;
+    /** @var ?array{0: float, 1: float, 2: float, 3: float} */
+    public ?array $bleedBy = null;
     /** Paints this node itself, given a painter and its box, before its children (mygo's Draw): icons, custom marks. */
     public ?\Closure $draw = null;
     /** The pointer over this node, or null for the arrow (mygo's Cursor). */
@@ -1815,10 +1828,10 @@ final class Node
         return $this->wrap($width);
     }
 
-    /** Draws a border $width points wide inside this container's edges, in $color or the theme's border color, over its background if it has one (mygo's Border): it takes room within the node's size, the padding and the children inside it. */
-    public function border(float $width = 1.0, ?int $color = null): static
+    /** Draws a border $width points wide inside this container's edges, in $color or the theme's border color at $alpha, over its background if it has one (mygo's Border): it takes room within the node's size, the padding and the children inside it. */
+    public function border(float $width = 1.0, ?int $color = null, float $alpha = 1.0): static
     {
-        $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width;
+        $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width; $this->borderAlpha = $alpha;
         $this->borders = [0.0, 0.0, 0.0, 0.0]; // one border all round, in place of borderWidth()'s (mygo's one border)
         return $this;
     }

@@ -423,8 +423,13 @@ final class Layout
             $n->context?->runtime?->memoForget($n->id); // at another size: built again, in another pass
             $n->context?->runtime?->changed();
         }
+        if ($n->ignoresSafeArea !== null) {
+            [$t, $r, $b, $l] = self::intoSafeArea($n->ignoresSafeArea, $x, $y, $w, $h);
+            $x -= $l; $y -= $t; $w += $l + $r; $h += $t + $b;
+        }
         $n->x = $x; $n->y = $y; $n->w = $w; $n->h = $h;
         $n->laid = true;
+        if ($n->bleed !== null) { $n->bleedBy = self::intoSafeArea($n->bleed, $x, $y, $w, $h); }
         if ($n->kind === Node::RICH && $n->wrapWidth === null && ($n->rtl || ($n->textStyle()->align ?? Node::START) !== Node::START) && $w - $n->padL() - $n->padR() > $n->textLayout()->width + 0.5) {
             $n->alignWidth = $w - $n->padL() - $n->padR(); // stretched wider than its lines: laid out across the box, so that they go where the alignment and the direction put them (mygo lays a text out at its width)
             $n->layout = null;
@@ -996,6 +1001,25 @@ final class Layout
 
     /** The text metrics of the frame laid out, for the baselines of texts (boxBaseline). */
     private static ?TextMetrics $metrics = null;
+
+    /**
+     * How far past each side, top, right, bottom and left, the box ($x, $y, $w, $h) reaches into the window's safe
+     * area $into ([the insets where it starts, how far into it on each side]): on the sides that touch its edge, as
+     * SwiftUI extends a view, or its background, that meets the safe area and no other.
+     * @param array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float, 2: float, 3: float}} $into
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    private static function intoSafeArea(array $into, float $x, float $y, float $w, float $h): array
+    {
+        [[$t, $r, $b, $l], $by] = $into;
+        [$ww, $wh] = self::$window;
+        return [
+            abs($y - $t) < 0.5 ? $by[0] : 0.0,
+            abs($x + $w - ($ww - $r)) < 0.5 ? $by[1] : 0.0,
+            abs($y + $h - ($wh - $b)) < 0.5 ? $by[2] : 0.0,
+            abs($x - $l) < 0.5 ? $by[3] : 0.0,
+        ];
+    }
 
     /** The window's size, the layout's: what attachTo keeps popovers in. */
     public static function window(float $w, float $h): void

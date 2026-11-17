@@ -166,15 +166,19 @@ abstract class View
         return $m === null ? null : $m[1][2];
     }
 
-    /** A color or gradient behind the view; or $content, a view as large as it, under it, as SwiftUI's background(alignment:content:). */
-    public function background(\Color|ColorValue|LinearGradientView|RadialGradientView|AngularGradientView|\MyPHP\UI\LinearGradient|\MyPHP\UI\RadialGradient|\MyPHP\UI\ConicGradient|View $color, \Alignment $alignment = \Alignment::center): static
+    /**
+     * A color or gradient behind the view, which reaches on into the safe area on the sides of $ignoresSafeAreaEdges
+     * where the view touches it (null: on none), as SwiftUI's background(_:ignoresSafeAreaEdges:); or $content, a
+     * view as large as it, under it, as SwiftUI's background(alignment:content:).
+     */
+    public function background(\Color|ColorValue|LinearGradientView|RadialGradientView|AngularGradientView|\MyPHP\UI\LinearGradient|\MyPHP\UI\RadialGradient|\MyPHP\UI\ConicGradient|View $color, \Alignment $alignment = \Alignment::center, ?\Edge $ignoresSafeAreaEdges = \Edge::all): static
     {
         if ($color instanceof LinearGradientView || $color instanceof RadialGradientView || $color instanceof AngularGradientView
             || $color instanceof \MyPHP\UI\LinearGradient || $color instanceof \MyPHP\UI\RadialGradient || $color instanceof \MyPHP\UI\ConicGradient) {
-            $this->mods[] = ['gradient', [$color]];
+            $this->mods[] = ['gradient', [$color, $ignoresSafeAreaEdges]];
             return $this;
         }
-        $this->mods[] = $color instanceof View ? ['overlay', [$color, $alignment, true]] : ['background', [ColorValue::of($color)]];
+        $this->mods[] = $color instanceof View ? ['overlay', [$color, $alignment, true]] : ['background', [ColorValue::of($color), $ignoresSafeAreaEdges]];
         return $this;
     }
 
@@ -299,8 +303,33 @@ abstract class View
         return $this;
     }
 
-    /** Extends the view into the safe area on the given edges, as SwiftUI's ignoresSafeArea. */
-    public function ignoresSafeArea(\SafeAreaRegions $regions = \SafeAreaRegions::all, \Edge $edges = \Edge::all): static { return $this; }
+    /** Extends the view into the safe area, of $regions, on the sides of $edges where it touches it, as SwiftUI's ignoresSafeArea(_:edges:). */
+    public function ignoresSafeArea(\SafeAreaRegions $regions = \SafeAreaRegions::all, \Edge $edges = \Edge::all): static { $this->mods[] = ['ignoresSafeArea', [$regions, $edges]]; return $this; }
+
+    /**
+     * The window's safe area $n reaches into on the sides of $edges, in $regions: [the insets where it
+     * starts, how far into it on each side], top, right, bottom and left (Node::$bleed, $ignoresSafeArea); null
+     * where there is none to reach into (a desktop window). @internal
+     * @return ?array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float, 2: float, 3: float}}
+     */
+    private static function safeAreaReach(Node $n, \SafeAreaRegions $regions, ?\Edge $edges): ?array
+    {
+        $c = $n->context;
+        if ($edges === null || $c === null || ($c->windowSafeArea === [0.0, 0.0, 0.0, 0.0] && $c->keyboard == 0.0)) { return null; }
+        [$t, $r, $b, $l] = $c->windowSafeArea;
+        $kb = max($c->keyboard - $b, 0.0); // what the keyboard takes over the home indicator's
+        $by = match ($regions) {
+            \SafeAreaRegions::all => [$t, $r, $b + $kb, $l],
+            \SafeAreaRegions::container => [$t, $r, $kb > 0 ? 0.0 : $b, $l], // under a keyboard, its bottom is the keyboard's
+            \SafeAreaRegions::keyboard => [0.0, 0.0, $kb, 0.0],
+        };
+        $start = $n->startSide();
+        if (!$edges->top()) { $by[0] = 0.0; }
+        if (!$edges->bottom()) { $by[2] = 0.0; }
+        if (!$edges->leading()) { $by[$start] = 0.0; }
+        if (!$edges->trailing()) { $by[4 - $start] = 0.0; }
+        return $by === [0.0, 0.0, 0.0, 0.0] ? null : [[$t, $r, $b + $kb, $l], $by];
+    }
 
     /** Places supplementary content in the safe area beside the view, as SwiftUI's safeAreaInset(edge:alignment:spacing:content:). */
     public function safeAreaInset(\Edge $edge = \Edge::bottom, \Alignment $alignment = \Alignment::center, ?float $spacing = null, ?Closure $content = null): static
@@ -945,14 +974,16 @@ abstract class View
                     if ($maxH !== null && $maxH < INF && $env->axis === Node::ROW && $n->self === Node::STRETCH) { $n->heightPercent(100)->alignSelf(Node::CENTER); }
                     if ($align !== \Alignment::center || $maxW === INF || $maxH === INF || $w !== null || $h !== null) { $align->place($n); }
                     break;
-                case 'background': $n->background($a[0]->rgb($env), $a[0]->alpha); break;
+                case 'background': $n->background($a[0]->rgb($env), $a[0]->alpha); $n->bleed = self::safeAreaReach($n, \SafeAreaRegions::all, $a[1]); break;
                 case 'gradient':
                     $g = $a[0] instanceof LinearGradientView || $a[0] instanceof RadialGradientView || $a[0] instanceof AngularGradientView ? $a[0]->toGradient($env) : $a[0];
                     $n->gradient = $g;
+                    $n->bleed = self::safeAreaReach($n, \SafeAreaRegions::all, $a[1]);
                     break;
+                case 'ignoresSafeArea': $n->ignoresSafeArea = self::safeAreaReach($n, $a[0], $a[1]); break;
                 case 'radius': $n->radius($a[0]); break;
                 case 'clip': $a[0]->clip($n); break;
-                case 'border': if ($a[0]->alpha > 0) { $n->border($a[1], $a[0]->rgb($env)); } break; // a clear one draws nothing: the engine's borders are opaque
+                case 'border': if ($a[0]->alpha > 0) { $n->border($a[1], $a[0]->rgb($env), $a[0]->alpha); } break; // a clear one draws nothing
                 case 'shadow': $n->shadow($a[2], $a[3], $a[1] * 2, 0, $a[0]?->rgb($env) ?? 0x000000, $a[0]?->alpha ?? 0.2); break;
                 case 'opacity': $n->opacity($a[0]); break;
                 case 'rotate': $n->rotate($a[0]); break;

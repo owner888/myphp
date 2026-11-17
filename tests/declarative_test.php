@@ -957,3 +957,13 @@ $h = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(Lab
 $h->frame(2);
 $title = $h->byText('JNI constructor');
 same(mb_strlen('JNI constructor') * 7.0, $h->rect($title)[2], 'the title whole, the value shortened');
+
+// A SecureField and a TextField taking each other's place share the field's state: the plain one shows what is typed again, as the boxed one does.
+foreach ([\TextFieldStyle::automatic, \TextFieldStyle::plain] as $style) {
+    $pw = new class { public string $text = 'secret'; public bool $shown = false; };
+    $h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(($pw->shown ? TextField('Password', text: $pw->text) : SecureField('Password', text: $pw->text))->textFieldStyle($style)), $c), 300, 100);
+    $h->frame(2);
+    $hidden = $h->byLabel('Password')?->edit?->shown();
+    $pw->shown = true; $h->frame(2);
+    same(['••••••', 'secret'], [$hidden, $h->byLabel('Password')?->edit?->shown()], 'a SecureField hides its text, the TextField in its place shows it: ' . $style->name);
+}

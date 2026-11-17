@@ -8780,6 +8780,28 @@ changed, which no hot reload can take.
   was outside the control. Rule: such a cell gives its padding to the
   innermost control of its one child, the nodes on the way stretched
   (`ListView::fillWithControl`); a button's label stays at the start.
+- A SecureField and a TextField shown in each other's place with
+  `TextFieldStyle::plain` stayed bullets. Cause: the two share the field's
+  `TextState` (kept by the node's id), `Context::input()` clears
+  `$state->password` each frame before `password()` sets it, and
+  `ContextBase::textInputBase()` did not. Rule: every builder of a field
+  clears what a modifier sets on the shared state.
+- On a phone, a page's background stopped at the safe area, the status
+  bar and the home indicator left in the theme's color, and
+  `ignoresSafeArea()` did nothing. Cause: `Content::render` pads the root
+  into the safe area, the background's node with it. Rule, as SwiftUI's:
+  `background()` of a color or gradient reaches into the safe area on the
+  sides where its node touches the safe area's edge (`Node::$bleed`, which
+  `Layout::arrange` answers in `$bleedBy` and `Painter::bled` paints; a
+  rounded node keeps to itself), and `ignoresSafeArea()` gives the node
+  itself that room in `Layout::arrange` (`Node::$ignoresSafeArea`), so its
+  children are laid out there. Both are null off the phones.
+- `Shape->stroke()` and `->border()` of a color with an opacity drew it
+  opaque (a hairline of black at a tenth: a black frame). Cause:
+  `Node::border()` took no alpha. Rule: `border($width, $color, $alpha)`
+  keeps it in `Node::$borderAlpha`; under 1 over a background, the face is
+  painted whole and the ring over it, so the background shows through
+  the border as SwiftUI's overlay does, not what is behind the node.
 
 ## The Windows backend, stage by stage
 

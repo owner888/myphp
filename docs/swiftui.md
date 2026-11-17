@@ -143,6 +143,7 @@ $view = fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 4)(
 | `.red`, `.orange`, `.green` | `Color::red`, `Color::orange`, `Color::green` |
 | A color of the app's own | `Color::rgb(0x336699)` |
 | `.background(.blue)`, `.background { … }` | `->background(Color::blue)`, `->background($view)` |
+| `.background(.blue, ignoresSafeAreaEdges: .top)`, `.ignoresSafeArea()`, `.ignoresSafeArea(.keyboard, edges: .bottom)` | `->background(Color::blue, ignoresSafeAreaEdges: Edge::top)` (all sides by default, `null` for none), `->ignoresSafeArea()`, `->ignoresSafeArea(SafeAreaRegions::keyboard, Edge::bottom)` |
 | `LinearGradient`, `RadialGradient`, `AngularGradient` | `LinearGradient(colors: [Color::blue, Color::purple], startPoint: UnitPoint::topLeading, endPoint: UnitPoint::bottomTrailing)`, `RadialGradient(colors: [...])`, `AngularGradient(colors: [...])` |
 | `.glassEffect()`, `.background(.regularMaterial)` | `->glassEffect($material)`; a window's `vibrancy:` for the window's material |
 | `.cornerRadius(12)`, `.clipShape(RoundedRectangle(cornerRadius: 12))` | the same |

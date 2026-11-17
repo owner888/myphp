@@ -1103,16 +1103,17 @@ final class Painter
         if ($n->material !== null) {
             $n->material->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
         } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box; its ring over the face, which shows through neither when it is dimmed (a disabled button's border stays a ring, as mygo's)
-            if ($n->borderGradient === null) { // the face inside its border, as one fill (mygo's): a face of its own alpha (background()) under none of it
+            if ($n->borderGradient === null && $n->borderAlpha >= 1.0) { // the face inside its border, as one fill (mygo's): a face of its own alpha (background()) under none of it
                 $bw = $n->borderWidth;
                 $list->box($n->x, $n->y, $n->w, $n->h, [$radius, $radius, $radius, $radius], $n->color, $n->bgAlpha, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, 1.0);
-            } else {
+            } else { // under a gradient's border, or one the face shows through (border()'s alpha): the whole face, the border over it below
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->bgAlpha, $radius);
             }
         } elseif ($n->gradient !== null) {
             $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
-            [$paint, $c1, $a1, $c2, $a2, $line, $stops] = self::gradientPaint($n->gradient, $n->w, $n->h, $n->alpha);
-            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $c1, $a1, paint: $paint, rgb2: $c2, alpha2: $a2, g: $line, stops: $stops);
+            [$fx, $fy, $fw, $fh] = self::bled($n, $radius);
+            [$paint, $c1, $a1, $c2, $a2, $line, $stops] = self::gradientPaint($n->gradient, $fw, $fh, $n->alpha);
+            $list->box($fx, $fy, $fw, $fh, $radii, $c1, $a1, paint: $paint, rgb2: $c2, alpha2: $a2, g: $line, stops: $stops);
         } elseif ($n->stripes !== null) { // over the color, if any
             $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
             [$sc, $sa, $sw, $sg, $angle] = $n->stripes;
@@ -1122,16 +1123,17 @@ final class Painter
             if ($n->radii !== null) {
                 $list->box($n->x, $n->y, $n->w, $n->h, $n->radii, $n->color, $n->alpha * $n->bgAlpha);
             } else {
-                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha * $n->bgAlpha, $radius);
+                [$fx, $fy, $fw, $fh] = self::bled($n, $radius);
+                $list->rect($fx, $fy, $fw, $fh, $n->color, $n->alpha * $n->bgAlpha, $radius);
             }
         }
-        if ($n->bordered && $n->color === null && $n->material === null && $n->borderGradient === null) { // a border without a face (mygo's Border on a box with no background): its ring, or dashed
+        if ($n->bordered && ($n->color === null || $n->borderAlpha < 1.0) && $n->material === null && $n->borderGradient === null) { // a border without a face (mygo's Border on a box with no background), or over a face that shows through it: its ring, or dashed
             if ($n->borderStyle === BorderStyle::Dashed) {
                 $radii ??= $n->radii ?? [$radius, $radius, $radius, $radius];
                 $bw = $n->borderWidth;
-                $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, $n->alpha, true);
+                $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, $n->alpha * $n->borderAlpha, true);
             } else {
-                $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, $n->alpha, $radius, $n->borderWidth);
+                $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, $n->alpha * $n->borderAlpha, $radius, $n->borderWidth);
             }
         }
         if ($n->shadows !== []) {
@@ -1273,6 +1275,18 @@ final class Painter
      * blurred by 6.4 points and saturated under 82% of the background
      * (toned as AppKit's), with a hairline along the other edge.
      */
+    /**
+     * The box $n's background fills: its own, and on the sides that touch the safe area's edge on to the window's
+     * (Node::$bleedBy, the layout's), as SwiftUI's background(ignoresSafeAreaEdges:); a rounded one keeps to the node.
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    private static function bled(Node $n, float $radius): array
+    {
+        if ($n->bleedBy === null || $radius > 0 || $n->radii !== null) { return [$n->x, $n->y, $n->w, $n->h]; }
+        [$t, $r, $b, $l] = $n->bleedBy;
+        return [$n->x - $l, $n->y - $t, $n->w + $l + $r, $n->h + $t + $b];
+    }
+
     /**
      * How box() paints $g across a box $w by $h, its colors' alphas times
      * $alpha: [paint, rgb, alpha, rgb2, alpha2, g, stops] (mygo's

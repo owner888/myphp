@@ -226,3 +226,17 @@ $p = (new \MyPHP\UI\Path())->moveTo(10, 10)->lineTo(50, 10)->lineTo(50, 30)->clo
 (new \MyPHP\UI\Painter($list, $h->metrics, \MyPHP\UI\Theme::light()))->fillPathGradient($p, new LinearGradient(0xff0000, 1.0, 0x0000ff, 1.0, 90));
 same([14.0, 33.0], [fmod($list->buf[9], DisplayList::KIND_STRIDE), $list->buf[16 + 11]], 'a box of a mask (32), with a gradient (1)');
 same([0.0, 10.0, 40.0, 10.0], array_map(fn($v) => round($v, 6) + 0.0, [$list->buf[28], $list->buf[29], $list->buf[30], $list->buf[31]]), 'left to right across its bounds');
+
+// A stroke's and a border's color keep their opacity, as SwiftUI's: a hairline of black at a tenth is a tenth of
+// black, over the background where there is one (the engine's borders were opaque: a black frame).
+require_once __DIR__ . '/../src/UI/Declarative/functions.php';
+$h = new Headless(fn(Context $c) => \MyPHP\UI\Content::render(fn() => VStack()(
+    RoundedRectangle(cornerRadius: 8)->stroke(\Color::rgb(0x000000, 0.1), lineWidth: 0.5)->frame(width: 80, height: 40),
+    RoundedRectangle(cornerRadius: 8)->stroke(\Color::rgb(0x000000), lineWidth: 2)->frame(width: 80, height: 40),
+    Text('Card')->padding(8)->background(\Color::rgb(0xffffff))->border(\Color::rgb(0xff0000, 0.25), width: 3),
+), $c), 300, 300);
+$h->frame(2);
+$rings = styleKind($h, 4);
+same([[0.1, 0.5], [1.0, 2.0], [0.25, 3.0]], array_map(fn(array $q): array => [round($q[7], 3), $q[10]], $rings), 'the rings: each its color\'s opacity and its width');
+$face = array_values(array_filter(styleQuads($h), fn(array $q): bool => (int)$q[9] !== 4 && [$q[0], $q[1], $q[2], $q[3]] === [$rings[2][0], $rings[2][1], $rings[2][2], $rings[2][3]]));
+same([1, 1.0], [count($face), $face[0][7] ?? null], 'the background whole under the border it shows through');
