@@ -7976,6 +7976,10 @@ glyph again, as the file's other out slots are. `D3dRenderPass` set
 refuses of memory it owns ("Attempt to perform assign of owned C
 pointer"); it takes the address of the array's first element, cast, as
 `DWrite`'s glyph run does.
+With that past, `Mesh::uploadD3d` stopped next: `FFI::memcpy` takes its
+source by reference, and the mesh's vertex and index bytes are readonly
+properties ("Cannot indirectly modify readonly property"); it copies from
+locals of them.
 
 `myphp build -platform darwin/arm64,android/arm64,ios/arm64` left only the
 iOS app: the summary listed the .app, the .dmg and the APK at 0 KB, for

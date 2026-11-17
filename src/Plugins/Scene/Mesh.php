@@ -97,8 +97,10 @@ final class Mesh
         $vDesc->Usage = 1; // IMMUTABLE
         $vDesc->BindFlags = 0x1; // VERTEX_BUFFER
 
+        // FFI::memcpy takes what it copies from by reference, which a readonly property cannot be: a local of it
+        [$vertices, $indices] = [$this->vertexData, $this->indexData];
         $vBuf = $f->new("char[$vLen]");
-        \FFI::memcpy($vBuf, $this->vertexData, $vLen);
+        \FFI::memcpy($vBuf, $vertices, $vLen);
         $vInit = $f->new('D3D11_SUBRESOURCE_DATA');
         $vInit->pSysMem = $f->cast('void *', \FFI::addr($vBuf));
 
@@ -114,7 +116,7 @@ final class Mesh
         $iDesc->BindFlags = 0x2; // INDEX_BUFFER
 
         $iBuf = $f->new("char[$iLen]");
-        \FFI::memcpy($iBuf, $this->indexData, $iLen);
+        \FFI::memcpy($iBuf, $indices, $iLen);
         $iInit = $f->new('D3D11_SUBRESOURCE_DATA');
         $iInit->pSysMem = $f->cast('void *', \FFI::addr($iBuf));
 
