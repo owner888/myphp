@@ -33,3 +33,12 @@ same([], array_values(array_filter($patterns, fn(string $p) => fnmatch($p, '_Cur
 $bridge = $declared((string)file_get_contents("$root/src/Native/iOS.php"), 'myphp_ios_');
 check(count($bridge) > 10, 'the bridge\'s functions found in Native\iOS');
 same([], array_values(array_filter($bridge, fn(string $f) => !$isExported("_$f"))), 'every bridge function Native\iOS declares is in main.m and exported');
+
+// libcurl's API must be visible to be exported at all: a static libcurl built with curl's symbol hiding hides every
+// function (CURL_EXTERN is empty then), and no list exports a hidden symbol. build-ios-php.sh builds it without, and
+// again when the one it has hides them; package-ios-app.sh fails when the app does not export them.
+$build = (string)file_get_contents("$root/scripts/build-ios-php.sh");
+check(str_contains($build, '--disable-symbol-hiding'), 'curl is configured without symbol hiding');
+check(preg_match('/if curl_hidden; then\s+echo [^\n]*\n\s+rm -f "\$\{SYSROOT\}\/lib\/libcurl\.a"/', $build) === 1, 'a libcurl.a that hides its API is built again');
+check(str_contains($build, '&& ! curl_hidden; then'), 'nor is a downloaded one that hides it taken as it is');
+check(preg_match('/strip -x "\$\{APP_DIR\}\/\$\{APP_NAME\}"\n(#[^\n]*\n)*if ! xcrun nm -gU "\$\{APP_DIR\}\/\$\{APP_NAME\}" \| grep \' _curl_easy_init\$\'/', $script) === 1, 'the app\'s build fails when the stripped app does not export curl_easy_init');

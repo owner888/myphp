@@ -63,6 +63,12 @@ xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -
     -framework UIKit -framework Foundation -framework CoreGraphics -framework Metal -framework MetalKit -framework QuartzCore -framework UserNotifications -framework Network -framework Security -framework WebKit -framework AudioToolbox -framework PhotosUI -framework UniformTypeIdentifiers \
     -o "${APP_DIR}/${APP_NAME}"
 xcrun --sdk "$IOS_SDK" strip -x "${APP_DIR}/${APP_NAME}"
+# What FFI finds in the process is in the app's exports, or the build fails here rather than every request in the app
+# (a libcurl built with symbol hiding cannot be exported, whatever the list says; build-ios-php.sh builds it again).
+if ! xcrun nm -gU "${APP_DIR}/${APP_NAME}" | grep ' _curl_easy_init$' > /dev/null; then
+    echo "error: ${APP_NAME} does not export libcurl's functions (_curl_easy_init), which Native\Curl finds in the app" >&2
+    exit 1
+fi
 
 # 3. Create Info.plist
 cat <<PLIST > "${APP_DIR}/Info.plist"

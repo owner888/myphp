@@ -25,6 +25,13 @@ echo "==> Target Architecture: ${IOS_TARGET}"
 
 mkdir -p "${BUILD_DIR}" "${SYSROOT}/lib" "${SYSROOT}/include"
 
+# Whether libcurl.a hides its API: one built with curl's symbol hiding (before --disable-symbol-hiding below, a static
+# libcurl's functions all hidden then) cannot be exported from the app, where Native\Curl finds it over FFI, and every
+# request fails at run time ("Failed resolving C function 'curl_easy_init'"). Such a library is built again.
+curl_hidden() {
+    [ -f "${SYSROOT}/lib/libcurl.a" ] && [[ "$(xcrun nm -m "${SYSROOT}/lib/libcurl.a" | grep ' _curl_easy_init$')" == *"private external"* ]]
+}
+
 # Fast-path: download prebuilt iOS runtime archive when libphp.a is not yet built locally
 RUNTIME_NAME="$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator-arm64 || echo ios-arm64)"
 PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-${RUNTIME_NAME}-php-${PHP_VERSION}.tar.gz"
@@ -34,7 +41,7 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" !=
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
         echo "==> Extracting prebuilt iOS runtime..."
         tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
-        if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ -f "${SYSROOT}/lib/libcurl.a" ]; then
+        if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ -f "${SYSROOT}/lib/libcurl.a" ] && ! curl_hidden; then
             touch "${BUILD_DIR}/libs/libphp.a"
             echo "==> Prebuilt iOS PHP embed runtime ready:"
             ls -lh "${BUILD_DIR}/libs/libphp.a"
@@ -94,6 +101,10 @@ if [ ! -f "${SYSROOT}/lib/libssl.a" ]; then
     make install_dev
 fi
 
+if curl_hidden; then
+    echo "==> libcurl.a hides its API (built with symbol hiding): building curl again"
+    rm -f "${SYSROOT}/lib/libcurl.a" "${SYSROOT}/lib/libcurl.la"
+fi
 if [ ! -f "${SYSROOT}/lib/libcurl.a" ]; then
     echo "==> Preparing curl ${CURL_VERSION} for iOS..."
     cd "${BUILD_DIR}"

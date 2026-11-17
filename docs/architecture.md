@@ -7966,6 +7966,17 @@ input builds the phones' or the desktops' alone. On Windows `myphp doctor
 --fix` installs PHP 8.5 now (winget's `PHP.PHP.8.5`), the PHP a Windows app
 carries being the one that builds it.
 
+Four of Windows's tests stopped in FFI, by two mistakes of the same kind,
+a PHP value where a pointer was due. `DWrite::coverage` kept its `void *`
+out slot between glyphs and cleared it with `$out->cdata = null`: a
+pointer's CData has no `cdata` ("Attempt to assign field 'cdata' of non C
+struct/union"), so no glyph was drawn; the slot is made anew for each
+glyph again, as the file's other out slots are. `D3dRenderPass` set
+`SemanticName`, a `const char *`, to the `char[n]` it had made, which FFI
+refuses of memory it owns ("Attempt to perform assign of owned C
+pointer"); it takes the address of the array's first element, cast, as
+`DWrite`'s glyph run does.
+
 `myphp build -platform darwin/arm64,android/arm64,ios/arm64` left only the
 iOS app: the summary listed the .app, the .dmg and the APK at 0 KB, for
 they were gone. `scripts/package-ios-app.sh` began with `rm -rf` of its
@@ -8934,15 +8945,23 @@ changed, which no hot reload can take.
   with `-exported_symbols_list` (to keep the `myphp_ios_*` bridge through
   `-dead_strip` and `strip -x`), only what the list names stays exported,
   and the list held the bridge alone, so the curl_* functions were gone
-  from the app. An app packaged before the list exported them, as every
-  global symbol is by default. Rule: what FFI finds in the process is in
-  the list: `package-ios-app.sh` adds `_curl_*` (ld takes patterns there;
-  libcurl's internal functions are `Curl_*`), and
-  `tests/ios_exports_test.php` checks every function Native\Curl and
-  Native\iOS declare against the list as the script makes it. Not
-  `grep curl_ Curl.php`: it also takes `curl_slist` and the
-  `myphp_curl_*` typedefs, which are no symbols, and ld fails on a name
-  the list has that the app has not.
+  from the app. Rule: what FFI finds in the process is in the list:
+  `package-ios-app.sh` adds `_curl_*` (ld takes patterns there; libcurl's
+  internal functions are `Curl_*`), and `tests/ios_exports_test.php`
+  checks every function Native\Curl and Native\iOS declare against the
+  list as the script makes it. Not `grep curl_ Curl.php`: it also takes
+  `curl_slist` and the `myphp_curl_*` typedefs, which are no symbols, and
+  ld fails on a name the list has that the app has not.
+  That was not all: a libcurl.a built before `--disable-symbol-hiding`
+  was added to `build-ios-php.sh` (curl's configure defaults to
+  `-fvisibility=hidden`, and a static libcurl's CURL_EXTERN is empty, so
+  every function, curl_easy_init too, is `private external`) cannot be
+  exported whatever the list says, and the script built libcurl only
+  when there was none, so the old one stayed. Rule: `build-ios-php.sh`
+  builds libcurl again when the one it has (or downloaded) hides
+  curl_easy_init (`nm -m`: private external), and `package-ios-app.sh`
+  fails the build when the stripped app does not export it, rather than
+  every request failing in the app.
 
 ## The Windows backend, stage by stage
 
