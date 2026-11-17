@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.201.0';
+const VERSION = '1.201.1';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -2977,12 +2977,12 @@ function ensurePhpEnvironment(bool $forceFix = false): void
                 quiet(['sudo', 'apt-get', 'update', '-y']);
                 quiet(['sudo', 'apt-get', 'install', '-y', 'php-cli', 'php-ffi', 'php-mbstring', 'php-xml', 'php-curl', 'libgtk-3-0', 'libepoxy0']);
             } elseif (Cmd::look('dnf') !== '') {
-                quiet(['sudo', 'dnf', 'install', '-y', 'php-cli', 'php-ffi', 'php-mbstring', 'php-xml', 'php- process', 'gtk3', 'libepoxy']);
+                quiet(['sudo', 'dnf', 'install', '-y', 'php-cli', 'php-ffi', 'php-mbstring', 'php-xml', 'php-process', 'gtk3', 'libepoxy']);
             } elseif (Cmd::look('pacman') !== '') {
                 quiet(['sudo', 'pacman', '-Sy', '--noconfirm', 'php', 'gtk3', 'libepoxy']);
             }
         } elseif (PHP_OS_FAMILY === 'Windows' && Cmd::look('winget') !== '') {
-            quiet(['winget', 'install', '--id', 'PHP.PHP.8.4', '-e', '--accept-source-agreements', '--accept-package-agreements']);
+            quiet(['winget', 'install', '--id', 'PHP.PHP.8.5', '-e', '--accept-source-agreements', '--accept-package-agreements']);
         }
     }
     progressBar(4, 4, 'PHP environment check complete.');
