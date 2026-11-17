@@ -23,15 +23,15 @@ $dir = sys_get_temp_dir() . '/myphp-view-file-' . getmypid();
 $view = "$dir/view.php";
 $trigger = "$dir/.reload";
 putenv("MYPHP_HOT_RELOAD=$trigger");
-$write = function (string $code) use ($view): void { file_put_contents($view, "<?php\nuse MyPHP\\UI\\Context;\n$code"); touch($view, time() + random_int(1, 1000)); };
+$write = function (string $code) use ($view): void { file_put_contents($view, "<?php\n$code"); touch($view, time() + random_int(1, 1000)); };
 $ask = function (string ...$files) use ($trigger): void { file_put_contents($trigger, implode("\n", $files) . "\n# " . microtime(true)); ViewFile::check(); };
 $lastLog = fn() => Logger::line(Logger::entries()[count(Logger::entries()) - 1]);
 
 $write('$add = function (): void { $this->n++; };
-return function (Context $c) use ($add): void {
-    $c->text("{$this->title}: " . self::LABEL . " {$this->n}");
-    if ($c->clicked($c->button("+"))) { $add(); }
-};');
+return fn() => VStack()(
+    Text(verbatim: "{$this->title}: " . self::LABEL . " {$this->n}"),
+    Button("+", action: $add),
+);');
 $s = new ViewFileState;
 $content = Content::file($view, $s);
 $h = new Headless(fn(Context $c) => ($content->view)($c));
@@ -40,22 +40,22 @@ check($h->byText('Counter: count 0') !== null, 'bound to the state: $this, a pri
 $h->clickText('+'); $h->frame();
 same(1, $s->n, 'its helper closures are bound too');
 
-$write('return function (Context $c): void { $c->text("now {$this->n}"); };');
+$write('return fn() => Text(verbatim: "now {$this->n}");');
 $ask($view);
 $h->frame();
 check($h->byText('now 1') !== null, 'a hot reload: the new code, the state as it was: ' . json_encode($h->texts()));
 
-$write('return function (Context $c): void { $c->text("broken" };');
+$write('return fn() => Text("broken" ;');
 $ask($view);
 $h->frame();
 check($h->byText('now 1') !== null && str_contains($lastLog(), '[E]') && str_contains($lastLog(), 'did not load'), 'a file that fails to load keeps the view it had, the error said: ' . $lastLog());
 
-$write('final class Declared {} return function (Context $c): void { $c->text("class"); };');
+$write('final class Declared {} return fn() => Text("class");');
 $ask($view);
 $h->frame();
 check($h->byText('now 1') !== null && str_contains($lastLog(), 'declares class Declared'), 'a named class is not loaded twice: said: ' . $lastLog());
 
-$write('return function (Context $c): void { $c->text("all {$this->n}"); };');
+$write('return fn() => Text(verbatim: "all {$this->n}");');
 $ask('*');
 $h->frame();
 check($h->byText('all 1') !== null, '* loads every view of a file again (r with nothing saved)');

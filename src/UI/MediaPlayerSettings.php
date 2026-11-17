@@ -51,7 +51,7 @@ final class MediaPlayerSettings
     /** What one window's settings view keeps between frames: the page, the search, the pages' scrolls, the section in view, the rows open, the fields' texts. */
     private static function local(Context $c, Node $root): object
     {
-        $make = static fn() => new class { public string $page = 'general', $section = ''; public TextState $search; public bool $open = false, $assSecondary = false; public array $scroll = [], $expanded = [], $fields = [], $heights = []; public mixed $ring = null, $jump = null, $pinned = null, $toolbarChosen = null, $audioDevices = null, $thumbBytes = null, $kbSearch = null, $kbChosen = null; public function __construct() { $this->search = new TextState(); } };
+        $make = static fn() => new class { public string $page = 'general', $section = ''; public TextState $search; public bool $open = false, $assSecondary = false, $pluginUpdatesChecked = false; public array $scroll = [], $expanded = [], $fields = [], $heights = []; public mixed $ring = null, $jump = null, $pinned = null, $toolbarChosen = null, $audioDevices = null, $thumbBytes = null, $kbSearch = null, $kbChosen = null, $pluginDrag = null; public function __construct() { $this->search = new TextState(); } };
         return $c->runtime?->local($root->id, $make) ?? $make();
     }
 
