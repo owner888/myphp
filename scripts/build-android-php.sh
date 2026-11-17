@@ -236,10 +236,6 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     sed -i '' 's/#define HAVE_RES_NSEARCH 1/\/* #undef HAVE_RES_NSEARCH *\//' main/php_config.h
     sed -i '' 's/#define HAVE_RES_SEARCH 1/\/* #undef HAVE_RES_SEARCH *\//' main/php_config.h
 
-    # Patch HARDCODED_INI in sapi/embed/php_embed.c for ffi.enable=1 & opcache
-    echo "==> Enabling ffi.enable=1 and opcache in sapi/embed/php_embed.c..."
-    sed -i '' 's/"max_input_time=-1\\n\\0"/"max_input_time=-1\\nffi.enable=1\\nopcache.enable=1\\nopcache.enable_cli=1\\n\\0"/' sapi/embed/php_embed.c
-
     # Inject getdtablesize macro before PHP_CONFIG_H guard
     php -r '
     $f = "main/php_config.h";
