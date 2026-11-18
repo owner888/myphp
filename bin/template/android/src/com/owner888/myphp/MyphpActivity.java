@@ -767,6 +767,15 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         }, "MyPHP-ApkUpdater").start();
     }
 
+    /** Installs the update already downloaded, again: after the permission to install was given, or the installer was dismissed. */
+    public static void installDownloadedApk() {
+        if (sInstance == null) return;
+        File apk = new File(sInstance.getCacheDir(), "Linking_update.apk");
+        if (apk.exists() && apk.length() > 100000) {
+            new Thread(() -> installApkFile(apk), "MyPHP-ApkInstall").start();
+        }
+    }
+
     private static void installApkFile(File apkFile) {
         if (sInstance == null || apkFile == null || !apkFile.exists()) return;
         try {
