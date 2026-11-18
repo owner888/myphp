@@ -362,10 +362,13 @@ trait ContextMobile
      * a phone's, as UIKit's in a regular width. $cornerRadius rounds it
      * otherwise (SwiftUI's presentationCornerRadius), null the system's;
      * $grabber shows the grabber or not (presentationDragIndicator), null
-     * as the system does: on a phone's sheet, not on a page sheet. Not mygo's.
+     * as the system does: on a phone's sheet, not on a page sheet. $flush: what it holds is a NavigationStack or a list,
+     * which fills the sheet to its edges, as UIKit's, on the sheet's own (elevated) gray, not inset 16. With detents the
+     * sheet moves as one piece as it is dragged, its content laid out at the largest height and its bottom, which the
+     * window cuts, kept clear by what the settled detent leaves under the window. Not mygo's.
      * @param list<float> $detents
      */
-    public function sheet(bool &$open, Closure $fn, array $detents = [], bool $dismissDisabled = false, ?float $cornerRadius = null, ?bool $grabber = null): ?Node
+    public function sheet(bool &$open, Closure $fn, array $detents = [], bool $dismissDisabled = false, ?float $cornerRadius = null, ?bool $grabber = null, bool $flush = false): ?Node
     {
         $t = $this->theme;
         $rt = $this->runtime;
@@ -375,7 +378,7 @@ trait ContextMobile
         $key = 'sheet' . $this->sheets++; // each sheet of the frame its own, open or closed: two (one going, one coming) do not share a state
         $tablet = ($rt?->touch ?? false) && $this->tabsPlacement() !== self::TABS_BOTTOM;
         if ($tablet) { $detents = []; } // a page sheet has no detents
-        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet, $dismissDisabled, $cornerRadius, $grabber): void {
+        $this->overlay(function () use (&$back, &$panel, &$gone, $t, $rt, $fn, $detents, $shown, $key, $tablet, $dismissDisabled, $cornerRadius, $grabber, $flush): void {
             $this->key($key);
             $rise = $rt?->motions[$this->upcomingId()]['rise'] ?? null;
             if (!$shown && ($rise === null || ($rise->value <= 0.001 && !$rise->moving))) { // closed, and gone below the window
@@ -392,18 +395,21 @@ trait ContextMobile
                   $panel->alignSelf(Node::CENTER)->size(min(700.0, $this->width - 40), 0)->minHeight($page)->maxHeight($page)->margin($this->windowSafeArea[0] + 20, 0, 0, 0);
               }
               $down = 0.0; // how far a drag moved it down from the largest
+              $rest = 0.0; // how far the settled detent leaves the panel under the window
               if ($detents !== []) { // as high as the largest, moved down to show the others: the offset of each its height short of the largest
                   $heights = array_values(array_unique(array_map(fn(float $h) => min(max($h, 0.0), $large), $detents)));
                   sort($heights);
                   $top = array_last($heights);
                   $panel->minHeight($top)->maxHeight($top);
-                  $makeOffset = static fn() => new class([0.0, $top - $heights[0]]) { public function __construct(public array $offset) {} };
+                  $makeOffset = static fn() => new class([0.0, $top - $heights[0]]) { public float $rest = -1.0; public function __construct(public array $offset) {} }; // rest: how far under the window the settled detent leaves the panel
                   $kept = $rt?->local($back->id, $makeOffset, null, 'offset') ?? $makeOffset();
                   $stops = array_map(fn(float $h) => [0.0, $top - $h], $heights);
                   if (!$dismissDisabled) { $stops[] = [0.0, $top]; } // below the window: gone
                   $this->draggable($panel, $kept->offset, new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, $top], snap: Motion::nearest(...$stops)));
                   $down = $this->dragOffset($panel)[1];
-                  $panel->minHeight(max($top - $down, 0.0))->maxHeight(max($top - $down, 0.0)); // as high as it shows, its content laid out in it (a scroll reaches its end at every height), the drag's move taken back below
+                  if ($kept->rest < 0 || !$this->dragging($panel)) { $kept->rest = max(0.0, min($kept->offset[1], $top)); } // at rest: where it settled
+                  $rest = $kept->rest;
+                  $panel->minHeight($top)->maxHeight($top); // one piece as it moves: laid out at the largest height, the drag's move its own
                   $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $down >= $top - 2; // let go toward below the window, and there: gone
               }
               // iOS 26's: short of the whole window, a sheet floats, 8 in from the window's sides and bottom, rounded all round; at the whole, it meets them
@@ -413,15 +419,19 @@ trait ContextMobile
               $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
               if ($rt !== null && !isset($rt->motions[$back->id]['rise'])) { $this->jump($back, 'rise', 0.0); } // shown now: from below the window, not at its place
               $p = $this->animate($back, 'rise', $shown ? 1 : 0, $shown ? 0.35 : 0.3); // up as it shows, back down as it closes
-              $panel->translate(0, (1 - $p) * ($tablet ? $this->height : $h) - $down); // rises from below the window; the drag's move is its height's
+              $panel->translate(0, (1 - $p) * ($tablet ? $this->height : $h)); // rises from below the window
               $back->alpha = 0.4 * $p; // the window dims as it rises
-              $panel->draw(static fn(Painter $pt, array $r) => $pt->displayList()->box($r[0], $r[1], $r[2], $r[3], [$corner, $corner, $corner * $float, $corner * $float], $pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background, 1.0)); // in the dark UIKit's elevated background, a gray over the black
+              $panel->draw(static fn(Painter $pt, array $r) => $pt->displayList()->box($r[0], $r[1], $r[2], $r[3], [$corner, $corner, $corner * $float, $corner * $float], $flush ? ($pt->theme()->dark ? 0x1c1c1e : 0xf2f2f7) : ($pt->theme()->dark ? $pt->theme()->surface : $pt->theme()->background), 1.0)); // in the dark UIKit's elevated background, a gray over the black
                 if ($grabber ?? !$tablet) { // a page sheet has none, unless asked for
                     $this->column(0, 0)->alignSelf(Node::STRETCH)->alignItems(Node::CENTER)->padding(5, 0, 0, 0)->shrink(0);
                       $g = $this->box(36, 5, $t->textMuted)->radius(2.5); $g->alpha = 0.5; // the grabber
                     $this->end();
                 }
-                $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding($tablet ? 20 : 16, $tablet ? 20 : 16, $tablet ? 20 : 16 + max(0.0, $this->windowSafeArea[2] - 8 * $float), $tablet ? 20 : 16);
+                if ($flush) { // a stack or a list: to the sheet's edges, its bottom clear of what the window cuts
+                    $this->column(0, 0, 1)->alignSelf(Node::STRETCH)->padding(0, 0, ($rest ?? 0.0), 0);
+                } else {
+                    $this->column(16, $t->space(2), 1)->alignSelf(Node::STRETCH)->padding($tablet ? 20 : 16, $tablet ? 20 : 16, $tablet ? 20 : 16 + max(0.0, $this->windowSafeArea[2] - 8 * $float), $tablet ? 20 : 16);
+                }
                   $fn();
                 $this->end();
               $this->end();

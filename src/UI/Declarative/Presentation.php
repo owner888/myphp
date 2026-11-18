@@ -30,9 +30,19 @@ final class Presentation
                 $detents = $this->kind === 'fullScreen' ? [\PresentationDetent::height($c->height)] : ($first instanceof View ? ($first->sheetDetents ?? []) : []); // the content's presentationDetents, as SwiftUI's
                 $disabled = $this->kind === 'fullScreen' || ($first instanceof View && $first->dismissDisabled);
                 $large = $c->height - ($this->kind === 'fullScreen' ? 0.0 : $c->windowSafeArea[0] + 10);
-                $c->sheet($this->shown, function () use ($c, $env, $views): void { View::renderAll($c, $env->along(\MyPHP\UI\Node::COLUMN), $views); },
+                $flush = $this->kind === 'sheet' && ($c->runtime?->touch ?? false) && ($first instanceof NavigationStack || $first instanceof ListView); // a stack or a list fills the sheet, on the sheet's own gray
+                if ($flush) { $first->scrollContentBackground(\Visibility::hidden); } // the list paints no page of its own: the sheet's gray, rounded at its corners, shows
+                $c->sheet($this->shown, function () use ($c, $env, $views, $flush): void {
+                    if (!$flush) { View::renderAll($c, $env->along(\MyPHP\UI\Node::COLUMN), $views); return; }
+                    // UIKit's elevated colors: over the sheet the grouped page is the sheet's gray, its sections a step lighter
+                    $saved = $c->theme;
+                    $up = clone $saved;
+                    [$up->groupBackground, $up->groupSurface] = $saved->dark ? [0x1c1c1e, 0x2c2c2e] : [0xf2f2f7, 0xffffff];
+                    $c->theme = $up;
+                    try { View::renderAll($c, $env->with(['theme' => $up])->along(\MyPHP\UI\Node::COLUMN), $views); } finally { $c->theme = $saved; }
+                },
                     array_map(fn(\PresentationDetent $d) => $d->points($large), $detents), $disabled,
-                    $first instanceof View ? $first->sheetCornerRadius : null, $first instanceof View ? $first->sheetGrabber : null); // the content's presentationCornerRadius and presentationDragIndicator
+                    $first instanceof View ? $first->sheetCornerRadius : null, $first instanceof View ? $first->sheetGrabber : null, $flush); // the content's presentationCornerRadius and presentationDragIndicator
                 break;
             case 'alert':
                 $chosen = $c->alertDialog($this->shown, Localized::string($this->title, $env), Localized::string($this->message, $env), ...array_map(fn(Button $b) => Localized::string($b->title, $env), $this->actions));
