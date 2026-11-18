@@ -9507,6 +9507,12 @@ away. Paste reads `UIPasteboard` in `paste:`, as the user pastes, and sends the 
 hardware keyboard's Cmd+X, C, V and A reach the same actions. The input event's text became the launcher's `strdup`
 (freed by PHP): a `char[256]` cut a paste, dictation or Writing Tools' rewrite at 255 bytes.
 
+**The Passwords bar on every field after a password's**: the keyboard reads `secureTextEntry` and `textContentType`
+only as a responder becomes first, and the password AutoFill it starts (the Passwords bar) stays through
+`reloadInputViews`. Moving between UITextFields changes the responder; here one view types into every field, so when
+either trait changes (`myphp_ios_set_text_traits`) it resigns and becomes first responder again, in the same turn of
+the run loop (the keyboard stays); the other traits still take `reloadInputViews`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is

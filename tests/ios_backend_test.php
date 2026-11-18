@@ -300,6 +300,9 @@ use MyPHP\UI\{Content, TextState};
     check(str_contains($iosWindowSrc, '$f->myphp_ios_free_string($iev->text);'), 'PHP frees each input event\'s text');
     check(str_contains($mainM, '[[UIEditMenuInteraction alloc] initWithDelegate:self]') && str_contains($mainM, '- (void)paste:(id)sender {') && str_contains($mainM, 'push_input_event(6, '), 'main.m: the edit menu, whose Paste reads the pasteboard as the user pastes');
     check(str_contains($iosWindowSrc, "6 => \$this->onEditMenu('paste', \$text)") && str_contains($iosWindowSrc, "['edit', \$name, \$pasted]"), 'iOS Window pastes the text the menu read');
+    // Secure entry and the content type changing (a password's field to another): the view becomes first responder again,
+    // as the keyboard reads them only then; reloadInputViews alone left the Passwords bar on every field after it.
+    check(preg_match('/if \(anew\) \{\s*\[g_view resignFirstResponder\];\s*\[g_view becomeFirstResponder\];/', $mainM) === 1 && str_contains($mainM, 'BOOL anew = (secure != 0) != g_secure_entry'), 'main.m: a field after a password\'s gets the keyboard anew, not the password\'s');
     check(str_contains($binMyphpSrc, 'UIEmojiSearchOperations'), 'bin/myphp filters UIEmojiSearchOperations log noise (#11)');
     check(str_contains($dateInputDoc, 'App::region()') && !str_contains($dateInputDoc, 'as en-US writes it'), 'docs/ui/date-input.md documents regional date formatting (#18)');
 

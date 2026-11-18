@@ -1055,14 +1055,24 @@ static UITextContentType myphp_content_type(NSString *name) {
 void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalization, int secure, const char *content_type, int autocorrection) {
     NSString *content = content_type ? [NSString stringWithUTF8String:content_type] : nil; // copied before PHP's string goes
     dispatch_async(dispatch_get_main_queue(), ^{
+        UITextContentType type = myphp_content_type(content);
+        // Secure entry and the content type the keyboard reads only as a responder becomes first: its password AutoFill
+        // (the Passwords bar, the secure keyboard) stays after reloadInputViews, on every field after a password's. A
+        // UITextField's are other responders; this one view, as the field it types into changes, becomes first again.
+        BOOL anew = (secure != 0) != g_secure_entry || !(type == g_content_type || [type isEqualToString:g_content_type]);
         g_keyboard_type = (UIKeyboardType)keyboard;
         g_return_key = (UIReturnKeyType)return_key;
         g_autocapitalization = (UITextAutocapitalizationType)autocapitalization;
         g_secure_entry = secure != 0;
-        g_content_type = myphp_content_type(content);
+        g_content_type = type;
         g_autocorrection = (UITextAutocorrectionType)autocorrection;
         if (g_view && [g_view isFirstResponder]) {
-            [g_view reloadInputViews];
+            if (anew) {
+                [g_view resignFirstResponder];
+                [g_view becomeFirstResponder];
+            } else {
+                [g_view reloadInputViews];
+            }
         }
     });
 }
