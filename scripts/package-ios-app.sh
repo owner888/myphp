@@ -77,6 +77,13 @@ if ! xcrun nm -gU "${APP_DIR}/${APP_NAME}" | grep ' _curl_easy_init$' > /dev/nul
 fi
 
 # 3. Create Info.plist
+# MYPHP_IOS_RUN=1 (myphp run on a device): MyPHPRun, the launcher runs a copy of the PHP in the app's data, which
+# myphp run changes for a hot reload or restart, as a device's bundle cannot be written (main.m's myphp_run_root)
+RUN_KEY=""
+if [ "${MYPHP_IOS_RUN:-}" = 1 ]; then
+    RUN_KEY="<key>MyPHPRun</key>
+    <true/>"
+fi
 cat <<PLIST > "${APP_DIR}/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -102,6 +109,7 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <string>${APP_VERSION}</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    ${RUN_KEY}
     <key>CFBundleIcons</key>
     <dict>
         <key>CFBundlePrimaryIcon</key>

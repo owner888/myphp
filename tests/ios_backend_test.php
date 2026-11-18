@@ -303,6 +303,15 @@ use MyPHP\UI\{Content, TextState};
     // Secure entry and the content type changing (a password's field to another): the view becomes first responder again,
     // as the keyboard reads them only then; reloadInputViews alone left the Passwords bar on every field after it.
     check(preg_match('/if \(anew\) \{\s*\[g_view resignFirstResponder\];\s*\[g_view becomeFirstResponder\];/', $mainM) === 1 && str_contains($mainM, 'BOOL anew = (secure != 0) != g_secure_entry'), 'main.m: a field after a password\'s gets the keyboard anew, not the password\'s');
+    // r and R on a device: its bundle cannot be written, so an app myphp run made (MyPHPRun) runs a copy of its PHP in its
+    // data, which myphp run changes by devicectl; its log is devicectl's --console, through phoneHot, launched again on R.
+    $packageIosSh = (string)file_get_contents(__DIR__ . '/../scripts/package-ios-app.sh');
+    check(str_contains($mainM, 'objectForInfoDictionaryKey:@"MyPHPRun"') && str_contains($mainM, 'stringByAppendingPathComponent:@"myphp-run"]') && str_contains($mainM, 'NSApplicationSupportDirectory'), 'main.m: an app myphp run made for a device runs its PHP from Application Support/myphp-run');
+    check(str_contains($mainM, 'NSString *appPhp = [root stringByAppendingPathComponent:@"app.php"];') && str_contains($mainM, '[[root stringByAppendingPathComponent:@".myphp-reload"] UTF8String]'), 'main.m: app.php and the hot reload\'s file from the run root');
+    check(str_contains($packageIosSh, 'if [ "${MYPHP_IOS_RUN:-}" = 1 ]; then') && str_contains($packageIosSh, '<key>MyPHPRun</key>'), 'package-ios-app.sh marks the app myphp run makes for a device');
+    check(str_contains($binMyphpSrc, "putenv('MYPHP_IOS_RUN=' . (\$targetDev->type === 'device' ? '1' : ''))"), 'myphp run asks for it on a device only');
+    check(str_contains($binMyphpSrc, "'--domain-type', 'appDataContainer'") && str_contains($binMyphpSrc, '"Library/Application Support/myphp-run/$to"'), 'phoneSync copies into the run root on a device, where main.m runs it');
+    check(preg_match("/do \\{\\s*\\\$relaunch = false;\\s*streamLog\\(.*'--console'.*'ios-device', \\\$all, \\\$hot\\);\\s*\\} while \\(\\\$relaunch\\);/", $binMyphpSrc) === 1, 'myphp run follows a device\'s console through phoneHot (r, R), launching it again on R');
     check(str_contains($binMyphpSrc, 'UIEmojiSearchOperations'), 'bin/myphp filters UIEmojiSearchOperations log noise (#11)');
     check(str_contains($dateInputDoc, 'App::region()') && !str_contains($dateInputDoc, 'as en-US writes it'), 'docs/ui/date-input.md documents regional date formatting (#18)');
 

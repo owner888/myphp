@@ -1134,6 +1134,53 @@ static void myphp_ini_defaults(HashTable *configuration_hash)
     }
 }
 
+/* Where the app's PHP runs from: its bundle; on a device, for an app `myphp run` made (Info.plist's MyPHPRun), a copy
+ * in its own data, Library/Application Support/myphp-run, as a device's bundle cannot be written and there myphp run
+ * copies the PHP files saved since (devicectl, phoneSync): a hot reload, a hot restart (R), as Android's files. Made
+ * once an install (the executable's time, which every build changes, in .myphp-install): the PHP files copied, the
+ * rest linked to the bundle's, so that a file beside the code (__DIR__ . '/assets') is where the code looks. The
+ * simulator's bundle myphp run writes itself. */
+static NSString *myphp_run_root(NSString *bundlePath) {
+#if TARGET_OS_SIMULATOR
+    return bundlePath;
+#else
+    if (![[[NSBundle mainBundle] objectForInfoDictionaryKey:@"MyPHPRun"] boolValue]) return bundlePath;
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *root = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:@"myphp-run"];
+    NSString *stampFile = [root stringByAppendingPathComponent:@".myphp-install"];
+    NSDate *built = [[fm attributesOfItemAtPath:[[NSBundle mainBundle] executablePath] error:nil] fileModificationDate];
+    NSString *stamp = [NSString stringWithFormat:@"%@ %.3f", bundlePath, [built timeIntervalSince1970]];
+    if ([[NSString stringWithContentsOfFile:stampFile encoding:NSUTF8StringEncoding error:nil] isEqualToString:stamp]) return root;
+    [fm removeItemAtPath:root error:nil];
+    NSError *err = nil;
+    if (![fm createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:&err]) {
+        myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:@"cannot make %@, the app runs its bundle's PHP: %@", root, err] UTF8String]);
+        return bundlePath;
+    }
+    NSDirectoryEnumerator *walk = [fm enumeratorAtPath:bundlePath];
+    for (NSString *rel in walk) {
+        NSString *from = [bundlePath stringByAppendingPathComponent:rel], *to = [root stringByAppendingPathComponent:rel];
+        BOOL dir = [walk.fileAttributes[NSFileType] isEqualToString:NSFileTypeDirectory];
+        BOOL ok;
+        if (dir && ![rel isEqualToString:@"_CodeSignature"] && ![rel isEqualToString:@"Frameworks"]) {
+            ok = [fm createDirectoryAtPath:to withIntermediateDirectories:NO attributes:nil error:&err];
+        } else if (!dir && [[rel pathExtension] isEqualToString:@"php"]) {
+            ok = [fm copyItemAtPath:from toPath:to error:&err];
+        } else {
+            if (dir) [walk skipDescendants];
+            ok = [fm createSymbolicLinkAtPath:to withDestinationPath:from error:&err];
+        }
+        if (!ok) {
+            myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:@"cannot copy %@ to run it, the app runs its bundle's PHP: %@", rel, err] UTF8String]);
+            [fm removeItemAtPath:root error:nil];
+            return bundlePath;
+        }
+    }
+    [stamp writeToFile:stampFile atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    return root;
+#endif
+}
+
 static void* php_worker_thread(void *arg) {
     myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP worker thread starting...");
 
@@ -1141,12 +1188,13 @@ static void* php_worker_thread(void *arg) {
         NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
         NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
         NSString *tmpDir = NSTemporaryDirectory();
+        NSString *root = myphp_run_root(bundlePath); // where app.php and the framework's src are
 
         setenv("HOME", [docDir UTF8String], 1);
         setenv("TMPDIR", [tmpDir UTF8String], 1);
         setenv("MYPHP_BUNDLE", [bundlePath UTF8String], 1);
         setenv("MYPHP_PLATFORM", "ios", 1);
-        setenv("MYPHP_HOT_RELOAD", [[bundlePath stringByAppendingPathComponent:@".myphp-reload"] UTF8String], 1); // where myphp run asks for a hot reload (ViewFile::hotReloadFile): beside app.php
+        setenv("MYPHP_HOT_RELOAD", [[root stringByAppendingPathComponent:@".myphp-reload"] UTF8String], 1); // where myphp run asks for a hot reload (ViewFile::hotReloadFile): beside app.php
         setenv("SSL_CERT_FILE", [[bundlePath stringByAppendingPathComponent:@"cacert.pem"] UTF8String], 1); // what curl's OpenSSL trusts (package-ios-app.sh)
 
         char *php_argv[] = {"myphp", NULL};
@@ -1157,7 +1205,7 @@ static void* php_worker_thread(void *arg) {
         php_embed_module.ini_defaults = myphp_ini_defaults;
         php_embed_init(1, php_argv);
 
-        NSString *appPhp = [bundlePath stringByAppendingPathComponent:@"app.php"];
+        NSString *appPhp = [root stringByAppendingPathComponent:@"app.php"];
         if (![[NSFileManager defaultManager] fileExistsAtPath:appPhp]) {
             myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[@"app.php not found at " stringByAppendingString:appPhp] UTF8String]);
         } else {
@@ -1167,7 +1215,7 @@ static void* php_worker_thread(void *arg) {
                 // and why PHP ended, in the log: a fatal error, an uncaught exception's trace (as the Android launcher's)
                 NSString *autoload = [NSString stringWithFormat:@"ini_set('memory_limit', '512M'); require '%@/src/autoload.php';"
                     "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
-                    "set_exception_handler(function (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); });", bundlePath]; // PHP ends after the handler, as with no handler
+                    "set_exception_handler(function (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); });", root]; // PHP ends after the handler, as with no handler
                 zend_eval_string((char *)[autoload UTF8String], NULL, "myphp_bootstrap");
                 zend_file_handle file_handle;
                 zend_stream_init_filename(&file_handle, [appPhp UTF8String]);

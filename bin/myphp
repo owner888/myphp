@@ -114,6 +114,9 @@ function printLogLine(string $line, string $platform, bool $all, bool $color): v
  * process and thread left out, a tag other than the launcher's kept), and whether it is the app's own: a line of
  * MyPHP\Logger's ("[myphp] 07:00:21.767 [ios][W] …" on iOS, "… W MyPHP : 07:00:21.767 [ios][W] …" on Android), which
  * takes its own level and loses the logger's time, or PHP's warnings and errors. Null for a line of none (a header).
+ * On an iOS device ($platform ios-device) the lines are what devicectl's --console forwards, the launcher's stderr
+ * ("[myphp] …" the logger's, with its time; "[myphp-ios] …" the launcher's and PHP's log, at the time it comes, the
+ * app's own: on a device nothing else tells what it does).
  * @return ?array{time: string, level: string, msg: string, ours: bool}
  */
 function logEntry(string $line, string $platform): ?array
@@ -123,6 +126,14 @@ function logEntry(string $line, string $platform): ?array
         [, $time, $type, $tag, $msg] = $m;
         $level = match ($type) { 'E' => 'E', 'F', 'A' => 'F', 'W' => 'W', 'I' => 'I', 'D' => 'D', default => 'V' };
         if ($tag !== 'MyPHP') { $msg = "$tag: $msg"; }
+    } elseif ($platform === 'ios-device') {
+        if (!preg_match('/^\[myphp(-ios)?\] (.*)$/', $line, $m)) { return null; } // devicectl's own lines, PHP's output
+        $msg = $m[2];
+        $time = preg_match('/^(\d\d:\d\d:\d\d\.\d+) /', $msg, $t) ? $t[1] : (new DateTime())->format('H:i:s.v');
+        $level = $m[1] === '-ios' ? 'I' : 'D';
+        if ($m[1] === '-ios') {
+            $ours = true;
+        }
     } else { // date time TYPE process[pid:tid] message (compact)
         if (!preg_match('/^\S+ (\S+) (\S+)\s+\S+ (.*)$/', $line, $m)) { return null; }
         [, $time, $type, $msg] = $m;
@@ -130,7 +141,7 @@ function logEntry(string $line, string $platform): ?array
         if ($level === '') { return null; }
         $msg = preg_replace('/^\[myphp(-ios)?\] /', '', $msg); // the launcher's mark
     }
-    $ours = false;
+    $ours ??= false;
     if (preg_match('/^\d\d:\d\d:\d\d\.\d+ (\[[^\]]+\])\[([VDIWEF])\] (.*)$/', $msg, $l)) { // MyPHP\Logger's: its level, its subsystem kept
         [$level, $msg, $ours] = [$l[2], "{$l[1]} {$l[3]}", true];
     } elseif (preg_match('/PHP (Fatal error|Parse error|Recoverable fatal error)/', $msg)) {
@@ -3341,17 +3352,18 @@ function fileStamps(array $files): array
  * hot reload: the changed files are copied into the installed app, which loads its views of files (Content::file)
  * again, the state kept, and says what else changed; R is a hot restart: the app starts again with them, its state
  * lost (phoneSync). c clears the console, q ends. $files lists the app's files as they are now, $seen their stamps
- * as installed.
+ * as installed. On an iOS device R ends the log with $relaunch set: the log is the launch's (devicectl --console),
+ * so the caller launches the app again and follows the new launch's.
  * @param Closure(): array<string, string> $files @param array<string, string> $seen
  */
-function phoneHot(TargetDevice $dev, string $app, string $name, Closure $files, array $seen, Closure $step): Closure
+function phoneHot(TargetDevice $dev, string $app, string $name, Closure $files, array $seen, Closure $step, bool &$relaunch = false): Closure
 {
     $keys = singleKeys();
     if ($keys) {
         echo "  → a saved PHP file hot reloads the app; press h for help\n";
     }
     $last = 0.0;
-    return function () use ($dev, $app, $name, $files, &$seen, $step, $keys, &$last): bool {
+    return function () use ($dev, $app, $name, $files, &$seen, $step, $keys, &$last, &$relaunch): bool {
         $key = null;
         while ($keys && ($k = pressedKey()) !== null) {
             switch ($k) {
@@ -3374,6 +3386,10 @@ function phoneHot(TargetDevice $dev, string $app, string $name, Closure $files, 
         logf(($restart ? 'restarting ' : 'reloading ') . $name . $why);
         try {
             phoneSync($dev, $app, array_intersect_key($all, array_flip($changed)), $restart, $step);
+            if ($restart && $dev->platform === 'ios' && $dev->type === 'device') {
+                $relaunch = true;
+                return false;
+            }
             logf(sprintf('%s %s in %.1f s', $restart ? 'restarted' : 'reloaded', $name, microtime(true) - $t));
         } catch (Failure $e) {
             fwrite(STDERR, "myphp: ✗ {$e->getMessage()}\n  Save a fix to try again, or run myphp run again.\n");
@@ -3387,7 +3403,9 @@ function phoneHot(TargetDevice $dev, string $app, string $name, Closure $files, 
  * else writes their places in .myphp-reload beside the app's entry, which the app watches in development
  * (ViewFile::hotReloadFile): a hot reload. On Android pushed to /data/local/tmp and copied into the app's files by
  * run-as (the APK myphp run builds is debuggable), which keep them until the next install (the activity copies its
- * assets once an install, MyphpActivity.copyAssetsToFilesDir); on the iOS simulator into the installed bundle.
+ * assets once an install, MyphpActivity.copyAssetsToFilesDir); on the iOS simulator into the installed bundle; on an
+ * iOS device, whose bundle cannot be written, by devicectl into the copy of the PHP the app runs in its data
+ * (main.m's myphp_run_root), its restart left to the caller (phoneHot's $relaunch).
  * @param array<string, string> $files
  */
 function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, Closure $step): void
@@ -3419,6 +3437,21 @@ function phoneSync(TargetDevice $dev, string $app, array $files, bool $restart, 
         }
         if ($restart) {
             $step(['adb', '-s', $dev->id, 'shell', 'am', 'start', '-S', '-n', "$app/com.owner888.myphp.MyphpActivity"]) === 0 || fail('could not start the app again');
+        }
+        return;
+    }
+    if ($dev->type === 'device') {
+        $copy = fn(string $from, string $to): bool => $step(['xcrun', 'devicectl', 'device', 'copy', 'to', '--device', $dev->id, '--domain-type', 'appDataContainer',
+            '--domain-identifier', $app, '--source', $from, '--destination', "Library/Application Support/myphp-run/$to"]) === 0;
+        foreach ($files as $to => $from) {
+            $copy($from, $to) || fail("could not copy $to into $app on {$dev->name} (a folder new since myphp run: run it again)");
+        }
+        if ($request !== null) {
+            $tmp = tempnam(sys_get_temp_dir(), 'myphp-reload-');
+            file_put_contents($tmp, $request);
+            $ok = $copy($tmp, '.myphp-reload'); // after the files it names
+            @unlink($tmp);
+            $ok || fail("could not ask $app on {$dev->name} for a hot reload");
         }
         return;
     }
@@ -3510,6 +3543,7 @@ function runCommand(array $args): void
             iosSigning($dir, $c, $bundleId, null, $out);
         }
         putenv('MYPHP_EXCLUDE=' . implode(':', $exclude));
+        putenv('MYPHP_IOS_RUN=' . ($targetDev->type === 'device' ? '1' : '')); // on a device the app runs a copy of its PHP, which phoneSync changes (main.m's myphp_run_root)
         $step([$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName], $dir) === 0 || fail("Failed to build iOS application");
 
         $appBundle = "$out/$exeName.app";
@@ -3517,8 +3551,15 @@ function runCommand(array $args): void
             $say("Installing app on device {$targetDev->id}...");
             $step(['xcrun', 'devicectl', 'device', 'install', 'app', '--device', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on {$targetDev->name}");
             $say("Launching application ($bundleId)...");
-            logf("$displayName is running on {$targetDev->name}; its log follows, Ctrl+C quits");
-            sh(['xcrun', 'devicectl', 'device', 'process', 'launch', '--console', '--terminate-existing', '--device', $targetDev->id, $bundleId]);
+            logf("$displayName is running on {$targetDev->name}; its log follows" . ($all ? '' : ' (-v: all of it)') . ', Ctrl+C quits');
+            // its log is what devicectl's --console forwards, the app's stdout and stderr, for as long as that launch runs:
+            // a hot restart (R) launches it again, and the log follows the new launch
+            $relaunch = false;
+            $hot = phoneHot($targetDev, $bundleId, $displayName, fn() => phoneFiles($dir, 'ios', $mainPhp, $exclude), $seen, $step, $relaunch);
+            do {
+                $relaunch = false;
+                streamLog(implode(' ', array_map('escapeshellarg', ['xcrun', 'devicectl', 'device', 'process', 'launch', '--console', '--terminate-existing', '--device', $targetDev->id, $bundleId])), 'ios-device', $all, $hot);
+            } while ($relaunch);
         } else {
             $say("Installing app on simulator {$targetDev->id}...");
             $step(['xcrun', 'simctl', 'install', $targetDev->id, $appBundle]) === 0 || fail("Failed to install app on iOS simulator");

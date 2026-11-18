@@ -9513,6 +9513,18 @@ only as a responder becomes first, and the password AutoFill it starts (the Pass
 either trait changes (`myphp_ios_set_text_traits`) it resigns and becomes first responder again, in the same turn of
 the run loop (the keyboard stays); the other traits still take `reloadInputViews`.
 
+**r and R on a device**: `myphp run` on an iPhone ran `devicectl device process launch --console` straight to the
+terminal, without `phoneHot`: r and R were echoed and nothing reloaded; and the simulator's way, copying the saved
+files into the installed bundle, cannot work there, as a device's bundle is read-only. Now the app `myphp run` makes
+for a device carries `MyPHPRun` in its Info.plist (`MYPHP_IOS_RUN=1`, `package-ios-app.sh`), and its launcher runs a
+copy of its PHP in its own data, `Library/Application Support/myphp-run` (`myphp_run_root`), made once an install
+(the executable's time): the PHP files copied, everything else linked to the bundle's, so code that looks beside
+itself finds its files. `phoneSync` copies the saved files there with `devicectl device copy to --domain-type
+appDataContainer` (the development-signed app allows it), then `.myphp-reload` (r). The log is still the launch's
+`--console`, now through `streamLog` with `phoneHot` (`ios-device` lines: the logger's with their time, the
+launcher's as the app's); R ends it with `$relaunch` and the app is launched again (`--terminate-existing`), its
+console followed. A file in a folder new since the install needs `myphp run` again.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is
