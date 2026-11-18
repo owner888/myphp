@@ -9527,16 +9527,16 @@ console followed. A file in a folder new since the install needs `myphp run` aga
 
 ## myphp upgrade
 
-Users had no way to MyPHP's next release: `bin/myphp` had no such command, and `install.sh` without Composer put
-`bin/myphp` alone from `main` in `~/.myphp/bin`, which runs nothing (`FRAMEWORK` is its parent: `src/`, `scripts/`,
-`bin/skills/`) and follows no release. Now `install.sh` unpacks the latest release (GitHub's latest, no prerelease)
-into `~/.myphp`, so that `~/.myphp/bin` on the PATH stays as it was, and `myphp upgrade`, as `flutter upgrade`, goes
-by where MyPHP is: a git checkout pulls (`--ff-only`, refused over uncommitted changes); Composer's global install
-(its `vendor-dir`) runs `composer global update owner888/myphp`; a project's own `vendor/` is the project's
-(`composer update owner888/myphp` there); else the release's archive replaces it, `build/` (the phones' PHP
-runtimes, 10-20 minutes to build), `dist/`, `vendor/` and `.myphp/` carried over, beside it and then renamed into
-place. `--check` and `myphp doctor` only say whether one is out. Not on Windows outside Composer (a running
-`bin/myphp`'s folder cannot be renamed there).
+Users had no way to MyPHP's next release, nor a `myphp` once installed: `bin/myphp` had no such command;
+`composer.json` declared no `bin`, so `composer global require owner888/myphp` linked no `myphp` into Composer's
+bin; and `install.sh` without Composer put `bin/myphp` alone from `main` in `~/.myphp/bin`, which runs nothing
+(`FRAMEWORK` is its parent: `src/`, `scripts/`, `bin/skills/`). Now `install.sh` is pig's (`app/Views/myphp/install.sh`
+on myphp.ai): PHP 8.4 with `ext-ffi` checked before anything (`brew install php` offered on a Mac), Composer installed
+if missing, `composer global require owner888/myphp` the one way MyPHP is installed, and `myphp` linked into a
+directory already on the PATH, Composer's bin added to the shell's profile when the user says so. `myphp upgrade`, as
+`flutter upgrade`, goes by where MyPHP is: Composer's global install (its `vendor-dir`) runs `composer global update
+owner888/myphp`; a git checkout pulls (`--ff-only`, refused over uncommitted changes); a project's own `vendor/` is the
+project's (`composer update owner888/myphp` there). `--check` and `myphp doctor` only say whether one is out.
 
 ## Open items
 

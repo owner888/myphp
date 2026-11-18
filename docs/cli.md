@@ -6,9 +6,11 @@ flags of one.
 
 ## Install
 
-A checkout of MyPHP runs it as `bin/myphp`; a project that installed MyPHP
-with Composer (the package `owner888/myphp`) has it in
-`vendor/bin/myphp`:
+`curl -fsSL https://myphp.ai/install.sh | sh` checks PHP (8.4 or later, with
+`ext-ffi`), installs Composer if it is missing, installs the package
+`owner888/myphp` with `composer global require`, and puts `myphp` on your
+PATH. A checkout of MyPHP runs it as `bin/myphp`; a project that has MyPHP
+as its dependency has it in `vendor/bin/myphp`:
 
 ```sh
 bin/myphp init my-app
@@ -297,12 +299,10 @@ myphp upgrade --check   # only say whether there is one
 ```
 
 Upgrades MyPHP to its latest release, as `flutter upgrade`, the way it was
-installed: the install of `install.sh` without Composer (`~/.myphp`) takes
-the release's archive, keeping the phones' PHP runtimes it built (`build/`);
-Composer's global install runs `composer global update owner888/myphp`; a
-git checkout pulls, refusing while it has changes of yours. A project that
-has MyPHP as its own dependency (its `vendor/`) updates it there, as any
-package: `composer update owner888/myphp`.
+installed: Composer's global install, the one `install.sh` makes, runs
+`composer global update owner888/myphp`; a git checkout pulls, refusing while
+it has changes of yours. A project that has MyPHP as its own dependency (its
+`vendor/`) updates it there, as any package: `composer update owner888/myphp`.
 
 ## myphp version
 

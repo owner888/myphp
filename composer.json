@@ -3,6 +3,7 @@
     "description": "Desktop apps in PHP, with native UI or a web frontend, over ext-ffi.",
     "type": "library",
     "license": "MIT",
+    "bin": ["bin/myphp"],
     "require": {
         "php": ">=8.4",
         "ext-ffi": "*"

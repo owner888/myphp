@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.203.1';
+const VERSION = '1.203.2';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -2623,13 +2623,12 @@ function latestRelease(int $seconds): ?string
 
 /**
  * myphp upgrade, as flutter upgrade: MyPHP brought to its latest release, the way it was installed. A git checkout
- * pulls (refusing while it has changes); Composer's global install updates the package; a project's dependency is the
- * project's to update (its composer.json); else, the release unpacked where install.sh put it (~/.myphp), with what
- * MyPHP made there and git ignores (build/: the phones' PHP runtimes, built once; dist/, vendor/, .myphp/) kept.
+ * pulls (refusing while it has changes); Composer's global install, the one install.sh makes, updates the package; a
+ * project's dependency is the project's to update (its composer.json).
  */
 function upgrade(array $args): void
 {
-    help($args, "upgrade [--check]\n\nUpgrades MyPHP to its latest release, the way it was installed: a git checkout pulls,\nComposer's global install updates owner888/myphp, the install of install.sh (~/.myphp) takes the release's archive.\nA project's own dependency (its vendor/) is updated in the project: composer update owner888/myphp.\n\nFlags:\n  --check   only say whether a newer release is out");
+    help($args, "upgrade [--check]\n\nUpgrades MyPHP to its latest release, the way it was installed: Composer's global install\n(install.sh's) updates owner888/myphp, a git checkout pulls.\nA project's own dependency (its vendor/) is updated in the project: composer update owner888/myphp.\n\nFlags:\n  --check   only say whether a newer release is out");
     $check = flag($args, 'check');
     $latest = latestRelease(15);
     if ($check) {
@@ -2660,27 +2659,7 @@ function upgrade(array $args): void
         logf("upgraded myphp " . VERSION . " to $latest");
         return;
     }
-    PHP_OS_FAMILY !== 'Windows' || fail("on Windows MyPHP is upgraded by Composer: composer global update owner888/myphp");
-    $new = "$root.upgrade";
-    Cmd::output(['rm', '-rf', $new, "$root.old"]);
-    mkdir($new, 0755, true);
-    $archive = "$new.tar.gz";
-    logf("downloading myphp $latest…");
-    $ok = quiet(['curl', '-fsSL', '--max-time', '300', '-o', $archive, "https://github.com/owner888/myphp/archive/refs/tags/v$latest.tar.gz"]) === 0
-        && quiet(['tar', '-xzf', $archive, '-C', $new, '--strip-components', '1']) === 0
-        && is_file("$new/bin/myphp");
-    @unlink($archive);
-    if (!$ok) {
-        Cmd::output(['rm', '-rf', $new]);
-        fail("could not download myphp $latest");
-    }
-    foreach (['build', 'dist', 'vendor', '.myphp'] as $kept) { // what MyPHP made here, which the release has not
-        if (file_exists("$root/$kept")) { rename("$root/$kept", "$new/$kept"); }
-    }
-    rename($root, "$root.old") || fail("could not move $root aside (myphp $latest is in $new)");
-    rename($new, $root) || fail("could not put myphp $latest in $root (it is in $new, the one before in $root.old)");
-    Cmd::output(['rm', '-rf', "$root.old"]);
-    logf("upgraded myphp " . VERSION . " to $latest");
+    fail("MyPHP in $root is neither Composer's install nor a git checkout: install it with curl -fsSL https://myphp.ai/install.sh | sh");
 }
 
 function keygen(array $args): void
