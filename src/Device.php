@@ -14,11 +14,68 @@ use MyPHP\Native\iOS;
 final class Device
 {
     private static ?DeviceType $override = null;
+    private static ?string $channelOverride = null;
 
     /** Overrides the device type (for previews or headless tests); null restores detection. */
     public static function setType(?DeviceType $type): void
     {
         self::$override = $type;
+    }
+
+    /** Overrides the distribution channel ('apk', 'play', 'appstore', 'desktop'); null restores detection. */
+    public static function setChannel(?string $channel): void
+    {
+        self::$channelOverride = $channel;
+    }
+
+    /**
+     * Returns the package distribution channel:
+     * - 'appstore': iOS / iPadOS App Store package
+     * - 'play': Android Google Play Store package (built with -channel play, AAB splitNames, or installed via com.android.vending)
+     * - 'apk': Android standalone / sideloaded APK (supports in-app APK self-upgrade)
+     * - 'desktop': macOS / Windows / Linux desktop build
+     */
+    public static function channel(): string
+    {
+        if (self::$channelOverride !== null && self::$channelOverride !== '') {
+            return self::$channelOverride;
+        }
+        $env = getenv('MYPHP_CHANNEL') ?: getenv('MYPHP_ANDROID_CHANNEL');
+        if (is_string($env) && $env !== '') {
+            return strtolower(trim($env));
+        }
+        if (App::isIOS()) {
+            return 'appstore';
+        }
+        if (App::isAndroid()) {
+            try {
+                $cls = \MyPHP\Native\Jni::cls('com.owner888.myphp.MyphpActivity');
+                if (\MyPHP\Native\Jni::callStatic($cls, 'isPlayStoreBuild', '()Z')) {
+                    return 'play';
+                }
+            } catch (\Throwable) {
+            }
+            return 'apk';
+        }
+        return 'desktop';
+    }
+
+    /** Whether this Android build is distributed via Google Play Store (in-app APK self-update disabled). */
+    public static function isPlayStore(): bool
+    {
+        return self::channel() === 'play';
+    }
+
+    /** Whether this build is distributed via Apple App Store. */
+    public static function isAppStore(): bool
+    {
+        return self::channel() === 'appstore';
+    }
+
+    /** Whether this build is a standalone Android APK allowed to download and install APK updates in-app. */
+    public static function canSelfUpdateApk(): bool
+    {
+        return self::channel() === 'apk';
     }
 
     /** The form factor of the current device. */

@@ -64,13 +64,17 @@ BUNDLE_ID="com.owner888.myphp"
 APP_LABEL="${APP_NAME:-MyPHP}"
 APP_VERSION="1.0.0"
 VERSION_CODE="1"
+ANDROID_CHANNEL="${MYPHP_ANDROID_CHANNEL:-apk}"
 if [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/myphp.json" ]; then
     BUNDLE_ID="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["identifier"] ?? "com.owner888.myphp";' "${PROJECT_DIR}/myphp.json")"
     APP_LABEL="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["name"] ?? $c["displayName"] ?? $argv[2];' "${PROJECT_DIR}/myphp.json" "$APP_LABEL")"
     APP_VERSION="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["version"] ?? "1.0.0";' "${PROJECT_DIR}/myphp.json")"
     VERSION_CODE="$(php -r '$v = $argv[1]; if (preg_match("/^(\d+)\.(\d+)\.(\d+)/", $v, $m)) { echo ($m[1] * 10000 + $m[2] * 100 + $m[3]); } else { echo "1"; }' "$APP_VERSION")"
+    if [ -z "${MYPHP_ANDROID_CHANNEL:-}" ]; then
+        ANDROID_CHANNEL="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["android"]["channel"] ?? $c["channel"] ?? "apk";' "${PROJECT_DIR}/myphp.json")"
+    fi
 fi
-echo "==> App Identity: package=${BUNDLE_ID} label=${APP_LABEL} version=${APP_VERSION} (${VERSION_CODE})"
+echo "==> App Identity: package=${BUNDLE_ID} label=${APP_LABEL} version=${APP_VERSION} (${VERSION_CODE}) channel=${ANDROID_CHANNEL}"
 
 mkdir -p "${WORK_DIR}/res"
 cp -R "${TEMPLATE_DIR}/res/"* "${WORK_DIR}/res/"
@@ -94,6 +98,10 @@ cp "${TEMPLATE_DIR}/AndroidManifest.xml" "${WORK_DIR}/AndroidManifest.xml"
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" != "1" ]; then
     php -r '$f=$argv[1]; file_put_contents($f, str_replace("<application ", "<application android:extractNativeLibs=\"true\" ", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
 fi
+if [ "$ANDROID_CHANNEL" = "play" ]; then
+    echo "==> Play Store channel: removing REQUEST_INSTALL_PACKAGES permission..."
+    php -r '$f=$argv[1]; file_put_contents($f, preg_replace("/\s*<uses-permission[^>]*REQUEST_INSTALL_PACKAGES[^>]*\/>/", "", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
+fi
 DEBUG_MODE=""
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
 "$AAPT2" link $DEBUG_MODE \
@@ -109,11 +117,23 @@ if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
 
 # 3. Compile Java code
 echo "==> Compiling Java sources with javac..."
+mkdir -p "${WORK_DIR}/src"
+cp -R "${TEMPLATE_DIR}/src/"* "${WORK_DIR}/src/"
+if [ "$ANDROID_CHANNEL" = "play" ]; then
+    echo "==> Play Store channel: stripping in-app APK installer from MyphpActivity.java..."
+    php -r '
+    $f = $argv[1];
+    $code = file_get_contents($f);
+    $code = preg_replace("#// BEGIN_APK_SELF_UPDATE.*?// END_APK_SELF_UPDATE#s", "", $code);
+    $code = str_replace("boolean playBuild = false;", "boolean playBuild = true;", $code);
+    file_put_contents($f, $code);
+    ' "${WORK_DIR}/src/com/owner888/myphp/MyphpActivity.java"
+fi
 "$JAVAC" -source 17 -target 17 \
     -d "${WORK_DIR}/classes" \
     -cp "$PLATFORM_JAR" \
     $(find "${WORK_DIR}/gen" -name "*.java") \
-    $(find "${TEMPLATE_DIR}/src" -name "*.java")
+    $(find "${WORK_DIR}/src" -name "*.java")
 
 # 4. Dex with d8
 echo "==> Converting .class to classes.dex with d8..."

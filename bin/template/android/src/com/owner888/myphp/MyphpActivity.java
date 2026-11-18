@@ -633,14 +633,39 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         });
     }
 
+    public static boolean isPlayStoreBuild() {
+        // BEGIN_PLAY_CHANNEL_FLAG
+        boolean playBuild = false;
+        // END_PLAY_CHANNEL_FLAG
+        if (playBuild) return true;
+        if (sInstance == null) return false;
+        try {
+            android.content.pm.PackageManager pm = sInstance.getPackageManager();
+            String pkg = sInstance.getPackageName();
+            android.content.pm.PackageInfo pi = pm.getPackageInfo(pkg, 0);
+            if (pi.splitNames != null && pi.splitNames.length > 0) {
+                return true;
+            }
+            android.content.pm.InstallSourceInfo isi = pm.getInstallSourceInfo(pkg);
+            String installer = isi != null ? isi.getInstallingPackageName() : null;
+            if ("com.android.vending".equals(installer) || "com.google.android.feedback".equals(installer)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
     public static void openUrl(String url) {
         if (sInstance == null || url == null || url.isEmpty()) return;
         sInstance.runOnUiThread(() -> {
             try {
+                // BEGIN_APK_SELF_UPDATE
                 if (url.startsWith("file://") && url.endsWith(".apk")) {
                     installApkFile(new File(Uri.parse(url).getPath()));
                     return;
                 }
+                // END_APK_SELF_UPDATE
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 sInstance.startActivity(intent);
@@ -650,6 +675,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         });
     }
 
+    // BEGIN_APK_SELF_UPDATE
     private static void installApkFile(File apkFile) {
         if (sInstance == null || apkFile == null || !apkFile.exists()) return;
         try {
@@ -705,6 +731,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             Log.e(TAG, "installApkFile error", e);
         }
     }
+    // END_APK_SELF_UPDATE
 
     public static void setKeepScreenOn(boolean on) {
         if (sInstance == null) return;

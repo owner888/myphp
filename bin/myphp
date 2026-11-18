@@ -1053,8 +1053,9 @@ function build(array $args): void
     $launcher = option($args, 'launcher', ''); // none named: what each platform's app carries its PHP with, below
     $php = option($args, 'php');
     $sign = option($args, 'sign', '');
+    $channel = option($args, 'channel', '');
     $out = option($args, 'o', '');
-    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer')];
+    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer'), 'channel' => $channel];
     $skipBuildCommand = flag($args, 'skip-build-command');
     $upload = flag($args, 'upload');
     ['dir' => $dir, 'config' => $c] = project($args);
@@ -1199,6 +1200,9 @@ function buildAndroid(string $dir, array $c, string $arch, array $opts): array
     is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
     $name = orElse($c['name'], 'app');
     $apk = "$out/$name.apk";
+    if (!empty($opts['channel'])) {
+        putenv('MYPHP_ANDROID_CHANNEL=' . $opts['channel']);
+    }
     logf("Making android/$arch: $apk");
     $script = dirname(__DIR__) . '/scripts/package-android-apk.sh';
     is_executable($script) || chmod($script, 0755);

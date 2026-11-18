@@ -1120,6 +1120,7 @@ function UpdateCapsule(
     ?Closure $onAction = null,
     ?Closure $onDismiss = null,
     mixed $tint = null,
+    string $actionTitle = 'UPDATE',
 ): D\View {
     if ($version === '' || !in_array($status, ['available', 'downloading', 'installing', 'failed'], true)) {
         return EmptyView();
@@ -1146,7 +1147,7 @@ function UpdateCapsule(
         $isDownloading => "{$pct}%",
         $isInstalling => 'INSTALL',
         $isFailed => 'RETRY',
-        default => 'UPDATE',
+        default => $actionTitle,
     };
 
     return VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
