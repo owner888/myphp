@@ -5716,5 +5716,41 @@
   "desktopShortcut": "Create a desktop shortcut",
   "@desktopShortcut": {
     "description": "The finish page of the Windows installer: whether it makes a desktop shortcut of the app (mygo's desktopShortcut)."
+  },
+  "updateApp": "Update {app}",
+  "@updateApp": {
+    "description": "The in-app update capsule, while an update waits; {app} is the app's name.",
+    "placeholders": {
+      "app": {
+        "type": "String",
+        "example": "Telegram"
+      }
+    }
+  },
+  "updateDownloading": "Downloading {percent}%...",
+  "@updateDownloading": {
+    "description": "The update capsule, while the update downloads; {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "45"
+      }
+    }
+  },
+  "updateNow": "Update Now",
+  "@updateNow": {
+    "description": "The update capsule, once the update is downloaded."
+  },
+  "updateFailed": "Download Failed · Retry",
+  "@updateFailed": {
+    "description": "The update capsule, when the download failed; a tap tries again."
+  },
+  "updateOnAppStore": "Update on the App Store",
+  "@updateOnAppStore": {
+    "description": "The update capsule of an app that updates through the App Store."
+  },
+  "updateOnGooglePlay": "Update on Google Play",
+  "@updateOnGooglePlay": {
+    "description": "The update capsule of an app that updates through Google Play."
   }
 }

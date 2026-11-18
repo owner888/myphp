@@ -335,7 +335,7 @@ abstract class View
      * $content's view along the top or the bottom edge of the view, which gives it the room, as SwiftUI's
      * safeAreaInset(edge:content:): the view ends where it begins, and the safe area on that side is its from then
      * on, so a TabView's bar floats over it, not over the home indicator, and a background of its bleeds to the
-     * window's edge. TabView(…)(…)->safeAreaInset(Edge::bottom, content: fn() => UpdateCapsule(…)).
+     * window's edge. a bar of an app's own (a TabView's floating capsule over its tab bar is bottomAccessory()).
      */
     public function safeAreaInset(\Edge $edge = \Edge::bottom, ?Closure $content = null): static
     {

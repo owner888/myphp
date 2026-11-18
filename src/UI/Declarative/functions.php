@@ -1107,13 +1107,12 @@ function PhotosPicker(string $title, mixed &$selection, ?int $maxSelectionCount 
 }
 
 /**
- * An in-app update bar, as Telegram's on Android (its UpdateLayout): a bar of the accent color across the bottom of the
- * window, 44 points high and the bottom safe area more, the whole of it the button; in its middle a bold title after a
- * white disc with the mark of what a tap does, at its end the version, where Telegram shows the download's size. Shown
+ * An in-app update capsule, as Telegram's on Android: a small capsule of the accent color, 40 points high and as wide as
+ * its content, the whole of it the button; a white disc with the mark of what a tap does, a bold title, and the download's $size (the version without one). The words are MyPHP's own strings, in the app's language. Shown
  * when $version !== '' and $status is 'available' | 'downloading' | 'installing' | 'failed'; the title follows the
  * status ("Downloading 45%...", "Update Now", "Download Failed · Retry"), $actionTitle is the one of an update that
- * waits (default "Update <app>"). Put it under the content, VStack(spacing: 0)($content, UpdateCapsule(…)), which it
- * then pushes up, as Telegram's does.
+ * waits (default "Update <app>", or the $store's, 'appstore' | 'play'). Float it over a TabView's page just above its tab bar:
+ * TabView(…)(…)->bottomAccessory(fn() => UpdateCapsule(…)), as Telegram does.
  */
 function UpdateCapsule(
     string $version,
@@ -1122,6 +1121,8 @@ function UpdateCapsule(
     ?Closure $onAction = null,
     mixed $tint = null,
     ?string $actionTitle = null,
+    int $size = 0,
+    ?string $store = null,
 ): D\View {
     if ($version === '' || !in_array($status, ['available', 'downloading', 'installing', 'failed'], true)) {
         return EmptyView();
@@ -1130,37 +1131,41 @@ function UpdateCapsule(
     $isFailed = $status === 'failed';
     $waits = $status === 'available';
     $color = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::accentColor);
+    $words = MyPHP\L10n::in(MyPHP\I18n::locale()); // MyPHP's own strings: an app's "myphp.updateApp" … in its catalogs change or translate them
     $title = match ($status) {
-        'downloading' => 'Downloading ' . (int) round(max(0.0, min(1.0, $progress)) * 100) . '%...',
-        'installing' => 'Update Now',
-        'failed' => 'Download Failed · Retry',
-        default => $actionTitle ?? 'Update ' . MyPHP\App::name(),
+        'downloading' => $words->get('updateDownloading', ['percent' => (int) round(max(0.0, min(1.0, $progress)) * 100)]),
+        'installing' => $words->get('updateNow'),
+        'failed' => $words->get('updateFailed'),
+        default => $actionTitle ?? match ($store) {
+            'appstore' => $words->get('updateOnAppStore'),
+            'play' => $words->get('updateOnGooglePlay'),
+            default => $words->get('updateApp', ['app' => MyPHP\App::name()]),
+        },
     };
+    $end = $size > 0 ? MyPHP\I18n::formatNumber(MyPHP\I18n::locale(), $size / 1048576 >= 1 ? round($size / 1048576, 1) : round($size / 1024, 1), new MyPHP\NumberOptions(maxFractionDigits: 1)) . ($size >= 1048576 ? ' MB' : ' KB') : ltrim($version, 'vV'); // Telegram's: the download's size
 
-    $bar = ZStack(alignment: Alignment::center)(
-        HStack(alignment: VerticalAlignment::center, spacing: 8)(
-            Image(systemName: $waits || $isDownloading ? 'arrow.down.to.line' : 'arrow.clockwise')
-                ->font(Font::caption)
-                ->bold()
-                ->foregroundStyle($color)
-                ->frame(width: 22, height: 22, alignment: Alignment::center)
-                ->background(Color::white)
-                ->cornerRadius(11),
-            Text(verbatim: $title)
-                ->font(Font::subheadline)
-                ->bold()
-                ->foregroundStyle(Color::white)
-                ->lineLimit(1),
-        ),
-        $waits ? Text(verbatim: ltrim($version, 'vV'))
+    $bar = HStack(alignment: VerticalAlignment::center, spacing: 8)(
+        Image(systemName: $waits || $isDownloading ? 'arrow.down.to.line' : 'arrow.clockwise')
+            ->font(Font::caption)
+            ->bold()
+            ->foregroundStyle($color)
+            ->frame(width: 22, height: 22, alignment: Alignment::center)
+            ->background(Color::white)
+            ->cornerRadius(11),
+        Text(verbatim: $title)
+            ->font(Font::subheadline)
+            ->bold()
+            ->foregroundStyle(Color::white)
+            ->lineLimit(1),
+        $waits ? Text(verbatim: $end)
             ->font(Font::footnote)
             ->bold()
             ->foregroundStyle(Color::rgb(0xFFFFFF, 0.8))
-            ->lineLimit(1)
-            ->frame(maxWidth: INF, alignment: Alignment::trailing)
-            ->padding(Edge::trailing, 20) : null,
+            ->lineLimit(1) : null,
     )
-        ->frame(maxWidth: INF, height: 44, alignment: Alignment::center)
-        ->background($color);
+        ->padding(Edge::horizontal, 14)
+        ->frame(height: 40, alignment: Alignment::center)
+        ->background($color)
+        ->cornerRadius(20);
     return $isDownloading || $onAction === null ? $bar : $bar->onTapGesture($onAction);
 }

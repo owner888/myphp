@@ -46,10 +46,11 @@ trait ContextMobile
      * $minimize 1 the phone's bar shrinks to the chosen tab as the page
      * scrolls down (-1: up), as iOS 26's tabBarMinimizeBehavior; a tap
      * on it, the page scrolling the other way or back at its top, brings
-     * it back.
+     * it back. $accessory builds a view floating centered over the page just above the phone's bar
+     * (iOS 26's tabViewBottomAccessory, Telegram's update capsule); over the page's bottom where the bar is hidden.
      * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items @param Closure(int, string): void $content
      */
-    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0, ?object $backdrop = null): Node
+    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0, ?object $backdrop = null, ?Closure $accessory = null): Node
     {
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
@@ -94,6 +95,13 @@ trait ContextMobile
               }
               $this->bottomInset = $was;
               $this->safeArea[2] = $bottom;
+              if ($accessory !== null) {
+                  $above = $hiddenNow ? $bottom + 8.0 : $inset + 8.0;
+                  $row = $this->row(0, 0)->absolute()->bottom($above)->start(0)->end(0)->justify(Node::CENTER)->alignItems(Node::CENTER);
+                  $row->floats = true; // a tap on it is its, not the page's under it
+                    $accessory();
+                  $this->end();
+              }
               if (!$hiddenNow) {
                   $bar = $this->tabBar($items, $index, $this->animate($n, 'tabsSmall', $small->small ? 1 : 0, 0.25), $expand);
                   if ($expand) { $small->small = false; $this->runtime?->changed(); } // a tap on the shrunk bar

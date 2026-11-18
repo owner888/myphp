@@ -32,6 +32,14 @@ final class TabView extends View
     /** Whether a phone's tab bar shrinks to the chosen tab as the page scrolls down (onScrollDown) or up, as iOS 26's; a tap on it, or the page back at its top, brings it back. */
     public function tabBarMinimizeBehavior(\TabBarMinimizeBehavior $behavior): static { $this->minimize = $behavior; return $this; }
 
+    private ?\Closure $accessory = null;
+
+    /**
+     * A view floating centered just above a phone's tab bar, over the page, as iOS 26's tabViewBottomAccessory:
+     * TabView(…)(…)->bottomAccessory(fn() => UpdateCapsule(…)). Nothing where $content returns null or EmptyView.
+     */
+    public function bottomAccessory(?\Closure $content): static { $this->accessory = $content; return $this; }
+
     public function __construct(mixed &$selection)
     {
         $this->selection = &$selection;
@@ -44,6 +52,23 @@ final class TabView extends View
     }
 
     protected function build(Context $c, Env $env): ?Node
+    {
+        $paged = $this->style === \TabViewStyle::page || $this->style === \TabViewStyle::pageAlways || $this->style === \TabViewStyle::pageNever;
+        if ($this->accessory === null || $paged || ($c->runtime?->touch ?? false) && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_BOTTOM) { return $this->buildTabs($c, $env); } // a phone's bar carries it itself
+        // no bar across the bottom: the accessory floats over the page's bottom, centered
+        $wrap = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->fill();
+          $inner = $this->buildTabs($c, $env);
+          $v = ($this->accessory)();
+          if ($v instanceof View) {
+              $c->open(new Node(Node::CONTAINER, Node::ROW))->absolute()->bottom(16.0 + $c->safeArea[2])->start(0)->end(0)->justify(Node::CENTER)->alignItems(Node::CENTER)->floats = true;
+                View::renderAll($c, $env->along(Node::ROW), [$v]);
+              $c->end();
+          }
+        $c->end();
+        return $inner === null ? null : $wrap;
+    }
+
+    private function buildTabs(Context $c, Env $env): ?Node
     {
         $index = array_find_key($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? 0;
         if ($this->style === \TabViewStyle::page || $this->style === \TabViewStyle::pageAlways || $this->style === \TabViewStyle::pageNever) {
@@ -67,7 +92,10 @@ final class TabView extends View
                 $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
                   View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [self::stacked($this->tabs[$i]->content)]);
                 $c->end();
-            }, $minimize, $backdrop);
+            }, $minimize, $backdrop, $this->accessory === null ? null : function () use ($c, $env): void {
+                $v = ($this->accessory)();
+                if ($v instanceof View) { View::renderAll($c, $env->along(Node::ROW), [$v]); }
+            });
             if ($backdrop->color !== null) { $n->background($backdrop->color); } // the floating tab bar over the page's color, as iOS's
             $this->selection = $this->tabs[$index]->value ?? $this->selection;
             return $n;

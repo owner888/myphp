@@ -365,5 +365,11 @@
   "iinaAlertAddWatchMessage": "有効なmpvのプロパティ名を入力してください。",
   "iinaMenuInspector": "インスペクタ",
   "iinaMenuAudioDevice": "オーディオデバイス",
-  "desktopShortcut": "デスクトップにショートカットを作成"
+  "desktopShortcut": "デスクトップにショートカットを作成",
+  "updateApp": "{app}をアップデート",
+  "updateDownloading": "ダウンロード中 {percent}%...",
+  "updateNow": "今すぐアップデート",
+  "updateFailed": "ダウンロード失敗 · 再試行",
+  "updateOnAppStore": "App Storeでアップデート",
+  "updateOnGooglePlay": "Google Playでアップデート"
 }

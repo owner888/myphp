@@ -77,9 +77,10 @@ what scrolls under them goes on to the screen's edges.
 `->safeAreaInset(Edge::bottom, content: fn() => …)` (or `Edge::top`) puts a bar of yours along that edge of a view,
 as SwiftUI's: the view ends where the bar begins and the safe area on that side is the bar's, so a `TabView`'s bar
 floats over yours and your bar's background goes on to the screen's edge. `UpdateCapsule(version:, status:, progress:,
-onAction:, tint:, actionTitle:)` is such a bar: an app's update, as Telegram's on Android (a bar of the accent color
-44 points high, a bold title in its middle after a white disc, the version at its end; "Update <app>",
-"Downloading 45%...", "Update Now"), nothing while `$version` is empty. While a field has
+onAction:, tint:, actionTitle:)` is an app's update, as Telegram's on Android: a small capsule of the accent color
+40 points high, a white disc, a bold title ("Update <app>", "Downloading 45%...", "Update Now") and the download's `size:` (the version without one), the words in the app's language (MyPHP's own strings, which an app's `myphp.updateApp`, `myphp.updateDownloading`, `myphp.updateNow`, `myphp.updateFailed` change; `store: 'appstore'|'play'` says "Update on the App Store"/"…Google Play"),
+floated over a `TabView`'s page just above its tab bar with `->bottomAccessory(fn() => UpdateCapsule(…))` (iOS 26's
+tabViewBottomAccessory; over the page's bottom where there is no bar below), nothing while `$version` is empty. While a field has
 the focus, the keyboard takes the bottom and what it would cover of the
 field scrolls into view. On the desktop there is none of it.
 
