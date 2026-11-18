@@ -3041,6 +3041,27 @@ final class Runtime
         return false;
     }
 
+    /**
+     * Whether a click this frame landed on $outer and not on $inner, which is in it (a sheet's backdrop and its panel):
+     * a tap outside. A click on $inner is left for what is in it, a field that takes the focus and asks for no click.
+     */
+    public function clickedOutside(int $outer, int $inner): bool
+    {
+        if (isset($this->disabledIds[$outer])) {
+            return false;
+        }
+        $this->clickable[$outer] = true;
+        foreach ($this->clicks as $i => [$x, $y, $mods, $takers]) {
+            if (!($takers !== null ? isset($takers[$outer]) : $this->under($outer, $x, $y))) { continue; }
+            if ($takers !== null ? isset($takers[$inner]) : $this->under($inner, $x, $y)) { continue; }
+            unset($this->clicks[$i]);
+            $this->consumed = true;
+            $this->clickMods = $mods; $this->clickModsOf[$outer] = $mods;
+            return true;
+        }
+        return false;
+    }
+
     /** @var array<int, int> the modifiers held at the last click of each node, by id */
     private array $clickModsOf = [];
 

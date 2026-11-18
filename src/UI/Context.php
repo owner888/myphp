@@ -562,6 +562,12 @@ final class Context
         return $this->runtime?->clicked($n->id) ?? false;
     }
 
+    /** Whether a click landed on $outer and not on $inner, a node in it (a sheet's backdrop and its panel): a tap outside. */
+    public function clickedOutside(Node $outer, Node $inner): bool
+    {
+        return $this->runtime?->clickedOutside($outer->id, $inner->id) ?? false;
+    }
+
     /** The pointer's position from $n's top left in its axes, and whether it is over $n (mygo's PointerPosition). @return array{0: float, 1: float, 2: bool} */
     public function pointerPosition(Node $n): array
     {

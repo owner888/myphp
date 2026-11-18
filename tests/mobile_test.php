@@ -456,3 +456,27 @@ same(50.0 + 15.0, $middle($h, 'Above'), 'one along the top, under the status bar
 same(844.0 - 34.0 - 22.0, $middle($h, 'Bar'), 'a view inside the safe area: the bar over the home indicator, once');
 $r = $h->rect($h->byText('Bottom'));
 same(844.0 - 34.0 - 44.0, $r[1] + $r[3], 'the view ends where the bar begins');
+
+// A tap on a field in a sheet takes the focus and does not close it; a tap outside does.
+$sheetApp = new class { public bool $open = true; public string $text = ''; };
+$h = new Headless(fn(Context $c) => \MyPHP\UI\Content::render(fn() => \Text('Page')->sheet(isPresented: $sheetApp->open, content: fn() => \VStack(spacing: 8)(
+    \TextField('Name', text: $sheetApp->text, prompt: 'Your name'),
+    \Text('In the sheet'),
+)->padding(16)->presentationDetents([\PresentationDetent::large()])), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$h->frame(2); usleep(700_000); $h->frame(6);
+$field = $h->byLabel('Name') ?? $h->byText('Your name');
+check($field !== null, 'the sheet shows its field');
+if ($field !== null) {
+    $h->clickOn($field); $h->frame(3);
+    same(true, $sheetApp->open, 'a tap on a field in a sheet does not close it');
+}
+$sheetApp->open = true;
+$h = new Headless(fn(Context $c) => \MyPHP\UI\Content::render(fn() => \Text('Page')->sheet(isPresented: $sheetApp->open, content: fn() => \VStack(spacing: 8)(
+    \TextField('Name', text: $sheetApp->text, prompt: 'Your name'),
+    \Text('In the sheet'),
+)->padding(16)->presentationDetents([\PresentationDetent::large()])), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
+$h->frame(2); usleep(700_000); $h->frame(6);
+$h->click(196, 3); $h->frame(2); usleep(700_000); $h->frame(6); // above the panel
+same(false, $sheetApp->open, 'a tap outside the sheet closes it');

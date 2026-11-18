@@ -430,7 +430,7 @@ trait ContextMobile
         if ($back === null || !$open) { // closed: nothing, or what goes down
             return $back;
         }
-        if (!$dismissDisabled && ($gone || $this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel)))) { // dragged away, Escape, or a tap outside
+        if (!$dismissDisabled && ($gone || $this->overlayShortcut($back, Key::ESCAPE) || $this->clickedOutside($back, $panel))) { // dragged away, Escape, or a tap outside
             $open = false;
             $back->dismissed = true;
         }
@@ -576,7 +576,7 @@ trait ContextMobile
             $rt->touchMenu['closing'] = true;
             ($m['chosen'])($chosen);
             $rt->changed();
-        } elseif ($shown && ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel)))) { // a tap beside, Escape, Back: it fades out, nothing chosen
+        } elseif ($shown && ($this->overlayShortcut($back, Key::ESCAPE) || $this->clickedOutside($back, $panel))) { // a tap beside, Escape, Back: it fades out, nothing chosen
             $rt->touchMenu['closing'] = true;
             $rt->changed();
         }
@@ -633,7 +633,7 @@ trait ContextMobile
               $this->end();
             $this->end();
         });
-        if ($chosen < 0 && ($this->clicked($cancel) || $this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel)))) {
+        if ($chosen < 0 && ($this->clicked($cancel) || $this->overlayShortcut($back, Key::ESCAPE) || $this->clickedOutside($back, $panel))) {
             $chosen = self::SHEET_DISMISSED;
         }
         if ($chosen !== -1) { $open = false; }
