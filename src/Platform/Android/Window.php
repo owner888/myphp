@@ -339,12 +339,12 @@ final class Window implements Platform\Window
         return $this->keyboard;
     }
 
-    public function onFrame(): void
+    public function onFrame(int $frameTimeMs = 0): void
     {
-        $this->drawFrame();
+        $this->drawFrame($frameTimeMs);
     }
 
-    public function drawFrame(): void
+    public function drawFrame(int $frameTimeMs = 0): void
     {
         if ($this->paused || $this->frame === null) {
             return;
@@ -369,8 +369,9 @@ final class Window implements Platform\Window
         $heightPts = (int)round($hPx / $density);
 
         if ($this->flingActive && ($inp = $this->w->input) !== null) {
-            $nowNs = hrtime(true);
-            $dt = max(0.001, min(0.032, ($nowNs - $this->flingLastTime) / 1e9));
+            $nowNs = $frameTimeMs > 0 ? $frameTimeMs * 1_000_000 : hrtime(true);
+            $rawDt = $this->flingLastTime > 0 ? ($nowNs - $this->flingLastTime) / 1e9 : 0.008333;
+            $dt = ($rawDt >= 0.004 && $rawDt <= 0.050) ? $rawDt : 0.008333;
             $this->flingLastTime = $nowNs;
             // Native mobile scroll deceleration time constant (~0.55s, matching UIScrollView/SplineOverScroller glide)
             $decay = exp(-$dt / 0.55);
@@ -674,7 +675,7 @@ final class Window implements Platform\Window
                                 $this->flingActive = true;
                                 $this->flingVx = max(-6000.0, min(6000.0, $vx));
                                 $this->flingVy = max(-6000.0, min(6000.0, $vy));
-                                $this->flingLastTime = hrtime(true);
+                                $this->flingLastTime = 0;
                             }
                         }
                     }

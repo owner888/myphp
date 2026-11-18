@@ -550,6 +550,14 @@ final class Node
         }
         $rt = $this->context?->runtime;
         if ($rt !== null && !$rt->systemMaterials) {
+            if (\MyPHP\App::isAndroid()) {
+                // On mobile TBDR GPUs (Adreno/Mali), mid-frame FBO 0 glCopyTexSubImage2D + full-screen blur passes stall
+                // tile memory every frame; render a single-pass translucent surface with subtle border & elevation shadow.
+                $isDark = $dark ?? ($this->context?->theme->dark ?? false);
+                $this->shadow(0, 4, 16, 0, 0x000000, $isDark ? 0.35 : 0.12);
+                $this->border(1 / max($this->context?->scale ?? 1.0, 1.0), $isDark ? 0x38383a : 0xd1d1d6);
+                return $this->background($isDark ? 0x1c1c1e : 0xf2f2f7, 0.94);
+            }
             if (!$rt->ownMaterialsTold) {
                 $rt->ownMaterialsTold = true;
                 \MyPHP\Logger::verbose("the system has no materials: myphp's own draw \"$material\" and the others (Glass, Blur)", 'ui');

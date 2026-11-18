@@ -98,6 +98,15 @@ final class Input
             }
         }
         if ($this->direct !== null && ($this->direct)($event)) { return true; } // which may count a press's clicks again (Runtime::deliver)
+        if ($event[0] === 'scroll' && $this->events !== []) {
+            $lastIdx = count($this->events) - 1;
+            $last = $this->events[$lastIdx];
+            if ($last[0] === 'scroll' && $last[1] === $event[1] && $last[2] === $event[2] && ($last[5] ?? true) === ($event[5] ?? true)) {
+                $this->events[$lastIdx][3] += $event[3];
+                $this->events[$lastIdx][4] += $event[4];
+                return false;
+            }
+        }
         $this->events[] = $event;
         return false;
     }

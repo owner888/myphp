@@ -98,6 +98,7 @@ final class Backend implements Platform\Backend
         $ev = $this->event ??= $f->new('MyphpEvent');
         $timeout = 8;
         $needsRender = false;
+        $choreoTimeMs = 0;
         while ($f->myphp_read_event(FFI::addr($ev), $timeout) > 0) {
             $timeout = 0; // drain remaining queued events without waiting
             $win = Window::instance();
@@ -130,6 +131,7 @@ final class Backend implements Platform\Backend
                         break;
                     case Android::EVENT_CHOREOGRAPHER:
                         $needsRender = true;
+                        $choreoTimeMs = (int)$ev->time_ms;
                         break;
                     case Android::EVENT_PAUSE:
                         $win?->onPause();
@@ -175,11 +177,11 @@ final class Backend implements Platform\Backend
             Window::instance()?->onAccessOn();
         }
 
-        // Render after all queued input/VSync events have been coalesced (eglSwapBuffers paces to display VSync)
-        $win = Window::instance();
-        if ($needsRender || ($win !== null && $win->isFrameRequested())) {
+        // Render strictly once per AChoreographer VSync pulse after all queued input events have been coalesced
+        if ($needsRender) {
             try {
-                $win?->onFrame();
+                $win = Window::instance();
+                $win?->onFrame($choreoTimeMs);
             } catch (\Throwable $e) {
                 \MyPHP\Logger::error("Exception in onFrame: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
                 throw $e;

@@ -110,7 +110,7 @@ trait ContextMobile
               // iPadOS 26's: a capsule of glass centered over the page under the status bar, each tab's title in it, the chosen one on a capsule of its own
               $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 52 + $top)->padding($top + 4, 16, 4, 16)->alignItems(Node::CENTER)->justify(Node::CENTER)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
                 $pill = $this->row(0, 0)->size(0, 44)->padding(4)->radius(22)->systemMaterial('glass')->alignItems(Node::STRETCH)->shrink(1)->minWidth(0);
-                  if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.72; }
+                  if (!($this->runtime?->systemMaterials ?? true) && !\MyPHP\App::isAndroid()) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.72; }
                   foreach ($items as $i => [, $label]) {
                       $on = $i === $index;
                       $tab = $this->row(0, 0)->padding(0, 16)->radius(18)->alignItems(Node::CENTER)->focusable()->role(Role::TAB)->label($label);
@@ -203,7 +203,7 @@ trait ContextMobile
           $full = max($this->width - 32 - $apart, 64.0);
           $pill = $this->row(4, 0, 1)->size(0, 56)->radius(28)->alignItems(Node::STRETCH)->systemMaterial('glass');
           if ($small > 0) { $pill->maxWidth($full + (64 - $full) * $small); } // narrowing to the chosen tab's 64
-            if (!($this->runtime?->systemMaterials ?? true)) { // myphp's own glass (Android): frosted as iOS 26's bar is, what passes under it a haze, not bent text
+            if (!($this->runtime?->systemMaterials ?? true) && !\MyPHP\App::isAndroid()) {
                 $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72;
             }
             foreach ($items as $i => [$svg, $label]) {
@@ -231,7 +231,7 @@ trait ContextMobile
               $color = $on ? $t->accent : $t->text;
               $circle = $this->column(0, 0)->absolute()->end(16)->bottom($bottom)->size(56, 56)->radius(28)->systemMaterial('glass')->center()->focusable()->role(Role::TAB)->label($label);
               $circle->on = $on; $circle->checked($on);
-                if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72; }
+                if (!($this->runtime?->systemMaterials ?? true) && !\MyPHP\App::isAndroid()) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(28)->role(Role::NONE)->bgAlpha = 0.72; }
                 if ($on) { $this->box(0, 0, $t->text)->absolute()->top(4)->bottom(4)->start(4)->end(4)->radius(24)->role(Role::NONE)->bgAlpha = 0.08; } // chosen: a capsule of its own, as the bar's tabs
                 if ($svg instanceof SVG) { $this->icon($svg, 24, $color); }
                 elseif ($svg instanceof Closure) { $this->image($svg($color), 24, 24)->role(Role::NONE); }
