@@ -413,7 +413,7 @@ trait ContextMobile
                   $gone = $kept->offset[1] >= $top - 0.5 && !$this->dragging($panel) && $down >= $top - 2; // let go toward below the window, and there: gone
               }
               // iOS 26's: short of the whole window, a sheet floats, 8 in from the window's sides and bottom, rounded all round; at the whole, it meets them
-              $float = ($rt?->touch ?? false) ? ($detents === [] ? 1.0 : min(1.0, max(0.0, $down / 30))) : 0.0;
+              $float = ($rt?->touch ?? false) && !$flush ? ($detents === [] ? 1.0 : min(1.0, max(0.0, $down / 30))) : 0.0; // a sheet that fills to its edges stays as wide as the window, as it is dragged too: no gap opens beside it
               if (!$tablet) { $panel->margin(0, 8 * $float, 8 * $float, 8 * $float); }
               $corner = $cornerRadius ?? (($rt?->touch ?? false) ? 32.0 : 10.0);
               $h = $rt?->rectOf($panel->id)[3] ?? $this->height; // not yet laid out: the window's height, below it all the same
