@@ -30,10 +30,10 @@ final class Device
 
     /**
      * Returns the package distribution channel:
-     * - 'appstore': iOS / iPadOS App Store package
+     * - 'appstore': Apple App Store package (iOS, iPadOS, macOS, tvOS, visionOS)
      * - 'play': Android Google Play Store package (built with -channel play, AAB splitNames, or installed via com.android.vending)
      * - 'apk': Android standalone / sideloaded APK (supports in-app APK self-upgrade)
-     * - 'desktop': macOS / Windows / Linux desktop build
+     * - 'desktop': Standalone desktop build (Windows / Linux, or macOS outside App Store with MYPHP_CHANNEL=desktop)
      */
     public static function channel(): string
     {
@@ -44,7 +44,7 @@ final class Device
         if (is_string($env) && $env !== '') {
             return strtolower(trim($env));
         }
-        if (App::isIOS()) {
+        if (App::isApple()) {
             return 'appstore';
         }
         if (App::isAndroid()) {
@@ -144,6 +144,26 @@ final class Device
     public static function isIOS(): bool
     {
         return App::isIOS();
+    }
+
+    public static function isTvOS(): bool
+    {
+        return App::isTvOS();
+    }
+
+    public static function isVisionOS(): bool
+    {
+        return App::isVisionOS();
+    }
+
+    public static function isMacOS(): bool
+    {
+        return App::isMacOS();
+    }
+
+    public static function isApple(): bool
+    {
+        return App::isApple();
     }
 
     public static function isAndroid(): bool

@@ -1116,6 +1116,27 @@ final class App
         return getenv('MYPHP_PLATFORM') === 'ios';
     }
 
+    public static function isTvOS(): bool
+    {
+        return getenv('MYPHP_PLATFORM') === 'tvos';
+    }
+
+    public static function isVisionOS(): bool
+    {
+        return getenv('MYPHP_PLATFORM') === 'visionos';
+    }
+
+    public static function isMacOS(): bool
+    {
+        return !self::isIOS() && !self::isTvOS() && !self::isVisionOS() && PHP_OS_FAMILY === 'Darwin';
+    }
+
+    /** Whether the current OS is any Apple platform (iOS, iPadOS, macOS, tvOS, visionOS). */
+    public static function isApple(): bool
+    {
+        return self::isIOS() || self::isTvOS() || self::isVisionOS() || PHP_OS_FAMILY === 'Darwin';
+    }
+
     /**
      * @internal the platform's backend (mygo's backend()): Cocoa on macOS, GTK on Linux, EGL/GLES on Android, Metal/UIKit on iOS.
      * Made on first use, before App::run too, as Secrets need it.
