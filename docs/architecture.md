@@ -9538,6 +9538,44 @@ directory already on the PATH, Composer's bin added to the shell's profile when 
 owner888/myphp`; a git checkout pulls (`--ff-only`, refused over uncommitted changes); a project's own `vendor/` is the
 project's (`composer update owner888/myphp` there). `--check` and `myphp doctor` only say whether one is out.
 
+## A frame on a phone's GPU: what a pixel costs (Android)
+
+A list page of 600 quads scrolled at 50 frames a second on a 1440 × 3200, 120 Hz phone (Snapdragon 8 Gen 3, Adreno
+750) where the system's own apps hold 120. PHP was not what held it: `MYPHP_FRAME_STATS` showed build, layout and
+paint in 12 ms and `eglSwapBuffers` waiting 9 ms more, and SurfaceFlinger (`dumpsys SurfaceFlinger --timestats`)
+25 ms from a buffer queued to its fence signalled. The GPU was busy 95% at its top clock
+(`/sys/class/kgsl/kgsl-3d0/gpubusy`, `gpuclk`): 16 million clock cycles a frame, where 120 Hz leaves 7.5 at that
+clock. And the thread that waits in the swap is idle half the time, so the CPU's governor clocks it down (1 GHz of
+3): PHP's 12 ms were the same wait seen again, 6 ms once frames came every 8.
+
+What the cycles went to, found by leaving kinds of quads out in the vertex shader one at a time:
+
+- **The fragment shader works out both sides of what a pixel decides.** `contCoverage` returns early where a pixel is
+  far from a corner, but Adreno's compiler turns such a branch into a select: the four corners' curves, three times
+  over, in every pixel of every fill, square ones too. A branch on what a whole quad decides (a `flat` varying: the
+  kind, the radius, the mask) is a real one. So the two quads that fill most of a frame, a square fill through no
+  mask and a glyph through none, leave `main()` first with what `quadPaint()` gives them (`Native\GlShader`); the
+  pixels are the same. A test on the pixel's place (inside the rect by more than its corners) in the same spot saved
+  nothing: it has to be the quad's.
+- **A rounded fill is square between its corners.** A card is all but its corners, yet each of its pixels paid for
+  them. `DisplayList::rect` draws a large rounded fill on whole pixels in seven pieces
+  (`DisplayList::betweenCorners`): three square fills where its edges are straight, and its four corners, copies of
+  the quad clipped to the squares their curves stay in (1.528665 radii, the shaders' `contExtent`), as `Bands` cuts a
+  ring. Outside those squares the shaders cover a pixel by its overlap with the rect alone, so the pixels are the
+  same; `noBands` draws it whole to compare. Not through a map (the clip is the window's), nor where corners meet (a
+  capsule).
+- **The same rect filled again hid nothing.** `cull()` kept an occluder half a point inside its rect for its smoothed
+  edge, so a page's background over the window's, both the window's size, left both drawn: three screens of black
+  under the content. A square fill on whole pixels (`pixels`) covers each of its pixels whole: its occluder is its
+  rect. A blended pixel is not free on a tile renderer, which sorts out hidden surfaces only among opaque draws.
+
+With the three: 3.5 million cycles a frame, the GPU 80% busy at 540 MHz of 903, every frame of a fling 8 ms apart.
+What is left is the box shadows (their inset solved by iteration in every pixel: 0.8 million for the tab bar's), the
+bordered boxes and the rounded fills drawn through a map. `lastDraw()` on Android gives `MYPHP_FRAME_STATS` the
+quads, the backdrop blurs and the milliseconds of the GL calls and of the swap: a swap that waits is the GPU behind.
+`glFinish` after the draw makes the GPU's time a frame's, but the governor then clocks the GPU down: count cycles
+(busy time × clock), not milliseconds.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is

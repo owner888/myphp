@@ -421,6 +421,47 @@ final class DisplayList
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         if ($w * $h >= self::OCCLUDER_AREA && $this->xk == 0.0 && $alpha * $this->opacity >= 1.0) { $this->occluder($this->n, $x, $y, $w, $h, $radius, 0.0); }
         $this->n++;
+        if ($radius > 0 && $rgb <= 0xffffff) { $this->betweenCorners($x, $y, $w, $h, $radius); }
+    }
+
+    /** How far along an edge a corner's curve reaches, in radii: the shaders' contExtent. */
+    private const CORNER_EXTENT = 1.528665;
+
+    /**
+     * Draws the rounded fill just added, on whole pixels, in pieces: its
+     * four corners, each a copy clipped to the square its curve stays in,
+     * which the vertex shader draws within, and the three bands between
+     * them, where its edges are straight, as square fills. The shaders work
+     * out a corner's curve in every pixel of a rounded quad, which costs a
+     * phone's GPU several times a square fill's pixel; of a card that is
+     * all but its corners. The pixels are the same either way: outside
+     * the corners' squares the shaders cover a pixel by its overlap with
+     * the rect alone, and the pieces meet on whole pixels. Only an upright
+     * quad, through no map nor mask, large enough to pay for six quads more.
+     */
+    private function betweenCorners(float $x, float $y, float $w, float $h, float $radius): void
+    {
+        if ($this->xk != 0.0 || $this->noBands || $this->pixels <= 0) { return; }
+        $s = $this->pixels * $this->zoom;
+        $e = ceil(self::CORNER_EXTENT * $radius * $s) / $s;
+        if ($w < 2 * $e || $h < 2 * $e || $w * $h - 4 * $e * $e <= 6 * Bands::COST) { return; } // corners that meet are flattened into each other: left whole
+        $b = $this->buf; $k = ($this->n - 1) * 16;
+        $clip = [$b[$k + 12], $b[$k + 13], $b[$k + 12] + $b[$k + 14], $b[$k + 13] + $b[$k + 15]];
+        $run = $this->copyOut($this->n - 1, $this->n);
+        $b[$k + 1] = $y + $e; $b[$k + 3] = $h - 2 * $e; $b[$k + 8] = 0.0; // the rows between the corners
+        foreach ([$y, $y + $h - $e] as $py) { // the columns between them, above and below
+            $at = $this->n * 16;
+            $this->copyIn($run);
+            $b[$at] = $x + $e; $b[$at + 1] = $py; $b[$at + 2] = $w - 2 * $e; $b[$at + 3] = $e; $b[$at + 8] = 0.0;
+        }
+        foreach ([[$x, $y], [$x + $w - $e, $y], [$x, $y + $h - $e], [$x + $w - $e, $y + $h - $e]] as [$px, $py]) {
+            [$cx, $cy] = [max($px, $clip[0]), max($py, $clip[1])];
+            [$cw, $ch] = [min($px + $e, $clip[2]) - $cx, min($py + $e, $clip[3]) - $cy];
+            if ($cw <= 0 || $ch <= 0) { continue; } // clipped out
+            $at = $this->n * 16;
+            $this->copyIn($run);
+            $b[$at + 12] = $cx; $b[$at + 13] = $cy; $b[$at + 14] = $cw; $b[$at + 15] = $ch;
+        }
     }
 
     /**
@@ -433,7 +474,8 @@ final class DisplayList
      */
     private function occluder(int $i, float $x, float $y, float $w, float $h, float $radius, float $border): void
     {
-        $m = 0.3 * $radius + 0.5 + $border; // a rounded corner's curve stays outside the rect in by 0.29 of its radius
+        $m = $radius <= 0.0 && $border <= 0.0 && $this->pixels > 0 ? 0.0 // square, on whole pixels: it covers each of its pixels whole, so another fill of the same rect over it hides it (a page's background over the window's)
+            : 0.3 * $radius + 0.5 + $border; // a rounded corner's curve stays outside the rect in by 0.29 of its radius
         $c = $this->clip;
         $x0 = max($x + $m, $c[0]); $y0 = max($y + $m, $c[1]);
         $x1 = min($x + $w - $m, $c[0] + $c[2]); $y1 = min($y + $h - $m, $c[1] + $c[3]);

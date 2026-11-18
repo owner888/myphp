@@ -34,6 +34,8 @@ final class Window implements Platform\Window
     private mixed $eglContext = null;
     private mixed $eglSurface = null;
     private ?Gl $gl = null;
+    /** The last frame's quads, backdrop blurs, and the milliseconds its GL calls and its swap took (lastDraw). @var array{0: int, 1: int, 2: float, 3: float} */
+    private array $drawn = [0, 0, 0.0, 0.0];
 
     public function __construct(
         private readonly Backend $b,
@@ -392,10 +394,13 @@ final class Window implements Platform\Window
             ($this->frame)($list, (float)$widthPts, (float)$heightPts);
 
             $clear = [0.0, 0.0, 0.0, 1.0];
+            $t0 = hrtime(true);
             $this->gl->draw($list, max(1, $wPx), max(1, $hPx), $density * $list->zoom, $clear);
+            $t1 = hrtime(true);
 
             $egl = Android::egl();
             $ret = $egl->eglSwapBuffers($this->eglDisplay, $this->eglSurface);
+            $this->drawn = [$list->n, count($list->glass), ($t1 - $t0) / 1e6, (hrtime(true) - $t1) / 1e6];
             if (!$ret) {
                 Logger::error("eglSwapBuffers failed: " . $egl->eglGetError(), "android");
             } else {
@@ -853,7 +858,11 @@ final class Window implements Platform\Window
     public function repaintAsked(): bool { return $this->repaintOnly; }
     public function displayRate(): float { return 120.0; }
     public function setProgressBar(string $state, float $value): void {}
-    public function lastDraw(): string { return ''; }
+    /** How the last frame was drawn, for FrameStats: its quads, the backdrops blurred for it, and how long the GL calls and the swap took. */
+    public function lastDraw(): string
+    {
+        return sprintf('GLES, %d quads, %d backdrop blurs, draw %.1f, swap %.1f', ...$this->drawn);
+    }
     public function backingScale(): float { return $this->density; }
     public function isKey(): bool { return true; }
     public function setAcceptsFirstMouse(bool $on): void {}
