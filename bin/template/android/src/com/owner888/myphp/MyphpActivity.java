@@ -669,8 +669,8 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 );
             int sessionId = installer.createSession(params);
             try (android.content.pm.PackageInstaller.Session session = installer.openSession(sessionId);
-                 FileInputStream in = new FileInputStream(apkFile);
-                 OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
+                 java.io.FileInputStream in = new java.io.FileInputStream(apkFile);
+                 java.io.OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
                 byte[] buf = new byte[65536];
                 int n;
                 while ((n = in.read(buf)) != -1) {
