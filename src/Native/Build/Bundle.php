@@ -54,12 +54,15 @@ final class Bundle
      */
     public static function infoPlist(array $c, string $executable, bool $icon, bool $catalog, array $localizations, array $updates, bool $production): array
     {
+        $rawVer = (string)$c['version'];
+        [$shortVer, $plusBuild] = array_pad(explode('+', $rawVer, 2), 2, '');
+        $buildVer = (string)($c['buildNumber'] ?? ($plusBuild !== '' ? $plusBuild : $shortVer));
         $d = [
             'CFBundleName' => $c['name'],
             'CFBundleDisplayName' => $c['name'],
             'CFBundleIdentifier' => $c['identifier'],
-            'CFBundleVersion' => $c['version'],
-            'CFBundleShortVersionString' => $c['version'],
+            'CFBundleVersion' => $buildVer,
+            'CFBundleShortVersionString' => $shortVer,
             'CFBundleExecutable' => $executable,
             'CFBundlePackageType' => 'APPL',
             'CFBundleInfoDictionaryVersion' => '6.0',

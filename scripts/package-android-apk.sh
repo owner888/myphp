@@ -68,8 +68,15 @@ ANDROID_CHANNEL="${MYPHP_ANDROID_CHANNEL:-apk}"
 if [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/myphp.json" ]; then
     BUNDLE_ID="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["identifier"] ?? "com.owner888.myphp";' "${PROJECT_DIR}/myphp.json")"
     APP_LABEL="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["name"] ?? $c["displayName"] ?? $argv[2];' "${PROJECT_DIR}/myphp.json" "$APP_LABEL")"
-    APP_VERSION="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["version"] ?? "1.0.0";' "${PROJECT_DIR}/myphp.json")"
-    VERSION_CODE="$(php -r '$v = $argv[1]; if (preg_match("/^(\d+)\.(\d+)\.(\d+)/", $v, $m)) { echo ($m[1] * 10000 + $m[2] * 100 + $m[3]); } else { echo "1"; }' "$APP_VERSION")"
+    APP_VERSION="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; $v = (string)($c["version"] ?? "1.0.0"); echo explode("+", $v, 2)[0];' "${PROJECT_DIR}/myphp.json")"
+    VERSION_CODE="$(php -r '
+        $c = json_decode(file_get_contents($argv[1]), true) ?: [];
+        $raw = (string)($c["version"] ?? "1.0.0");
+        [$ver, $plus] = array_pad(explode("+", $raw, 2), 2, "");
+        $build = (int)($c["buildNumber"] ?? ($plus !== "" ? $plus : 0));
+        $base = preg_match("/^(\d+)\.(\d+)\.(\d+)/", $ver, $m) ? ($m[1] * 10000 + $m[2] * 100 + $m[3]) : 0;
+        echo $build >= 20000 ? $build : max(1, $base + $build);
+    ' "${PROJECT_DIR}/myphp.json")"
     if [ -z "${MYPHP_ANDROID_CHANNEL:-}" ]; then
         ANDROID_CHANNEL="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["android"]["channel"] ?? $c["channel"] ?? "apk";' "${PROJECT_DIR}/myphp.json")"
     fi

@@ -104,9 +104,9 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>${APP_VERSION}</string>
+    <string>${APP_VERSION%%+*}</string>
     <key>CFBundleVersion</key>
-    <string>${APP_VERSION}</string>
+    <string>${APP_VERSION#*+}</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     ${RUN_KEY}
