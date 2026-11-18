@@ -322,7 +322,7 @@ trait ContextMobile
                 $this->end();
                 if ($this->clicked($back)) { $router->back(); }
             } elseif ($leading !== null) { // the items at the bar's start, in a capsule of glass as the trailing ones are
-                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER)->shrink(0);
+                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER)->shrink(0)->menuAnchor = true;
                   $leading();
                 $this->end();
             }
@@ -334,7 +334,7 @@ trait ContextMobile
           }
           $this->row(0, 0, 1)->basis(0)->alignItems(Node::CENTER)->justify(Node::END);
             if ($trailing !== null) {
-                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER)->shrink(0); // as wide as its items, each on one line ("13 frames" did not wrap in UIKit's bar either)
+                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER)->shrink(0)->menuAnchor = true; // as wide as its items, each on one line ("13 frames" did not wrap in UIKit's bar either)
                   $trailing();
                 $this->end();
             }
@@ -504,6 +504,7 @@ trait ContextMobile
         $origin = [0.5, 0.0]; // where the menu grows from: the button's corner
         if ($isButton && $m['rect'] !== null) { // iOS 26's: the menu's corner on the button's, the end of the button's side of the window, growing from it
             $b = $m['rect'];
+            if (($anchor = $rt->menuAnchorOf((int)$m['target'])) !== null && ($ar = $rt->rectOf($anchor)) !== null) { $b = $ar; } // a button in a toolbar's capsule: the menu's corner on the capsule's, as iOS 26's
             $startSide = $b[0] + $b[2] / 2 < $this->width / 2;
             $x = max(8.0, min($startSide ? $b[0] : $b[0] + $b[2] - $w, $this->width - 8 - $w));
             $y = $b[1];

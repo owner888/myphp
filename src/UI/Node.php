@@ -176,6 +176,8 @@ final class Node
     public ?object $movie = null;
     /** The system's material the node's box shows (systemMaterial()): its name and appearance, dark, light or null for the app's. @var ?array{0: string, 1: ?bool} */
     public ?array $systemMaterial = null;
+    /** Whether a menu button inside opens its menu at this node's corner, not its own: a toolbar's capsule of glass, which the menu of the button in it grows from. */
+    public bool $menuAnchor = false;
     public ?string $accepts = null;
     /** A native drag source (Context::dragData): what makes its data as the drag starts, and its options; a native drop target's options (Context::dropData); whether it takes files dragged from other apps (Context::droppedFiles). @var ?array{0: \Closure(): \MyPHP\Transfer\Data, 1: \MyPHP\Transfer\DragOptions} */
     public ?array $dataSource = null;

@@ -37,6 +37,8 @@ trait RuntimeMenu
     private array $menuNodes = [];
     /** The nodes of this frame laid out right to left, whose menus open to the left (mygo's state.rtl). @var array<int, true> */
     private array $menuRtl = [];
+    /** @var array<int, true> the nodes this frame that a menu button inside grows its menu from (Node::$menuAnchor) */
+    private array $menuAnchors = [];
 
     /**
      * Shows a menu built in a frame, once the frame is done (mygo's host
@@ -74,10 +76,20 @@ trait RuntimeMenu
         $this->popupMenu = fn(array $items, float $x, float $y, bool $rtl, Closure $chosen) => null;
     }
 
+    /** The node around $id that its menu grows from (Node::$menuAnchor), a toolbar's capsule, null for none. */
+    public function menuAnchorOf(int $id): ?int
+    {
+        for ($a = $this->parents[$id] ?? 0, $i = 0; $a !== 0 && $i < 64; $a = $this->parents[$a] ?? 0, $i++) {
+            if (isset($this->menuAnchors[$a])) { return $a; }
+        }
+        return null;
+    }
+
     /** Notes the menus of $n for this frame's presses and keys. */
     private function recordMenus(Node $n): void
     {
         if ($n->rtl) { $this->menuRtl[$n->id] = true; }
+        if ($n->menuAnchor) { $this->menuAnchors[$n->id] = true; }
         $f = ($n->contextMenu ? 1 : 0) | ($n->menuButton ? 2 : 0);
         if ($f !== 0 && !$n->isDisabled()) {
             $this->menuNodes[$n->id] = $f;

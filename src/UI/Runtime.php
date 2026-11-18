@@ -912,7 +912,7 @@ final class Runtime
         $this->parents = []; $this->inertIds = []; $this->passing = []; $this->disabledIds = []; $this->attachedTo = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->forgetSelectable();
-        $this->menuNodes = []; $this->menuRtl = [];
+        $this->menuNodes = []; $this->menuRtl = []; $this->menuAnchors = [];
         $this->modal = null;
         $this->record($root);
         $this->memoSweep();
@@ -2251,6 +2251,7 @@ final class Runtime
             $this->recordSelectable($n, $parent);
         }
         if ($n->rtl) { $this->menuRtl[$n->id] = true; }
+        if ($n->menuAnchor) { $this->menuAnchors[$n->id] = true; }
         if (($n->contextMenu || $n->menuButton) && !$disabled) {
             $this->menuNodes[$n->id] = ($n->contextMenu ? 1 : 0) | ($n->menuButton ? 2 : 0);
         }
