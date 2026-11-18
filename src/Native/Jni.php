@@ -208,7 +208,7 @@ final class Jni
         $types = self::parseArgDescriptors($sig);
         $n = count($types);
         if ($n === 0) {
-            return [null, []];
+            return [null, [], null];
         }
 
         $arr = $f->new("jvalue[$n]");

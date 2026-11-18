@@ -808,15 +808,17 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                     android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
                 );
             int sessionId = installer.createSession(params);
-            try (android.content.pm.PackageInstaller.Session session = installer.openSession(sessionId);
-                 java.io.FileInputStream in = new java.io.FileInputStream(apkFile);
-                 java.io.OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
-                byte[] buf = new byte[65536];
-                int n;
-                while ((n = in.read(buf)) != -1) {
-                    out.write(buf, 0, n);
+            try (android.content.pm.PackageInstaller.Session session = installer.openSession(sessionId)) {
+                // the stream is closed before the commit, which the system refuses ("Files still open") while it is not
+                try (java.io.FileInputStream in = new java.io.FileInputStream(apkFile);
+                     java.io.OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        out.write(buf, 0, n);
+                    }
+                    session.fsync(out);
                 }
-                session.fsync(out);
                 String action = sInstance.getPackageName() + ".INSTALL_COMMIT_" + sessionId;
                 sInstance.registerReceiver(new BroadcastReceiver() {
                     @Override
@@ -848,6 +850,8 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             }
         } catch (Exception e) {
             Log.e(TAG, "installApkFile error", e);
+            sApkInstallMessage = String.valueOf(e.getMessage());
+            sApkUpgradeProgress = -3;
         }
     }
     // END_APK_SELF_UPDATE
