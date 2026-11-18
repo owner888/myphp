@@ -644,24 +644,28 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         });
     }
 
+    private static Boolean sIsPlayStoreBuild = null;
+
     public static boolean isPlayStoreBuild() {
         // BEGIN_PLAY_CHANNEL_FLAG
         boolean playBuild = false;
         // END_PLAY_CHANNEL_FLAG
         if (playBuild) return true;
+        if (sIsPlayStoreBuild != null) return sIsPlayStoreBuild;
         if (sInstance == null) return false;
         try {
             android.content.pm.PackageManager pm = sInstance.getPackageManager();
             String pkg = sInstance.getPackageName();
             android.content.pm.PackageInfo pi = pm.getPackageInfo(pkg, 0);
             if (pi.splitNames != null && pi.splitNames.length > 0) {
-                return true;
+                return sIsPlayStoreBuild = true;
             }
             android.content.pm.InstallSourceInfo isi = pm.getInstallSourceInfo(pkg);
             String installer = isi != null ? isi.getInstallingPackageName() : null;
             if ("com.android.vending".equals(installer) || "com.google.android.feedback".equals(installer)) {
-                return true;
+                return sIsPlayStoreBuild = true;
             }
+            return sIsPlayStoreBuild = false;
         } catch (Exception ignored) {
         }
         return false;

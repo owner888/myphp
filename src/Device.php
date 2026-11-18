@@ -15,6 +15,7 @@ final class Device
 {
     private static ?DeviceType $override = null;
     private static ?string $channelOverride = null;
+    private static ?string $detectedChannel = null;
 
     /** Overrides the device type (for previews or headless tests); null restores detection. */
     public static function setType(?DeviceType $type): void
@@ -58,15 +59,18 @@ final class Device
             }
             return 'dmg';
         }
+        if (self::$detectedChannel !== null) {
+            return self::$detectedChannel;
+        }
         if (App::isAndroid()) {
             try {
                 $cls = \MyPHP\Native\Jni::cls('com.owner888.myphp.MyphpActivity');
                 if (\MyPHP\Native\Jni::callStatic($cls, 'isPlayStoreBuild', '()Z')) {
-                    return 'play';
+                    return self::$detectedChannel = 'play';
                 }
             } catch (\Throwable) {
             }
-            return 'apk';
+            return self::$detectedChannel = 'apk';
         }
         return 'desktop';
     }

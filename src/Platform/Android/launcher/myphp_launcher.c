@@ -134,19 +134,20 @@ float myphp_get_density(void) {
 int myphp_read_event(MyphpEvent *ev, int timeout_ms) {
     if (g_event_pipe[0] < 0) return 0;
 
-    // 1. Drain any already-queued event in the non-blocking pipe immediately
+    // Pump ALooper non-blockingly first so AChoreographer 120Hz VSync callbacks are never starved by touch events
+    ALooper_pollOnce(0, NULL, NULL, NULL);
+
     ssize_t n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
     if (n == sizeof(MyphpEvent)) {
         return 1;
     }
 
-    // 2. Wait in ALooper_pollOnce, which monitors BOTH AChoreographer's 120Hz VSync fd
-    // and g_event_pipe[0] simultaneously with zero polling delay
-    ALooper_pollOnce(timeout_ms > 0 ? timeout_ms : 0, NULL, NULL, NULL);
-
-    n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
-    if (n == sizeof(MyphpEvent)) {
-        return 1;
+    if (timeout_ms > 0) {
+        ALooper_pollOnce(timeout_ms, NULL, NULL, NULL);
+        n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
+        if (n == sizeof(MyphpEvent)) {
+            return 1;
+        }
     }
     return 0;
 }

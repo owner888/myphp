@@ -175,10 +175,10 @@ final class Backend implements Platform\Backend
             Window::instance()?->onAccessOn();
         }
 
-        // Render at most one frame per VSync (EVENT_CHOREOGRAPHER), after all input and lifecycle events have been consumed
-        if ($needsRender) {
+        // Render after all queued input/VSync events have been coalesced (eglSwapBuffers paces to display VSync)
+        $win = Window::instance();
+        if ($needsRender || ($win !== null && $win->isFrameRequested())) {
             try {
-                $win = Window::instance();
                 $win?->onFrame();
             } catch (\Throwable $e) {
                 \MyPHP\Logger::error("Exception in onFrame: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");

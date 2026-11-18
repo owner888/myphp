@@ -370,15 +370,16 @@ final class Window implements Platform\Window
 
         if ($this->flingActive && ($inp = $this->w->input) !== null) {
             $nowNs = hrtime(true);
-            $dt = max(0.001, min(0.05, ($nowNs - $this->flingLastTime) / 1e9));
+            $dt = max(0.001, min(0.032, ($nowNs - $this->flingLastTime) / 1e9));
             $this->flingLastTime = $nowNs;
-            $decay = exp(-$dt / 0.325);
+            // Native mobile scroll deceleration time constant (~0.55s, matching UIScrollView/SplineOverScroller glide)
+            $decay = exp(-$dt / 0.55);
             $this->flingVx *= $decay;
             $this->flingVy *= $decay;
-            if (hypot($this->flingVx, $this->flingVy) < 18.0) {
+            if (hypot($this->flingVx, $this->flingVy) < 8.0) {
                 $this->flingActive = false;
             } else {
-                $inp->push(['scroll', $this->touchStartX, $this->touchStartY, $this->flingVx * $dt, $this->flingVy * $dt, true, false]);
+                $inp->push(['scroll', $this->touchStartX, $this->touchStartY, $this->flingVx * $dt, $this->flingVy * $dt, true, true]);
                 $this->requestFrame();
             }
         }
@@ -504,6 +505,7 @@ final class Window implements Platform\Window
         $ptX = $x / $density;
         $ptY = $y / $density;
         $time = hrtime(true);
+        $sampleTime = $timeMs > 0 ? $timeMs * 1_000_000 : $time;
 
         $input->mouse($ptX, $ptY);
         $input->mods = 0;
@@ -526,7 +528,7 @@ final class Window implements Platform\Window
                 $this->touchIsScrolling = false;
                 $this->touchAxisTaken = false;
                 $this->touchMenuHeld = false;
-                $this->touchHistory = [[$time, $ptX, $ptY]];
+                $this->touchHistory = [[$sampleTime, $ptX, $ptY]];
 
                 // Check if touch begins inside the focused text field box
                 $this->touchInField = false;
@@ -608,14 +610,13 @@ final class Window implements Platform\Window
                     }
                 }
 
-                $now = hrtime(true);
-                $this->touchHistory[] = [$now, $ptX, $ptY];
-                while (count($this->touchHistory) > 1 && ($now - $this->touchHistory[0][0]) > 120_000_000) {
+                $this->touchHistory[] = [$sampleTime, $ptX, $ptY];
+                while (count($this->touchHistory) > 2 && ($sampleTime - $this->touchHistory[0][0]) > 100_000_000) {
                     array_shift($this->touchHistory);
                 }
 
                 $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
-                if (!$this->touchIsScrolling && $dist > 8.0) {
+                if (!$this->touchIsScrolling && $dist > 6.0) {
                     $this->touchIsScrolling = true;
                     $rt?->cancelTouchPress();
                     $this->touchLastX = $ptX;
@@ -665,15 +666,15 @@ final class Window implements Platform\Window
                         $first = $this->touchHistory[0];
                         $last = array_last($this->touchHistory);
                         $dt = ($last[0] - $first[0]) / 1e9;
-                        if ($dt > 0.008 && $dt < 0.25) {
+                        if ($dt > 0.004 && $dt < 0.25 && ($sampleTime - $last[0]) < 80_000_000) {
                             $vx = ($last[1] - $first[1]) / $dt;
                             $vy = ($last[2] - $first[2]) / $dt;
                             $speed = hypot($vx, $vy);
-                            if ($speed > 50.0) {
+                            if ($speed > 45.0) {
                                 $this->flingActive = true;
-                                $this->flingVx = max(-3500.0, min(3500.0, $vx));
-                                $this->flingVy = max(-3500.0, min(3500.0, $vy));
-                                $this->flingLastTime = $time;
+                                $this->flingVx = max(-6000.0, min(6000.0, $vx));
+                                $this->flingVy = max(-6000.0, min(6000.0, $vy));
+                                $this->flingLastTime = hrtime(true);
                             }
                         }
                     }
