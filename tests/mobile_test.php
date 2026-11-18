@@ -428,3 +428,31 @@ $h = $phone(fn() => ZStack()(Color(\Color::rgb(0x123456))->ignoresSafeArea(edges
 same([0.0, 59.0, 393.0, 793.0], $h->rect($h->byLabel('fill')), 'on the sides it names');
 $h = $phone(fn() => ZStack()(Color(\Color::rgb(0x123456))->ignoresSafeArea(\SafeAreaRegions::container)->accessibilityLabel('fill')), 300.0);
 same([0.0, 0.0, 393.0, 552.0], $h->rect($h->byLabel('fill')), 'the container\'s alone stops at the keyboard');
+
+// safeAreaInset(): a bar along the bottom of the view, which ends where the bar begins; the safe area's bottom is the bar's, so a TabView's bar floats over it and the bar's background reaches the window's edge.
+$phone = fn(\Closure $view) => new Headless(function (Context $c) use ($view): void {
+    $c->windowSafeArea = $c->safeArea = [50.0, 0.0, 34.0, 0.0];
+    \MyPHP\UI\Content::render($view, $c);
+}, 390, 844);
+$middle = fn(Headless $h, string $text): float => ($r = $h->rect($h->byText($text)))[1] + $r[3] / 2;
+$tab = 0;
+$tabs = fn() => \TabView(selection: $tab)(\Tab('One', systemImage: 'house.fill', value: 0)(\Text('Page')), \Tab('Two', systemImage: 'star.fill', value: 1)(\Text('Other')));
+$h = $phone(fn() => $tabs()->safeAreaInset(\Edge::bottom, content: fn() => \Text('Bar')->frame(maxWidth: INF, height: 44)->background(\Color::blue)));
+$h->rt->touch = true;
+$h->frame();
+same(844.0 - 34.0 - 22.0, $middle($h, 'Bar'), 'the bar across the bottom, 44 high over the home indicator');
+$label = $h->rect($h->byText('Two'));
+check($label[1] + $label[3] <= 844.0 - 34.0 - 44.0 - 8.0 && $label[1] > 844.0 - 34.0 - 44.0 - 8.0 - 56.0, 'the tab bar floats 8 over the bar, not over the home indicator');
+$h = $phone($tabs);
+$h->rt->touch = true;
+$h->frame();
+$label = $h->rect($h->byText('Two'));
+check($label[1] > 844.0 - 34.0 - 56.0, 'without it, over the home indicator');
+$h = $phone(fn() => \VStack()(\Spacer(), \Text('Bottom'))->frame(maxWidth: INF, maxHeight: INF)
+    ->safeAreaInset(\Edge::top, content: fn() => \Text('Above')->frame(maxWidth: INF, height: 30))
+    ->safeAreaInset(\Edge::bottom, content: fn() => \Text('Bar')->frame(maxWidth: INF, height: 44)));
+$h->frame();
+same(50.0 + 15.0, $middle($h, 'Above'), 'one along the top, under the status bar');
+same(844.0 - 34.0 - 22.0, $middle($h, 'Bar'), 'a view inside the safe area: the bar over the home indicator, once');
+$r = $h->rect($h->byText('Bottom'));
+same(844.0 - 34.0 - 44.0, $r[1] + $r[3], 'the view ends where the bar begins');

@@ -73,7 +73,13 @@ screen's edges on the sides where the view touches the safe area
 `->ignoresSafeArea()` takes the view itself there, what is inside it too,
 as a `Color(...)` or a gradient at the back of a `ZStack`. A `NavigationStack`'s bar reaches
 into the status bar, a `TabView`'s bar floats over the home indicator, and
-what scrolls under them goes on to the screen's edges. While a field has
+what scrolls under them goes on to the screen's edges.
+`->safeAreaInset(Edge::bottom, content: fn() => …)` (or `Edge::top`) puts a bar of yours along that edge of a view,
+as SwiftUI's: the view ends where the bar begins and the safe area on that side is the bar's, so a `TabView`'s bar
+floats over yours and your bar's background goes on to the screen's edge. `UpdateCapsule(version:, status:, progress:,
+onAction:, tint:, actionTitle:)` is such a bar: an app's update, as Telegram's on Android (a bar of the accent color
+44 points high, a bold title in its middle after a white disc, the version at its end; "Update <app>",
+"Downloading 45%...", "Update Now"), nothing while `$version` is empty. While a field has
 the focus, the keyboard takes the bottom and what it would cover of the
 field scrolls into view. On the desktop there is none of it.
 

@@ -331,15 +331,16 @@ abstract class View
         return $by === [0.0, 0.0, 0.0, 0.0] ? null : [[$t, $r, $b + $kb, $l], $by];
     }
 
-    /** Places supplementary content in the safe area beside the view, as SwiftUI's safeAreaInset(edge:alignment:spacing:content:). */
-    public function safeAreaInset(\Edge $edge = \Edge::bottom, \Alignment $alignment = \Alignment::center, ?float $spacing = null, ?Closure $content = null): static
+    /**
+     * $content's view along the top or the bottom edge of the view, which gives it the room, as SwiftUI's
+     * safeAreaInset(edge:content:): the view ends where it begins, and the safe area on that side is its from then
+     * on, so a TabView's bar floats over it, not over the home indicator, and a background of its bleeds to the
+     * window's edge. TabView(…)(…)->safeAreaInset(Edge::bottom, content: fn() => UpdateCapsule(…)).
+     */
+    public function safeAreaInset(\Edge $edge = \Edge::bottom, ?Closure $content = null): static
     {
-        if ($content !== null) {
-            $v = $content();
-            if ($v instanceof View) {
-                $this->mods[] = ['overlay', [$v, $edge === \Edge::top ? \Alignment::top : \Alignment::bottom]];
-            }
-        }
+        $v = $content !== null ? $content() : null;
+        if ($v instanceof View) { $this->wraps[] = ['safeAreaInset', [$edge === \Edge::top ? 0 : 2, $v]]; }
         return $this;
     }
 
@@ -770,6 +771,33 @@ abstract class View
 
     /** Builds the view into $c in the environment $env: an app's view never calls it, Content and the views inside do. @internal */
     public function render(Context $c, Env $env): ?Node
+    {
+        $insets = array_column(array_filter($this->wraps, fn(array $w): bool => $w[0] === 'safeAreaInset'), 1);
+        if ($insets === []) { return $this->renderInSafeArea($c, $env); }
+        // safeAreaInset(): a column of the views along the top, the view, the views along the bottom, each of those inside the safe area on its side, which the view then has none of
+        $safe = $c->safeArea;
+        $bar = function (View $v, float $top, float $bottom) use ($c, $env): void { // $top, $bottom: the safe area the one at the window's edge is kept out of
+            $c->open(new Node(Node::CONTAINER, Node::COLUMN))->alignSelf(Node::STRETCH)->shrink(0)->padding($top, $c->safeArea[1], $bottom, $c->safeArea[3]);
+              $v->render($c, $env->along(Node::COLUMN));
+            $c->end();
+        };
+        $above = array_reverse(array_column(array_filter($insets, fn(array $i): bool => $i[0] === 0), 1)); // the first given the nearest to the view, as SwiftUI's
+        $below = array_column(array_filter($insets, fn(array $i): bool => $i[0] === 2), 1);
+        $col = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
+          foreach ($above as $i => $v) { $bar($v, $i === 0 ? $safe[0] : 0.0, 0.0); }
+          if ($above !== []) { $c->safeArea[0] = 0.0; }
+          if ($below !== []) { $c->safeArea[2] = 0.0; }
+          $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
+            $inner = $this->renderInSafeArea($c, $env->along(Node::COLUMN));
+          $c->end();
+          foreach ($below as $i => $v) { $bar($v, 0.0, $i === count($below) - 1 ? $safe[2] : 0.0); }
+        $c->end();
+        $c->safeArea = $safe;
+        return $inner === null ? null : $col;
+    }
+
+    /** render() inside what safeAreaInset() left of the safe area. */
+    private function renderInSafeArea(Context $c, Env $env): ?Node
     {
         $env = $this->sets === [] ? $env : $env->with($this->sets);
         $bar = null; // a toolbar no stack's bar nor split view takes: a bar of its own over the view, as a Mac window's toolbar

@@ -287,7 +287,14 @@ final class MyphpAccess extends AccessibilityNodeProvider {
         }
     }
 
+    /** Whether events may be sent: AccessibilityManager.sendAccessibilityEvent throws while accessibility is off, as it is again after whoever asked for the elements (a screen reader, a UI dump) has gone. */
+    private boolean on() {
+        AccessibilityManager am = (AccessibilityManager) host.getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+        return am != null && am.isEnabled();
+    }
+
     private void send(int virtual, int type) {
+        if (!on()) { return; }
         AccessibilityEvent ev = new AccessibilityEvent(type);
         ev.setPackageName(host.getContext().getPackageName());
         ev.setSource(host, virtual);
@@ -297,6 +304,7 @@ final class MyphpAccess extends AccessibilityNodeProvider {
     }
 
     private void sendHost(int type) {
+        if (!on()) { return; }
         AccessibilityEvent ev = new AccessibilityEvent(type);
         ev.setPackageName(host.getContext().getPackageName());
         ev.setSource(host);

@@ -153,7 +153,7 @@ from .myphp/dev. Work in `src/Native/Build/` (`tests/build_test.php`). Project `
 ## Working on it
 
 - PHP ≥ 8.4 (8.5 recommended) with `ext-ffi`; `myphp run` and `myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
-- Before handing back: `php -l` on changed files; run relevant checks (`php tests/run.php [name]`); full suite only for final milestones; ask the developer to run GUI examples; `php tests/bench.php` after per-frame changes.
+- Before handing back: `php -l` on changed files; run only the tests of what you changed (`php tests/run.php <name>...`), never the whole suite (the developer's rule: all of it is CI's); ask the developer to run GUI examples; `php tests/bench.php` after per-frame changes.
 - New ObjC calls: selector/types from Apple's headers, letters in `ObjC::MAP`, structs via `ObjC::$c->new`/`ObjC::rect`, no variadics (`arrayWithObjects:`).
 - Record each solved problem in `docs/architecture.md` (one paragraph).
 - CJK in the iOS Simulator from the Mac's keyboard: switch the input method inside the simulator (iOS's keyboard), not the Mac's input source.
