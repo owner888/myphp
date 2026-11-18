@@ -181,6 +181,7 @@ or a user's tag.
 | `ProgressView()`, `ProgressView(value:)`, `Gauge` | the same |
 | `Link("Site", destination:)` | `WebLink('Site', destination: 'https://…')` |
 | `Menu("Sort") { Button("Name") { } }` | `Menu('Sort')(Button('Name', action: …), …)` |
+| `Menu("Sort", systemImage: "arrow.up.arrow.down") { }` | `Menu('Sort', systemImage: 'arrow.up.arrow.down')(Section('Sort By')(Picker(…)), Divider(), Button(…))`: the icon alone in a toolbar; its Sections are groups (a line between, a header over each), a Picker's choice checked; on a phone it opens at its toolbar's capsule, its corner on the capsule's, growing from it |
 | `.contextMenu { }` | `->contextMenu(Button(…), Divider(), …)`: a right click on a Mac, a long press on a phone |
 | `Image(systemName:)`, `Image("asset")` | `Image(systemName: 'gearshape')`, `Image(file: $path)`, `Image($svg)` (`->resizable()`, `->scaledToFit()`, `->scaledToFill()`, `->aspectRatio(ContentMode::fit)`) |
 | `AsyncImage(url:)` | `AsyncImage($url, content: fn(ImageView $img) => $img->resizable(), placeholder: fn() => ProgressView())` |
@@ -252,6 +253,9 @@ $view = fn() => ListView($app->files, id: 'id')(fn(array $f) => HStack()(
 | `.navigationBarTitleDisplayMode(.large)` | `->navigationBarTitleDisplayMode(TitleDisplayMode::large)` |
 | `NavigationSplitView { sidebar } detail: { }` | `NavigationSplitView(ListView(…), $detail)`, for a sidebar of the app's data |
 | `TabView { Tab("A", systemImage:, value:) { } }` | `TabView(selection: $app->tab)(Tab('A', systemImage: 'house', value: 'a')( … ), …)`; `->tabViewStyle(TabViewStyle::sidebarAdaptable)` for every screen; `->tabBarMinimizeBehavior(TabBarMinimizeBehavior::onScrollDown)` |
+| `TabSection("Tools") { Tab… }` | `TabSection('Tools')(Tab(…), Tab(…))`: tabs grouped under a title, in a sidebar and in a phone's More list |
+| more than five tabs | by itself: a phone's bar has the first four and a More tab (a list of the others, grouped as the sections were; a tap on More again goes back to it), a sidebar has them all |
+| `ToolbarItem(placement: .topBarLeading) { }` | `ToolbarItem('leading', fn() => …)` inside `->toolbar(…)`: at the start of the bar, where there is no way back |
 | `Tab(value:role: .search)`, `role: .prominent` | `Tab(value: 'search', role: TabRole::search)`: titled Search, in the bar with the others (iOS 27's); `TabRole::prominent` apart at the bar's end |
 
 ```php
@@ -273,6 +277,7 @@ property the control sets back to false when the user dismisses it.
 |---|---|
 | `.sheet(isPresented: $open) { }` | `->sheet(isPresented: $app->open, content: fn() => …)`: a dialog on the desktop, a sheet from the bottom on a phone, a page sheet on an iPad |
 | `.presentationDetents([.medium, .large])` | the same on the sheet's content: `[PresentationDetent::medium(), PresentationDetent::large()]` |
+| a sheet of a stack or a list, `.presentationDetents([.medium, .large])` | filled to its edges on the system's elevated gray (the page the sheet's, its sections a step lighter), as wide as the window, moving as one piece as it is dragged between its detents; a tap on a field in it does not close it |
 | `.presentationCornerRadius(20)`, `.presentationDragIndicator(.hidden)` | the same on the sheet's content |
 | `.alert("Title", isPresented:) { Button("OK") {} } message: { }` | `->alert('Title', isPresented: $app->asking, actions: [Button(…), …], message: '…')` |
 | `.confirmationDialog` | `->confirmationDialog('Title', isPresented: $app->asking, actions: [Button(…), Button('Cancel', role: ButtonRole::cancel)])` |

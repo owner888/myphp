@@ -236,12 +236,13 @@ Android too (only the font differs, Roboto there):
 
 | | |
 |---|---|
-| `TabView` | the tab bar floating over the bottom, a capsule of glass, icons over labels, the chosen one in the accent; `tabBarMinimizeBehavior(.onScrollDown)` shrinks it; `Tab(role: .search)`, `Tab(role: .prominent)` |
+| `TabView` | the tab bar floating over the bottom, a capsule of glass, icons over labels, the chosen one in the accent; `tabBarMinimizeBehavior(.onScrollDown)` shrinks it; `Tab(role: .search)`, `Tab(role: .prominent)`; over five tabs the first four and a More tab listing the rest, `TabSection` groups them |
 | `NavigationStack` | the bar across the top, clear, the way back a chevron in a circle of glass, a swipe from the start edge; `toolbar()` a capsule of glass at its end; large titles |
-| `.sheet` | a panel rising from the bottom, floating 8 in, a grabber over it; `presentationDetents` |
+| `.sheet` | a panel rising from the bottom, a grabber over it; `presentationDetents` for two stages; a stack or a list inside fills it to its edges on the elevated gray, moving as one piece as it is dragged |
 | `.confirmationDialog` | choices rising from the bottom with a Cancel |
 | `.alert` | UIKit's alert |
 | `Form`, `ListView` of `Section`s | an inset grouped list, as Settings: rows 52 high in rounded groups |
+| `Menu` in a toolbar | its icon alone, its menu opening at the toolbar's capsule, grown from its corner with a spring, the check before the items, groups with headers and lines |
 | `.swipeActions`, `.refreshable`, `.contextMenu` | Mail's swipe, pull to refresh, the long-press menu over the blurred window |
 | `.searchable`, `.searchScopes` | iOS 26's search field across the top, its scopes under it |
 
