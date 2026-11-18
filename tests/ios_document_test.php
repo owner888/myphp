@@ -44,7 +44,7 @@ $m = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/launcher/main.m')
 $cdef = (string)file_get_contents(__DIR__ . '/../src/Native/iOS.php');
 $fields = function (string $src): string {
     preg_match('/typedef struct \{(.*?)\}\s*MyphpInputEvent;/s', $src, $m);
-    return (string)preg_replace(['~//[^\n]*~', '/\s+/'], ['', ' '], trim($m[1] ?? ''));
+    return trim((string)preg_replace(['~//[^\n]*~', '/\s+/'], ['', ' '], $m[1] ?? '')); // trimmed once the comments are gone: one after the last field leaves a space
 };
 same($fields($cdef), $fields($m), 'MyphpInputEvent the same in main.m and Native\iOS: ' . $fields($m));
 check(str_contains($m, 'void myphp_ios_set_text_document(int on, const char *text, int from, int to, int acked)') && str_contains($cdef, 'void myphp_ios_set_text_document(int on, const char *text, int from, int to, int acked);'), 'myphp_ios_set_text_document, in both');
