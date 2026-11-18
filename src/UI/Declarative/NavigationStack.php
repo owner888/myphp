@@ -56,9 +56,13 @@ final class NavigationStack extends View
           $toolbar = $entry->toolbar ?? null;
           $hideBar = ($entry->navBarHidden ?? false) || ($this->router->title() === '' && !$this->router->canGoBack() && $toolbar === null && $large === null);
           if ($entry->navBarHidden ?? false) { $c->safeArea[0] = 0.0; }
+          $leadingItems = array_values(array_filter($toolbar ?? [], fn($i) => $i instanceof Group && $i->isLeading()));
+          $trailingItems = array_values(array_filter($toolbar ?? [], fn($i) => !($i instanceof Group && $i->isLeading())));
+          $renderItems = fn(array $items): Closure => function () use ($c, $env, $items): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $items); };
           $navBarNode = $hideBar ? null : $c->navigationBar($this->router->title(), $this->router,
-              $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); },
-              $large);
+              $trailingItems === [] ? null : $renderItems($trailingItems),
+              $large,
+              $leadingItems === [] ? null : $renderItems($leadingItems));
           $c->safeArea(function () use ($c, $env, $backdrop): void {
               $this->router->view($c, function (Route $r) use ($c, $env, $backdrop): void {
                   $e = $env->with(['route' => $r, 'stack' => $this, 'title' => null, 'titleMode' => null, 'toolbar' => null, 'backdrop' => $backdrop]);

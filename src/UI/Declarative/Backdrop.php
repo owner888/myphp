@@ -13,5 +13,9 @@ final class Backdrop
         public ?int $color = null,
         public bool $tabBarHidden = false,
         public bool $navBarHidden = false,
+        /** A phone's bar with more than five tabs: the index from which the tabs are in its "More" list. */
+        public ?int $moreFrom = null,
+        /** The tab the list chose this frame. */
+        public ?int $morePick = null,
     ) {}
 }

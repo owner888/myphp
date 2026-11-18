@@ -11,6 +11,13 @@ final class Group extends View
 {
     /** @var list<mixed> */
     private array $content = [];
+    /** Where a ToolbarItem goes in a page's bar: 'leading' (also topBarLeading, navigationBarLeading, cancellationAction) at its start, any other at its end. */
+    public string $placement = 'automatic';
+
+    public function isLeading(): bool
+    {
+        return in_array($this->placement, ['leading', 'topBarLeading', 'navigationBarLeading', 'cancellationAction'], true);
+    }
 
     public function __invoke(View|Closure|array|null ...$content): static
     {

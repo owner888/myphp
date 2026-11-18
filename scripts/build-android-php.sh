@@ -203,7 +203,8 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     export YACC="/opt/homebrew/opt/bison/bin/bison -y"
     export RE2C="/opt/homebrew/bin/re2c"
     export CFLAGS="-fPIC -Os -ffunction-sections -fdata-sections -I${SYSROOT}/include"
-    export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -Wl,--gc-sections"
+    # 16 KB pages (-z max-page-size): Google Play requires every native library of an app targeting Android 15+ to load on devices with them
+    export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -Wl,--gc-sections -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
     export LIBS=""
     export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
     export LIBXML_CFLAGS="-I${SYSROOT}/include/libxml2" LIBXML_LIBS="-L${SYSROOT}/lib -lxml2 -lm"
@@ -270,7 +271,7 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     '
 
     echo "==> Compiling PHP..."
-    make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" EXTRA_LDFLAGS="-avoid-version -module -L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -XCClinker -Wl,--gc-sections -XCClinker -Wl,--exclude-libs=libssl.a:libcrypto.a:libxml2.a:libffi.a"
+    make -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" EXTRA_LDFLAGS="-avoid-version -module -L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -XCClinker -Wl,--gc-sections -XCClinker -Wl,-z,max-page-size=16384 -XCClinker -Wl,-z,common-page-size=16384 -XCClinker -Wl,--exclude-libs=libssl.a:libcrypto.a:libxml2.a:libffi.a"
     "$STRIP" --strip-unneeded "${PHP_DIR}/libs/libphp.so"
 fi
 

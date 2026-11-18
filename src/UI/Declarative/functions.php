@@ -528,6 +528,9 @@ function TabView(mixed &$selection): D\TabView { return new D\TabView($selection
 /** A tab of a TabView: Tab('Inbox', systemImage: 'tray', value: 'inbox')( …its views… ), or with an SVG, image: $svg. */
 function Tab(string $title = '', ?SVG $image = null, mixed $value = null, ?string $systemImage = null, ?TabRole $role = null): D\Tab { return new D\Tab($title, $image, $value, $systemImage, $role); }
 
+/** Tabs grouped under a title, as SwiftUI's TabSection: TabView(…)(Tab(…), TabSection('Tools')(Tab(…), Tab(…))). In the sidebar a group with its title; in a phone's "More" list too. */
+function TabSection(string $title = ''): D\TabSection { return new D\TabSection($title); }
+
 /** Whether a paged TabView shows its page indicator dots, as SwiftUI's PageTabViewStyle.IndexDisplayMode. */
 enum PageIndexDisplayMode { case automatic; case always; case never; }
 
@@ -980,10 +983,11 @@ function ControlGroup(string $title = ''): D\ControlGroup
     return new D\ControlGroup($title);
 }
 
-/** ToolbarItem, as SwiftUI's: wraps toolbar items inside ->toolbar(...). */
+/** ToolbarItem, as SwiftUI's: wraps toolbar items inside ->toolbar(...); with placement 'leading' (or topBarLeading) they go at the bar's start, where the way back is. */
 function ToolbarItem(string $placement = 'automatic', ?Closure $content = null): D\Group
 {
     $g = new D\Group();
+    $g->placement = $placement;
     if ($content !== null) {
         $res = $content();
         $g(...(is_array($res) ? $res : [$res]));

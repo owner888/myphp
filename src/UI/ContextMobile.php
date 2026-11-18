@@ -27,6 +27,10 @@ trait ContextMobile
     /** The row the last swipeActions() built around its content, which a stack along a row makes as wide as it (the declarative views'). @internal */
     public ?Node $swipedRow = null;
 
+    /** The tab of the bar tapped while it was the chosen one, in the last tabBar(). */
+    public ?int $tabRetapped = null;
+
+
     /** How many sheets the frame built so far, open or closed, which keys each (sheet()). */
     private int $sheets = 0;
 
@@ -46,7 +50,9 @@ trait ContextMobile
      * $minimize 1 the phone's bar shrinks to the chosen tab as the page
      * scrolls down (-1: up), as iOS 26's tabBarMinimizeBehavior; a tap
      * on it, the page scrolling the other way or back at its top, brings
-     * it back. $accessory builds a view floating centered over the page just above the phone's bar
+     * it back. With more than five tabs the phone's bar has the first four and a "More" tab, as iOS's, which lists the
+     * others (the content is asked for page -1, the list, from a TabView; $backdrop->morePick names the one chosen);
+     * a tap on More again, from one of them, goes back to the list. $accessory builds a view floating centered over the page just above the phone's bar
      * (iOS 26's tabViewBottomAccessory, Telegram's update capsule); over the page's bottom where the bar is hidden.
      * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items @param Closure(int, string): void $content
      */
@@ -56,19 +62,29 @@ trait ContextMobile
         $index = max(0, min($index, count($items) - 1));
         $where = $this->tabsPlacement();
         if ($where === self::TABS_BOTTOM) { // the bar floats over the page, as iOS 26's: the page's scroll goes on under it
+            $moreFrom = count($items) > 5 ? 4 : null; // the bar's room: four tabs and More
+            if ($backdrop !== null && property_exists($backdrop, 'moreFrom')) { $backdrop->moreFrom = $moreFrom; }
             $bottom = $this->safeArea[2];
             $inset = $this->tabBarInset();
             $n = $this->column(0, 0, 1)->fill();
-              $makeSmall = static fn() => new class($index) { public ?float $y = null; public bool $small = false, $hidden = false; public function __construct(public int $tab) {} };
+              $makeSmall = static fn() => new class($index) { public ?float $y = null; public bool $small = false, $hidden = false, $moreList = false; public int $moreAt = 0; public function __construct(public int $tab) {} };
               $small = $this->runtime?->local($n->id, $makeSmall, null, 'tab') ?? $makeSmall();
               $wasHidden = $small->hidden ?? false;
               $this->safeArea[2] = $wasHidden ? $bottom : 0.0; // the tabBar takes the bottom safe area, unless the page hid it
               $was = $this->bottomInset;
               $this->bottomInset = $wasHidden ? 0.0 : $inset; // the page's first scroll takes it as room after its content
               $this->insetScroll = null;
+              if ($small->moreList && $index !== $small->moreAt) { $small->moreList = false; } // the selection moved on its own (the app chose a tab): that tab, not the list
               $page = $this->column(0, 0, 1)->alignSelf(Node::STRETCH);
-                $content($index, $where);
+                $content($moreFrom !== null && $small->moreList ? -1 : $index, $where);
               $this->end();
+              if ($moreFrom !== null && ($backdrop->morePick ?? null) !== null) { // a row of the list chosen: its page
+                  $index = max(0, min((int)$backdrop->morePick, count($items) - 1));
+                  $backdrop->morePick = null;
+                  $small->moreList = false;
+                  $n->changed = true;
+                  $this->runtime?->changed();
+              }
               $hiddenNow = (bool)($backdrop->tabBarHidden ?? false);
               if ($hiddenNow !== $wasHidden) {
                   $small->hidden = $hiddenNow;
@@ -103,7 +119,18 @@ trait ContextMobile
                   $this->end();
               }
               if (!$hiddenNow) {
-                  $bar = $this->tabBar($items, $index, $this->animate($n, 'tabsSmall', $small->small ? 1 : 0, 0.25), $expand);
+                  $barItems = $items;
+                  $barIndex = $index;
+                  if ($moreFrom !== null) { // the first four, and More for the rest: highlighted while the list or one of them shows
+                      $barItems = [...array_slice($items, 0, $moreFrom), [static fn(int $rgb) => Image::symbol('ellipsis', 24, $rgb), $this->texts()->get('more')]];
+                      $barIndex = $small->moreList || $index >= $moreFrom ? $moreFrom : $index;
+                  }
+                  $shownIndex = $barIndex;
+                  $bar = $this->tabBar($barItems, $barIndex, $this->animate($n, 'tabsSmall', $small->small ? 1 : 0, 0.25), $expand);
+                  if ($moreFrom === null) { $index = $barIndex; }
+                  elseif ($barIndex !== $shownIndex) { // another of the bar's tabs, or More, chosen
+                      if ($barIndex === $moreFrom) { $small->moreList = true; $small->moreAt = $index; } else { $index = $barIndex; $small->moreList = false; }
+                  } elseif ($this->tabRetapped === $moreFrom && $index >= $moreFrom && !$small->moreList) { $small->moreList = true; $small->moreAt = $index; } // More again, from a page of it: the list
                   if ($expand) { $small->small = false; $this->runtime?->changed(); } // a tap on the shrunk bar
                   $bar->absolute()->bottom(0)->start(0)->end(0);
                   $bar->floats = true; // a tap on it is its, not the page's under it
@@ -200,6 +227,7 @@ trait ContextMobile
     public function tabBar(array $items, int &$index, float $small = 0.0, ?bool &$expand = null): Node
     {
         $expand = false;
+        $this->tabRetapped = null;
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
         $bottom = max($this->safeArea[2], 8.0);
@@ -227,9 +255,11 @@ trait ContextMobile
                   if ($small < 0.5) { $this->text($label, 10, $color)->singleLine()->fontWeight($on ? 600 : 500); }
                 $this->end();
                 if ($small >= 0.5 && $this->clicked($tab)) { $expand = true; } // the shrunk bar, tapped: whole again
-                elseif ($this->clicked($tab) && !$on) {
-                    $index = $i;
-                    $n->changed = true;
+                elseif ($this->clicked($tab)) { // clicked() takes the click: asked once
+                    if (!$on) {
+                        $index = $i;
+                        $n->changed = true;
+                    } else { $this->tabRetapped = $i; }
                 }
             }
           $this->end();
@@ -271,10 +301,11 @@ trait ContextMobile
      * shows only once that one scrolled under it, as iOS's large titles do.
      * Where the screen is not touched (a Mac, a PC), the bar is a window's
      * toolbar, as macOS 26's: 52 high, the title in 15 points, the back
-     * button and the trailing capsule 32 high. Build it first in a column
-     * that fills the window. Not mygo's.
+     * button and the trailing capsule 32 high. $leading builds items at the
+     * bar's start (a ToolbarItem placed 'leading') where there is no way back.
+     * Build it first in a column that fills the window. Not mygo's.
      */
-    public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null, ?Scrollable $largeTitle = null): Node
+    public function navigationBar(string $title, ?Router $router = null, ?Closure $trailing = null, ?Scrollable $largeTitle = null, ?Closure $leading = null): Node
     {
         $t = $this->theme;
         $top = $this->safeArea[0];
@@ -290,6 +321,10 @@ trait ContextMobile
                   $a->draw(static fn(Painter $p, array $r) => self::disclosure($p->displayList(), [$r[0] - 4, $r[1], 20, 20], 180, $p->theme()->accent));
                 $this->end();
                 if ($this->clicked($back)) { $router->back(); }
+            } elseif ($leading !== null) { // the items at the bar's start, in a capsule of glass as the trailing ones are
+                $this->row(0, $side)->minHeight($button)->padding(0, $side)->radius($button / 2)->systemMaterial('glass')->alignItems(Node::CENTER)->shrink(0);
+                  $leading();
+                $this->end();
             }
           $this->end();
           $inline = $this->text($title, $size, $t->text)->fontWeight(600)->singleLine()->shrink(1);

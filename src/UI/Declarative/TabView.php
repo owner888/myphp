@@ -21,6 +21,8 @@ final class TabView extends View
 {
     /** @var list<Tab> */
     private array $tabs = [];
+    /** The tabs in the groups they were given in, a group with a title (TabSection) or without: [title, list of indices into $tabs]. @var list<array{0: string, 1: list<int>}> */
+    private array $groups = [];
     private mixed $selection;
     private \TabViewStyle $style = \TabViewStyle::automatic;
 
@@ -45,9 +47,22 @@ final class TabView extends View
         $this->selection = &$selection;
     }
 
-    public function __invoke(Tab ...$tabs): static
+    public function __invoke(Tab|TabSection ...$items): static
     {
-        $this->tabs = $tabs;
+        $this->tabs = [];
+        $this->groups = [];
+        foreach ($items as $item) {
+            if ($item instanceof TabSection) {
+                $at = count($this->tabs);
+                array_push($this->tabs, ...$item->tabs);
+                if ($item->tabs !== []) { $this->groups[] = [$item->title, range($at, count($this->tabs) - 1)]; }
+            } else {
+                $this->tabs[] = $item;
+                $last = count($this->groups) - 1;
+                if ($last >= 0 && $this->groups[$last][0] === '') { $this->groups[$last][1][] = count($this->tabs) - 1; }
+                else { $this->groups[] = ['', [count($this->tabs) - 1]]; }
+            }
+        }
         return $this;
     }
 
@@ -86,8 +101,10 @@ final class TabView extends View
             if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
             $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env), $t->role === \TabRole::prominent], $this->tabs); // a prominent tab apart, at the bar's end (iOS 27's)
             $backdrop = new Backdrop();
+            $chosenAtStart = $this->selection;
             $minimize = match ($this->minimize) { \TabBarMinimizeBehavior::onScrollDown => 1, \TabBarMinimizeBehavior::onScrollUp => -1, default => 0 };
             $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {
+                if ($i < 0) { $this->moreList($c, $env, $backdrop); return; } // a phone's "More": the tabs its bar has no room for
                 $c->key('tab' . $i); // each tab its own nodes, which keep their state (a stack's history) by it
                 $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
                   View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [self::stacked($this->tabs[$i]->content)]);
@@ -97,7 +114,8 @@ final class TabView extends View
                 if ($v instanceof View) { View::renderAll($c, $env->along(Node::ROW), [$v]); }
             });
             if ($backdrop->color !== null) { $n->background($backdrop->color); } // the floating tab bar over the page's color, as iOS's
-            $this->selection = $this->tabs[$index]->value ?? $this->selection;
+            // What the page chose while it was built (a button that says: go to that tab) stays: only a selection nobody moved takes the tab shown
+            if ($this->selection === $chosenAtStart) { $this->selection = $this->tabs[$index]->value ?? $this->selection; }
             return $n;
         } finally {
             $c->theme = $prevTheme;
@@ -118,12 +136,43 @@ final class TabView extends View
         return (new NavigationStack())(...$views);
     }
 
+    /** The list of the tabs from $backdrop->moreFrom on, as iOS's "More" tab shows them: a row each, grouped as the TabSections were; a tap names the tab in $backdrop->morePick. */
+    private function moreList(Context $c, Env $env, Backdrop $backdrop): void
+    {
+        $from = $backdrop->moreFrom ?? count($this->tabs);
+        $rows = function (array $indices) use ($backdrop): array {
+            return array_map(function (int $i) use ($backdrop): View {
+                $t = $this->tabs[$i];
+                $icon = $t->image !== null ? new ImageView($t->image) : ($t->systemImage !== null ? new ImageView(null, $t->systemImage) : null);
+                return \Button(action: function () use ($backdrop, $i): void { $backdrop->morePick = $i; }, label: \HStack(\VerticalAlignment::center, 12)(
+                    $icon,
+                    \Text(verbatim: $t->title),
+                    \Spacer(),
+                    \Image(systemName: 'chevron.right'),
+                ))->buttonStyle(\ButtonStyle::plain);
+            }, $indices);
+        };
+        $sections = [];
+        foreach ($this->groups as [$title, $indices]) {
+            $overflow = array_values(array_filter($indices, fn(int $i) => $i >= $from));
+            if ($overflow !== []) { $sections[] = \Section($title)(...$rows($overflow)); }
+        }
+        $c->key('tabmore');
+        $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
+          View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [\NavigationStack()(\ListView()(...$sections)->navigationTitle($c->texts()->get('more'))->navigationBarTitleDisplayMode(\TitleDisplayMode::large))]);
+        $c->end();
+    }
+
     /** The tabs as a NavigationSplitView, as sidebarAdaptable's where there is room: a Label of each in the sidebar, choosing it, beside its views. */
     private function split(Context $c, Env $env): ?Node
     {
         $chosen = new Binding(get: fn() => $this->selection, set: function ($v) { $this->selection = $v; });
         $sidebar = new ListView(null, null, $chosen, true);
-        $sidebar(...array_map(fn(Tab $t) => new Label($t->title, $t->systemImage, $t->image)->badge($t->badgeValue)->tag($t->value), $this->tabs));
+        $label = fn(Tab $t) => new Label($t->title, $t->systemImage, $t->image)->badge($t->badgeValue)->tag($t->value);
+        $sidebar(...array_map(
+            fn(array $g) => $g[0] === '' ? array_map(fn(int $i) => $label($this->tabs[$i]), $g[1]) : (new Section($g[0]))(...array_map(fn(int $i) => $label($this->tabs[$i]), $g[1])),
+            $this->groups,
+        ));
         $shown = array_find($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? $this->tabs[0] ?? null;
         $kept = $c->runtime?->local($c->upcomingId(), static fn() => new class { public \NavigationSplitViewVisibility $sidebar = \NavigationSplitViewVisibility::all; }); // whether the sidebar shows, its button's
         $visibility = $kept === null ? \NavigationSplitViewVisibility::all : $kept->sidebar;
