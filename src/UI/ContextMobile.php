@@ -480,6 +480,8 @@ trait ContextMobile
         }
         $high += 16; // 8 over its first item and under its last
         $icons = array_filter($items, static fn(\MyPHP\MenuItem $it) => $it->systemImage !== '') !== []; // any item with a symbol: all the labels after a column of them
+        $checks = array_filter($items, static fn(\MyPHP\MenuItem $it) => $it->checked) !== []; // any item checked: its mark has a column at the start of every item, as UIMenu's
+        $isButton = (bool)($m['button'] ?? false); // a menu button's menu: it grows from the button, over the window as it is
         if (!array_key_exists('target', $m)) { $m['target'] = $rt->touchMenu['target'] = $rt->contextMenuTarget($m['x'], $m['y']); $rt->liftNode = null; } // the node it lifts, the next frames' record keeping it (Runtime::$liftNode)
         $lifted = $rt->liftNode;
         if ($lifted !== null) { // where it shows in the window, scrolled and moved as it is
@@ -489,7 +491,7 @@ trait ContextMobile
             $m['rect'] = $rt->touchMenu['rect'] = $m['target'] !== 0 ? $rt->rectOf($m['target']) : null; // not yet recorded: its box as laid out
         }
         $at = $m['rect'] ?? [$m['x'], $m['y'] - 12, 0.0, 24.0]; // none: the finger's point
-        $w = min(max($wide + 48 + 24 + ($icons ? 34 : 0), 200.0), 280.0, $this->width - 16); // as wide as its longest label and 24 each side, 200 to 280
+        $w = min(max($wide + 32 + ($checks ? 32 : 0) + ($icons ? 36 : 0) + 8, $isButton ? 250.0 : 200.0), 300.0, $this->width - 16); // as wide as its longest label, its columns and 16 each side, 200 (a button's 250) to 300
         $grown = $m['rect'] !== null ? min(1.02, ($this->width - 16) / max($m['rect'][2], 1.0)) : 1.0; // how much the lifted node grows (or narrows, as wide as the window), lifted
         $liftedAt = $m['rect'] === null ? null : [$m['rect'][0] + $m['rect'][2] * (1 - $grown) / 2, $m['rect'][2] * $grown]; // its start and width, lifted
         if ($liftedAt === null) { $edge = $m['x'] - 24; }
@@ -499,6 +501,16 @@ trait ContextMobile
         $y = $at[1] + $at[3] + 8; // below the node
         if ($y + $high > $this->height - $this->windowSafeArea[2] - 16) { $y = $at[1] - 8 - $high; } // no room below: above it
         if ($y < $this->windowSafeArea[0] + 16) { $y = max($this->windowSafeArea[0] + 16, $this->height - $this->windowSafeArea[2] - 16 - $high); } // nor above (a tall node): over it, at the bottom
+        $origin = [0.5, 0.0]; // where the menu grows from: the button's corner
+        if ($isButton && $m['rect'] !== null) { // iOS 26's: the menu's corner on the button's, the end of the button's side of the window, growing from it
+            $b = $m['rect'];
+            $startSide = $b[0] + $b[2] / 2 < $this->width / 2;
+            $x = max(8.0, min($startSide ? $b[0] : $b[0] + $b[2] - $w, $this->width - 8 - $w));
+            $y = $b[1];
+            $up = $y + $high > $this->height - $this->windowSafeArea[2] - 16; // no room below: it grows upward from the button's bottom
+            if ($up) { $y = max($this->windowSafeArea[0] + 16, $b[1] + $b[3] - $high); }
+            $origin = [$startSide ? 0.0 : 1.0, $up ? 1.0 : 0.0];
+        }
         $finger = $rt->touchMenuFinger;
         $lift = null; // where the finger held on lifted, having moved: the item there is chosen
         if ($finger !== null && $finger[2]) {
@@ -514,7 +526,7 @@ trait ContextMobile
         $shown = !($m['closing'] ?? false);
         $gone = false;
         $under = null; // the item the finger slides over
-        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $grown, $icons, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
+        $this->overlay(function () use (&$chosen, &$back, &$panel, &$gone, &$under, $shown, $grown, $icons, $checks, $isButton, $origin, $rt, $items, $t, $w, $x, $y, $m, $slide, $lift, $inside): void {
             $this->key('touchMenu');
             $fade = $rt->motions[$this->upcomingId()]['fade'] ?? null;
             if (!$shown && ($fade === null || ($fade->value <= 0.001 && !$fade->moving))) { // closed, and faded out
@@ -525,11 +537,15 @@ trait ContextMobile
             $back = $this->column(0, 0)->at(0, 0)->size($this->width, $this->height);
             if ($shown) { $back->block(); } else { $back->passThrough(); }
             if (!isset($rt->motions[$back->id]['fade'])) { $this->jump($back, 'fade', 0.0); } // opened now: from nothing
-            $p = $this->animate($back, 'fade', $shown ? 1 : 0, $shown ? 0.2 : 0.25);
-              // the window blurred and dimmed, the node lifted over it: painted again, a little larger, rounded on the surface, as UIKit's preview
-              $this->column(0, 0)->absolute()->top(0)->start(0)->size($this->width, $this->height)->role(Role::NONE)->material(new \MyPHP\Plugins\Glass\Blur(10 * $p));
-                $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
-              $this->end();
+            if ($isButton && !isset($rt->motions[$back->id]['pop'])) { $this->jump($back, 'pop', 0.0); }
+            $p = $this->animate($back, 'fade', $shown ? 1 : 0, $isButton ? ($shown ? 0.12 : 0.16) : ($shown ? 0.2 : 0.25));
+            // a menu button's: grown from the button's corner with a spring, small and clear at first, the window not blurred
+            $pop = $isButton ? $this->spring($back, 'pop', $shown ? 1.0 : 0.0, new SpringOptions(duration: 0.4, bounce: 0.2)) : 1.0;
+              if (!$isButton) { // the window blurred and dimmed, the node lifted over it: painted again, a little larger, rounded on the surface, as UIKit's preview
+                  $this->column(0, 0)->absolute()->top(0)->start(0)->size($this->width, $this->height)->role(Role::NONE)->material(new \MyPHP\Plugins\Glass\Blur(10 * $p));
+                    $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
+                  $this->end();
+              }
               if (($r = $m['rect']) !== null && $m['target'] !== 0 && !($m['button'] ?? false)) { // a menu button is not lifted: the menu opens at it
                   $s = 1 + ($grown - 1) * $p; // a little larger as it lifts, as UIKit's; a cell as wide as the window a little narrower, 8 in from its sides
                   $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2;
@@ -544,30 +560,34 @@ trait ContextMobile
                       $pa->clip($big, static fn() => $pa->copyOf($node, $map), 13 * $up);
                   })->color = null;
               }
-              $panel = $this->column(0, 0)->absolute()->top($y)->left($x)->size($w, 0)->padding(8, 0)->radius(32)->systemMaterial('glass')->clip()->role(Role::MENU)->opacity($p); // iOS 26's: of glass, rounded 32, its items apart by no line, a group's by a hairline
+              $panel = $this->column(0, 0)->absolute()->top($y)->left($x)->size($w, 0)->padding(8, 0)->radius(32)->systemMaterial('glass')->clip()->role(Role::MENU)->opacity($p);
+              if ($isButton) { $s0 = 0.25 + 0.75 * $pop; $panel->transformOrigin($origin[0], $origin[1])->scale($s0, $s0); } // iOS 26's: of glass, rounded 32, its items apart by no line, a group's by a hairline
                 $tint = $this->box(0, 0, $t->dark ? 0x1c1c1e : 0xffffff)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(32)->role(Role::NONE)->borderWidth(1)->borderColor($t->dark ? 0x000000 : 0xd1d1d6); // tinted, as the system's menu, its items read over any page; a darker edge, floating, as iOS 27's
-                $tint->bgAlpha = 0.6;
+                $tint->bgAlpha = $isButton ? 0.9 : 0.6; // a menu over the window as it is: little of it shows through, as the system's blurred glass
                 foreach ($items as $it) {
                     if ($it->type === \MyPHP\MenuItem::SEPARATOR) { // a group's end: a hairline 24 in, 8 apart from the items, as iOS 26's
-                        $this->box(0, 1 / max($this->scale, 1.0), $t->border)->alignSelf(Node::STRETCH)->margin(8, 24)->shrink(0);
+                        $this->box(0, 1 / max($this->scale, 1.0), $t->border)->alignSelf(Node::STRETCH)->margin(8, 16)->shrink(0);
                         continue;
                     }
                     if ($it->type === \MyPHP\MenuItem::HEADER) {
-                        $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 24, 4, 24)->singleLine();
+                        $this->text($it->label, 13.0 * $t->fontSize / 17.0, $t->textMuted)->padding(10, 16 + ($checks ? 32 : 0), 4, 16)->singleLine(); // over the labels' column, as iOS's
                         continue;
                     }
                     $off = $it->disabled || $it->submenu !== [];
-                    $row = $this->row(0, 14)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 24)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
+                    $row = $this->row(0, 12)->alignSelf(Node::STRETCH)->minHeight(44)->padding(0, 16)->alignItems(Node::CENTER)->focusable()->role(Role::MENU_ITEM)->label($it->label);
                     $rect = $rt->rectOf($row->id); // as last laid out: where the finger slides and lifts
                     if (!$off && $inside($rect, $slide)) { $under = (int)$it->id; }
                     if (!$off && (($this->hovered($row) && ($this->runtime?->input->mouseDown ?? false)) || $inside($rect, $slide))) { $row->color = $t->dark ? 0x3a3a3c : 0xe5e5ea; }
                       $fg = $off ? $t->textMuted : ($it->role === 'destructive' ? $t->danger : $t->text);
+                      if ($checks) { // the mark of a checked item in a column of its own at the start, in the text's color, as UIMenu's
+                          if ($it->checked) { $this->image(Image::symbol('checkmark', 17, $fg), 20, 20)->shrink(0)->role(Role::NONE); }
+                          else { $this->box(20, 20, 0)->shrink(0)->role(Role::NONE)->color = null; }
+                      }
                       if ($icons) { // a column of the items' symbols at their start, 20 wide, as UIMenu's images
                           if ($it->systemImage !== '') { $this->image(Image::symbol($it->systemImage, 20, $fg), 20, 20)->shrink(0)->role(Role::NONE); }
                           else { $this->box(20, 20, 0)->shrink(0)->role(Role::NONE)->color = null; }
                       }
                       $this->text($it->label, $t->fontSize, $fg)->singleLine()->grow(1)->shrink(1)->minWidth(0);
-                      if ($it->checked) { $this->text('✓', $t->fontSize, $t->accent)->shrink(0); }
                     $this->end();
                     if ($shown && !$off && ($this->clicked($row) || $inside($rect, $lift))) { $chosen = (int)$it->id; }
                 }

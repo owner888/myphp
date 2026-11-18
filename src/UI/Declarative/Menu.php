@@ -55,7 +55,10 @@ final class Menu extends View
     /** Fills the native menu $m with the items $content, running the action of the one chosen. @internal @param array<mixed> $content */
     public static function items(UIMenu $m, array $content, Env $env): void
     {
+        $before = null; // what came before: a Section's end and what follows it are apart by a line, as SwiftUI's
         foreach (ListView::flat($content) as $v) {
+            if ($before !== null && ($v instanceof Section || $before instanceof Section) && !($v instanceof Divider) && !($before instanceof Divider)) { $m->separator(); }
+            $before = $v;
             match (true) {
                 $v instanceof Button => $m->item(Localized::string($v->title, $env))->destructive($v->role === \ButtonRole::destructive)->systemImage($v->systemImage)->chosen() && $v->run(),
                 $v instanceof Toggle => $m->item(Localized::string($v->title, $env))->checked($v->isOn())->chosen() && $v->flip(),

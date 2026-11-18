@@ -496,3 +496,17 @@ if ($btn !== null) {
     $h->clickOn($btn); $h->frame(3);
     same(['# Sort By', 'Default', 'Latency'], $h->menuLabels(), 'its menu: the header and the choices');
 }
+
+// Sections of a menu are groups: a line between them, each its header.
+$h = new Headless(fn(Context $c) => \MyPHP\UI\Content::render(fn() => \NavigationStack()(
+    \ListView()(\Section()(\Text('Row')))->navigationTitle('Messages')
+        ->toolbar(\Menu('Filter', systemImage: 'line.3.horizontal.decrease')(
+            \Section()(\Button('Messages'), \Button('Junk')),
+            \Section('Filter By')(\Button('Unread'), \Button('Travel')),
+            \Button('Manage Filters'),
+        ))
+), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(true);
+$h->frame(2); usleep(500_000); $h->frame(6);
+$h->clickOn($h->byLabel('Filter')); $h->frame(3);
+same(['Messages', 'Junk', '-', '# Filter By', 'Unread', 'Travel', '-', 'Manage Filters'], $h->menuLabels(), 'a menu of groups: lines between, a header over a group');
