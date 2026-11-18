@@ -698,8 +698,15 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     // BEGIN_APK_SELF_UPDATE
     private static volatile int sApkUpgradeProgress = -2; // -2 idle, 0..100 downloading, 101 installing, -1 failed
 
+    private static volatile String sApkInstallMessage = "";
+
     public static int getApkUpgradeProgress() {
         return sApkUpgradeProgress;
+    }
+
+    /** Why the installer refused the update (-3 from getApkUpgradeProgress), as the system words it. */
+    public static String getApkInstallMessage() {
+        return sApkInstallMessage == null ? "" : sApkInstallMessage;
     }
 
     public static void startApkUpgrade(String urlStr) {
@@ -772,6 +779,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         if (sInstance == null) return;
         File apk = new File(sInstance.getCacheDir(), "Linking_update.apk");
         if (apk.exists() && apk.length() > 100000) {
+            sApkUpgradeProgress = 101;
             new Thread(() -> installApkFile(apk), "MyPHP-ApkInstall").start();
         }
     }
@@ -821,6 +829,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                                 confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                 sInstance.startActivity(confirm);
                             }
+                        } else if (status != android.content.pm.PackageInstaller.STATUS_SUCCESS) {
+                            // the installer refused (another signature, a lower version, not enough room): say so, rather than a tap that does nothing
+                            sApkInstallMessage = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE);
+                            Log.e(TAG, "APK install failed: status " + status + " " + sApkInstallMessage);
+                            sApkUpgradeProgress = -3;
                         }
                     }
                 }, new IntentFilter(action), Context.RECEIVER_EXPORTED);
