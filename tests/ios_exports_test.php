@@ -19,6 +19,13 @@ $patterns = $m[1];
 check(str_contains($script, '-Wl,-exported_symbols_list,"${EXPORT_LIST}"'), 'the launcher is linked with the list');
 $isExported = fn(string $symbol): bool => in_array($symbol, $exported, true) || array_filter($patterns, fn(string $p) => fnmatch($p, $symbol)) !== [];
 
+// Every name the list takes from main.m is a function main.m defines, and not static: ld fails on an exported symbol the
+// launcher does not have ("Undefined symbols: _myphp_ios_line", a static function named as the bridge's). A function of
+// the launcher's own is named otherwise (myphp_log_line).
+$undefined = array_values(array_filter(array_unique(array_map(fn(string $s) => substr($s, 1), $exported)),
+    fn(string $f) => preg_match('/^(?!static\b)[A-Za-z_][\w \t*]*\b' . $f . '\s*\([^;{]*\)\s*\{/m', $main) !== 1));
+same([], $undefined, 'every myphp_ios_ name in main.m is a function it defines, not static');
+
 /** The C functions declared in $cdef, those of names starting $prefix. @return list<string> */
 $declared = function (string $cdef, string $prefix): array {
     preg_match_all('/(?<![A-Za-z0-9_])(' . $prefix . '[A-Za-z0-9_]*)\s*\(/', $cdef, $m);

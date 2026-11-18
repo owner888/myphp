@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.203.0';
+const VERSION = '1.203.1';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -35,6 +35,7 @@ Commands:
 	micro                get the static PHP that the apps myphp build makes carry
 	keygen               create the key pair that signs updates
 	doctor               check that the development environment is ready
+	upgrade [--check]    upgrade MyPHP to its latest release (--check: only say whether there is one)
 	version              print the MyPHP version
 
 Run "myphp <command> -h" for the flags of a command.
@@ -2612,6 +2613,76 @@ function writeUpdate(string $dir, array $c, string $out, string $entry, string $
 }
 
 /** Creates the Ed25519 key pair that signs updates (mygo's keygen). */
+/** The version of MyPHP's latest release (GitHub's latest, prereleases left out), or null when it cannot be asked (offline). */
+function latestRelease(int $seconds): ?string
+{
+    [$code, $out] = Cmd::output(['curl', '-fsSL', '--max-time', (string)$seconds, '-H', 'Accept: application/vnd.github+json', 'https://api.github.com/repos/owner888/myphp/releases/latest']);
+    $tag = $code === 0 ? (json_decode($out, true)['tag_name'] ?? null) : null;
+    return is_string($tag) ? ltrim($tag, 'v') : null;
+}
+
+/**
+ * myphp upgrade, as flutter upgrade: MyPHP brought to its latest release, the way it was installed. A git checkout
+ * pulls (refusing while it has changes); Composer's global install updates the package; a project's dependency is the
+ * project's to update (its composer.json); else, the release unpacked where install.sh put it (~/.myphp), with what
+ * MyPHP made there and git ignores (build/: the phones' PHP runtimes, built once; dist/, vendor/, .myphp/) kept.
+ */
+function upgrade(array $args): void
+{
+    help($args, "upgrade [--check]\n\nUpgrades MyPHP to its latest release, the way it was installed: a git checkout pulls,\nComposer's global install updates owner888/myphp, the install of install.sh (~/.myphp) takes the release's archive.\nA project's own dependency (its vendor/) is updated in the project: composer update owner888/myphp.\n\nFlags:\n  --check   only say whether a newer release is out");
+    $check = flag($args, 'check');
+    $latest = latestRelease(15);
+    if ($check) {
+        echo $latest === null ? "myphp " . VERSION . " (the latest release could not be asked: offline?)\n"
+            : (version_compare($latest, VERSION, '>') ? "myphp " . VERSION . ", $latest is out: myphp upgrade\n" : "myphp " . VERSION . " is the latest\n");
+        return;
+    }
+    $root = (string)realpath(FRAMEWORK);
+    if (is_dir("$root/.git")) {
+        [, $dirty] = Cmd::output(['git', '-C', $root, 'status', '--porcelain']);
+        trim($dirty) === '' || fail("$root has changes of yours: commit or stash them, then myphp upgrade");
+        sh(['git', '-C', $root, 'pull', '--ff-only']) === 0 || fail("git pull in $root failed");
+        logf('upgraded the checkout in ' . $root);
+        return;
+    }
+    $latest !== null || fail('the latest release could not be asked (offline?); try again');
+    if (!version_compare($latest, VERSION, '>')) {
+        logf('myphp ' . VERSION . ' is the latest');
+        return;
+    }
+    if (str_contains(str_replace('\\', '/', $root), '/vendor/owner888/myphp')) {
+        [$code, $out] = Cmd::output(['composer', 'global', 'config', 'vendor-dir', '--absolute']);
+        $lines = preg_split('/\R/', trim($out)) ?: [];
+        $global = $code === 0 ? realpath(trim((string)end($lines))) : false;
+        $global !== false && str_starts_with($root, $global . DIRECTORY_SEPARATOR)
+            || fail("MyPHP here is a project's dependency ($root): in that project, composer update owner888/myphp");
+        sh(['composer', 'global', 'update', 'owner888/myphp']) === 0 || fail('composer global update owner888/myphp failed');
+        logf("upgraded myphp " . VERSION . " to $latest");
+        return;
+    }
+    PHP_OS_FAMILY !== 'Windows' || fail("on Windows MyPHP is upgraded by Composer: composer global update owner888/myphp");
+    $new = "$root.upgrade";
+    Cmd::output(['rm', '-rf', $new, "$root.old"]);
+    mkdir($new, 0755, true);
+    $archive = "$new.tar.gz";
+    logf("downloading myphp $latest…");
+    $ok = quiet(['curl', '-fsSL', '--max-time', '300', '-o', $archive, "https://github.com/owner888/myphp/archive/refs/tags/v$latest.tar.gz"]) === 0
+        && quiet(['tar', '-xzf', $archive, '-C', $new, '--strip-components', '1']) === 0
+        && is_file("$new/bin/myphp");
+    @unlink($archive);
+    if (!$ok) {
+        Cmd::output(['rm', '-rf', $new]);
+        fail("could not download myphp $latest");
+    }
+    foreach (['build', 'dist', 'vendor', '.myphp'] as $kept) { // what MyPHP made here, which the release has not
+        if (file_exists("$root/$kept")) { rename("$root/$kept", "$new/$kept"); }
+    }
+    rename($root, "$root.old") || fail("could not move $root aside (myphp $latest is in $new)");
+    rename($new, $root) || fail("could not put myphp $latest in $root (it is in $new, the one before in $root.old)");
+    Cmd::output(['rm', '-rf', "$root.old"]);
+    logf("upgraded myphp " . VERSION . " to $latest");
+}
+
 function keygen(array $args): void
 {
     help($args, "keygen [-out dir] [-force]\n\nCreates the key pair that signs updates.");
@@ -3116,6 +3187,12 @@ function doctor(array $args): void
         echo "\n";
         return $allOk;
     };
+
+    // MyPHP itself: a newer release, which myphp upgrade takes
+    $latest = latestRelease(5);
+    $section('MyPHP', [
+        [$latest === null || !version_compare($latest, VERSION, '>'), 'myphp ' . VERSION . ($latest === null ? ' (the latest release could not be asked)' : (version_compare($latest, VERSION, '>') ? ", $latest is out" : ', the latest')), 'Run `myphp upgrade`'],
+    ]);
 
     // 1. PHP Runtime
     $phpVersion = PHP_VERSION;
@@ -3732,6 +3809,7 @@ function run(string $cmd, array $args): void
         'micro' => micro($args),
         'keygen' => keygen($args),
         'doctor' => doctor($args),
+        'upgrade' => upgrade($args),
         'version', '-v', '--version' => print('myphp ' . VERSION . "\n"),
         'help', '-h', '--help' => print(USAGE),
         default => (function () use ($cmd): never { fwrite(STDERR, "myphp: unknown command \"$cmd\"\n\n" . USAGE); exit(2); })(),

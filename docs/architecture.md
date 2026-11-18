@@ -9487,7 +9487,7 @@ the launcher gives it the app's own tmp in its INI defaults (`myphp_ini_defaults
 `php_worker_thread` before `php_embed_init`). **Nothing in `myphp run`**: on a device it shows `devicectl device
 process launch --console`, which forwards the app's stdout and stderr and never the system log, while the launcher
 wrote PHP's output (`ub_write`), PHP's log (`log_message`), `MyPHP\Logger`'s lines (`myphp_ios_log`) and its own
-steps to `os_log` alone: a fatal was a black screen. Each now goes to both through `myphp_ios_line` (stderr is
+steps to `os_log` alone: a fatal was a black screen. Each now goes to both through `myphp_log_line` (stderr is
 unbuffered, so the line before PHP dies arrives); the simulator still reads the system log, launched without
 `--console`, so nothing shows twice. **`ObjC::boot` refused the phone**: `php_uname('m')` on an iPhone is its model
 (`iPhone17,1`), not `arm64`; iOS is arm64 only, so `App::isIOS()` (the launcher's `MYPHP_PLATFORM`) passes the check
@@ -9524,6 +9524,19 @@ appDataContainer` (the development-signed app allows it), then `.myphp-reload` (
 `--console`, now through `streamLog` with `phoneHot` (`ios-device` lines: the logger's with their time, the
 launcher's as the app's); R ends it with `$relaunch` and the app is launched again (`--terminate-existing`), its
 console followed. A file in a folder new since the install needs `myphp run` again.
+
+## myphp upgrade
+
+Users had no way to MyPHP's next release: `bin/myphp` had no such command, and `install.sh` without Composer put
+`bin/myphp` alone from `main` in `~/.myphp/bin`, which runs nothing (`FRAMEWORK` is its parent: `src/`, `scripts/`,
+`bin/skills/`) and follows no release. Now `install.sh` unpacks the latest release (GitHub's latest, no prerelease)
+into `~/.myphp`, so that `~/.myphp/bin` on the PATH stays as it was, and `myphp upgrade`, as `flutter upgrade`, goes
+by where MyPHP is: a git checkout pulls (`--ff-only`, refused over uncommitted changes); Composer's global install
+(its `vendor-dir`) runs `composer global update owner888/myphp`; a project's own `vendor/` is the project's
+(`composer update owner888/myphp` there); else the release's archive replaces it, `build/` (the phones' PHP
+runtimes, 10-20 minutes to build), `dist/`, `vendor/` and `.myphp/` carried over, beside it and then renamed into
+place. `--check` and `myphp doctor` only say whether one is out. Not on Windows outside Composer (a running
+`bin/myphp`'s folder cannot be renamed there).
 
 ## Open items
 

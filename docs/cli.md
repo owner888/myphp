@@ -285,9 +285,24 @@ in `updates.publicKey`, and the private one stays secret, in
 
 ## myphp doctor
 
-Checks that the development environment is ready: PHP and its extensions,
-Xcode's tools on macOS, GTK and WebKitGTK on
-Linux. Failed checks exit with status 1.
+Checks that the development environment is ready: MyPHP itself (whether a
+newer release is out), PHP and its extensions, Xcode's tools on macOS, GTK
+and WebKitGTK on Linux. Failed checks exit with status 1.
+
+## myphp upgrade
+
+```sh
+myphp upgrade           # to the latest release
+myphp upgrade --check   # only say whether there is one
+```
+
+Upgrades MyPHP to its latest release, as `flutter upgrade`, the way it was
+installed: the install of `install.sh` without Composer (`~/.myphp`) takes
+the release's archive, keeping the phones' PHP runtimes it built (`build/`);
+Composer's global install runs `composer global update owner888/myphp`; a
+git checkout pulls, refusing while it has changes of yours. A project that
+has MyPHP as its own dependency (its `vendor/`) updates it there, as any
+package: `composer update owner888/myphp`.
 
 ## myphp version
 

@@ -1094,7 +1094,7 @@ void myphp_ios_hide_keyboard(void) {
 /* What the launcher and PHP say goes where `myphp run` reads it on both: the system log (the simulator's log stream) and
  * stderr (a device's: devicectl's --console forwards the app's stdout and stderr, never the system log; unbuffered, so a
  * line printed just before PHP dies still arrives). A line, without its newline, after its tag ("[myphp]"). */
-static void myphp_ios_line(os_log_type_t type, const char *tag, const char *line) {
+static void myphp_log_line(os_log_type_t type, const char *tag, const char *line) {
     os_log_with_type(OS_LOG_DEFAULT, type, "%{public}s %{public}s", tag, line);
     fprintf(stderr, "%s %s\n", tag, line);
 }
@@ -1110,12 +1110,12 @@ static size_t myphp_ub_write(const char *str, size_t len) {
 // warnings as default (the line says [W]), errors as errors, faults as faults, where `myphp run` reads and colors them.
 void myphp_ios_log(int level, const char *message) {
     static const os_log_type_t types[] = {OS_LOG_TYPE_DEBUG, OS_LOG_TYPE_DEBUG, OS_LOG_TYPE_INFO, OS_LOG_TYPE_DEFAULT, OS_LOG_TYPE_ERROR, OS_LOG_TYPE_FAULT};
-    myphp_ios_line(types[level < 0 ? 0 : (level > 5 ? 5 : level)], "[myphp]", message);
+    myphp_log_line(types[level < 0 ? 0 : (level > 5 ? 5 : level)], "[myphp]", message);
 }
 
 // PHP's log (warnings, fatals: "PHP Request Startup: …"), as errors
 static void myphp_log_message(const char *message, int syslog_type_int) {
-    myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", message);
+    myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", message);
 }
 
 /* The INI the app runs with, as php_embed's defaults (ini_defaults, read as its configuration starts): ini_entries set
@@ -1154,7 +1154,7 @@ static NSString *myphp_run_root(NSString *bundlePath) {
     [fm removeItemAtPath:root error:nil];
     NSError *err = nil;
     if (![fm createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:&err]) {
-        myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:@"cannot make %@, the app runs its bundle's PHP: %@", root, err] UTF8String]);
+        myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:@"cannot make %@, the app runs its bundle's PHP: %@", root, err] UTF8String]);
         return bundlePath;
     }
     NSDirectoryEnumerator *walk = [fm enumeratorAtPath:bundlePath];
@@ -1171,7 +1171,7 @@ static NSString *myphp_run_root(NSString *bundlePath) {
             ok = [fm createSymbolicLinkAtPath:to withDestinationPath:from error:&err];
         }
         if (!ok) {
-            myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:@"cannot copy %@ to run it, the app runs its bundle's PHP: %@", rel, err] UTF8String]);
+            myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:@"cannot copy %@ to run it, the app runs its bundle's PHP: %@", rel, err] UTF8String]);
             [fm removeItemAtPath:root error:nil];
             return bundlePath;
         }
@@ -1182,7 +1182,7 @@ static NSString *myphp_run_root(NSString *bundlePath) {
 }
 
 static void* php_worker_thread(void *arg) {
-    myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP worker thread starting...");
+    myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP worker thread starting...");
 
     @autoreleasepool {
         NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
@@ -1199,7 +1199,7 @@ static void* php_worker_thread(void *arg) {
 
         char *php_argv[] = {"myphp", NULL};
 
-        myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Initializing PHP Embed SAPI on iOS...");
+        myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Initializing PHP Embed SAPI on iOS...");
         php_embed_module.ub_write = myphp_ub_write;
         php_embed_module.log_message = myphp_log_message;
         php_embed_module.ini_defaults = myphp_ini_defaults;
@@ -1207,9 +1207,9 @@ static void* php_worker_thread(void *arg) {
 
         NSString *appPhp = [root stringByAppendingPathComponent:@"app.php"];
         if (![[NSFileManager defaultManager] fileExistsAtPath:appPhp]) {
-            myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[@"app.php not found at " stringByAppendingString:appPhp] UTF8String]);
+            myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[@"app.php not found at " stringByAppendingString:appPhp] UTF8String]);
         } else {
-            myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Executing app.php...");
+            myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Executing app.php...");
             zend_first_try {
                 // the framework the app carries: an app needs no autoloader of its own, as on the desktop with Composer's;
                 // and why PHP ended, in the log: a fatal error, an uncaught exception's trace (as the Android launcher's)
@@ -1222,11 +1222,11 @@ static void* php_worker_thread(void *arg) {
                 php_execute_script(&file_handle);
                 zend_destroy_file_handle(&file_handle);
             } zend_catch {
-                myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", "Uncaught PHP exception/bailout in app.php");
+                myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", "Uncaught PHP exception/bailout in app.php");
             } zend_end_try();
         }
 
-        myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP execution finished, shutting down...");
+        myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP execution finished, shutting down...");
         php_embed_shutdown();
     }
     return NULL;
@@ -2041,7 +2041,7 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
 
 @implementation MyphpAppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Application did finish launching");
+    myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Application did finish launching");
 
     // Start network path monitor
     g_path_monitor = nw_path_monitor_create();

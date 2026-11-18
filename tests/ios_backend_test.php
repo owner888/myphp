@@ -291,7 +291,7 @@ use MyPHP\UI\{Content, TextState};
     $objcSrc = (string)file_get_contents(__DIR__ . '/../src/Native/ObjC.php');
     check(str_contains($objcSrc, "php_uname('m') !== 'arm64' && !App::isIOS()"), 'ObjC::boot runs on an iPhone, whose machine is its model, not arm64');
     check(str_contains($mainM, 'fprintf(stderr, "%s %s\\n", tag, line);') && str_contains($mainM, 'fwrite(str, 1, len, stderr);'), 'main.m writes its lines and PHP\'s output to stderr too, which devicectl --console shows');
-    check(!preg_match('/\bos_log(_error)?\(OS_LOG_DEFAULT, "\[myphp-ios\] [A-Z]/', $mainM), 'main.m: the launcher\'s steps go through myphp_ios_line, not os_log alone');
+    check(!preg_match('/\bos_log(_error)?\(OS_LOG_DEFAULT, "\[myphp-ios\] [A-Z]/', $mainM), 'main.m: the launcher\'s steps go through myphp_log_line, not os_log alone');
     // The edit menu, as a UITextField's (UIEditMenuInteraction): its commands PHP's field would take, its Paste with the
     // pasteboard read as the user pastes; and the keyboard's text whole (a paste, Writing Tools' rewrite run long).
     $iosFfiSrc = (string)file_get_contents(__DIR__ . '/../src/Native/iOS.php');

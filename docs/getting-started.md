@@ -15,7 +15,8 @@ curl -fsSL https://myphp.ai/install.sh | bash
 Native UI needs nothing more on macOS or Windows. On Linux it uses GTK 3 and
 libepoxy (`sudo apt install libgtk-3-0 libepoxy0` on Debian and Ubuntu).
 `myphp doctor` checks your desktop and mobile toolchains (`myphp doctor --fix`
-auto-configures PHP extensions).
+auto-configures PHP extensions), and says when a newer MyPHP is out:
+`myphp upgrade` takes it, as `flutter upgrade`.
 
 ## Create a project
 
