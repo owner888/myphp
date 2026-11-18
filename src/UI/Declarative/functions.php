@@ -635,7 +635,7 @@ function ProgressView(string $title = '', ?float $value = null, float $total = 1
 function Gauge(float $value, array $in = [0.0, 1.0], string $title = ''): D\Gauge { return new D\Gauge($value, $in, $title); }
 
 /** A button opening a menu of its content: Menu('Sort')( Button('Name', action: …), Divider(), Toggle('Reverse', isOn: …) ). */
-function Menu(string $title): D\Menu { return new D\Menu($title); }
+function Menu(string $title, ?string $systemImage = null, ?D\View $label = null): D\Menu { return new D\Menu($title, $systemImage, $label); }
 
 /**
  * Text editing $text over lines, taking the room it is given, as SwiftUI's TextEditor; or a large document, a

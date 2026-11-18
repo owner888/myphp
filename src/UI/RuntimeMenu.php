@@ -363,7 +363,7 @@ trait RuntimeMenu
         }
         $this->menuPending = null;
         if (!$this->touch) { self::symbolIcons($p['items']); } // a phone's own menu draws them (Context::touchMenu)
-        ($this->popupMenu)($p['items'], $p['x'] * $this->frameZoom, $p['y'] * $this->frameZoom, $p['rtl'], fn(int $choice) => $this->menuChosen($p, $choice)); // in the window's points
+        ($this->popupMenu)($p['items'], $p['x'] * $this->frameZoom, $p['y'] * $this->frameZoom, $p['rtl'], fn(int $choice) => $this->menuChosen($p, $choice), $p['button'] ? $p['id'] : null); // in the window's points; the menu button it is the menu of, if one
     }
 
     /** The item $choice (from 1) chosen from menu $p: the next frame reports it to its function, or the text does the editing command (mygo's menuChosen). @param array{id: int, button: bool, items: list<NativeItem>, labels: list<string>, commands: ?list<string>, x: float, y: float, text: int} $p */

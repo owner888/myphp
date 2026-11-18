@@ -116,9 +116,9 @@ final class Window
             $this->runtime->writeClipboardData = fn(Data $data, ?\Closure $onRelease = null) => App::backend()->clipboard()->writeData($data, $onRelease);
             $this->runtime->readClipboardData = fn(string ...$formats): Data => $formats === [] ? new Data : App::backend()->clipboard()->readData($formats);
             $this->runtime->clipboardFormats = fn() => App::backend()->clipboard()->formats();
-            $this->runtime->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen): void {
+            $this->runtime->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen, ?int $button = null): void {
                 if ($this->runtime->touch) { // a phone's: the view builds it (Context::touchMenu), as UIKit's context menu over a dimmed window
-                    $this->runtime->touchMenu = ['items' => $items, 'x' => $x / $this->runtime->frameZoom, 'y' => $y / $this->runtime->frameZoom, 'chosen' => $chosen];
+                    $this->runtime->touchMenu = ['items' => $items, 'x' => $x / $this->runtime->frameZoom, 'y' => $y / $this->runtime->frameZoom, 'chosen' => $chosen] + ($button !== null ? ['target' => $button, 'button' => true] : []); // a menu button's: anchored to it, which stays where it is
                     $this->invalidate();
                     return;
                 }

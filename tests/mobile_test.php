@@ -480,3 +480,19 @@ $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(false);
 $h->frame(2); usleep(700_000); $h->frame(6);
 $h->click(196, 3); $h->frame(2); usleep(700_000); $h->frame(6); // above the panel
 same(false, $sheetApp->open, 'a tap outside the sheet closes it');
+
+// A Menu with an icon in a toolbar is the icon alone, no title or chevron, its menu a Picker's choices under a header, the one chosen checked.
+$menuApp = new class { public string $sort = 'latency'; };
+$h = new Headless(fn(Context $c) => \MyPHP\UI\Content::render(fn() => \NavigationStack()(
+    \ListView()(\Section()(\Text('Row')))->navigationTitle('Proxies')
+        ->toolbar(\Menu('Sort', systemImage: 'arrow.up.arrow.down')(\Section('Sort By')(\Picker('Sort By', selection: $menuApp->sort)(\Text('Default')->tag('default'), \Text('Latency')->tag('latency')))))
+), $c), 393, 852);
+$h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(true);
+$h->frame(2); usleep(500_000); $h->frame(6);
+$btn = $h->byLabel('Sort');
+check($btn !== null && $h->byText('Sort') === null, 'a toolbar menu with an icon shows no title');
+if ($btn !== null) {
+    same(true, $h->rect($btn)[2] < 60, 'and is no wider than an icon button');
+    $h->clickOn($btn); $h->frame(3);
+    same(['# Sort By', 'Default', 'Latency'], $h->menuLabels(), 'its menu: the header and the choices');
+}

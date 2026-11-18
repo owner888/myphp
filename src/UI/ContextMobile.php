@@ -530,7 +530,7 @@ trait ContextMobile
               $this->column(0, 0)->absolute()->top(0)->start(0)->size($this->width, $this->height)->role(Role::NONE)->material(new \MyPHP\Plugins\Glass\Blur(10 * $p));
                 $this->box(0, 0, 0x000000)->absolute()->top(0)->bottom(0)->start(0)->end(0)->role(Role::NONE)->bgAlpha = 0.12 * $p;
               $this->end();
-              if (($r = $m['rect']) !== null && $m['target'] !== 0) {
+              if (($r = $m['rect']) !== null && $m['target'] !== 0 && !($m['button'] ?? false)) { // a menu button is not lifted: the menu opens at it
                   $s = 1 + ($grown - 1) * $p; // a little larger as it lifts, as UIKit's; a cell as wide as the window a little narrower, 8 in from its sides
                   $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2;
                   $big = [$cx - $r[2] * $s / 2, $cy - $r[3] * $s / 2, $r[2] * $s, $r[3] * $s];

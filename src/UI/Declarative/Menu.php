@@ -15,7 +15,11 @@ final class Menu extends View
     /** @var list<mixed> */
     private array $content = [];
 
-    public function __construct(public readonly string $title) {}
+    /**
+     * $systemImage, an SF Symbol's name, or $label, a view: the button shows it as the label of Menu(_:systemImage:)
+     * does, and in a toolbar the icon alone, as SwiftUI's; the title names it to assistive technology.
+     */
+    public function __construct(public readonly string $title, public readonly ?string $systemImage = null, public readonly ?View $label = null) {}
 
     /** The items. */
     public function __invoke(View|array|null ...$content): static
@@ -26,7 +30,24 @@ final class Menu extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
+        if ($this->systemImage !== null || $this->label !== null) { return $this->buildIcon($c, $env); }
         $n = $c->menuButton(Localized::string($this->title, $env), fn(UIMenu $m) => self::items($m, $this->content, $env));
+        if ($env->disabled) { $n->disabled(); }
+        return $n;
+    }
+
+    /** A menu button with a label of its own (an icon, a Label): the label alone, in a toolbar the icon in its room, no chevron. */
+    private function buildIcon(Context $c, Env $env): Node
+    {
+        $t = $env->theme;
+        $label = $this->label ?? new Label($this->title, $this->systemImage);
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(\MyPHP\UI\Role::BUTTON)->alignItems(Node::CENTER);
+        if ($env->labelStyle === \LabelStyle::iconOnly) { $n->padding($t->space(1.5), $t->space(2))->radius($t->radius); }
+        $label->render($c, $env->along(Node::ROW));
+        $c->end();
+        $n->fg = $env->color?->rgb($env) ?? $t->text;
+        $n->label(Localized::string($this->title, $env));
+        $n->menu(fn(UIMenu $m) => self::items($m, $this->content, $env));
         if ($env->disabled) { $n->disabled(); }
         return $n;
     }
