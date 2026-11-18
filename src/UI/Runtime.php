@@ -782,7 +782,7 @@ final class Runtime
                     break;
                 case 'edit': // an editing command of the menus with no node taking its input: the focused field's, or Copy and Select All on selectable text
                     if ($this->focus !== null && isset($this->fields[$this->focus]) && !($this->fields[$this->focus][0]->readOnly && in_array($e[1], ['paste', 'pasteAndMatchStyle', 'cut', 'undo', 'redo'], true))) {
-                        $this->editCommand($this->focus, $e[1]);
+                        $this->editCommand($this->focus, $e[1], $e[2] ?? null);
                     } elseif (!$this->textSelectionCommand($e[1])) {
                         $this->commandKey($e[1]);
                     }

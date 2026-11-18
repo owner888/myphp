@@ -292,6 +292,14 @@ use MyPHP\UI\{Content, TextState};
     check(str_contains($objcSrc, "php_uname('m') !== 'arm64' && !App::isIOS()"), 'ObjC::boot runs on an iPhone, whose machine is its model, not arm64');
     check(str_contains($mainM, 'fprintf(stderr, "%s %s\\n", tag, line);') && str_contains($mainM, 'fwrite(str, 1, len, stderr);'), 'main.m writes its lines and PHP\'s output to stderr too, which devicectl --console shows');
     check(!preg_match('/\bos_log(_error)?\(OS_LOG_DEFAULT, "\[myphp-ios\] [A-Z]/', $mainM), 'main.m: the launcher\'s steps go through myphp_ios_line, not os_log alone');
+    // The edit menu, as a UITextField's (UIEditMenuInteraction): its commands PHP's field would take, its Paste with the
+    // pasteboard read as the user pastes; and the keyboard's text whole (a paste, Writing Tools' rewrite run long).
+    $iosFfiSrc = (string)file_get_contents(__DIR__ . '/../src/Native/iOS.php');
+    $iosWindowSrc = (string)file_get_contents(__DIR__ . '/../src/Platform/iOS/Window.php');
+    check(str_contains($mainM, 'char *text; //') && str_contains($mainM, '.text = strdup(text ? text : "");') && preg_match('/\} MyphpInputEvent;/', $iosFfiSrc) === 1 && str_contains($iosFfiSrc, "char *text;\n            } MyphpInputEvent;"), 'the input event\'s text is the launcher\'s strdup, not 255 bytes of it');
+    check(str_contains($iosWindowSrc, '$f->myphp_ios_free_string($iev->text);'), 'PHP frees each input event\'s text');
+    check(str_contains($mainM, '[[UIEditMenuInteraction alloc] initWithDelegate:self]') && str_contains($mainM, '- (void)paste:(id)sender {') && str_contains($mainM, 'push_input_event(6, '), 'main.m: the edit menu, whose Paste reads the pasteboard as the user pastes');
+    check(str_contains($iosWindowSrc, "6 => \$this->onEditMenu('paste', \$text)") && str_contains($iosWindowSrc, "['edit', \$name, \$pasted]"), 'iOS Window pastes the text the menu read');
     check(str_contains($binMyphpSrc, 'UIEmojiSearchOperations'), 'bin/myphp filters UIEmojiSearchOperations log noise (#11)');
     check(str_contains($dateInputDoc, 'App::region()') && !str_contains($dateInputDoc, 'as en-US writes it'), 'docs/ui/date-input.md documents regional date formatting (#18)');
 

@@ -45,6 +45,17 @@ final class Window implements Platform\Window
     private int $inputTaken = 0;
     /** What the keyboard was last told of the field's text (document()), as a string that changes when any of it does. */
     private ?string $documentKey = null;
+    /** The edit menu's commands the launcher was last told the field takes (editCommands' bits). */
+    private int $editCommands = -1;
+    /**
+     * A touch in the field that had the keyboard as it began: the field, its
+     * cursor and anchor then, and whether it lifted (the frame after takes
+     * it: the edit menu over a selection it made, at the caret it tapped).
+     * @var ?array{0: TextState, 1: int, 2: int, 3: bool}
+     */
+    private ?array $editMenuTouch = null;
+    /** Select or Select All of the edit menu: it shows again over the selection, the frame after. */
+    private bool $editMenuAfter = false;
     private $view = null;
     private ?Metal $metal = null;
     /** The launcher's view over the materials, in which what their nodes hold paints (Runtime::$overLayer), adopted as it is first needed; whether it shows anything; the materials as last given to the launcher. */
@@ -145,12 +156,16 @@ final class Window implements Platform\Window
             $iev = $this->inputEv ??= $f->new('MyphpInputEvent');
             while ($f->myphp_ios_poll_input_event(\FFI::addr($iev)) > 0) {
                 $this->inputTaken++;
+                $text = \FFI::string($iev->text); // the launcher's strdup, whole
+                $f->myphp_ios_free_string($iev->text);
                 match ((int)$iev->type) {
-                    0 => $this->onImeCommit(\FFI::string($iev->text)),
+                    0 => $this->onImeCommit($text),
                     1 => $this->onBackspace(),
-                    2 => $this->onImeCompose(\FFI::string($iev->text)),
-                    3 => $this->onReplace((int)$iev->from, (int)$iev->to, \FFI::string($iev->text)),
+                    2 => $this->onImeCompose($text),
+                    3 => $this->onReplace((int)$iev->from, (int)$iev->to, $text),
                     4 => $this->onSelect((int)$iev->from, (int)$iev->to),
+                    5 => $this->onEditMenu($text),
+                    6 => $this->onEditMenu('paste', $text),
                     default => null,
                 };
             }
@@ -178,6 +193,22 @@ final class Window implements Platform\Window
             Logger::error('pollEvents: ' . $e->getMessage(), 'ios');
             throw $e;
         }
+    }
+
+    /**
+     * A command of the edit menu (or a hardware keyboard's Cmd+X, C, V, A):
+     * cut, copy, selectAll, paste with the text the launcher read from the
+     * pasteboard as the user pasted, as the Edit menu's (Runtime's 'edit');
+     * select, the word the launcher selected. Over what Select and Select
+     * All selected the menu shows again, as a UITextField's.
+     */
+    public function onEditMenu(string $name, ?string $pasted = null): void
+    {
+        if ($name !== 'select') {
+            $this->w->input?->push($pasted === null ? ['edit', $name] : ['edit', $name, $pasted]);
+        }
+        $this->editMenuAfter = $name === 'select' || $name === 'selectAll';
+        $this->requestFrame();
     }
 
     /** The text the input method is composing (UITextInput's marked text), '' once it commits or gives up: shown in the field, underlined, as on the desktop. */
@@ -309,6 +340,7 @@ final class Window implements Platform\Window
                         $this->touchInField = true;
                     }
                 }
+                $this->editMenuTouch = $this->touchInField ? [$input->focus, $input->focus->cursor, $input->focus->anchor, false] : null;
 
                 // Push pointer down immediately so all controls enter their native pressed/dragging state
                 $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
@@ -423,6 +455,7 @@ final class Window implements Platform\Window
                     $input->mouse($ptX, $ptY);
                     $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
                     $this->touchInField = false;
+                    if ($this->editMenuTouch !== null) { $this->editMenuTouch[3] = true; }
                     $this->requestFrame();
                     break;
                 }
@@ -458,6 +491,7 @@ final class Window implements Platform\Window
                 break;
 
             case 3: // touchesCancelled
+                $this->editMenuTouch = null;
                 $this->touchMenuHeld = false;
                 $this->touchActive = false;
                 $this->touchIsScrolling = false;
@@ -507,6 +541,7 @@ final class Window implements Platform\Window
             $this->documentKey = $key;
             iOS::ffi()->myphp_ios_set_text_document($on, $text, $from, $to, $this->inputTaken);
         }
+        $this->editMenuAfterTouch();
         $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
         if ($hasInputFocus && !$this->keyboardVisible) {
             $this->keyboardVisible = true;
@@ -700,6 +735,59 @@ final class Window implements Platform\Window
         }
         [$a, $b] = $f->selection();
         return [1, $f->text, TextState::utf16Index($f->text, $a), TextState::utf16Index($f->text, $b)];
+    }
+
+    /** The edit menu's commands: their bits in the launcher's (EDIT_CUT…), Runtime::commandEnabled's names. */
+    private const EDIT_COMMANDS = ['cut' => 1, 'copy' => 2, 'paste' => 4, 'selectAll' => 8];
+
+    /**
+     * The edit menu, as a UITextField's: what it offers, told the launcher
+     * when it changes; shown, the frame after a touch in the field with the
+     * keyboard lifted, over the selection the touch made (a double tap, a
+     * long press, a drag), or at the caret it tapped where the caret was
+     * (shown there already, it goes); and over what Select and Select All
+     * of the menu selected.
+     */
+    private function editMenuAfterTouch(): void
+    {
+        $input = $this->w->input;
+        $f = $input?->focus;
+        $mask = 0;
+        if ($f !== null && $input->commandEnabled !== null) {
+            foreach (self::EDIT_COMMANDS as $name => $bit) {
+                if (($input->commandEnabled)($name)) { $mask |= $bit; }
+            }
+        }
+        if ($mask !== $this->editCommands) {
+            $this->editCommands = $mask;
+            iOS::ffi()->myphp_ios_set_edit_commands($mask);
+        }
+        if ($this->editMenuTouch !== null && $this->editMenuTouch[3]) {
+            [$was, $cursor, $anchor] = $this->editMenuTouch;
+            $this->editMenuTouch = null;
+            if ($f === $was && $f->hasSelection()) {
+                $this->editMenu(1);
+            } elseif ($f === $was && $f->cursor === $cursor && $f->anchor === $anchor) {
+                $this->editMenu(2);
+            }
+        }
+        if ($this->editMenuAfter) {
+            $this->editMenuAfter = false;
+            if ($f !== null && $f->hasSelection()) { $this->editMenu(1); }
+        }
+    }
+
+    /** The edit menu over the selection of the field with the keyboard, or its caret: $how 1 shows it, 2 unless it showed as the touch began (myphp_ios_edit_menu). */
+    private function editMenu(int $how): void
+    {
+        $input = $this->w->input;
+        $f = $input->focus;
+        [$a, $b] = $f->selection();
+        [$x, $y, $w, $h] = $input->caretRect(TextState::utf16Index($f->text, $a));
+        [$x2, $y2, $w2, $h2] = $input->caretRect(TextState::utf16Index($f->text, $b));
+        $left = min($x, $x2);
+        $top = min($y, $y2);
+        iOS::ffi()->myphp_ios_edit_menu($how, $left, $top, max($x + $w, $x2 + $w2) - $left, max($y + $h, $y2 + $h2) - $top);
     }
 
     /** Tells the text input where the caret of the field taking the keyboard is, in the view: a hardware keyboard's candidates show by it (as Linux\Window::placeCaret). */

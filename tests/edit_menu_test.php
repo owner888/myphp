@@ -107,3 +107,14 @@ $t->input->push(['move', 10, 10]);
 check(!$t->rt->commandEnabled('copy'), 'the pointer moving: an empty field still copies nothing');
 $t->input->push(['insert', 'x']);
 check($t->rt->commandEnabled('copy'), 'text on its way: the command goes behind it');
+
+// A paste that brings its text (iOS's edit menu reads the pasteboard as the user pastes: read later, the system would
+// ask the user first): that text, not the clipboard's, through the field's paste as any, onPaste seeing it.
+$st = new TextState('');
+$seen = null;
+$st->onPaste = function (string $s) use (&$seen): bool { $seen = $s; return false; };
+$t = new Headless(function (Context $c) use ($st): void { $c->input($st)->label('field'); }, 300, 60);
+$t->frame();
+$t->clickLabel('field'); $t->frame();
+$t->input->push(['edit', 'paste', "from\r\nthe menu"]); $t->frame();
+same(["from\nthe menu", 'from the menu'], [$seen, $st->text], 'a paste with its text: onPaste sees it, a single-line field takes it on one line');

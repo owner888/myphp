@@ -9493,6 +9493,20 @@ unbuffered, so the line before PHP dies arrives); the simulator still reads the 
 (`iPhone17,1`), not `arm64`; iOS is arm64 only, so `App::isIOS()` (the launcher's `MYPHP_PLATFORM`) passes the check
 there. `tests/embed_ini_test.php` and `tests/ios_backend_test.php` check all three.
 
+**The edit menu, as a UITextField's**: a tap in the field with the keyboard showed no Paste and no Writing Tools, as
+the Metal view had no edit menu at all. It has UIKit's now (`UIEditMenuInteraction`), and UIKit fills it: the view
+answers `canPerformAction:` for Cut, Copy, Paste and Select All by what PHP's field would take now
+(`Runtime::commandEnabled`, told as bits each frame they change: `myphp_ios_set_edit_commands`; Paste only while the
+pasteboard `hasStrings`), Select itself (the tokenizer's word at the caret), and leaves the rest (Writing Tools,
+AutoFill, Look Up) to UIKit; `writingToolsBehavior` is none where the document is the marked text alone. PHP shows it
+the frame after a touch in the focused field lifts (`iOS\Window::editMenuAfterTouch`): over a selection the touch made,
+or at the caret it tapped without moving it, unless it showed as the touch began (`myphp_ios_edit_menu`'s 2: the second
+tap takes it away); again over what Select and Select All selected. A touch, typing or the keyboard going takes it
+away. Paste reads `UIPasteboard` in `paste:`, as the user pastes, and sends the text along (`['edit', 'paste', $text]`,
+`RuntimeMenu::editCommand`'s `$pasted`): read later from PHP's thread, iOS asks the user whether to allow it. A
+hardware keyboard's Cmd+X, C, V and A reach the same actions. The input event's text became the launcher's `strdup`
+(freed by PHP): a `char[256]` cut a paste, dictation or Writing Tools' rewrite at 255 bytes.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is

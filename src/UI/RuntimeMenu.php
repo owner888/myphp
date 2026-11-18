@@ -385,8 +385,12 @@ trait RuntimeMenu
         }
     }
 
-    /** An editing command of a menu on text input or selectable text $id: Copy and Select All on selectable text; Cut, Copy, Paste, Delete, Select All, Undo and Redo on a field. */
-    private function editCommand(int $id, string $name): void
+    /**
+     * An editing command of a menu on text input or selectable text $id: Copy and Select All on selectable text; Cut,
+     * Copy, Paste, Delete, Select All, Undo and Redo on a field. A paste's $pasted is the text the system's menu read
+     * as the user pasted (iOS's edit menu: read later, the system would ask the user first); null reads the clipboard.
+     */
+    private function editCommand(int $id, string $name, ?string $pasted = null): void
     {
         if (isset($this->disabledIds[$id])) {
             return; // a disabled input or paragraph takes no command
@@ -407,7 +411,7 @@ trait RuntimeMenu
             case 'undo': $state->undo(); break;
             case 'redo': $state->redo(); break;
             case 'paste': case 'pasteAndMatchStyle': // plain text: pasted as it is
-                $s = str_replace(["\r\n", "\r"], "\n", ($this->readClipboard)());
+                $s = str_replace(["\r\n", "\r"], "\n", $pasted ?? ($this->readClipboard)());
                 if ($state->onPaste === null || !($state->onPaste)($s)) { // the app may take the paste
                     $state->insert($state->multiline ? $s : str_replace("\n", ' ', $s));
                 }

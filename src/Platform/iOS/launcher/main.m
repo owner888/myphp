@@ -21,9 +21,10 @@ typedef struct {
 } MyphpTouchEvent;
 
 typedef struct {
-    int type; // 0: insert text, 1: backspace, 2: the text being composed ("" none), 3: text replacing from..to, 4: from..to selected
+    int type; // 0: insert text, 1: backspace, 2: the text being composed ("" none), 3: text replacing from..to, 4: from..to selected,
+              // 5: an edit menu's command (cut, copy, selectAll, select), 6: the edit menu's Paste, text what the pasteboard held
     int from, to; // 3 and 4: UTF-16 offsets in the document (myphp_ios_set_text_document)
-    char text[256];
+    char *text; // strdup'ed, whole (a paste, dictation, Writing Tools' rewrite run long): PHP frees it (myphp_ios_free_string)
 } MyphpInputEvent;
 
 #define TOUCH_QUEUE_SIZE 256
@@ -128,12 +129,7 @@ static void push_input_event_at(int type, int from, int to, const char *text) {
         g_input_queue[g_input_head].type = type;
         g_input_queue[g_input_head].from = from;
         g_input_queue[g_input_head].to = to;
-        if (text) {
-            strncpy(g_input_queue[g_input_head].text, text, sizeof(g_input_queue[g_input_head].text) - 1);
-            g_input_queue[g_input_head].text[sizeof(g_input_queue[g_input_head].text) - 1] = '\0';
-        } else {
-            g_input_queue[g_input_head].text[0] = '\0';
-        }
+        g_input_queue[g_input_head].text = strdup(text ? text : "");
         g_input_head = next;
         g_input_pushed++;
     }
@@ -1188,6 +1184,17 @@ static void* php_worker_thread(void *arg) {
 // input, none) the document is the marked text alone, and corrections are off.
 static BOOL g_doc_on = NO;
 
+/* The edit menu (UIEditMenuInteraction), as a UITextField's: PHP shows it on a tap at the caret of the field with the
+ * keyboard, and over a selection made by touch (myphp_ios_edit_menu); its items are UIKit's for the commands this view
+ * can perform: those PHP's field would take now (Runtime::commandEnabled, as bits: myphp_ios_set_edit_commands, each
+ * frame they change), Select where the document has text and no selection, and what UIKit adds itself (Writing Tools,
+ * AutoFill, Look Up). A touch on the view takes it away; a tap at the caret where it showed leaves it gone. */
+enum { EDIT_CUT = 1, EDIT_COPY = 2, EDIT_PASTE = 4, EDIT_SELECT_ALL = 8 };
+static int g_edit_commands = 0;
+static BOOL g_edit_menu_shown = NO;    // between its willPresent and willDismiss
+static BOOL g_edit_menu_at_touch = NO; // it showed as the last touch began
+static CGRect g_edit_menu_rect;        // the caret or the selection it points at, in the view
+
 @interface MyphpTextPosition : UITextPosition
 @property (nonatomic, assign) NSInteger index;
 + (instancetype)at:(NSInteger)i;
@@ -1212,11 +1219,14 @@ static BOOL g_doc_on = NO;
 - (NSUInteger)hash { return (NSUInteger)(self.from * 31 + self.to); }
 @end
 
-@interface MyphpMetalView : MTKView <UITextInput>
+@interface MyphpMetalView : MTKView <UITextInput, UIEditMenuInteractionDelegate>
 @property (nonatomic, strong) NSMutableString *doc;     // the document: the field's text, with the marked text in it
 @property (nonatomic, assign) NSRange sel;              // the selection in it
 @property (nonatomic, assign) NSRange marked;           // the marked text in it (length 0: none)
 @property (nonatomic, strong) UITextInputStringTokenizer *tokenizerObject;
+@property (nonatomic, strong) UIEditMenuInteraction *editMenuInteraction;
+- (void)myphpShowEditMenu:(int)how;
+- (void)myphpDismissEditMenu;
 - (void)takeDocument:(NSString *)text on:(BOOL)on from:(NSInteger)from to:(NSInteger)to acked:(int)acked;
 @end
 
@@ -1229,6 +1239,7 @@ static BOOL g_doc_on = NO;
 }
 
 - (BOOL)resignFirstResponder {
+    [self myphpDismissEditMenu];
     [self clearMarked];
     return [super resignFirstResponder];
 }
@@ -1304,6 +1315,7 @@ static BOOL g_doc_on = NO;
 }
 
 - (void)insertText:(NSString *)text {
+    [self myphpDismissEditMenu]; // typing takes it away, as in a UITextField
     NSString *t = text ?: @"";
     NSRange at = [self hasMarked] ? _marked : _sel; // the composition commits as this text
     [[self docText] replaceCharactersInRange:at withString:t];
@@ -1317,6 +1329,7 @@ static BOOL g_doc_on = NO;
 }
 
 - (void)deleteBackward {
+    [self myphpDismissEditMenu];
     NSMutableString *d = [self docText];
     NSRange r = _sel;
     if ([self hasMarked]) { // a backspace inside the composition edits it, not the field
@@ -1345,6 +1358,7 @@ static BOOL g_doc_on = NO;
 }
 
 - (void)setMarkedText:(NSString *)markedText selectedRange:(NSRange)selectedRange {
+    [self myphpDismissEditMenu];
     NSString *m = markedText ?: @"";
     [_inputDelegate textWillChange:self];
     NSRange at = [self hasMarked] ? _marked : _sel; // a selection is replaced by what is composed, as PHP's setMarked does
@@ -1402,6 +1416,7 @@ static BOOL g_doc_on = NO;
 }
 
 - (void)replaceRange:(UITextRange *)range withText:(NSString *)text {
+    [self myphpDismissEditMenu];
     MyphpTextRange *r = (MyphpTextRange *)range;
     if (!r) return;
     NSString *t = text ?: @"";
@@ -1483,6 +1498,66 @@ static BOOL g_doc_on = NO;
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range { return range.end; }
 - (UITextRange *)characterRangeAtPoint:(CGPoint)point { return nil; }
 
+// The edit menu: how 1 shows it at g_edit_menu_rect, 2 too unless it showed as this touch began (the caret tapped again)
+- (void)myphpShowEditMenu:(int)how {
+    if (how == 2 && g_edit_menu_at_touch) return;
+    if (!_editMenuInteraction) {
+        _editMenuInteraction = [[UIEditMenuInteraction alloc] initWithDelegate:self];
+        [self addInteraction:_editMenuInteraction];
+    }
+    CGPoint at = CGPointMake(CGRectGetMidX(g_edit_menu_rect), CGRectGetMinY(g_edit_menu_rect));
+    [_editMenuInteraction presentEditMenuWithConfiguration:[UIEditMenuConfiguration configurationWithIdentifier:nil sourcePoint:at]];
+}
+
+- (void)myphpDismissEditMenu {
+    if (g_edit_menu_shown) [_editMenuInteraction dismissMenu];
+}
+
+- (CGRect)editMenuInteraction:(UIEditMenuInteraction *)interaction targetRectForConfiguration:(UIEditMenuConfiguration *)configuration {
+    return g_edit_menu_rect;
+}
+
+- (void)editMenuInteraction:(UIEditMenuInteraction *)interaction willPresentMenuForConfiguration:(UIEditMenuConfiguration *)configuration animator:(id<UIEditMenuInteractionAnimating>)animator {
+    g_edit_menu_shown = YES;
+}
+
+- (void)editMenuInteraction:(UIEditMenuInteraction *)interaction willDismissMenuForConfiguration:(UIEditMenuConfiguration *)configuration animator:(id<UIEditMenuInteractionAnimating>)animator {
+    g_edit_menu_shown = NO;
+}
+
+// What the edit menu, and a hardware keyboard's Cmd+X, C, V, A, offer: what PHP's field would take; the rest UIKit's
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+    if (action == @selector(cut:)) return (g_edit_commands & EDIT_CUT) != 0;
+    if (action == @selector(copy:)) return (g_edit_commands & EDIT_COPY) != 0;
+    if (action == @selector(paste:)) return (g_edit_commands & EDIT_PASTE) != 0 && [UIPasteboard generalPasteboard].hasStrings; // asks the user nothing
+    if (action == @selector(selectAll:)) return (g_edit_commands & EDIT_SELECT_ALL) != 0;
+    if (action == @selector(select:)) return g_doc_on && _sel.length == 0 && [self docText].length > 0;
+    return [super canPerformAction:action withSender:sender];
+}
+
+- (void)cut:(id)sender { push_input_event(5, "cut"); g_needs_render = 1; }
+- (void)copy:(id)sender { push_input_event(5, "copy"); g_needs_render = 1; }
+- (void)selectAll:(id)sender { push_input_event(5, "selectAll"); g_needs_render = 1; }
+
+// The pasteboard read here, as the user pastes: read later, from PHP's thread, the system asks the user whether to allow
+// it. Its text ("" for none, an image) goes to the field's paste, which the app may take (TextState::onPaste).
+- (void)paste:(id)sender {
+    NSString *text = [UIPasteboard generalPasteboard].string;
+    push_input_event(6, [(text ?: @"") UTF8String]);
+    g_needs_render = 1;
+}
+
+// Select: the word at the caret, or the one before it (the caret after a word), as a UITextField's
+- (void)select:(id)sender {
+    UITextPosition *caret = [MyphpTextPosition at:(NSInteger)_sel.location];
+    UITextRange *word = [[self tokenizer] rangeEnclosingPosition:caret withGranularity:UITextGranularityWord inDirection:UITextStorageDirectionForward]
+        ?: [[self tokenizer] rangeEnclosingPosition:caret withGranularity:UITextGranularityWord inDirection:UITextStorageDirectionBackward];
+    if (!word) return;
+    [self setSelectedTextRange:word];
+    push_input_event(5, "select"); // the menu shows again over the word, once PHP selected it
+    g_needs_render = 1;
+}
+
 // UITextInputTraits: what the field with the keyboard asks (myphp_ios_set_text_traits). Corrections, spelling and smart
 // punctuation are UIKit's defaults, as a UITextField's, where the keyboard reads the field's text (g_doc_on), and
 // autocorrectionDisabled() turns corrections and spelling off; off where it reads the marked text alone, as its
@@ -1497,6 +1572,8 @@ static BOOL g_doc_on = NO;
 - (UITextSmartQuotesType)smartQuotesType { return g_doc_on ? UITextSmartQuotesTypeDefault : UITextSmartQuotesTypeNo; }
 - (UITextSmartDashesType)smartDashesType { return g_doc_on ? UITextSmartDashesTypeDefault : UITextSmartDashesTypeNo; }
 - (UITextSmartInsertDeleteType)smartInsertDeleteType { return g_doc_on ? UITextSmartInsertDeleteTypeDefault : UITextSmartInsertDeleteTypeNo; }
+// Writing Tools rewrite the document: UIKit's default where it is the field's text, none where it is the marked text alone
+- (UIWritingToolsBehavior)writingToolsBehavior API_AVAILABLE(ios(18.0)) { return g_doc_on ? UIWritingToolsBehaviorDefault : UIWritingToolsBehaviorNone; }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
     NSMutableSet<UIPress *> *pass = nil;
@@ -1565,6 +1642,8 @@ static BOOL g_doc_on = NO;
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    g_edit_menu_at_touch = g_edit_menu_shown;
+    [self myphpDismissEditMenu];
     UITouch *t = [touches anyObject];
     if (t) {
         CGPoint pt = [t locationInView:self];
@@ -1607,6 +1686,24 @@ void myphp_ios_set_text_document(int on, const char *text, int from, int to, int
         if (g_view) {
             [(MyphpMetalView *)g_view takeDocument:t on:on != 0 from:from to:to acked:acked];
         }
+    });
+}
+
+// Which of the edit menu's commands PHP's field would take now (EDIT_CUT, EDIT_COPY, EDIT_PASTE, EDIT_SELECT_ALL bits):
+// the menu, and a hardware keyboard's shortcuts, offer those. PHP's iOS\Window::editCommands, each frame they change.
+void myphp_ios_set_edit_commands(int mask) {
+    dispatch_async(dispatch_get_main_queue(), ^{ g_edit_commands = mask; });
+}
+
+// The edit menu over x, y, w, h in the view (the caret, or the selection): how 0 takes it away, 1 shows it, 2 shows it
+// unless it showed as the touch began (a tap at the caret shows it, and the next one takes it away). iOS\Window::editMenu.
+void myphp_ios_edit_menu(int how, float x, float y, float w, float h) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        MyphpMetalView *v = (MyphpMetalView *)g_view;
+        if (!v || ![v isFirstResponder]) return;
+        if (how == 0) { [v myphpDismissEditMenu]; return; }
+        g_edit_menu_rect = CGRectMake(x, y, MAX(1.0f, w), MAX(1.0f, h));
+        [v myphpShowEditMenu:how];
     });
 }
 

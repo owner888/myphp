@@ -22,7 +22,7 @@ final class iOS
             typedef struct {
                 int type;
                 int from, to;
-                char text[256];
+                char *text;
             } MyphpInputEvent;
 
             typedef struct {
@@ -56,6 +56,8 @@ int myphp_ios_poll_memory_warning(void);
             int myphp_ios_take_files_result(int callback_id, char *out, int max_len);
             float myphp_ios_get_keyboard_height(void);
             void myphp_ios_set_caret_rect(float x, float y, float w, float h);
+            void myphp_ios_set_edit_commands(int mask);
+            void myphp_ios_edit_menu(int how, float x, float y, float w, float h);
             int myphp_ios_is_dark(void);
             void* myphp_ios_get_over_view(void);
             void myphp_ios_log(int level, const char *message);
