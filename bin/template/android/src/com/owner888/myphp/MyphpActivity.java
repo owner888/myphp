@@ -127,9 +127,9 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         if (f == null) {
             try {
                 f = new Font.Builder(font).setFontVariationSettings("'wght' " + weight).build();
-            } catch (java.io.IOException e) {
-                Log.e("MyPHP", "Weight " + weight + " of a font failed: " + e);
-                throw new RuntimeException("Weight " + weight + " of a font failed: " + e, e);
+            } catch (Exception e) {
+                Log.w("MyPHP", "Weight " + weight + " fallback to base font: " + e);
+                f = font;
             }
             sWeightedFonts.put(key, f);
         }
@@ -510,7 +510,9 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             int gid = glyphs.getGlyphId(i);
             Font font = glyphs.getFont(i);
             if (font != null) {
-                sGlyphFontCache.put(glyphKey(style, gid), weighted(font, style));
+                Font wf = weighted(font, style);
+                sGlyphFontCache.put(glyphKey(style, gid), wf);
+                sGlyphFontCache.put(glyphKey(0, gid), wf);
             }
             result[4 + i * 3] = (float) gid;
             result[4 + i * 3 + 1] = glyphs.getGlyphX(i);
@@ -523,6 +525,9 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     // Glyph rasterization via Canvas.drawGlyphs into ALPHA_8 Bitmap
     public static synchronized byte[] rasterizeGlyph(int glyphId, float textSize, int style, int[] outMetrics) {
         Font font = sGlyphFontCache.get(glyphKey(style, glyphId));
+        if (font == null) {
+            font = sGlyphFontCache.get(glyphKey(0, glyphId));
+        }
         if (font == null) {
             outMetrics[0] = 0;
             outMetrics[1] = 0;
@@ -691,16 +696,93 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     // BEGIN_APK_SELF_UPDATE
+    private static volatile int sApkUpgradeProgress = -2; // -2 idle, 0..100 downloading, 101 installing, -1 failed
+
+    public static int getApkUpgradeProgress() {
+        return sApkUpgradeProgress;
+    }
+
+    public static void startApkUpgrade(String urlStr) {
+        if (sInstance == null || urlStr == null || urlStr.isEmpty()) return;
+        if (sApkUpgradeProgress >= 0 && sApkUpgradeProgress <= 100) return;
+        sApkUpgradeProgress = 0;
+        final File outFile = new File(sInstance.getCacheDir(), "Linking_update.apk");
+        new Thread(() -> {
+            java.net.HttpURLConnection conn = null;
+            try {
+                String currentUrl = urlStr;
+                for (int redirects = 0; redirects < 8; redirects++) {
+                    java.net.URL u = new java.net.URL(currentUrl);
+                    conn = (java.net.HttpURLConnection) u.openConnection();
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(60000);
+                    conn.setRequestProperty("User-Agent", "Linking-MyPHP-Updater");
+                    int code = conn.getResponseCode();
+                    if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                        String loc = conn.getHeaderField("Location");
+                        conn.disconnect();
+                        if (loc == null || loc.isEmpty()) break;
+                        currentUrl = loc;
+                        continue;
+                    }
+                    break;
+                }
+                if (conn == null || conn.getResponseCode() < 200 || conn.getResponseCode() >= 300) {
+                    sApkUpgradeProgress = -1;
+                    return;
+                }
+                long total = conn.getContentLengthLong();
+                try (java.io.InputStream in = conn.getInputStream();
+                     java.io.FileOutputStream out = new java.io.FileOutputStream(outFile)) {
+                    byte[] buf = new byte[32768];
+                    long downloaded = 0;
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        out.write(buf, 0, n);
+                        downloaded += n;
+                        if (total > 0) {
+                            sApkUpgradeProgress = (int) Math.min(99, (downloaded * 100L) / total);
+                        } else {
+                            sApkUpgradeProgress = Math.min(95, sApkUpgradeProgress + 1);
+                        }
+                    }
+                    out.flush();
+                }
+                if (outFile.exists() && outFile.length() > 100000) {
+                    sApkUpgradeProgress = 100;
+                    sApkUpgradeProgress = 101;
+                    installApkFile(outFile);
+                } else {
+                    sApkUpgradeProgress = -1;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "startApkUpgrade error", e);
+                sApkUpgradeProgress = -1;
+            } finally {
+                if (conn != null) {
+                    try { conn.disconnect(); } catch (Exception ignored) {}
+                }
+            }
+        }, "MyPHP-ApkUpdater").start();
+    }
+
     private static void installApkFile(File apkFile) {
         if (sInstance == null || apkFile == null || !apkFile.exists()) return;
         try {
             if (!sInstance.getPackageManager().canRequestPackageInstalls()) {
-                Intent permIntent = new Intent(
-                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:" + sInstance.getPackageName())
-                );
-                permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                sInstance.startActivity(permIntent);
+                sInstance.runOnUiThread(() -> {
+                    try {
+                        Intent permIntent = new Intent(
+                            android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + sInstance.getPackageName())
+                        );
+                        permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        sInstance.startActivity(permIntent);
+                    } catch (Exception e) {
+                        Log.e(TAG, "ACTION_MANAGE_UNKNOWN_APP_SOURCES error", e);
+                    }
+                });
                 return;
             }
             android.content.pm.PackageInstaller installer = sInstance.getPackageManager().getPackageInstaller();

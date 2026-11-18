@@ -1130,8 +1130,8 @@ function UpdateCapsule(
     $isFailed = $status === 'failed';
     $pct = (int) round(max(0.0, min(1.0, $progress)) * 100);
 
-    $accent = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::rgb(0xF7C35E));
-    $bgTint = $isFailed ? Color::rgb(0xED2020, 0.16) : Color::rgb(0xF7C35E, 0.16);
+    $accent = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::rgb(0x2B65F1));
+    $bgTint = $isFailed ? Color::rgb(0x2A1215, 0.96) : Color::rgb(0x161D2E, 0.96);
 
     $iconGlyph = $isFailed ? '↻' : ($isDownloading || $isInstalling ? '↓' : '↑');
     $headline = match (true) {
@@ -1142,7 +1142,6 @@ function UpdateCapsule(
         default => 'Update Available',
     };
     $cleanVer = 'v' . ltrim($version, 'vV');
-    $subtitle = $notes !== '' ? "{$cleanVer} · {$notes}" : $cleanVer;
     $btnText = match (true) {
         $isDownloading => "{$pct}%",
         $isInstalling => 'INSTALL',
@@ -1153,18 +1152,20 @@ function UpdateCapsule(
     return VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
         HStack(alignment: VerticalAlignment::center, spacing: 10)(
             Text(verbatim: $iconGlyph)
-                ->font(Font::headline)
-                ->foregroundStyle(Color::rgb(0x1E1E24))
+                ->font(Font::subheadline)
+                ->foregroundStyle(Color::white)
                 ->frame(width: 28, height: 28, alignment: Alignment::center)
                 ->background($accent)
                 ->cornerRadius(14),
-            VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+            VStack(alignment: HorizontalAlignment::leading, spacing: 1)(
                 Text(verbatim: $headline)
                     ->font(Font::subheadline)
-                    ->foregroundStyle($accent),
-                Text(verbatim: $subtitle)
+                    ->foregroundStyle(Color::white)
+                    ->lineLimit(1),
+                Text(verbatim: $cleanVer)
                     ->font(Font::caption)
-                    ->foregroundStyle(Color::secondary),
+                    ->foregroundStyle(Color::secondary)
+                    ->lineLimit(1),
             )->frame(maxWidth: INF, alignment: Alignment::leading),
             Button($btnText, action: ($isDownloading || $isInstalling) ? null : $onAction)
                 ->buttonStyle(ButtonStyle::borderedProminent)
@@ -1173,12 +1174,12 @@ function UpdateCapsule(
                 ? Button('✕', action: $onDismiss)->buttonStyle(ButtonStyle::plain)->foregroundStyle(Color::secondary)
                 : null,
         ),
-        $isDownloading
-            ? ProgressView(value: max(0.0, min(1.0, $progress)), total: 1.0)->tint($accent)
+        ($isDownloading || $isInstalling)
+            ? ProgressView(value: $isInstalling ? 1.0 : max(0.02, min(1.0, $progress)), total: 1.0)->tint($accent)
             : null,
     )
         ->padding(Edge::horizontal, 14)
-        ->padding(Edge::vertical, 9)
+        ->padding(Edge::vertical, 8)
         ->background($bgTint)
-        ->cornerRadius(20);
+        ->cornerRadius(22);
 }

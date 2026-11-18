@@ -234,6 +234,10 @@ int myphp_shape_text(const char *text, float size, int style, float *out_buffer,
     jstring jstr = (*env)->NewStringUTF(env, text);
     jfloatArray jarr = (jfloatArray)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_shape, jstr, size, style);
     (*env)->DeleteLocalRef(env, jstr);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        return 0;
+    }
 
     if (!jarr) return 0;
     jsize len = (*env)->GetArrayLength(env, jarr);
@@ -253,6 +257,11 @@ int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics,
 
     jintArray jmetrics = (*env)->NewIntArray(env, 4);
     jbyteArray jpix = (jbyteArray)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_rasterize, glyph_id, size, style, jmetrics);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        (*env)->DeleteLocalRef(env, jmetrics);
+        return 0;
+    }
 
     if (!jpix) {
         (*env)->DeleteLocalRef(env, jmetrics);
@@ -1194,6 +1203,9 @@ void* myphp_jni_activity(void) {
 void* myphp_jni_find_class(const char *name) {
     JNIEnv *env = get_jni_env();
     if (!env || !name) return NULL;
+    if (g_activity_class && strcmp(name, "com/owner888/myphp/MyphpActivity") == 0) {
+        return (void*)g_activity_class;
+    }
     jclass local = (*env)->FindClass(env, name);
     if ((*env)->ExceptionCheck(env) || !local) {
         (*env)->ExceptionClear(env);
