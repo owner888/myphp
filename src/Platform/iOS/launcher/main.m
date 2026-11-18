@@ -1085,30 +1085,42 @@ void myphp_ios_hide_keyboard(void) {
     });
 }
 
-// PHP's output and its log (warnings, fatals: "PHP Request Startup: …") into the system log, where `myphp run` reads them
+/* What the launcher and PHP say goes where `myphp run` reads it on both: the system log (the simulator's log stream) and
+ * stderr (a device's: devicectl's --console forwards the app's stdout and stderr, never the system log; unbuffered, so a
+ * line printed just before PHP dies still arrives). A line, without its newline, after its tag ("[myphp]"). */
+static void myphp_ios_line(os_log_type_t type, const char *tag, const char *line) {
+    os_log_with_type(OS_LOG_DEFAULT, type, "%{public}s %{public}s", tag, line);
+    fprintf(stderr, "%s %s\n", tag, line);
+}
+
+// PHP's output into the system log and stderr, as it comes (its own newlines)
 static size_t myphp_ub_write(const char *str, size_t len) {
     os_log(OS_LOG_DEFAULT, "[myphp-ios] %{public}.*s", (int)len, str);
+    fwrite(str, 1, len, stderr);
     return len;
 }
 
-// A line of the app's log (MyPHP\Logger) into the system log at its level: verbose and debug as debug, info as info,
+// A line of the app's log (MyPHP\Logger) into the system log at its level, and stderr: verbose and debug as debug, info as info,
 // warnings as default (the line says [W]), errors as errors, faults as faults, where `myphp run` reads and colors them.
 void myphp_ios_log(int level, const char *message) {
     static const os_log_type_t types[] = {OS_LOG_TYPE_DEBUG, OS_LOG_TYPE_DEBUG, OS_LOG_TYPE_INFO, OS_LOG_TYPE_DEFAULT, OS_LOG_TYPE_ERROR, OS_LOG_TYPE_FAULT};
-    os_log_type_t type = types[level < 0 ? 0 : (level > 5 ? 5 : level)];
-    os_log_with_type(OS_LOG_DEFAULT, type, "[myphp] %{public}s", message);
+    myphp_ios_line(types[level < 0 ? 0 : (level > 5 ? 5 : level)], "[myphp]", message);
 }
 
+// PHP's log (warnings, fatals: "PHP Request Startup: …"), as errors
 static void myphp_log_message(const char *message, int syslog_type_int) {
-    os_log_error(OS_LOG_DEFAULT, "[myphp-ios] %{public}s", message);
+    myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", message);
 }
 
 /* The INI the app runs with, as php_embed's defaults (ini_defaults, read as its configuration starts): ini_entries set
  * before php_embed_init are lost, as it sets them to its own HARDCODED_INI, and FFI was off ("FFI API is restricted by
- * the ffi.enable configuration directive") on a PHP whose php_embed.c was not patched. */
+ * the ffi.enable configuration directive") on a PHP whose php_embed.c was not patched. OPcache makes its lock file in
+ * opcache.lockfile_path as it starts, /tmp by default, which a device's sandbox refuses ("Unable to create opcache lock
+ * file in /tmp: Operation not permitted", exit 254; the simulator's is the Mac's): the app's own tmp, the TMPDIR
+ * php_worker_thread sets before php_embed_init. */
 static void myphp_ini_defaults(HashTable *configuration_hash)
 {
-    static const char *const ini[][2] = {{"ffi.enable", "1"}, {"memory_limit", "512M"}};
+    const char *const ini[][2] = {{"ffi.enable", "1"}, {"memory_limit", "512M"}, {"opcache.lockfile_path", getenv("TMPDIR")}};
     for (size_t i = 0; i < sizeof ini / sizeof ini[0]; i++) {
         zval v;
         ZVAL_NEW_STR(&v, zend_string_init(ini[i][1], strlen(ini[i][1]), 1));
@@ -1117,7 +1129,7 @@ static void myphp_ini_defaults(HashTable *configuration_hash)
 }
 
 static void* php_worker_thread(void *arg) {
-    os_log(OS_LOG_DEFAULT, "[myphp-ios] PHP worker thread starting...");
+    myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP worker thread starting...");
 
     @autoreleasepool {
         NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
@@ -1133,7 +1145,7 @@ static void* php_worker_thread(void *arg) {
 
         char *php_argv[] = {"myphp", NULL};
 
-        os_log(OS_LOG_DEFAULT, "[myphp-ios] Initializing PHP Embed SAPI on iOS...");
+        myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Initializing PHP Embed SAPI on iOS...");
         php_embed_module.ub_write = myphp_ub_write;
         php_embed_module.log_message = myphp_log_message;
         php_embed_module.ini_defaults = myphp_ini_defaults;
@@ -1141,9 +1153,9 @@ static void* php_worker_thread(void *arg) {
 
         NSString *appPhp = [bundlePath stringByAppendingPathComponent:@"app.php"];
         if (![[NSFileManager defaultManager] fileExistsAtPath:appPhp]) {
-            os_log_error(OS_LOG_DEFAULT, "[myphp-ios] app.php not found at %{public}@", appPhp);
+            myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[@"app.php not found at " stringByAppendingString:appPhp] UTF8String]);
         } else {
-            os_log(OS_LOG_DEFAULT, "[myphp-ios] Executing app.php...");
+            myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Executing app.php...");
             zend_first_try {
                 // the framework the app carries: an app needs no autoloader of its own, as on the desktop with Composer's;
                 // and why PHP ended, in the log: a fatal error, an uncaught exception's trace (as the Android launcher's)
@@ -1156,11 +1168,11 @@ static void* php_worker_thread(void *arg) {
                 php_execute_script(&file_handle);
                 zend_destroy_file_handle(&file_handle);
             } zend_catch {
-                os_log_error(OS_LOG_DEFAULT, "[myphp-ios] Uncaught PHP exception/bailout in app.php");
+                myphp_ios_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", "Uncaught PHP exception/bailout in app.php");
             } zend_end_try();
         }
 
-        os_log(OS_LOG_DEFAULT, "[myphp-ios] PHP execution finished, shutting down...");
+        myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "PHP execution finished, shutting down...");
         php_embed_shutdown();
     }
     return NULL;
@@ -1874,7 +1886,7 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
 
 @implementation MyphpAppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    os_log(OS_LOG_DEFAULT, "[myphp-ios] Application did finish launching");
+    myphp_ios_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Application did finish launching");
 
     // Start network path monitor
     g_path_monitor = nw_path_monitor_create();

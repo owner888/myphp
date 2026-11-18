@@ -286,6 +286,12 @@ use MyPHP\UI\{Content, TextState};
     check(str_contains($iosBackendSrc, 'if (!$this->readyCalled)') && !str_contains(explode('public function run()', $iosBackendSrc)[0], '$this->h->ready()'), 'iOS Backend calls ready() inside run() after event loop starts (#27)');
     check(str_contains($curlLoopSrc, '!App::isIOS()'), 'CurlLoop::driven and pump do not spin worker thread NSRunLoop on iOS (#27)');
     check(str_contains($mainM, 'k.characters') && str_contains($mainM, 'pressesEnded:'), 'main.m pressesBegan handles plain hardware keyboard characters directly without Simulator screenshot shortcut (#10)');
+    // On a device: uname's machine is the model ("iPhone17,1"), not arm64, so ObjC::boot takes the launcher's word; and
+    // `myphp run` shows devicectl's --console, stdout and stderr only: what the launcher and PHP say goes there too.
+    $objcSrc = (string)file_get_contents(__DIR__ . '/../src/Native/ObjC.php');
+    check(str_contains($objcSrc, "php_uname('m') !== 'arm64' && !App::isIOS()"), 'ObjC::boot runs on an iPhone, whose machine is its model, not arm64');
+    check(str_contains($mainM, 'fprintf(stderr, "%s %s\\n", tag, line);') && str_contains($mainM, 'fwrite(str, 1, len, stderr);'), 'main.m writes its lines and PHP\'s output to stderr too, which devicectl --console shows');
+    check(!preg_match('/\bos_log(_error)?\(OS_LOG_DEFAULT, "\[myphp-ios\] [A-Z]/', $mainM), 'main.m: the launcher\'s steps go through myphp_ios_line, not os_log alone');
     check(str_contains($binMyphpSrc, 'UIEmojiSearchOperations'), 'bin/myphp filters UIEmojiSearchOperations log noise (#11)');
     check(str_contains($dateInputDoc, 'App::region()') && !str_contains($dateInputDoc, 'as en-US writes it'), 'docs/ui/date-input.md documents regional date formatting (#18)');
 

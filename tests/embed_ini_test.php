@@ -11,12 +11,18 @@ foreach (['iOS' => 'src/Platform/iOS/launcher/main.m', 'Android' => 'src/Platfor
     $src = (string)file_get_contents("$root/$file");
     check(!str_contains($src, 'php_embed_module.ini_entries'), "$os: no ini_entries, which php_embed_init replaces");
     check(str_contains($src, 'php_embed_module.ini_defaults = myphp_ini_defaults;'), "$os: the INI as php_embed's defaults");
-    preg_match('/static void myphp_ini_defaults\(HashTable \*configuration_hash\)\s*\{\s*static const char \*const ini\[\]\[2\] = \{(.*?)\};/s', $src, $m);
+    preg_match('/static void myphp_ini_defaults\(HashTable \*configuration_hash\)\s*\{\s*(?:static )?const char \*const ini\[\]\[2\] = \{(.*?)\};/s', $src, $m);
     check(str_contains($m[1] ?? '', '{"ffi.enable", "1"}'), "$os: FFI on");
     $init = strpos($src, 'php_embed_init(');
     $set = strpos($src, 'php_embed_module.ini_defaults =');
     check($set !== false && $init !== false && $set < $init, "$os: set before php_embed_init");
 }
+// OPcache's lock file goes in opcache.lockfile_path as it starts, /tmp by default, which an iPhone's sandbox refuses
+// ("Unable to create opcache lock file in /tmp: Operation not permitted", exit 254): the app's own tmp instead.
+$mainM = (string)file_get_contents("$root/src/Platform/iOS/launcher/main.m");
+check(str_contains($mainM, '{"opcache.lockfile_path", getenv("TMPDIR")}'), 'iOS: OPcache locks in the app\'s TMPDIR, not /tmp');
+$tmpdir = strpos($mainM, 'setenv("TMPDIR"');
+check($tmpdir !== false && $tmpdir < strpos($mainM, 'php_embed_init('), 'iOS: TMPDIR set before php_embed_init reads it');
 same(['512M'], (function () use ($root) { preg_match('/\{"memory_limit", "([^"]+)"\}/', (string)file_get_contents("$root/src/Platform/iOS/launcher/main.m"), $m); return [$m[1] ?? null]; })(), 'iOS: memory_limit 512M, as the launcher set and lost too');
 check(preg_match('/build-ios-php\.sh"\n(#[^\n]*\n)*if ! xcrun nm -g "\$\{BUILD_DIR\}\/libs\/libphp\.a" [^\n]*\' _ffi_module_entry\$\'/', (string)file_get_contents("$root/scripts/package-ios-app.sh")) === 1,
     'package-ios-app.sh refuses a runtime without ext-ffi');

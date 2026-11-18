@@ -5,10 +5,11 @@ namespace MyPHP\Native;
 
 use Closure;
 use FFI;
+use MyPHP\App;
 use RuntimeException;
 
 /**
- * Objective-C runtime bridge over ext-ffi. macOS on Apple Silicon only.
+ * Objective-C runtime bridge over ext-ffi. macOS on Apple Silicon, and iOS.
  *
  * One FFI instance holds every type, so structs (NSRect) flow between calls.
  * objc_msgSend is cast per signature from its dlsym address and never declared
@@ -61,9 +62,10 @@ final class ObjC
             self::load($frameworks);
             return;
         }
-        if (PHP_OS_FAMILY !== 'Darwin' || php_uname('m') !== 'arm64') {
-            // Intel Macs return NSRect through objc_msgSend_stret, which this bridge does not map.
-            throw new RuntimeException('MyPHP\Native\ObjC needs macOS on Apple Silicon');
+        // Intel Macs return NSRect through objc_msgSend_stret, which this bridge does not map. An iPhone's machine is its
+        // model ("iPhone17,1"), not arm64: iOS is arm64 only, so its launcher's word (App::isIOS) is enough there.
+        if (PHP_OS_FAMILY !== 'Darwin' || (php_uname('m') !== 'arm64' && !App::isIOS())) {
+            throw new RuntimeException('MyPHP\Native\ObjC needs macOS on Apple Silicon, or iOS');
         }
         self::$c = FFI::cdef("
             typedef struct { double x, y, w, h; } NSRect;

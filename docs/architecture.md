@@ -9478,6 +9478,21 @@ asked for and how it was to come, and a frame that comes more than 100 ms
 later is logged with both; `Window` logs frames held for a window that does
 not show.
 
+## iOS on a device, not the simulator (v1.201)
+
+An app that ran in the simulator stopped on an iPhone in three ways, none of which the simulator can show: it is the
+Mac underneath. **OPcache's lock file**: OPcache makes it in `opcache.lockfile_path` as it starts, `/tmp` by default,
+which a device's sandbox refuses ("Unable to create opcache lock file in /tmp: Operation not permitted", exit 254);
+the launcher gives it the app's own tmp in its INI defaults (`myphp_ini_defaults`: `TMPDIR`, set by
+`php_worker_thread` before `php_embed_init`). **Nothing in `myphp run`**: on a device it shows `devicectl device
+process launch --console`, which forwards the app's stdout and stderr and never the system log, while the launcher
+wrote PHP's output (`ub_write`), PHP's log (`log_message`), `MyPHP\Logger`'s lines (`myphp_ios_log`) and its own
+steps to `os_log` alone: a fatal was a black screen. Each now goes to both through `myphp_ios_line` (stderr is
+unbuffered, so the line before PHP dies arrives); the simulator still reads the system log, launched without
+`--console`, so nothing shows twice. **`ObjC::boot` refused the phone**: `php_uname('m')` on an iPhone is its model
+(`iPhone17,1`), not `arm64`; iOS is arm64 only, so `App::isIOS()` (the launcher's `MYPHP_PLATFORM`) passes the check
+there. `tests/embed_ini_test.php` and `tests/ios_backend_test.php` check all three.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `upstream-deviations.md`; what is
