@@ -501,3 +501,21 @@ try {
     check(true, 'released more than held throws');
 }
 $setDev(null);
+
+// A device that opens and will not start (macOS refuses an Audio Queue while the output changes or the machine wakes,
+// OSStatus -66681): closed, told of (Audio::err), and stood in for by one that plays nothing and tries again; nothing
+// thrown, as it is opened again from the device's own news, a callback, where PHP's FFI cannot throw.
+$refusing = new class implements Device {
+    public bool $closed = false;
+    public function start(): void { throw new \RuntimeException('audio: AudioQueueStart failed (OSStatus -66681)'); }
+    public function close(): void { $this->closed = true; }
+    public function held(): int { return 0; }
+};
+Output::$open = fn(): Device => $refusing;
+$start = \Closure::bind(static fn() => Output::start(), null, Output::class);
+$dev = \Closure::bind(static fn(): ?Device => Output::$dev, null, Output::class);
+$start();
+check($refusing->closed && $dev() instanceof NullDevice, 'a device that will not start: closed, a stand-in that tries again in its place');
+same('audio: AudioQueueStart failed (OSStatus -66681)', Audio::err()?->getMessage(), 'and the app told why');
+Output::$open = null;
+$setDev(null);

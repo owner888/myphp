@@ -134,6 +134,12 @@ rates are resampled as they play. PHP mixes on the main thread, as the
 app runs (`App::run`): work that keeps the main thread busy for longer
 than that makes the sound break up.
 
+A device that does not open, or opens and will not start (macOS refuses
+an Audio Queue for a moment while the output changes or the machine
+wakes), is stood in for by one that plays nothing and tries the device
+again two seconds later; `Audio::err()` tells why. Nothing is thrown:
+the app goes on, silent for those seconds.
+
 `Audio::setLatency` sets how far ahead it mixes, as Web Audio's
 `latencyHint` (mygo's `SetLatency`):
 

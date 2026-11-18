@@ -70,16 +70,30 @@ final class Output
         self::start();
     }
 
+    /**
+     * Opens the device and starts it. One that does not open, or opens and
+     * will not start (macOS refuses an Audio Queue while the output it
+     * follows is changing or the machine wakes, OSStatus -66681), is closed
+     * and stood in for by the NullDevice that tries again after a while: it
+     * never throws, being called from the device's own news (lost()), a
+     * callback, where PHP's FFI cannot throw.
+     */
     private static function start(): void
     {
         self::$idle = 0.0; self::$closing = false;
         try {
             self::$dev = (self::$open ?? fn(): Device => App::backend()->media()->audioDevice())();
+            Mixer::setHeld(self::$dev->held());
+            self::$dev->start();
             Audio::setErr(null);
+            return;
         } catch (\Throwable $e) {
             Audio::setErr($e);
-            self::$dev = new NullDevice(null, retry: true);
+            $failed = self::$dev;
+            self::$dev = null;
+            try { $failed?->close(); } catch (\Throwable) {}
         }
+        self::$dev = new NullDevice(null, retry: true);
         Mixer::setHeld(self::$dev->held());
         self::$dev->start();
     }
