@@ -1107,79 +1107,60 @@ function PhotosPicker(string $title, mixed &$selection, ?int $maxSelectionCount 
 }
 
 /**
- * A Telegram / AGC-style in-app update capsule banner: shows when $version !== '' and $status is
- * 'available' | 'downloading' | 'installing' | 'failed', with an action pill button, optional progress bar,
- * and optional dismiss button when !$force.
+ * An in-app update bar, as Telegram's on Android (its UpdateLayout): a bar of the accent color across the bottom of the
+ * window, 44 points high and the bottom safe area more, the whole of it the button; in its middle a bold title after a
+ * white disc with the mark of what a tap does, at its end the version, where Telegram shows the download's size. Shown
+ * when $version !== '' and $status is 'available' | 'downloading' | 'installing' | 'failed'; the title follows the
+ * status ("Downloading 45%...", "Update Now", "Download Failed · Retry"), $actionTitle is the one of an update that
+ * waits (default "Update <app>"). Put it under the content, VStack(spacing: 0)($content, UpdateCapsule(…)), which it
+ * then pushes up, as Telegram's does.
  */
 function UpdateCapsule(
     string $version,
     string $status = 'available',
     float $progress = 0.0,
-    string $notes = '',
-    bool $force = false,
     ?Closure $onAction = null,
-    ?Closure $onDismiss = null,
     mixed $tint = null,
-    string $actionTitle = 'UPDATE',
+    ?string $actionTitle = null,
 ): D\View {
     if ($version === '' || !in_array($status, ['available', 'downloading', 'installing', 'failed'], true)) {
         return EmptyView();
     }
     $isDownloading = $status === 'downloading';
-    $isInstalling = $status === 'installing';
     $isFailed = $status === 'failed';
-    $pct = (int) round(max(0.0, min(1.0, $progress)) * 100);
-
-    $accent = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::rgb(0x2B65F1));
-    $bgTint = $isFailed ? Color::rgb(0x2A1215, 0.96) : Color::rgb(0x161D2E, 0.96);
-
-    $iconGlyph = $isFailed ? '↻' : ($isDownloading || $isInstalling ? '↓' : '↑');
-    $headline = match (true) {
-        $isDownloading => "Downloading {$pct}%",
-        $isInstalling => 'Installing...',
-        $isFailed => 'Download failed, tap to retry',
-        $force => 'Important Update Required',
-        default => 'Update Available',
-    };
-    $cleanVer = 'v' . ltrim($version, 'vV');
-    $btnText = match (true) {
-        $isDownloading => "{$pct}%",
-        $isInstalling => 'INSTALL',
-        $isFailed => 'RETRY',
-        default => $actionTitle,
+    $waits = $status === 'available';
+    $color = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::accentColor);
+    $title = match ($status) {
+        'downloading' => 'Downloading ' . (int) round(max(0.0, min(1.0, $progress)) * 100) . '%...',
+        'installing' => 'Update Now',
+        'failed' => 'Download Failed · Retry',
+        default => $actionTitle ?? 'Update ' . MyPHP\App::name(),
     };
 
-    return VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
-        HStack(alignment: VerticalAlignment::center, spacing: 10)(
-            Text(verbatim: $iconGlyph)
+    $bar = ZStack(alignment: Alignment::center)(
+        HStack(alignment: VerticalAlignment::center, spacing: 8)(
+            Image(systemName: $waits || $isDownloading ? 'arrow.down.to.line' : 'arrow.clockwise')
+                ->font(Font::caption)
+                ->bold()
+                ->foregroundStyle($color)
+                ->frame(width: 22, height: 22, alignment: Alignment::center)
+                ->background(Color::white)
+                ->cornerRadius(11),
+            Text(verbatim: $title)
                 ->font(Font::subheadline)
+                ->bold()
                 ->foregroundStyle(Color::white)
-                ->frame(width: 28, height: 28, alignment: Alignment::center)
-                ->background($accent)
-                ->cornerRadius(14),
-            VStack(alignment: HorizontalAlignment::leading, spacing: 1)(
-                Text(verbatim: $headline)
-                    ->font(Font::subheadline)
-                    ->foregroundStyle(Color::white)
-                    ->lineLimit(1),
-                Text(verbatim: $cleanVer)
-                    ->font(Font::caption)
-                    ->foregroundStyle(Color::secondary)
-                    ->lineLimit(1),
-            )->frame(maxWidth: INF, alignment: Alignment::leading),
-            Button($btnText, action: ($isDownloading || $isInstalling) ? null : $onAction)
-                ->buttonStyle(ButtonStyle::borderedProminent)
-                ->tint($accent),
-            (!$force && !$isDownloading && !$isInstalling && $onDismiss !== null)
-                ? Button('✕', action: $onDismiss)->buttonStyle(ButtonStyle::plain)->foregroundStyle(Color::secondary)
-                : null,
+                ->lineLimit(1),
         ),
-        ($isDownloading || $isInstalling)
-            ? ProgressView(value: $isInstalling ? 1.0 : max(0.02, min(1.0, $progress)), total: 1.0)->tint($accent)
-            : null,
+        $waits ? Text(verbatim: ltrim($version, 'vV'))
+            ->font(Font::footnote)
+            ->bold()
+            ->foregroundStyle(Color::rgb(0xFFFFFF, 0.8))
+            ->lineLimit(1)
+            ->frame(maxWidth: INF, alignment: Alignment::trailing)
+            ->padding(Edge::trailing, 20) : null,
     )
-        ->padding(Edge::horizontal, 14)
-        ->padding(Edge::vertical, 8)
-        ->background($bgTint)
-        ->cornerRadius(22);
+        ->frame(maxWidth: INF, height: 44, alignment: Alignment::center)
+        ->background($color);
+    return $isDownloading || $onAction === null ? $bar : $bar->onTapGesture($onAction);
 }
