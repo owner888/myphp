@@ -1281,7 +1281,14 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         }
         Resources::copy($res, "$contents/Resources");
         $localizations = writeLocalizations($dir, $c, "$contents/Resources");
-        file_put_contents("$contents/Info.plist", Bundle::xml(Bundle::infoPlist($c, $name, $icns !== null, $car !== null, $localizations, updatePlist($dir, $c, "darwin-$arch"), !$opts['debug'])));
+        $macChannel = ($opts['channel'] ?? '') !== '' ? $opts['channel'] : ($m['channel'] ?? $c['channel'] ?? 'dmg');
+        $extraPlist = $macChannel === 'appstore'
+            ? ['MyPHPChannel' => 'appstore'] // Mac App Store builds forbid Sparkle/self-update feeds
+            : updatePlist($dir, $c, "darwin-$arch") + ['MyPHPChannel' => 'dmg'];
+        if ($macChannel === 'appstore') {
+            $opts['skipDMG'] = true;
+        }
+        file_put_contents("$contents/Info.plist", Bundle::xml(Bundle::infoPlist($c, $name, $icns !== null, $car !== null, $localizations, $extraPlist, !$opts['debug'])));
         file_put_contents("$contents/PkgInfo", 'APPL????');
         if ($opts['launcher'] === 'exec') {
             buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch);

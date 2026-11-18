@@ -30,10 +30,11 @@ final class Device
 
     /**
      * Returns the package distribution channel:
-     * - 'appstore': Apple App Store package (iOS, iPadOS, macOS, tvOS, visionOS)
+     * - 'appstore': Apple App Store package (all iOS, iPadOS, tvOS, visionOS builds; and macOS Mac App Store builds)
+     * - 'dmg': macOS standalone .dmg / .app build distributed outside the Mac App Store (supports in-app self-update)
      * - 'play': Android Google Play Store package (built with -channel play, AAB splitNames, or installed via com.android.vending)
      * - 'apk': Android standalone / sideloaded APK (supports in-app APK self-upgrade)
-     * - 'desktop': Standalone desktop build (Windows / Linux, or macOS outside App Store with MYPHP_CHANNEL=desktop)
+     * - 'desktop': Windows / Linux standalone desktop build
      */
     public static function channel(): string
     {
@@ -44,8 +45,18 @@ final class Device
         if (is_string($env) && $env !== '') {
             return strtolower(trim($env));
         }
-        if (App::isApple()) {
+        if (App::isIOS() || App::isTvOS() || App::isVisionOS()) {
             return 'appstore';
+        }
+        if (App::isMacOS()) {
+            if (\MyPHP\Native\Bundle::info('MyPHPChannel') === 'appstore') {
+                return 'appstore';
+            }
+            $bundle = \MyPHP\Native\Bundle::path();
+            if ($bundle !== null && is_file("$bundle/Contents/_MASReceipt/receipt")) {
+                return 'appstore';
+            }
+            return 'dmg';
         }
         if (App::isAndroid()) {
             try {
@@ -66,10 +77,22 @@ final class Device
         return self::channel() === 'play';
     }
 
-    /** Whether this build is distributed via Apple App Store. */
+    /** Whether this build is distributed via Apple App Store (iOS, iPadOS, tvOS, visionOS, or Mac App Store). */
     public static function isAppStore(): bool
     {
         return self::channel() === 'appstore';
+    }
+
+    /** Whether this build is distributed via any official store (Apple App Store or Google Play Store). */
+    public static function isStoreBuild(): bool
+    {
+        return in_array(self::channel(), ['appstore', 'play'], true);
+    }
+
+    /** Whether this build is a standalone macOS .dmg build outside the Mac App Store. */
+    public static function isDmg(): bool
+    {
+        return self::channel() === 'dmg';
     }
 
     /** Whether this build is a standalone Android APK allowed to download and install APK updates in-app. */
