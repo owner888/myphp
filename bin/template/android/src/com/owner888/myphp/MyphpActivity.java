@@ -637,6 +637,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         if (sInstance == null || url == null || url.isEmpty()) return;
         sInstance.runOnUiThread(() -> {
             try {
+                if (url.startsWith("file://") && url.endsWith(".apk")) {
+                    installApkFile(new File(Uri.parse(url).getPath()));
+                    return;
+                }
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 sInstance.startActivity(intent);
@@ -644,6 +648,62 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 Log.e(TAG, "openUrl error: " + url, e);
             }
         });
+    }
+
+    private static void installApkFile(File apkFile) {
+        if (sInstance == null || apkFile == null || !apkFile.exists()) return;
+        try {
+            if (!sInstance.getPackageManager().canRequestPackageInstalls()) {
+                Intent permIntent = new Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + sInstance.getPackageName())
+                );
+                permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                sInstance.startActivity(permIntent);
+                return;
+            }
+            android.content.pm.PackageInstaller installer = sInstance.getPackageManager().getPackageInstaller();
+            android.content.pm.PackageInstaller.SessionParams params =
+                new android.content.pm.PackageInstaller.SessionParams(
+                    android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
+                );
+            int sessionId = installer.createSession(params);
+            try (android.content.pm.PackageInstaller.Session session = installer.openSession(sessionId);
+                 FileInputStream in = new FileInputStream(apkFile);
+                 OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                }
+                session.fsync(out);
+                String action = sInstance.getPackageName() + ".INSTALL_COMMIT_" + sessionId;
+                sInstance.registerReceiver(new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        try { sInstance.unregisterReceiver(this); } catch (Exception ignored) {}
+                        int status = intent.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, -1);
+                        if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                            Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+                            if (confirm != null) {
+                                confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                sInstance.startActivity(confirm);
+                            }
+                        }
+                    }
+                }, new IntentFilter(action), Context.RECEIVER_EXPORTED);
+                Intent broadcastIntent = new Intent(action).setPackage(sInstance.getPackageName());
+                android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(
+                    sInstance,
+                    sessionId,
+                    broadcastIntent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_MUTABLE
+                );
+                session.commit(pi.getIntentSender());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "installApkFile error", e);
+        }
     }
 
     public static void setKeepScreenOn(boolean on) {

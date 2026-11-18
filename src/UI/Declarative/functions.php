@@ -1105,3 +1105,79 @@ function PhotosPicker(string $title, mixed &$selection, ?int $maxSelectionCount 
 {
     return new D\PhotosPicker($title, $selection, $maxSelectionCount, $matching, $systemImage, $label);
 }
+
+/**
+ * A Telegram / AGC-style in-app update capsule banner: shows when $version !== '' and $status is
+ * 'available' | 'downloading' | 'installing' | 'failed', with an action pill button, optional progress bar,
+ * and optional dismiss button when !$force.
+ */
+function UpdateCapsule(
+    string $version,
+    string $status = 'available',
+    float $progress = 0.0,
+    string $notes = '',
+    bool $force = false,
+    ?Closure $onAction = null,
+    ?Closure $onDismiss = null,
+    mixed $tint = null,
+): D\View {
+    if ($version === '' || !in_array($status, ['available', 'downloading', 'installing', 'failed'], true)) {
+        return EmptyView();
+    }
+    $isDownloading = $status === 'downloading';
+    $isInstalling = $status === 'installing';
+    $isFailed = $status === 'failed';
+    $pct = (int) round(max(0.0, min(1.0, $progress)) * 100);
+
+    $accent = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::rgb(0xF7C35E));
+    $bgTint = $isFailed ? Color::rgb(0xED2020, 0.16) : Color::rgb(0xF7C35E, 0.16);
+
+    $iconGlyph = $isFailed ? '↻' : ($isDownloading || $isInstalling ? '↓' : '↑');
+    $headline = match (true) {
+        $isDownloading => "Downloading {$pct}%",
+        $isInstalling => 'Installing...',
+        $isFailed => 'Download failed, tap to retry',
+        $force => 'Important Update Required',
+        default => 'Update Available',
+    };
+    $cleanVer = 'v' . ltrim($version, 'vV');
+    $subtitle = $notes !== '' ? "{$cleanVer} · {$notes}" : $cleanVer;
+    $btnText = match (true) {
+        $isDownloading => "{$pct}%",
+        $isInstalling => 'INSTALL',
+        $isFailed => 'RETRY',
+        default => 'UPDATE',
+    };
+
+    return VStack(alignment: HorizontalAlignment::leading, spacing: 6)(
+        HStack(alignment: VerticalAlignment::center, spacing: 10)(
+            Text(verbatim: $iconGlyph)
+                ->font(Font::headline)
+                ->foregroundStyle(Color::rgb(0x1E1E24))
+                ->frame(width: 28, height: 28, alignment: Alignment::center)
+                ->background($accent)
+                ->cornerRadius(14),
+            VStack(alignment: HorizontalAlignment::leading, spacing: 2)(
+                Text(verbatim: $headline)
+                    ->font(Font::subheadline)
+                    ->foregroundStyle($accent),
+                Text(verbatim: $subtitle)
+                    ->font(Font::caption)
+                    ->foregroundStyle(Color::secondary),
+            )->frame(maxWidth: INF, alignment: Alignment::leading),
+            Button($btnText, action: ($isDownloading || $isInstalling) ? null : $onAction)
+                ->buttonStyle(ButtonStyle::borderedProminent)
+                ->tint($accent),
+            (!$force && !$isDownloading && !$isInstalling && $onDismiss !== null)
+                ? Button('✕', action: $onDismiss)->buttonStyle(ButtonStyle::plain)->foregroundStyle(Color::secondary)
+                : null,
+        ),
+        $isDownloading
+            ? ProgressView(value: max(0.0, min(1.0, $progress)), total: 1.0)->tint($accent)
+            : null,
+    )
+        ->padding(Edge::horizontal, 14)
+        ->padding(Edge::vertical, 9)
+        ->background($bgTint)
+        ->cornerRadius(20);
+}
