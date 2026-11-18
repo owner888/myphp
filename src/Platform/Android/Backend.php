@@ -23,6 +23,8 @@ final class Backend implements Platform\Backend
     private ?Power $power = null;
     private ?Network $network = null;
     private mixed $event = null;
+    /** @var array{0: int, 1: int, 2: int, 3: int, 4: int} latest [topPx, bottomPx, leftPx, rightPx, keyboardPx] */
+    public array $lastInsetsPx = [0, 0, 0, 0, 0];
 
     /** @var list<array{at: float, fn: \Closure}> pending timers */
     private array $timers = [];
@@ -136,6 +138,7 @@ final class Backend implements Platform\Backend
                         $win?->onResume();
                         break;
                     case Android::EVENT_CONFIGURATION:
+                        $this->lastInsetsPx = [(int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3], (int)$ev->keyboard];
                         $this->theme()->setConfiguration((bool)$ev->night_mode, (float)$ev->font_scale, (bool)$ev->reduce_motion);
                         $this->h->themeChanged(); // App::systemChanged: the theme follows night mode, the font size and animations anew, unless the app set its own
                         $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3], (int)$ev->keyboard);

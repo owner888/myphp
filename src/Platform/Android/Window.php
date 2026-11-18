@@ -50,6 +50,10 @@ final class Window implements Platform\Window
         $this->density = max(1.0, $f->myphp_get_density());
         $this->surfaceWidth = $f->myphp_get_surface_width();
         $this->surfaceHeight = $f->myphp_get_surface_height();
+        if ($this->b->lastInsetsPx !== [0, 0, 0, 0, 0]) {
+            [$t, $bt, $l, $r, $kb] = $this->b->lastInsetsPx;
+            $this->setInsets($t, $bt, $l, $r, $kb);
+        }
     }
 
     public static function instance(): ?self

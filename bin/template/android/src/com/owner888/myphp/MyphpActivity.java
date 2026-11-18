@@ -306,6 +306,9 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         if (windowInsets == null && surfaceView != null) {
             windowInsets = surfaceView.getRootWindowInsets();
         }
+        if (windowInsets == null && getWindow() != null && getWindow().getDecorView() != null) {
+            windowInsets = getWindow().getDecorView().getRootWindowInsets();
+        }
         int top = 0, bottom = 0, left = 0, right = 0, keyboard = 0;
         if (windowInsets != null) {
             // the safe area (status and navigation bars, the cutout) apart from the keyboard: a tab bar
@@ -316,6 +319,12 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             left = insets.left;
             right = insets.right;
             keyboard = windowInsets.getInsets(WindowInsets.Type.ime()).bottom;
+        }
+        if (top <= 0) {
+            int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (resId > 0) {
+                top = getResources().getDimensionPixelSize(resId);
+            }
         }
         // The user's text size (Settings > Display > Font size) and "Remove animations", which sets the animator scale to 0: the theme follows them (Preferences::$textScale, $reduceMotion).
         float fontScale = getResources().getConfiguration().fontScale;
@@ -441,6 +450,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 holder.getSurface().setFrameRate(120.0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
             }
         } catch (Exception ignored) {}
+        notifyConfiguration(null);
         nativeSurfaceCreated(holder.getSurface());
     }
 
@@ -451,6 +461,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 holder.getSurface().setFrameRate(120.0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
             }
         } catch (Exception ignored) {}
+        notifyConfiguration(null);
         nativeSurfaceChanged(holder.getSurface(), width, height);
     }
 
