@@ -1200,6 +1200,34 @@ void* myphp_jni_activity(void) {
     return (void*)g_activity_obj;
 }
 
+/* A class of the app's own dex, by the class loader of the activity's class (a slash-separated name). */
+static jclass find_app_class(JNIEnv *env, const char *name) {
+    if (!g_activity_class) return NULL;
+    jclass classClass = (*env)->FindClass(env, "java/lang/Class");
+    jclass loaderClass = (*env)->FindClass(env, "java/lang/ClassLoader");
+    jmethodID getLoader = (*env)->GetMethodID(env, classClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    jmethodID loadClass = (*env)->GetMethodID(env, loaderClass, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    jobject loader = (*env)->CallObjectMethod(env, (jobject)g_activity_class, getLoader);
+    jclass found = NULL;
+    if (loader) {
+        char dotted[256];
+        size_t i = 0;
+        for (; name[i] && i < sizeof(dotted) - 1; i++) dotted[i] = name[i] == '/' ? '.' : name[i];
+        dotted[i] = 0;
+        jstring jname = (*env)->NewStringUTF(env, dotted);
+        found = (jclass)(*env)->CallObjectMethod(env, loader, loadClass, jname);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            found = NULL;
+        }
+        (*env)->DeleteLocalRef(env, jname);
+        (*env)->DeleteLocalRef(env, loader);
+    }
+    (*env)->DeleteLocalRef(env, classClass);
+    (*env)->DeleteLocalRef(env, loaderClass);
+    return found;
+}
+
 void* myphp_jni_find_class(const char *name) {
     JNIEnv *env = get_jni_env();
     if (!env || !name) return NULL;
@@ -1209,7 +1237,8 @@ void* myphp_jni_find_class(const char *name) {
     jclass local = (*env)->FindClass(env, name);
     if ((*env)->ExceptionCheck(env) || !local) {
         (*env)->ExceptionClear(env);
-        return NULL;
+        local = find_app_class(env, name); // the PHP thread's FindClass sees the system's classes only: the app's (a project's android/java) are in its class loader
+        if (!local) return NULL;
     }
     jclass global = (jclass)(*env)->NewGlobalRef(env, local);
     (*env)->DeleteLocalRef(env, local);

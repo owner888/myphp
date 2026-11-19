@@ -58,7 +58,7 @@ fonts and fallbacks; nothing is bundled.
 An Android app's `android/` folder (beside `myphp.json`) is packaged as it is, no Gradle:
 
 - `android/jniLibs/<abi>/*.so` go into the APK's `lib/<abi>/`, only for an ABI the APK has the PHP runtime of (today `arm64-v8a`); others are skipped with a line in the build's output. A `lib*.so` that is really a program (a child process the app starts) is run from the app's native library directory, extracted on install.
-- `android/java/**/*.java` are compiled with the template's Java (`javac` + `d8`, Java 17, against `android.jar`).
+- `android/java/**/*.java` are compiled with the template's Java (`javac` + `d8`, Java 17, against `android.jar`); PHP calls their `public static` methods with `Jni::callStatic('your.package.Class', 'method', '(…)…', …)`, `Jni::activity()` being the `Context`.
 - `android/manifest-permissions.xml` is put before `<application>`, `android/manifest-application.xml` (services, receivers) inside it.
 
 All four are optional. Alignment: a library must have 16 KB `LOAD` segments (`-Wl,-z,max-page-size=16384`) to load on 16 KB-page devices.
