@@ -924,6 +924,7 @@ final class App
      */
     public static function relaunch(): void
     {
+        Platform\Unsupported::requireProcesses('App::relaunch'); // an app of a phone cannot start itself again: said now, not as the app is quitting
         self::$relaunch = true;
         self::quit();
     }

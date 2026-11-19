@@ -76,6 +76,13 @@ on every platform alike. So do `Dialog::prompt` and
 `Dialog::login` (ask in the window, with inputs), `Dialog::open` of a
 directory, and on iOS `Dialog::save` (write the file, then share it).
 
+An iPhone's sandbox has no `fork` or `exec`: `proc_open` and `exec` fail there
+(on tvOS and visionOS too). What starts a program (`Process::run`, the
+Terminal, `Media\YtDlp`, the player plugins' programs, `App::relaunch`) throws
+`Platform\Unsupported` ("… starts a program, which an app of this platform may
+not: its sandbox has no fork or exec"), as it does for the Dock or a second
+window, so an app takes it for what it is, not for a program that is missing.
+
 A plugin that loads a native library (the Terminal's, SQLite's) does not
 download it on a phone, as a desktop program does: iOS's code signing refuses a
 library that is not the app's own, and App Store (guideline 2.5.2) and Google

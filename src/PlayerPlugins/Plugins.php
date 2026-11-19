@@ -471,6 +471,7 @@ final class Plugins
 
     private static function run(array $argv): ?string
     {
+        \MyPHP\Platform\Unsupported::requireProcesses('A player plugin\'s installer');
         $proc = proc_open($argv, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         if ($proc === false) { return "cannot run {$argv[0]}"; }
         $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);

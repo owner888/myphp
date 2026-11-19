@@ -50,6 +50,7 @@ final class YtDlp
      */
     public static function info(string $url): array
     {
+        \MyPHP\Platform\Unsupported::requireProcesses('Media\\YtDlp');
         $bin = self::find() ?? throw new RuntimeException('myphp: no yt-dlp to read the page with (brew install yt-dlp, or set Media\YtDlp::$path)');
         \MyPHP\Logger::debug("Running $bin for $url", 'ytdl');
         // mpv's ytdl_hook's: the JSON, a playlist's entries flat (each read as it plays), its subtitles' formats.

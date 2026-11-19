@@ -31,6 +31,7 @@ final class Process
 
     private function __construct(array $argv, string $stdin, private Closure $done)
     {
+        Platform\Unsupported::requireProcesses('Process::run');
         $proc = proc_open($argv, [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
         if ($proc === false) {
             throw new RuntimeException('cannot start ' . $argv[0]);

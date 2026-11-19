@@ -73,6 +73,7 @@ final class UtilsApi extends Api
         }
         $dir = $cwd !== null ? $this->parsePath($cwd)[0] : null;
         $this->log("Executing $path " . implode(' ', $args));
+        \MyPHP\Platform\Unsupported::requireProcesses('A player plugin\'s program');
         $proc = @proc_open([$path, ...$args], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, ['LC_ALL' => 'en_US.UTF-8', 'PATH' => (string)getenv('PATH'), 'HOME' => (string)getenv('HOME')]);
         if ($proc === false) { throw new PluginError("Execution failed reporting: cannot run $path", self::ERROR_RUNTIME); }
         stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
