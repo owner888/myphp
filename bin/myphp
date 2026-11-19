@@ -351,6 +351,11 @@ function project(array $args): array
         is_string($i[$k]) || $bad("ios.$k is a string");
     }
     $i['teamId'] === '' || preg_match('/^[A-Z0-9]{10}$/', $i['teamId']) === 1 || $bad('ios.teamId ' . json_encode($i['teamId']) . ' is not a team ID (ten letters and digits, as Xcode → Settings → Accounts shows it)');
+    $i['infoPlist'] ??= [];
+    is_array($i['infoPlist']) && ($i['infoPlist'] === [] || !array_is_list($i['infoPlist'])) || $bad('ios.infoPlist is an object of Info.plist keys');
+    foreach ($i['infoPlist'] as $k => $_) {
+        $k !== '' && !is_int($k) || $bad('ios.infoPlist is an object of Info.plist keys: ' . json_encode($k) . ' is no key');
+    }
     $c['ios'] = $i;
     $l = $c['linux'] ?? [];
     is_array($l) && ($l === [] || !array_is_list($l)) || $bad('linux is an object');
@@ -2416,7 +2421,7 @@ function appLanguages(string $dir, array $c): array
 }
 
 /**
- * How package-ios-app.sh signs the app $bundleId (MYPHP_IOS_SIGN_IDENTITY,
+ * How package-ios-app.sh signs the app $bundleId, and the Info.plist keys the app adds (MYPHP_IOS_INFO_PLIST; MYPHP_IOS_SIGN_IDENTITY,
  * MYPHP_IOS_PROFILE, MYPHP_IOS_ENTITLEMENTS), as Xcode's automatic signing:
  * for the simulator ($udid null) ad hoc, which it runs; for an iPhone ($udid
  * its UDID, '' a build for any device) with a provisioning profile, which the
@@ -2460,6 +2465,7 @@ function iosSigning(string $dir, array $c, string $bundleId, ?string $udid, stri
         logf("Signing for iOS devices with {$p['name']} (team {$p['team']})");
         $env = ['MYPHP_IOS_SIGN_IDENTITY' => $identity, 'MYPHP_IOS_PROFILE' => $file, 'MYPHP_IOS_ENTITLEMENTS' => $entitlements];
     }
+    $env['MYPHP_IOS_INFO_PLIST'] = json_encode((object)($c['ios']['infoPlist'] ?? []), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR); // the app's keys over the Info.plist's (ios.infoPlist)
     foreach ($env as $k => $v) {
         putenv("$k=$v");
     }

@@ -277,6 +277,31 @@ microphone need:
 `minimumSystemVersion` is the oldest macOS the app runs on, 12.0 by
 default.
 
+### iOS Info.plist
+
+`ios.infoPlist` adds keys to an iPhone app's `Info.plist`, or replaces MyPHP's.
+A usage description is what the system shows as it asks for the camera, the
+microphone, Bluetooth or the local network, and an app that uses one without
+its key is ended by the system, not asked about:
+
+```json
+{
+  "ios": {
+    "infoPlist": {
+      "NSLocalNetworkUsageDescription": "Test the hosts of your network.",
+      "NSBonjourServices": ["_http._tcp"],
+      "NSCameraUsageDescription": "Scan documents with the camera."
+    }
+  }
+}
+```
+
+Without the local network's description, an app that connects to an address
+of the network it is on (192.168.x.x, a `.local` name) is refused it on iOS 14
+and later, silently. MyPHP sets `ITSAppUsesNonExemptEncryption` to `false`, as
+the app's encryption (TLS) is exempt: App Store Connect does not ask about it at
+every upload; the app's `ios.infoPlist` may set it otherwise.
+
 ### Provisioning profiles
 
 Restricted entitlements, such as Communication Notifications, need a

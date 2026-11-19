@@ -55,6 +55,7 @@ How an iPhone's build is signed (`myphp run -d <iPhone>`, `myphp build -platform
 - **`teamId`**: The team (ten letters and digits, Xcode → Settings → Accounts) whose profile and certificate sign the app; any team's by default.
 - **`provisioningProfile`**: Path to the `.mobileprovision` embedded in the app; by default the one of Xcode's for `identifier` (its own over a wildcard) that lists the iPhone and expires last.
 - **`signingIdentity`**: Code-signing identity; by default the keychain's whose certificate the profile names.
+- **`infoPlist`**: Keys added to the app's `Info.plist`, replacing MyPHP's of the same name: the usage descriptions (`NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSBluetoothAlwaysUsageDescription`, `NSLocalNetworkUsageDescription` with `NSBonjourServices`, …) a page needs for the protected resource it uses, as the system ends an app that uses one without its key. MyPHP itself sets `ITSAppUsesNonExemptEncryption` to `false` (the app's encryption, TLS, is exempt), so that App Store Connect does not ask about it at every upload; set it to `true` to answer otherwise.
 
 ### `windows`
 - **`displayName`**, **`installDirName`**, **`publisher`**: Metadata for the `.exe` version resource and NSIS installer.

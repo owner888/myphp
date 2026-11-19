@@ -157,6 +157,9 @@ cat <<PLIST > "${APP_DIR}/Info.plist"
 </plist>
 PLIST
 
+# The keys MyPHP adds (ITSAppUsesNonExemptEncryption false), and the app's own (ios.infoPlist), see ios-info-plist.sh
+"${ROOT_DIR}/scripts/ios-info-plist.sh" "${APP_DIR}/Info.plist"
+
 # 4. Bundle app entry and src: the entry as app.php, the PHP files beside it (its views of files, Content::file) and its project's src over the framework's, as on Android
 echo "==> Bundling app source..."
 if [[ "${ENTRY}" != /* ]]; then
