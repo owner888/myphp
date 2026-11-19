@@ -297,6 +297,9 @@ fi
 if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -z "${ANDROID_KEYSTORE_PATH:-}" ]; then
     ANDROID_KEYSTORE_PATH="${WORK_DIR}/release.keystore"
     php -r 'file_put_contents($argv[1], base64_decode($argv[2]));' "$ANDROID_KEYSTORE_PATH" "$ANDROID_KEYSTORE_BASE64"
+    chmod 600 "$ANDROID_KEYSTORE_PATH"
+    # the release key this wrote is not left in the build folder when the script ends, however it ends
+    trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
 fi
 KEYSTORE="${ANDROID_KEYSTORE_PATH:-${BUILD_DIR}/debug.keystore}"
 KEYSTORE_PASS="${ANDROID_KEYSTORE_PASS:-android}"
