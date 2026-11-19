@@ -170,6 +170,18 @@ VoiceOver and TalkBack read the views and act on them
 actions and Show Menu, tabs, switches, sliders, fields; a menu, a sheet
 or an alert on top alone until it closes.
 
+## Where an app's files are
+
+On an iPhone `HOME` is the app's container, and `App::path` puts the app in
+its place there: `PathName::UserData` in `Library/Application Support/<name>`,
+`PathName::Cache` in `Library/Caches/<name>`, `PathName::Logs` in
+`Library/Logs/<name>`, `PathName::Temp` in `tmp`, and `PathName::Documents` in
+`Documents`, which is the user's: iCloud backs it up and, with file sharing on,
+Files shows it. Keep an app's own data and caches out of Documents. Set the
+app's name (`App::setName()`) before the first `App::path()`, as the folders are
+named after it. On Android `HOME` is the app's files folder, and the same names
+are folders under it.
+
 ## Files and photos
 
 A list's rows take swipe actions, as Mail's: `->swipeActions()` on a row,

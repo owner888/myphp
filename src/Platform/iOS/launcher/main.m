@@ -1186,11 +1186,13 @@ static void* php_worker_thread(void *arg) {
 
     @autoreleasepool {
         NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
-        NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
         NSString *tmpDir = NSTemporaryDirectory();
         NSString *root = myphp_run_root(bundlePath); // where app.php and the framework's src are
 
-        setenv("HOME", [docDir UTF8String], 1);
+        // HOME is the app's container, not its Documents folder: App::path puts the app's data in Library/Application Support,
+        // its caches in Library/Caches (neither backed up to iCloud nor shown in Files, as Documents is), and Documents is the
+        // user's own (App::path(PathName::Documents), a Document's default folder).
+        setenv("HOME", [NSHomeDirectory() UTF8String], 1);
         setenv("TMPDIR", [tmpDir UTF8String], 1);
         setenv("MYPHP_BUNDLE", [bundlePath UTF8String], 1);
         setenv("MYPHP_PLATFORM", "ios", 1);
