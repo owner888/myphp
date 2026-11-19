@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.203.7';
+const VERSION = '1.203.6';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -3287,15 +3287,19 @@ function doctor(array $args): void
     $androidPhp = is_file("$phoneBuild/android/php-$phonePhpVer/libs/libphp.so") ? "$phoneBuild/android/php-$phonePhpVer/libs/libphp.so" : "$phoneBuild/android/php-8.3.16/libs/libphp.so";
     $iosPhp = "$phoneBuild/ios/libs/libphp.a";
     $iosSimPhp = "$phoneBuild/ios-simulator/libs/libphp.a";
-    $stale = fn(string $lib, string $script): bool => is_file($lib) && filemtime(FRAMEWORK . "/scripts/$script") > filemtime($lib);
+    // the script that made a runtime is kept as its SHA-256 beside it (scripts/phone-build-dir.sh); one without is taken as current. Not by the script's file time: an upgrade writes every file anew.
+    $stale = function (string $lib, string $script): bool {
+        $stamp = dirname($lib) . '/.build-script-sha256';
+        return is_file($lib) && is_file($stamp) && trim((string)file_get_contents($stamp)) !== hash_file('sha256', FRAMEWORK . "/scripts/$script");
+    };
     $buildTools = ['autoconf', 'automake', 'pkg-config', 'bison', 're2c'];
     if (PHP_OS_FAMILY === 'Darwin') { $buildTools[] = 'glibtoolize'; } else { $buildTools[] = 'libtoolize'; }
     $missingTools = array_values(array_filter($buildTools, fn(string $t): bool => Cmd::look($t) === '' && !is_executable("/opt/homebrew/opt/bison/bin/$t") && !is_executable("/opt/homebrew/bin/$t")));
     $toolsItem = [$missingTools === [], $missingTools === [] ? 'Phone runtime build tools (autoconf, automake, libtool, pkg-config, bison, re2c)' : 'Missing phone runtime build tools: ' . implode(', ', $missingTools), PHP_OS_FAMILY === 'Darwin' ? 'brew install autoconf automake libtool pkg-config bison re2c' : 'sudo apt install autoconf automake libtool pkg-config bison re2c'];
     $section("Phone runtimes (libphp with ffi, curl, openssl and libxml)", [$toolsItem, ...array_slice([
-        [is_file($androidPhp) && !$stale($androidPhp, 'build-android-php.sh'), is_file($androidPhp) ? ($stale($androidPhp, 'build-android-php.sh') ? 'Android: built before its script last changed' : 'Android: built') : 'Android: not built yet', 'myphp run -d android <dir> builds it (10-20 minutes the first time)'],
-        [is_file($iosPhp) && !$stale($iosPhp, 'build-ios-php.sh'), is_file($iosPhp) ? ($stale($iosPhp, 'build-ios-php.sh') ? 'iOS device: built before its script last changed' : 'iOS device: built') : 'iOS device: not built yet', 'myphp run -d <an iPhone> <dir> builds it'],
-        [is_file($iosSimPhp) && !$stale($iosSimPhp, 'build-ios-php.sh'), is_file($iosSimPhp) ? ($stale($iosSimPhp, 'build-ios-php.sh') ? 'iOS simulator: built before its script last changed' : 'iOS simulator: built') : 'iOS simulator: not built yet', 'myphp run -d ios <dir> builds it'],
+        [is_file($androidPhp) && !$stale($androidPhp, 'build-android-php.sh'), is_file($androidPhp) ? ($stale($androidPhp, 'build-android-php.sh') ? 'Android: made by an older script' : 'Android: built') : 'Android: not built yet', 'myphp run -d android <dir> builds it (10-20 minutes the first time)'],
+        [is_file($iosPhp) && !$stale($iosPhp, 'build-ios-php.sh'), is_file($iosPhp) ? ($stale($iosPhp, 'build-ios-php.sh') ? 'iOS device: made by an older script' : 'iOS device: built') : 'iOS device: not built yet', 'myphp run -d <an iPhone> <dir> builds it'],
+        [is_file($iosSimPhp) && !$stale($iosSimPhp, 'build-ios-php.sh'), is_file($iosSimPhp) ? ($stale($iosSimPhp, 'build-ios-php.sh') ? 'iOS simulator: made by an older script' : 'iOS simulator: built') : 'iOS simulator: not built yet', 'myphp run -d ios <dir> builds it'],
     ], 0, PHP_OS_FAMILY === 'Darwin' ? 3 : 1)]); // iOS's are built on a Mac alone
 
     // 5. Connected Devices

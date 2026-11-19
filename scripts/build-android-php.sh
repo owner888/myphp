@@ -62,7 +62,15 @@ ensure_php_embed_headers() {
     fi
 }
 
-if [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
+# Made again when this script changed since (a fix of the runtime, as memfd_create's was), by the prebuilt archive as a first run
+# gets it: in a checkout, whose script a developer edited, from source, as the archive does not have the edit yet.
+FROM_SOURCE="${MYPHP_BUILD_FROM_SOURCE:-0}"
+if runtime_is_stale "${PHP_DIR}/libs/libphp.so" "$0"; then
+    echo "==> This script changed since the Android runtime was made: making it again"
+    rm -f "${PHP_DIR}/libs/libphp.so"
+    [ -d "${ROOT_DIR}/.git" ] && FROM_SOURCE=1
+fi
+if [ "$FROM_SOURCE" != "1" ]; then
     if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
         ensure_php_embed_headers
         exit 0
@@ -75,6 +83,7 @@ if [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
         if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
             ensure_php_embed_headers
             touch "${PHP_DIR}/libs/libphp.so"
+            runtime_stamp "${PHP_DIR}/libs/libphp.so" "$0"
             echo "==> Prebuilt Android PHP runtime ready:"
             ls -lh "${PHP_DIR}/libs/libphp.so"
             exit 0
@@ -189,8 +198,7 @@ fi
 
 # 5. Build PHP
 # Built again when this script changed since (an extension added, as curl was): the one stamp of what libphp has.
-if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so" ]; then
-    rm -f "${PHP_DIR}/libs/libphp.so"
+if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
     echo "==> Preparing PHP ${PHP_VERSION}..."
     cd "$BUILD_DIR"
     if [ ! -f "php-${PHP_VERSION}.tar.gz" ]; then
@@ -288,5 +296,6 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     "$STRIP" --strip-unneeded "${PHP_DIR}/libs/libphp.so"
 fi
 
+runtime_stamp "${PHP_DIR}/libs/libphp.so" "$0"
 echo "==> PHP built successfully!"
 ls -lh "${PHP_DIR}/libs/libphp.so"

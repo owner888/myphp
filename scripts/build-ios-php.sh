@@ -54,7 +54,15 @@ ensure_php_headers
 # Fast-path: download prebuilt iOS runtime archive when libphp.a is not yet built locally
 RUNTIME_NAME="$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator-arm64 || echo ios-arm64)"
 PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-${RUNTIME_NAME}-php-${PHP_VERSION}.tar.gz"
-if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
+# Made again when this script changed since (an extension added, as curl was), by the prebuilt archive as a first run gets it:
+# in a checkout, whose script a developer edited, from source, as the archive does not have the edit yet.
+FROM_SOURCE="${MYPHP_BUILD_FROM_SOURCE:-0}"
+if runtime_is_stale "${BUILD_DIR}/libs/libphp.a" "$0"; then
+    echo "==> This script changed since the iOS runtime was made: making it again"
+    rm -f "${BUILD_DIR}/libs/libphp.a" "${PHP_BUILD_DIR}/Makefile"
+    [ -d "${ROOT_DIR}/.git" ] && FROM_SOURCE=1
+fi
+if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "$FROM_SOURCE" != "1" ]; then
     echo "==> Trying prebuilt iOS PHP runtime (${RUNTIME_NAME})..."
     TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
@@ -63,6 +71,7 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" !=
         if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ -f "${SYSROOT}/lib/libcurl.a" ] && ! curl_hidden; then
             ensure_php_headers
             touch "${BUILD_DIR}/libs/libphp.a"
+            runtime_stamp "${BUILD_DIR}/libs/libphp.a" "$0"
             echo "==> Prebuilt iOS PHP embed runtime ready:"
             ls -lh "${BUILD_DIR}/libs/libphp.a"
             exit 0
@@ -189,10 +198,6 @@ if grep -q '\*linux\*)' "${PHP_SRC_DIR}/configure" 2>/dev/null; then
     sed -i '' 's/\*linux\*)/\*linux\* | \*darwin\* | \*apple\*)/' "${PHP_SRC_DIR}/configure"
 fi
 
-# Built again when this script changed since (an extension added, as curl was): configured anew, the one stamp of what libphp has.
-if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ "$0" -nt "${BUILD_DIR}/libs/libphp.a" ]; then
-    rm -f "${BUILD_DIR}/libs/libphp.a" "${PHP_BUILD_DIR}/Makefile"
-fi
 if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
     echo "==> Configuring PHP for iOS..."
     mkdir -p "${PHP_BUILD_DIR}"
@@ -275,6 +280,7 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
     mkdir -p "${BUILD_DIR}/libs"
     cp libs/libphp.a "${BUILD_DIR}/libs/libphp.a"
 fi
+runtime_stamp "${BUILD_DIR}/libs/libphp.a" "$0"
 
 echo "==> Built iOS PHP embed runtime:"
 ls -lh "${BUILD_DIR}/libs/libphp.a"
