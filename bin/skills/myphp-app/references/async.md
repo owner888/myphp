@@ -37,6 +37,27 @@ $uploadReq = (new URLRequest('https://api.example.com/uploads', 'POST'))
     from: ['kind' => 'schedule', 'file' => $localFilePath],
 );
 
+// 3b. Upload or download progress, as Foundation's `delegate:` (URLSessionTaskDelegate): the delegate's methods run on the
+// main thread (not in the fiber that waits), at most 30 times a second, so they may change state; `$task->cancel()` ends the
+// transfer and the call throws URLError (cancelled). A progress bar is `ProgressView('Uploading', value: $this->sent, total: $this->total)`.
+final class UploadProgress extends \MyPHP\URLSessionTaskDelegate
+{
+    public function __construct(private Screen $screen) {}
+
+    public function didSendBodyData(\MyPHP\URLSession $session, \MyPHP\URLSessionTask $task, int $bytesSent, int $totalBytesSent, int $totalBytesExpectedToSend): void
+    {
+        $this->screen->sent = $totalBytesSent;
+        $this->screen->total = $totalBytesExpectedToSend;
+    }
+}
+try {
+    [$body, $resp] = URLSession::shared()->upload(for: $uploadReq, fromFile: $localFilePath, delegate: new UploadProgress($this));
+} catch (\MyPHP\URLError $e) {
+    // $e->isCancelled(): the app cancelled it ($task->cancel() in the delegate)
+}
+// A download is written to its file as it comes (no copy in memory), `didWriteData` is its progress:
+[$file, $resp] = URLSession::shared()->download(from: $url, delegate: new DownloadProgress($this));
+
 // 4. Inside App::go() fiber with automatic state observation:
 App::go(function () use ($app, $query, $seq) {
     try {

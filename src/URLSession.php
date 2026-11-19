@@ -40,25 +40,30 @@ final class URLSession
     }
 
     /**
-     * Instance / static-friendly `data(from:)` / `data(for:)`.
+     * Instance / static-friendly `data(from:)` / `data(for:)`, as `data(for:delegate:)`: with a $delegate, its
+     * didSendBodyData is told how the request's body goes and its didReceive each piece of the answer.
      * @return array{0: string, 1: HTTPURLResponse} [$data, $response]
      */
-    public function data(URLRequest|string|null $from = null, URLRequest|string|null $for = null): array
+    public function data(URLRequest|string|null $from = null, URLRequest|string|null $for = null, ?URLSessionTaskDelegate $delegate = null): array
     {
         $target = $for ?? $from ?? throw new \InvalidArgumentException('URLSession::data requires a URL or URLRequest');
         $req = is_string($target) ? new URLRequest($target) : $target;
         $headers = array_merge($this->defaultHeaders, $req->allHTTPHeaderFields);
         $timeout = $req->timeoutInterval > 0 ? $req->timeoutInterval : $this->timeoutInterval;
-        $r = Http::request($req->httpMethod, $req->url, $headers, $req->httpBody, $timeout);
+        $task = new URLSessionTask($req);
+        $r = Http::request($req->httpMethod, $req->url, $headers, $req->httpBody, $timeout,
+            $this->told($delegate, $task),
+            onData: $delegate === null ? null : fn(string $chunk) => $delegate->didReceive($this, $task, $chunk));
         return [$r->body, new HTTPURLResponse($req->url, $r->status, $r->headers)];
     }
 
     /**
-     * Uploads data or a multipart form/file, as `URLSession.shared.upload(for: request, from: data)`.
+     * Uploads data or a multipart form/file, as `URLSession.shared.upload(for: request, from: data, delegate:)`: with a
+     * $delegate, its didSendBodyData is told how much has gone, and `$task->cancel()` ends the upload (URLError cancelled).
      * @param array<string, mixed>|string|null $from
      * @return array{0: string, 1: HTTPURLResponse}
      */
-    public function upload(URLRequest|string $for, array|string|null $from = null, ?string $fromFile = null): array
+    public function upload(URLRequest|string $for, array|string|null $from = null, ?string $fromFile = null, ?URLSessionTaskDelegate $delegate = null): array
     {
         $req = is_string($for) ? new URLRequest($for, 'POST') : clone $for;
         if ($req->httpMethod === 'GET') {
@@ -66,27 +71,66 @@ final class URLSession
         }
         $headers = array_merge($this->defaultHeaders, $req->allHTTPHeaderFields);
         $timeout = $req->timeoutInterval > 0 ? $req->timeoutInterval : $this->timeoutInterval;
+        $progress = $this->told($delegate, $task = new URLSessionTask($req));
         if ($fromFile !== null) {
-            $body = (string)@file_get_contents($fromFile);
-            $r = Http::request($req->httpMethod, $req->url, $headers, $body, $timeout);
+            $body = @file_get_contents($fromFile);
+            $body !== false || throw new \RuntimeException("URLSession::upload: cannot read $fromFile");
+            $r = Http::request($req->httpMethod, $req->url, $headers, $body, $timeout, $progress);
         } elseif (is_array($from)) {
-            $r = Http::post($req->url, $from, $headers, $timeout);
+            $r = Http::post($req->url, $from, $headers, $timeout, $progress);
         } else {
-            $r = Http::request($req->httpMethod, $req->url, $headers, $from ?? $req->httpBody, $timeout);
+            $r = Http::request($req->httpMethod, $req->url, $headers, $from ?? $req->httpBody, $timeout, $progress);
         }
         return [$r->body, new HTTPURLResponse($req->url, $r->status, $r->headers)];
     }
 
     /**
-     * Downloads a URL to a temporary file, as `URLSession.shared.download(from: url)`.
+     * Downloads a URL to a temporary file, as `URLSession.shared.download(from: url, delegate:)`: the body is written to
+     * the file as it comes, not held in memory; with a $delegate, its didWriteData is told how much has come, and
+     * `$task->cancel()` ends the download (URLError cancelled; no file is left).
      * @return array{0: string, 1: HTTPURLResponse} [$tempFilePath, $response]
      */
-    public function download(URLRequest|string|null $from = null, URLRequest|string|null $for = null): array
+    public function download(URLRequest|string|null $from = null, URLRequest|string|null $for = null, ?URLSessionTaskDelegate $delegate = null): array
     {
-        [$bytes, $resp] = $this->data($from, $for);
+        $target = $for ?? $from ?? throw new \InvalidArgumentException('URLSession::download requires a URL or URLRequest');
+        $req = is_string($target) ? new URLRequest($target) : $target;
+        $headers = array_merge($this->defaultHeaders, $req->allHTTPHeaderFields);
+        $timeout = $req->timeoutInterval > 0 ? $req->timeoutInterval : $this->timeoutInterval;
         $tmp = tempnam(sys_get_temp_dir(), 'myphp-dl-') ?: (sys_get_temp_dir() . '/myphp-dl-' . bin2hex(random_bytes(6)));
-        file_put_contents($tmp, $bytes);
-        return [$tmp, $resp];
+        $task = new URLSessionTask($req);
+        try {
+            $r = Http::request($req->httpMethod, $req->url, $headers, $req->httpBody, $timeout,
+                $this->told($delegate, $task, download: true), saveTo: $tmp);
+        } catch (\Throwable $e) {
+            @unlink($tmp);
+            throw $e;
+        }
+        return [$tmp, new HTTPURLResponse($req->url, $r->status, $r->headers)];
+    }
+
+    /**
+     * What Http calls as a transfer goes, for $delegate: the task's counts are updated, didSendBodyData is told when the
+     * body has gone further (and, for a download, didWriteData when the file has), and the transfer goes on unless the
+     * task was cancelled. Null without a delegate.
+     */
+    private function told(?URLSessionTaskDelegate $delegate, URLSessionTask $task, bool $download = false): ?Closure
+    {
+        if ($delegate === null) {
+            return null;
+        }
+        $sent = $written = 0;
+        return function (int $uploadTotal, int $uploadNow, int $downloadTotal, int $downloadNow) use ($delegate, $task, $download, &$sent, &$written): bool {
+            $task->update($uploadTotal, $uploadNow, $downloadTotal, $downloadNow);
+            if ($uploadTotal > 0 && $uploadNow !== $sent) {
+                $delegate->didSendBodyData($this, $task, $uploadNow - $sent, $uploadNow, $uploadTotal);
+                $sent = $uploadNow;
+            }
+            if ($download && $downloadNow !== $written) {
+                $delegate->didWriteData($this, $task, $downloadNow - $written, $downloadNow, $downloadTotal);
+                $written = $downloadNow;
+            }
+            return !$task->progress->isCancelled;
+        };
     }
 
     /**

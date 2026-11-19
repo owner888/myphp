@@ -325,6 +325,7 @@ $view = fn() => VStack(spacing: 12)(
 | `Timer.publish`, `TimelineView(.periodic)` | `TimelineView()(fn(TimelineViewContext $context) => …)` |
 | `@MainActor` | Everything already is: PHP runs the app on one thread. What waits goes in a fiber (`App::go()`), heavy CPU work in a child process (see [app.md](app.md)) |
 | `URLSession.shared.data(from:)`, `URLRequest`, `JSONDecoder` | `[$data, $resp] = URLSession::shared()->data(from: $url)` (or `for: new URLRequest($url, 'POST', body: [...])`), `URLSession::shared()->json(from: $url)`, `URLSession::shared()->decode(User::class, from: $url)`, `upload()`, `download()`; or `Http::get()`, `Http::post()`, `Http::postJson()`, `Http::put()`, `Http::patch()`, `Http::delete()` |
+| `URLSession.shared.upload(for:from:delegate:)`, `download(for:delegate:)`, `URLSessionTaskDelegate`, `URLSessionTask`, `Progress`, `URLError.cancelled` | `->upload(for: $req, from: $body, delegate: $d)`, `->download(from: $url, delegate: $d)`, `->data(for: $req, delegate: $d)`; `$d` extends `URLSessionTaskDelegate` and overrides `didSendBodyData`, `didWriteData` (a download's file), `didReceive`: each is given the `URLSessionTask` (`countOfBytesSent`, `countOfBytesExpectedToSend`, `countOfBytesReceived`, `countOfBytesExpectedToReceive`, `progress->fractionCompleted`, `cancel()`); a cancelled call throws `URLError` (`isCancelled()`, code `-999`). Shown as `ProgressView('Uploading', value: $this->sent, total: $this->total)` |
 | `scenePhase` | `App::onActivate()`, the window's events (see [The application](app.md)) |
 
 <!-- no-test -->

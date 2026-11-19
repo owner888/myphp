@@ -25,7 +25,8 @@ final class Curl
         struct curl_slist { char *data; struct curl_slist *next; };
         typedef struct { int msg; CURL *easy_handle; union { void *whatever; int result; } data; } CURLMsg;
         typedef size_t (*myphp_curl_data)(char *ptr, size_t size, size_t n, void *user);
-        typedef struct { myphp_curl_data write; myphp_curl_data header; } myphp_curl_callbacks;
+        typedef int (*myphp_curl_xfer)(void *user, long long dltotal, long long dlnow, long long ultotal, long long ulnow);
+        typedef struct { myphp_curl_data write; myphp_curl_data header; myphp_curl_xfer xfer; } myphp_curl_callbacks;
         CURL *curl_easy_init(void);
         void curl_easy_cleanup(CURL *h);
         int curl_easy_setopt(CURL *h, int option, ...);
@@ -49,7 +50,10 @@ final class Curl
     public const OPT_URL = 10002, OPT_WRITEFUNCTION = 20011, OPT_HEADERFUNCTION = 20079, OPT_HTTPHEADER = 10023,
         OPT_CUSTOMREQUEST = 10036, OPT_POSTFIELDS = 10015, OPT_POSTFIELDSIZE_LARGE = 30120, OPT_FOLLOWLOCATION = 52,
         OPT_MAXREDIRS = 68, OPT_NOBODY = 44, OPT_NOSIGNAL = 99, OPT_PROTOCOLS_STR = 10318, OPT_REDIR_PROTOCOLS_STR = 10319,
-        OPT_ACCEPT_ENCODING = 10102, OPT_POST = 47, OPT_CONNECT_ONLY = 141, OPT_HTTPPROXYTUNNEL = 61, OPT_USERAGENT = 10018, OPT_CAINFO = 10065;
+        OPT_ACCEPT_ENCODING = 10102, OPT_POST = 47, OPT_CONNECT_ONLY = 141, OPT_HTTPPROXYTUNNEL = 61, OPT_USERAGENT = 10018, OPT_CAINFO = 10065,
+        OPT_NOPROGRESS = 43, OPT_XFERINFOFUNCTION = 20219;
+    /** CURLE_ABORTED_BY_CALLBACK: a progress callback that answered non-zero ended the transfer. */
+    public const E_ABORTED_BY_CALLBACK = 42;
     public const INFO_RESPONSE_CODE = 0x200002, INFO_EFFECTIVE_URL = 0x100001, INFO_REDIRECT_COUNT = 0x200014;
     public const MSG_DONE = 1;
     /** CURLE_TOO_MANY_REDIRECTS. */

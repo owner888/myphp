@@ -5,6 +5,7 @@ namespace MyPHP;
 
 use FFI;
 use MyPHP\Native\{Curl, CurlLoop, NetProxy};
+use Closure;
 use RuntimeException;
 
 /**
@@ -32,6 +33,8 @@ final class Http
 {
     /** CURLOPT_COPYPOSTFIELDS, CURLOPT_TIMEOUT_MS. */
     private const OPT_COPYPOSTFIELDS = 10165, OPT_TIMEOUT_MS = 155;
+    /** The most often a progress callback is called, in seconds: 30 times a second. */
+    private const PROGRESS_INTERVAL = 1 / 30;
 
     /** GET $url with $headers (name => value). */
     public static function get(string $url, array $headers = [], float $timeout = 0.0): HttpResponse
@@ -43,16 +46,16 @@ final class Http
      * POST $url with $body: a raw string, an array of fields or file paths
      * (encoded as multipart/form-data when a value is a file path or a
      * CURLFile, else JSON when Content-Type is application/json, else
-     * multipart/form-data), with $headers.
+     * multipart/form-data), with $headers. $progress as request()'s.
      * @param array<string, mixed>|string|null $body
      * @param array<string, string> $headers
      */
-    public static function post(string $url, array|string|null $body = null, array $headers = [], float $timeout = 0.0): HttpResponse
+    public static function post(string $url, array|string|null $body = null, array $headers = [], float $timeout = 0.0, ?Closure $progress = null): HttpResponse
     {
         if (is_array($body)) {
             [$body, $headers] = self::encodeBody($body, $headers);
         }
-        return self::request('POST', $url, $headers, $body, $timeout);
+        return self::request('POST', $url, $headers, $body, $timeout, $progress);
     }
 
     /** PUT $url with $body and $headers. @param array<string, mixed>|string|null $body @param array<string, string> $headers */
@@ -123,11 +126,19 @@ final class Http
      * $method of $url (http or https) with $headers (name => value), $body
      * sent when not null, taking $timeout seconds at most (0: no limit, as
      * Go's default client).
+     *
+     * $progress(int $uploadTotal, int $uploadNow, int $downloadTotal, int $downloadNow): ?bool is told how much of the
+     * body has gone and how much of the answer has come (a total is 0 until it is known), at most 30 times a second and
+     * once more when a direction is complete and at the end; it runs on the main thread, in the run loop's turn (not in
+     * the fiber that waits), so it may change the app's state and ask for a frame. Answering false ends the transfer: a
+     * URLError (cancelled) is thrown; so is what $progress throws, after the transfer is ended.
+     * $saveTo, a file path, takes the answer's body there as it comes, not in memory (the response's body is empty);
+     * $onData(string $chunk) gets each piece of the body as it comes. @internal $saveTo and $onData: URLSession
      * @param array<string, string> $headers
      */
-    public static function request(string $method, string $url, array $headers = [], ?string $body = null, float $timeout = 0.0): HttpResponse
+    public static function request(string $method, string $url, array $headers = [], ?string $body = null, float $timeout = 0.0, ?Closure $progress = null, ?string $saveTo = null, ?Closure $onData = null): HttpResponse
     {
-        return self::send($method, $url, $headers, $body, $timeout, 'http,https', 'MyPHP', 'http');
+        return self::send($method, $url, $headers, $body, $timeout, 'http,https', 'MyPHP', 'http', $progress, $saveTo, $onData);
     }
 
     /**
@@ -136,7 +147,7 @@ final class Http
      * $who before curl's reason when it fails. @internal Media\Https
      * @param array<string, string> $headers
      */
-    public static function send(string $method, string $url, array $headers, ?string $body, float $timeout, string $protocols, string $agent, string $who): HttpResponse
+    public static function send(string $method, string $url, array $headers, ?string $body, float $timeout, string $protocols, string $agent, string $who, ?Closure $progress = null, ?string $saveTo = null, ?Closure $onData = null): HttpResponse
     {
         if (preg_match('/^[!#$%&\'*+.^_`|~0-9A-Za-z-]+$/', $method) !== 1) {
             throw new RuntimeException("$who: invalid method \"$method\"");
@@ -144,17 +155,59 @@ final class Http
         $f = Curl::ffi();
         $h = $f->curl_easy_init();
         $state = new class { public int $status = 0; public string $body = ''; public array $headers = []; };
+        $out = null; // the file $saveTo names, open
+        if ($saveTo !== null) {
+            $out = @fopen($saveTo, 'wb') ?: throw new RuntimeException("$who: cannot write $saveTo");
+        }
+        $thrown = null; // what $progress or $onData threw: the transfer is ended and it is thrown after
         $cbs = $f->new('myphp_curl_callbacks');
-        $cbs->header = function ($ptr, $size, $n, $user) use ($state): int {
+        $cbs->header = function ($ptr, $size, $n, $user) use ($state, &$out): int {
             $line = FFI::string($ptr, $size * $n);
-            if (preg_match('~^HTTP/\S+\s+(\d{3})~', $line, $m) === 1) { [$state->status, $state->body, $state->headers] = [(int)$m[1], '', []]; } // the last response's, after redirects
+            if (preg_match('~^HTTP/\S+\s+(\d{3})~', $line, $m) === 1) { // the last response's, after redirects
+                [$state->status, $state->body, $state->headers] = [(int)$m[1], '', []];
+                if ($out !== null) { ftruncate($out, 0); rewind($out); }
+            }
             elseif (($at = strpos($line, ':')) !== false) { $state->headers[strtolower(substr($line, 0, $at))] = trim(substr($line, $at + 1)); }
             return $size * $n;
         };
-        $cbs->write = function ($ptr, $size, $n, $user) use ($state): int {
-            $state->body .= FFI::string($ptr, $size * $n);
+        $cbs->write = function ($ptr, $size, $n, $user) use ($state, &$out, $onData, &$thrown): int {
+            $chunk = FFI::string($ptr, $size * $n);
+            if ($out !== null) {
+                if (fwrite($out, $chunk) !== strlen($chunk)) { return 0; } // curl ends the transfer: a write error
+            } else {
+                $state->body .= $chunk;
+            }
+            if ($onData !== null) {
+                try { $onData($chunk); } catch (\Throwable $e) { $thrown = $e; return 0; }
+            }
             return $size * $n;
         };
+        // What the progress callback is given, throttled: the last values curl reported ($latest) and the last ones told ($told).
+        $latest = $told = null;
+        $toldAt = 0.0;
+        $finished = [false, false]; // upload complete, download complete: told once, whatever the pace
+        $tell = function (array $v) use ($progress, &$told, &$toldAt, &$thrown): int {
+            $told = $v;
+            $toldAt = hrtime(true) / 1e9;
+            try {
+                return $progress(...$v) === false ? 1 : 0;
+            } catch (\Throwable $e) {
+                $thrown = $e;
+                return 1;
+            }
+        };
+        if ($progress !== null) {
+            $cbs->xfer = function ($user, $dlTotal, $dlNow, $ulTotal, $ulNow) use (&$latest, &$told, &$toldAt, &$finished, $tell): int {
+                $v = $latest = [(int)$ulTotal, (int)$ulNow, (int)$dlTotal, (int)$dlNow];
+                if ($v === $told) { return 0; }
+                $upDone = $v[0] > 0 && $v[1] >= $v[0] && !$finished[0];
+                $downDone = $v[2] > 0 && $v[3] >= $v[2] && !$finished[1];
+                if ($upDone) { $finished[0] = true; }
+                if ($downDone) { $finished[1] = true; }
+                if (!$upDone && !$downDone && hrtime(true) / 1e9 - $toldAt < self::PROGRESS_INTERVAL) { return 0; }
+                return $tell($v);
+            };
+        }
         $list = Curl::headers($headers);
         $done = null;
         try {
@@ -172,6 +225,10 @@ final class Http
             if ($timeout > 0) { $set(self::OPT_TIMEOUT_MS, (int)ceil($timeout * 1000)); }
             $set(Curl::OPT_HEADERFUNCTION, $cbs->header);
             $set(Curl::OPT_WRITEFUNCTION, $cbs->write);
+            if ($progress !== null) {
+                $set(Curl::OPT_NOPROGRESS, 0);
+                $set(Curl::OPT_XFERINFOFUNCTION, $cbs->xfer);
+            }
             if ($list !== null) { $set(Curl::OPT_HTTPHEADER, $list); }
             if ($body !== null) {
                 $set(Curl::OPT_POSTFIELDSIZE_LARGE, strlen($body));
@@ -184,11 +241,21 @@ final class Http
             }
             CurlLoop::start($h, function (int $code) use (&$done): void { $done = $code; });
             CurlLoop::waitUntil(function () use (&$done): bool { return $done !== null; }); // by reference: an arrow function would keep the null
+            if ($thrown !== null) {
+                throw $thrown;
+            }
+            if ($done === Curl::E_ABORTED_BY_CALLBACK) {
+                throw URLError::cancelled();
+            }
             if ($done !== 0) {
                 throw new RuntimeException("$who: " . $f->curl_easy_strerror($done));
             }
+            if ($progress !== null && $latest !== null && $latest !== $told && $tell($latest) !== 0) { // the last values, whatever the pace
+                throw $thrown ?? URLError::cancelled();
+            }
             return new HttpResponse($state->status, $state->body, $state->headers);
         } finally {
+            if ($out !== null) { fclose($out); }
             if ($done === null) { CurlLoop::stop($h); }
             $f->curl_easy_cleanup($h);
             if ($list !== null) { $f->curl_slist_free_all($list); }
