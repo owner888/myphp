@@ -76,6 +76,14 @@ on every platform alike. So do `Dialog::prompt` and
 `Dialog::login` (ask in the window, with inputs), `Dialog::open` of a
 directory, and on iOS `Dialog::save` (write the file, then share it).
 
+A plugin that loads a native library (the Terminal's, SQLite's) does not
+download it on a phone, as a desktop program does: iOS's code signing refuses a
+library that is not the app's own, and App Store (guideline 2.5.2) and Google
+Play (the Developer Distribution Agreement, 4.9) bar running code that was
+downloaded. It says so (`... does not download a native library: ship it with
+the app, or name it with <ENV>`), and the app carries the library, or names it
+in the plugin's environment variable.
+
 ## The safe area and the keyboard
 
 The views keep out of the status bar, the notch or cutout and the home

@@ -49,7 +49,8 @@ final class NativeLibrary
      * next to the executable (Bundle::executable); the one in the user's cache,
      * where mygo's CLI downloads it (<cache>/mygo/natives/<sha256>/),
      * which programs that are not packaged apps download there when it
-     * is missing, checking its SHA-256. Packaged apps never download it.
+     * is missing, checking its SHA-256. Packaged apps never download it, nor does an app of a phone (iOS, Android): code
+     * downloaded to be run is barred there.
      */
     public static function find(string $manifest, string $name, string $env, string $plugin): string
     {
@@ -72,6 +73,12 @@ final class NativeLibrary
         }
         if ($resources !== null) {
             throw new RuntimeException("$plugin: {$f['name']} is missing from the app: build it with myphp build");
+        }
+        if (\MyPHP\App::isIOS() || \MyPHP\App::isAndroid()) {
+            // A phone's app may not download code and run it: iOS's code signing refuses a library that is not the app's own, and
+            // App Store (guideline 2.5.2) and Google Play (the Developer Distribution Agreement, 4.9) both bar it; the build
+            // here is the desktop's anyway. The library comes with the app, or MYPHP's env names it.
+            throw new RuntimeException("$plugin: {$f['name']} is not in the app, and an app of a phone does not download a native library: ship it with the app, or name it with $env");
         }
         self::download($f, $cached, $plugin);
         return $cached;
