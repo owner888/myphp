@@ -154,14 +154,15 @@ from .myphp/dev. Work in `src/Native/Build/` (`tests/build_test.php`). Project `
 ## Working on it
 
 - PHP ≥ 8.4 (8.5 recommended) with `ext-ffi`; `myphp run` and `myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
-- Before handing back: `php -l` on changed files; run only the tests of what you changed (`php tests/run.php <name>...`), never the whole suite (the developer's rule: all of it is CI's); ask the developer to run GUI examples; `php tests/bench.php` after per-frame changes.
+- Before handing back: `php -l` on changed files; run only the tests of what you changed (`php tests/run.php <name>...`), never the whole suite (the developer's rule: all of it is CI's); ask the developer to run GUI examples; `php tests/bench.php` after per-frame changes. Include the tests that *read* a file you changed (`grep -l <file name> tests/*.php`: a test of a launcher's source, a script's text): `embed_ini` broke on a comment added to the Android launcher, and was seen only in CI.
 - New ObjC calls: selector/types from Apple's headers, letters in `ObjC::MAP`, structs via `ObjC::$c->new`/`ObjC::rect`, no variadics (`arrayWithObjects:`).
 - Record each solved problem in `docs/architecture.md` (one paragraph).
+- **A phone is checked on a stock one**: a permissive SELinux (a rooted or custom ROM phone) and the iOS Simulator hide what a user's device refuses (OPcache's lock, the sandbox's `/tmp`, `fork`). Use an `Enforcing` `user`-build emulator image (Android TV's arm64 one) and, for iOS, a device; the details are in `docs/architecture.md`, "What a stock phone refuses".
 - CJK in the iOS Simulator from the Mac's keyboard: switch the input method inside the simulator (iOS's keyboard), not the Mac's input source.
 
 ## Roadmap
 
-Done: macOS (Metal/Cocoa/WKWebView), Windows (D3D11/Win32/DirectWrite/WebView2), Linux (GTK 3/OpenGL/WebKitGTK), Android (EGL/GLES 3), iOS/iPadOS (Metal/UIKit), and 5-platform native 3D (`Plugins\Scene`). Not targeted yet: tvOS (needs its own `appletvos`/`appletvsimulator` `libphp.a` slice with `fork`/`system`/`popen` disabled; Android TV shares Android's `libphp.so`), visionOS.
+Done: macOS (Metal/Cocoa/WKWebView), Windows (D3D11/Win32/DirectWrite/WebView2), Linux (GTK 3/OpenGL/WebKitGTK), Android (EGL/GLES 3), iOS/iPadOS (Metal/UIKit), and 5-platform native 3D (`Plugins\Scene`). Not targeted yet: tvOS (needs its own `appletvos`/`appletvsimulator` `libphp.a` slice with `fork`/`system`/`popen` disabled), visionOS. Android TV shares Android's `libphp.so` and starts, but has no D-pad focus engine; Android is 64-bit only (the framework takes 64-bit PHP integers): both in `docs/architecture.md`, "What a stock phone refuses".
 The UI is declarative, as SwiftUI's (docs/swiftui.md, docs/ui/views.md): every example, doc page and the skill show views; the builder (`$c->column()…`) is the engine's own, `@internal`, which apps reach only inside a `Representable`.
 Remaining: what building real apps turns up (examples/logview, notes, photos, http, mobile, model-viewer).
 With each new platform (Windows, Linux's bridges), update the app-writing skill `bin/skills/myphp-app/` with it: its description and opening (which GPU API draws where), "Verify before you say it is done" (how to run, screenshot and read the log there; `myphp devices`/`emulators`/`doctor` as they grow), and `references/` where its behavior differs.
