@@ -30,7 +30,9 @@ if [ -f "${ANDROID_PHP}/libs/libphp.so" ]; then
     ls -lh "${ARCHIVE}"
 fi
 
-# 2. iOS arm64 & iOS Simulator arm64 runtime archives
+# 2. iOS arm64 & iOS Simulator arm64 runtime archives. The launcher is compiled against PHP's headers: the ones the
+# iOS build made (php-build) and the PHP source's own (shared with Android, so the same list as the Android archive's):
+# scripts/check-ios-runtime-archive.sh compiles it from the archive alone.
 for TARGET in ios ios-simulator; do
     BDIR="build/${TARGET}"
     NAME="$([ "$TARGET" = "ios-simulator" ] && echo ios-simulator-arm64 || echo ios-arm64)"
@@ -44,8 +46,12 @@ for TARGET in ios ios-simulator; do
             "${BDIR}/php-build/main"/*.h \
             "${BDIR}/php-build/Zend"/*.h \
             "${ANDROID_PHP}/main"/*.h \
+            "${ANDROID_PHP}/main/streams"/*.h \
             "${ANDROID_PHP}/Zend"/*.h \
-            "${ANDROID_PHP}/TSRM"/*.h
+            "${ANDROID_PHP}/Zend/Optimizer"/*.h \
+            "${ANDROID_PHP}/TSRM"/*.h \
+            "${ANDROID_PHP}/sapi/embed"/*.h \
+            "${ANDROID_PHP}/ext/standard"/*.h
         ls -lh "${ARCHIVE}"
     fi
 done

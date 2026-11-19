@@ -12,13 +12,14 @@ APP_VERSION="${5:-1.0.0}"
 DISPLAY_NAME="${6:-${APP_NAME}}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/phone-build-dir.sh"
 # MYPHP_IOS_SDK=iphonesimulator packages for the simulator (its runtime under build/ios-simulator), a device by default
 IOS_SDK="${MYPHP_IOS_SDK:-iphoneos}"
-BUILD_DIR="${ROOT_DIR}/build/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
+BUILD_DIR="${PHONE_BUILD}/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
 SYSROOT="${BUILD_DIR}/sysroot"
 PHP_BUILD="${BUILD_DIR}/php-build"
 PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
-PHP_SRC="${ROOT_DIR}/build/android/php-${PHP_VERSION}"
+PHP_SRC="${PHONE_BUILD}/android/php-${PHP_VERSION}"
 
 SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
 IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator || true)"

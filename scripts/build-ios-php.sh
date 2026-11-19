@@ -5,13 +5,14 @@ set -euo pipefail
 # Part of myphp iOS platform toolchain.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/phone-build-dir.sh"
 # MYPHP_IOS_SDK=iphonesimulator builds the simulator's runtime (build/ios-simulator), the device's by default (build/ios)
 IOS_SDK="${MYPHP_IOS_SDK:-iphoneos}"
-BUILD_DIR="${ROOT_DIR}/build/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
+BUILD_DIR="${PHONE_BUILD}/$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator || echo ios)"
 SYSROOT="${BUILD_DIR}/sysroot"
 PHP_BUILD_DIR="${BUILD_DIR}/php-build"
 PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
-PHP_SRC_DIR="${ROOT_DIR}/build/android/php-${PHP_VERSION}"
+PHP_SRC_DIR="${PHONE_BUILD}/android/php-${PHP_VERSION}"
 
 SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
 IOS_TARGET="arm64-apple-ios16.0$([ "$IOS_SDK" = iphonesimulator ] && echo -simulator || true)"
@@ -32,6 +33,24 @@ curl_hidden() {
     [ -f "${SYSROOT}/lib/libcurl.a" ] && [[ "$(xcrun nm -m "${SYSROOT}/lib/libcurl.a" | grep ' _curl_easy_init$')" == *"private external"* ]]
 }
 
+# The launcher is compiled against the PHP source's own headers too (main.m includes main/php.h and sapi/embed/php_embed.h,
+# which need main/streams, Zend/Optimizer and ext/standard): shared with the Android build, in build/android/php-<version>.
+# An archive made before they were packed lacks some; they are fetched from the PHP source, as Android's script does.
+ensure_php_headers() {
+    [ -d "${PHP_SRC_DIR}/main" ] || return 0
+    if [ ! -f "${PHP_SRC_DIR}/main/streams/php_stream_context.h" ] || [ ! -f "${PHP_SRC_DIR}/Zend/Optimizer/zend_optimizer.h" ] \
+        || [ ! -f "${PHP_SRC_DIR}/sapi/embed/php_embed.h" ] || [ ! -f "${PHP_SRC_DIR}/ext/standard/php_standard.h" ]; then
+        echo "==> Fetching missing PHP ${PHP_VERSION} headers..."
+        curl -fsSL "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz" \
+            | tar -xz -C "${PHONE_BUILD}/android" \
+                "php-${PHP_VERSION}/main/streams" \
+                "php-${PHP_VERSION}/Zend/Optimizer" \
+                "php-${PHP_VERSION}/sapi/embed" \
+                "php-${PHP_VERSION}/ext/standard"
+    fi
+}
+ensure_php_headers
+
 # Fast-path: download prebuilt iOS runtime archive when libphp.a is not yet built locally
 RUNTIME_NAME="$([ "$IOS_SDK" = iphonesimulator ] && echo ios-simulator-arm64 || echo ios-arm64)"
 PREBUILT_URL="${MYPHP_PREBUILT_URL:-https://github.com/owner888/myphp/releases/download/runtime-php-${PHP_VERSION}}/myphp-runtime-${RUNTIME_NAME}-php-${PHP_VERSION}.tar.gz"
@@ -40,8 +59,9 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ] && [ "${MYPHP_BUILD_FROM_SOURCE:-0}" !=
     TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
         echo "==> Extracting prebuilt iOS runtime..."
-        tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
+        tar -xzf "${TMP_TAR}" --strip-components=1 -C "${PHONE_BUILD}" && rm -f "${TMP_TAR}" # its members are build/ios*/... and build/android/...
         if [ -f "${BUILD_DIR}/libs/libphp.a" ] && [ -f "${SYSROOT}/lib/libcurl.a" ] && ! curl_hidden; then
+            ensure_php_headers
             touch "${BUILD_DIR}/libs/libphp.a"
             echo "==> Prebuilt iOS PHP embed runtime ready:"
             ls -lh "${BUILD_DIR}/libs/libphp.a"
@@ -61,16 +81,16 @@ export RANLIB="ranlib"
 # 1. Build libffi for iOS
 if [ ! -f "${SYSROOT}/lib/libffi.a" ]; then
     echo "==> Preparing libffi for iOS..."
-    if [ ! -d "${ROOT_DIR}/build/android/libffi-src" ]; then
-        mkdir -p "${ROOT_DIR}/build/android"
-        git clone --depth 1 --branch v3.4.6 https://github.com/libffi/libffi.git "${ROOT_DIR}/build/android/libffi-src"
+    if [ ! -d "${PHONE_BUILD}/android/libffi-src" ]; then
+        mkdir -p "${PHONE_BUILD}/android"
+        git clone --depth 1 --branch v3.4.6 https://github.com/libffi/libffi.git "${PHONE_BUILD}/android/libffi-src"
     fi
-    if [ ! -f "${ROOT_DIR}/build/android/libffi-src/configure" ]; then
-        (cd "${ROOT_DIR}/build/android/libffi-src" && ./autogen.sh)
+    if [ ! -f "${PHONE_BUILD}/android/libffi-src/configure" ]; then
+        (cd "${PHONE_BUILD}/android/libffi-src" && ./autogen.sh)
     fi
     mkdir -p "${BUILD_DIR}/libffi-build"
     cd "${BUILD_DIR}/libffi-build"
-    "${ROOT_DIR}/build/android/libffi-src/configure" \
+    "${PHONE_BUILD}/android/libffi-src/configure" \
         --host=arm64-apple-darwin \
         --prefix="${SYSROOT}" \
         --enable-static \
@@ -156,8 +176,8 @@ fi
 
 # The PHP source, shared with the Android build
 if [ ! -f "${PHP_SRC_DIR}/configure" ]; then
-    mkdir -p "${ROOT_DIR}/build/android"
-    cd "${ROOT_DIR}/build/android"
+    mkdir -p "${PHONE_BUILD}/android"
+    cd "${PHONE_BUILD}/android"
     if [ ! -f "php-${PHP_VERSION}.tar.gz" ]; then
         curl -L -o "php-${PHP_VERSION}.tar.gz" "https://www.php.net/distributions/php-${PHP_VERSION}.tar.gz"
     fi

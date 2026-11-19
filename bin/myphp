@@ -854,6 +854,9 @@ function dev(array $args): void
     $reload = "$dir/.myphp/hot-reload"; // the app's views of files (Content::file) load again when it names them
     $env['MYPHP_HOT_RELOAD'] = $reload;
     $s = new DevSession($dir, $sign, devConfig($c)['name'], $env);
+    // Ctrl+C ends myphp (singleKeys: exit, which runs this), and the app with it, as Flutter's run does; else the app
+    // went on without its terminal, writing its log over the shell's prompt
+    register_shutdown_function(fn() => $s->stop());
     // The rest of the command line is the app's ($argv): a file or folder named relative to here, absolute, as the app runs in its project's folder.
     $s->appArgs = array_map(fn(string $a) => !str_starts_with($a, '-') && ($real = realpath($a)) !== false ? $real : $a, array_slice(array_values($args), 1));
     $keys = singleKeys();
@@ -2622,6 +2625,22 @@ function latestRelease(int $seconds): ?string
 }
 
 /**
+ * Where the phone runtimes (PHP, OpenSSL, libcurl, the launcher) and the Android debug keystore are kept: build/ of MyPHP's
+ * folder, or ~/.myphp/phone for a Composer package, whose folder every update replaces (scripts/phone-build-dir.sh, which
+ * the scripts source too, decides).
+ */
+function phoneBuild(): string
+{
+    static $dir = null;
+    if ($dir === null) {
+        [$code, $out] = Cmd::output(['bash', '-c', 'ROOT_DIR="$1"; source "$1/scripts/phone-build-dir.sh"; printf %s "$PHONE_BUILD"', 'sh', (string)realpath(FRAMEWORK)]);
+        $code === 0 && trim($out) !== '' || fail('cannot tell where the phone runtimes are kept (scripts/phone-build-dir.sh)');
+        $dir = trim($out);
+    }
+    return $dir;
+}
+
+/**
  * myphp upgrade, as flutter upgrade: MyPHP brought to its latest release, the way it was installed. A git checkout
  * pulls (refusing while it has changes); Composer's global install, the one install.sh makes, updates the package; a
  * project's dependency is the project's to update (its composer.json).
@@ -3253,9 +3272,10 @@ function doctor(array $args): void
 
     // 4. The PHP runtime of each phone platform: built by the first myphp run or build for it (scripts/build-*-php.sh), again when its script changes
     $phonePhpVer = getenv('MYPHP_PHONE_PHP_VERSION') ?: '8.5.12';
-    $androidPhp = is_file(FRAMEWORK . "/build/android/php-$phonePhpVer/libs/libphp.so") ? FRAMEWORK . "/build/android/php-$phonePhpVer/libs/libphp.so" : FRAMEWORK . '/build/android/php-8.3.16/libs/libphp.so';
-    $iosPhp = FRAMEWORK . '/build/ios/libs/libphp.a';
-    $iosSimPhp = FRAMEWORK . '/build/ios-simulator/libs/libphp.a';
+    $phoneBuild = phoneBuild();
+    $androidPhp = is_file("$phoneBuild/android/php-$phonePhpVer/libs/libphp.so") ? "$phoneBuild/android/php-$phonePhpVer/libs/libphp.so" : "$phoneBuild/android/php-8.3.16/libs/libphp.so";
+    $iosPhp = "$phoneBuild/ios/libs/libphp.a";
+    $iosSimPhp = "$phoneBuild/ios-simulator/libs/libphp.a";
     $stale = fn(string $lib, string $script): bool => is_file($lib) && filemtime(FRAMEWORK . "/scripts/$script") > filemtime($lib);
     $buildTools = ['autoconf', 'automake', 'pkg-config', 'bison', 're2c'];
     if (PHP_OS_FAMILY === 'Darwin') { $buildTools[] = 'glibtoolize'; } else { $buildTools[] = 'libtoolize'; }

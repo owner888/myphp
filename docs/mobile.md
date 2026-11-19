@@ -25,7 +25,10 @@ The first run for a phone builds its PHP runtime (libffi, OpenSSL,
 libcurl, libxml2, libphp: the NDK for Android, `arm64`, minSdk 31; Xcode
 for iOS 16; 10-20 minutes), kept under `build/android`, `build/ios` (an
 iPhone) and `build/ios-simulator` (the simulator, another slice of the
-same libraries) and built again when its script changes. The scripts under `scripts/` are the CLI's
+same libraries) and built again when its script changes. A Composer install
+(`composer global require owner888/myphp`) keeps them in `~/.myphp/phone` instead (its package folder is
+replaced whole by every update, which would take them along, and the Android debug key that signs the
+apps), as `android`, `ios` and `ios-simulator`; `MYPHP_PHONE_BUILD` names another place. The scripts under `scripts/` are the CLI's
 internals, not to be run by hand.
 
 An iPhone runs an app signed with an Apple Development certificate and a

@@ -35,7 +35,8 @@ pack_ios() {
         "build/android/php-${PHP_VERSION}/main" \
         "build/android/php-${PHP_VERSION}/Zend" \
         "build/android/php-${PHP_VERSION}/TSRM" \
-        "build/android/php-${PHP_VERSION}/sapi/embed"
+        "build/android/php-${PHP_VERSION}/sapi/embed" \
+        "build/android/php-${PHP_VERSION}/ext/standard"
     ls -lh "${archive}"
 }
 
@@ -52,7 +53,8 @@ pack_android() {
         "build/android/php-${PHP_VERSION}/main" \
         "build/android/php-${PHP_VERSION}/Zend" \
         "build/android/php-${PHP_VERSION}/TSRM" \
-        "build/android/php-${PHP_VERSION}/sapi/embed"
+        "build/android/php-${PHP_VERSION}/sapi/embed" \
+        "build/android/php-${PHP_VERSION}/ext/standard"
     ls -lh "${archive}"
 }
 

@@ -55,6 +55,12 @@ jobs:
         run: |
           chmod +x scripts/package-phone-runtimes.sh
           ./scripts/package-phone-runtimes.sh dist-runtimes
+      # What a developer's `myphp run -d <iPhone>` has after it downloads an archive: the launcher is compiled against it alone.
+      - name: Compile the iOS launcher from each iOS archive alone
+        run: |
+          for archive in dist-runtimes/myphp-runtime-ios-*.tar.gz; do
+            ./scripts/check-ios-runtime-archive.sh "$archive"
+          done
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

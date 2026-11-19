@@ -5,7 +5,8 @@ set -euo pipefail
 # Uses aapt2, javac, d8, zipalign, apksigner.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/android"
+source "$(dirname "$0")/phone-build-dir.sh"
+BUILD_DIR="${PHONE_BUILD}/android"
 TEMPLATE_DIR="${ROOT_DIR}/bin/template/android"
 
 PROJECT_DIR="${1:-}"

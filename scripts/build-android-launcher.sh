@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/android"
+source "$(dirname "$0")/phone-build-dir.sh"
+BUILD_DIR="${PHONE_BUILD}/android"
 SYSROOT="${BUILD_DIR}/sysroot"
 PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
 PHP_DIR="${BUILD_DIR}/php-${PHP_VERSION}"

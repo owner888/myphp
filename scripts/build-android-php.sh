@@ -5,7 +5,8 @@ set -euo pipefail
 # Part of myphp Android platform toolchain.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/android"
+source "$(dirname "$0")/phone-build-dir.sh"
+BUILD_DIR="${PHONE_BUILD}/android"
 SYSROOT="${BUILD_DIR}/sysroot"
 
 PHP_VERSION="${MYPHP_PHONE_PHP_VERSION:-8.5.12}"
@@ -70,7 +71,7 @@ if [ "${MYPHP_BUILD_FROM_SOURCE:-0}" != "1" ]; then
     TMP_TAR="${BUILD_DIR}/runtime-prebuilt.tar.gz"
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
         echo "==> Extracting prebuilt Android runtime..."
-        tar -xzf "${TMP_TAR}" -C "${ROOT_DIR}" && rm -f "${TMP_TAR}"
+        tar -xzf "${TMP_TAR}" --strip-components=1 -C "${PHONE_BUILD}" && rm -f "${TMP_TAR}" # its members are build/android/...
         if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
             ensure_php_embed_headers
             touch "${PHP_DIR}/libs/libphp.so"
