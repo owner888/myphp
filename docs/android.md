@@ -37,6 +37,7 @@
 ### 4. 提交格式要求（.aab 格式）
 - Google Play 官方强制要求新上架应用必须提交 **Android App Bundle (`.aab`)** 格式，单一 `.apk` 仅用于开发调试与离线分发。
 - 出包命令：`myphp build -platform android/arm64 -format aab -channel play`（`-channel play` 去掉 `REQUEST_INSTALL_PACKAGES` 并关闭应用内 APK 自更新；`-format` 默认是 `apk`）。输出在 `dist/<name>.aab`。
+- **只出 64 位（`arm64-v8a`）**：MyPHP 的框架依赖 64 位的 PHP 整数（纳秒时钟 `hrtime(true)` 在 32 位 PHP 上返回浮点而不是整数，大量 `int` 字段和 `strict_types` 会直接报错；还有超过 2³¹ 的常量、`pack('P'|'J'|'q'|'Q')` 等 64 位格式在 32 位 PHP 不可用）。所以没有 `armeabi-v7a` 运行库，AAB/APK 里只有 `arm64-v8a`，Google Play 会自动不向仅支持 32 位的设备分发。要支持 32 位设备，得先让整个框架对 32 位整数无依赖，那是单独的大工程。
 - 实现与注意：
   - 不依赖 Gradle 和 bundletool：用 `aapt2 --proto-format` 链接资源，把 base 模块（`manifest/`、`dex/`、`lib/`、`assets/`、`res/`、`resources.pb`）和 `BundleConfig.pb` 打成 zip，再用 `jarsigner` 签名（`ANDROID_KEYSTORE_*` 那把上传密钥，Google Play 用它校验，并用自己的应用签名密钥给分发的 APK 签名）。
   - 清单里的 `android:extractNativeLibs="true"` 保留：随包的 `lib*.so` 如果是要当程序运行的（例如子进程），Play 分发时仍会把它解压到应用的原生库目录。
