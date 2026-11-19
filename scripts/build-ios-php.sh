@@ -202,10 +202,17 @@ if [ ! -f "${BUILD_DIR}/libs/libphp.a" ]; then
     export CXXFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -O2 -fPIC -DDARWIN -DBIND_8_COMPAT -I${SYSROOT}/include"
     export LDFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -L${SYSROOT}/lib"
     export CPPFLAGS="-target ${IOS_TARGET} -isysroot ${SDK_PATH} -I${SYSROOT}/include"
-    export PKG_CONFIG_PATH="${SYSROOT}/lib/pkgconfig"
+    # pkg-config reads the sysroot's .pc files and nothing of the host's: a runtime unpacked from an archive has none, and a
+    # Homebrew's libcurl.pc is the Mac's (-lcurl -lldap), whose -lldap the iPhone SDK has not ("library 'ldap' not found").
+    export PKG_CONFIG_LIBDIR="${SYSROOT}/lib/pkgconfig"
+    unset PKG_CONFIG_PATH
     export PKG_CONFIG="pkg-config --static" # libcurl.a's and OpenSSL's own dependencies into libphp.a's link line
+    # The libraries configure asks pkg-config for are named outright, so that no .pc is needed for any
     export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
     export LIBXML_CFLAGS="-I${SYSROOT}/include/libxml2" LIBXML_LIBS="-L${SYSROOT}/lib -lxml2 -lm"
+    export CURL_CFLAGS="-I${SYSROOT}/include" CURL_LIBS="-L${SYSROOT}/lib -lcurl -lssl -lcrypto -lz"
+    export FFI_CFLAGS="-I${SYSROOT}/include" FFI_LIBS="-L${SYSROOT}/lib -lffi"
+    export ZLIB_CFLAGS="-I${SYSROOT}/include" ZLIB_LIBS="-lz" # the SDK's zlib, no .pc of its own; configure takes an empty ZLIB_CFLAGS for unset
 
     if [ ! -f "Makefile" ]; then
         "${PHP_SRC_DIR}/configure" \

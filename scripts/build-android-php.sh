@@ -207,8 +207,15 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     # 16 KB pages (-z max-page-size): Google Play requires every native library of an app targeting Android 15+ to load on devices with them
     export LDFLAGS="-L${SYSROOT}/lib -Wl,-rpath,'\$ORIGIN' -Wl,--gc-sections -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
     export LIBS=""
+    # The libraries configure asks pkg-config for are named outright, and pkg-config reads the sysroot's .pc files only (a
+    # runtime unpacked from an archive has none, and a Homebrew's libcurl.pc is the Mac's)
+    export PKG_CONFIG_LIBDIR="${SYSROOT}/lib/pkgconfig"
+    unset PKG_CONFIG_PATH
     export OPENSSL_CFLAGS="-I${SYSROOT}/include" OPENSSL_LIBS="-L${SYSROOT}/lib -lssl -lcrypto"
     export LIBXML_CFLAGS="-I${SYSROOT}/include/libxml2" LIBXML_LIBS="-L${SYSROOT}/lib -lxml2 -lm"
+    export CURL_CFLAGS="-I${SYSROOT}/include" CURL_LIBS="-L${SYSROOT}/lib -lcurl -lssl -lcrypto -lz"
+    export FFI_CFLAGS="-I${SYSROOT}/include" FFI_LIBS="-L${SYSROOT}/lib -lffi"
+    export ZLIB_CFLAGS="-I${SYSROOT}/include" ZLIB_LIBS="-lz" # the SDK's zlib, no .pc of its own; configure takes an empty ZLIB_CFLAGS for unset
 
     echo "==> Configuring PHP..."
     ./configure \
