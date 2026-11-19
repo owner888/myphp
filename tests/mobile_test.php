@@ -292,6 +292,9 @@ $router->push('/note');
 $h->frame(); // the push starts the slide
 $now += 2_000_000_000; $h->frame();
 check($h->byText('the note') !== null && $h->byText('the home') === null, 'the note shows alone');
+// What the edge is dragged along is known from the frame before the finger's, with no press yet: a touch screen asks it at the first touch, as a move can come before the frame that takes the down
+same(Node::HORIZONTAL, $h->rt->dragAxesAt(10, 300), 'the start edge is dragged sideways, known before any press');
+same(0, $h->rt->dragAxesAt(200, 300), 'the page away from the edge is not dragged');
 // a short drag from the edge, let go: the page comes back
 $h->hover(10, 300); $h->press(10, 300);
 foreach ([20, 40, 60] as $x) { $now += 10_000_000; $h->drag($x, 300); }
@@ -510,3 +513,11 @@ $h->rt->touch = true; $h->theme = \MyPHP\UI\Theme::phone(true);
 $h->frame(2); usleep(500_000); $h->frame(6);
 $h->clickOn($h->byLabel('Filter')); $h->frame(3);
 same(['Messages', 'Junk', '-', '# Filter By', 'Unread', 'Travel', '-', 'Manage Filters'], $h->menuLabels(), 'a menu of groups: lines between, a header over a group');
+
+// The phone windows take what the press began on (Runtime::dragAxesAt) at the first touch, so a move before the frame that takes the down still goes to the node dragged along one axis (the edge of the interactive pop gesture, a swiped row) and does not turn into a scroll. A window's touches need the system's events, so the two files are checked for the wiring.
+foreach (['iOS', 'Android'] as $platform) {
+    $window = (string)file_get_contents(dirname(__DIR__) . "/src/Platform/$platform/Window.php");
+    check(str_contains($window, '$this->touchDragAxes = $this->touchInField ? 0 : ($rt?->dragAxesAt($ptX, $ptY) ?? 0);'), "$platform Window asks dragAxesAt at the first touch");
+    check(str_contains($window, '$rt->isDraggingControl() || $this->touchDragAxes !== 0'), "$platform Window lets a move go to a node dragged along an axis");
+    check(str_contains($window, '$rt->pressDragAxes() ?: $this->touchDragAxes'), "$platform Window takes the axes from the press, or from the first touch");
+}

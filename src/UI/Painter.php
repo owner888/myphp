@@ -1635,7 +1635,8 @@ final class Painter
         $lead = (int)$phase;
         $rt?->after(($lead + 1 - $phase) * $turn / $spokes); // painted again for its next spoke, not every frame (mygo's spinner)
         $cx = $n->x + $n->w / 2; $cy = $n->y + $n->h / 2;
-        $in = $n->w * 0.22; $out = $n->w * 0.46; $w = max(1.5, $n->w * 0.09);
+        $side = min($n->w, $n->h); // the short side: a spinner stretched along a row (refreshable's) keeps its height's size
+        $in = $side * 0.22; $out = $side * 0.46; $w = max(1.5, $side * 0.09);
         $dots = 4;
         $color = $n->ts?->color ?? $t->textMuted; $own = $n->ts?->color !== null ? ($n->ts->alpha ?? 1.0) : 1.0; // the muted text color, or its own text color (mygo's TextColor), as on a chosen row
         for ($i = 0; $i < $spokes; $i++) {

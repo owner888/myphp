@@ -3682,6 +3682,19 @@ final class Runtime
         return $this->dragRecs[$id]->axes ?? 0;
     }
 
+    /**
+     * The axes a node is dragged along at ($x, $y), by last frame's nodes, as pressDragAxes() tells them for the press once
+     * the frame after its down has been through: a touch screen asks at the finger's first touch, not then, as a move can
+     * come before that frame (a slow one, or touches merged), and a move across the node would turn the press into a scroll.
+     * 0 for a point with no draggable node.
+     */
+    public function dragAxesAt(float $x, float $y): int
+    {
+        $id = $this->pressTarget($x, $y);
+        $id = $id === null || isset($this->draggables[$id]) ? $id : $this->draggableAround($id);
+        return $id === null ? 0 : ($this->dragRecs[$id]->axes ?? 0);
+    }
+
     /** Cancels an active touch press when finger movement transitions into a container scroll, preventing accidental clicks on release. */
     public function cancelTouchPress(): void
     {

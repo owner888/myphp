@@ -31,6 +31,7 @@ final class Window implements Platform\Window
     private int $touchStartTime = 0;
     private bool $touchIsScrolling = false;
     private bool $touchInField = false;
+    private int $touchDragAxes = 0; // what the press began on is dragged along (Runtime::dragAxesAt), known before the frame that takes its down
     /** A finger on a node dragged along one axis moved along it: the drag's, not the scroll's, until it lifts. */
     private bool $touchAxisTaken = false;
     private int $longPressId = 0;
@@ -345,6 +346,7 @@ final class Window implements Platform\Window
                 // Push pointer down immediately so all controls enter their native pressed/dragging state
                 $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
                 $hitId = $rt?->pressTarget($ptX, $ptY);
+                $this->touchDragAxes = $this->touchInField ? 0 : ($rt?->dragAxesAt($ptX, $ptY) ?? 0);
                 if ($hitId !== null) {
                     $rt->flashTouch($hitId, 2.0);
                 }
@@ -385,11 +387,11 @@ final class Window implements Platform\Window
                 if (hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY) > 10.0) { // moved off: no long press (UILongPressGestureRecognizer's allowableMovement)
                     ++$this->longPressId;
                 }
-                if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && $rt->isDraggingControl())) {
+                if ($this->touchInField || ($rt !== null && !$this->touchIsScrolling && ($rt->isDraggingControl() || $this->touchDragAxes !== 0))) {
                     // A node dragged along one axis alone (a row swiped sideways, a sheet pulled down) takes the finger
                     // once it moved 8 points along that axis; moved across it first, the container scrolls instead, as
                     // UIScrollView's directional lock; until either, nothing moves (the slop).
-                    $axes = $this->touchInField ? 0 : $rt->pressDragAxes();
+                    $axes = $this->touchInField ? 0 : ($rt->pressDragAxes() ?: $this->touchDragAxes);
                     $undecided = ($axes === Node::HORIZONTAL || $axes === Node::VERTICAL) && !$this->touchAxisTaken;
                     if ($undecided) {
                         $along = abs($axes === Node::HORIZONTAL ? $ptX - $this->touchStartX : $ptY - $this->touchStartY);
