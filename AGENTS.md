@@ -21,7 +21,7 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 15. **Mobile & cross-platform views follow SwiftUI and Apple HIG** (the developer's rule): `TabViewStyle::sidebarAdaptable`, `NavigationStack`, `sheet`, `confirmationDialog`; `docs/mobile.md` and `docs/swiftui.md` map SwiftUI's and Flutter's names for developers and AI agents.
 16. **Nothing a user sees carries upstream's name** (the developer's iron rule): an example's, a template's or a doc sample's
     text, links and URLs are myphp's own (`https://github.com/owner888/myphp`), never mygo's or egoist's; credit stays in README and comments.
-17. **Every feature change updates both GitHub and `smart-book` docs** (the developer's rule): whenever adding a feature or modifying existing behavior, check and sync both this repo's `docs/` (`README.md`, `bin/skills/myphp-app/`) and `/Users/ada/Development/owner/smart-book/app/Views/myphp/docs/` (both English and `zh-cn/`).
+17. **Every feature change updates both GitHub and `smart-book` docs** (the developer's rule): whenever adding a feature or modifying existing behavior, check and sync both this repo's `docs/` (`README.md`, `bin/skills/myphp-app/`) and `/Users/ada/Development/owner/smart-book/app/Views/myphp/docs/` (both English and `zh-cn/`); a feature the Chinese docs lack altogether (English has it, `zh-cn/` does not) is added there too, not passed over because this change did not touch it.
 
 ## What this is
 
