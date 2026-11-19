@@ -163,17 +163,20 @@ final class Tray implements Platform\TrayHandler
     public function clicked(): void
     {
         foreach ($this->onClick as $fn) { $fn(); }
+        UI\Reactive\Observer::sync(); // what the listeners changed shows, as after a timer
     }
 
     /** @internal Platform\TrayHandler */
     public function rightClicked(): void
     {
         foreach ($this->onRightClick as $fn) { $fn(); }
+        UI\Reactive\Observer::sync(); // what the listeners changed shows, as after a timer
     }
 
     /** @internal Platform\TrayHandler */
     public function appearanceChanged(): void
     {
         foreach ($this->onAppearance as $fn) { $fn(); }
+        UI\Reactive\Observer::sync(); // what the listeners changed shows, as after a timer
     }
 }

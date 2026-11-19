@@ -97,7 +97,18 @@ App::go(function () use ($app) {
 ```
 
 `App::later()` and `App::after()` run a function on a later turn of the run
-loop (and also auto-observe state changes). A SQLite query does not wait in
+loop (and also auto-observe state changes), as do the app's and windows'
+event listeners: menu items, the tray, notifications, global shortcuts,
+`App::on…`/`Window::on()` listeners and a page's calls to PHP.
+
+What a view closure reads is found from its source: `$state->name` and the
+methods it calls track those properties; an object passed on
+(`format($state)`) or read by a name in a variable (`$state->$key`) tracks
+all of its properties. A property holding an object or an array is
+compared one level in (`$state->doc->title`, a list of objects); a change
+deeper than that, or in state a closure reaches some other way (a global, a
+static), takes a `State` or a hooked property (`Observer::get`/`set`),
+which track themselves. A SQLite query does not wait in
 a fiber: it is synchronous (see [SQLite](../plugins/sqlite.md#from-php-or-native-ui)).
 
 ## Something that changes with time

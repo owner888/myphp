@@ -45,6 +45,8 @@ final class Observer
     private static array $lineCursor = [];
     /** @var array<string, list<string>> cached property names read by Class::method */
     private static array $methodCache = [];
+    /** @var array<string, int> how many times a file was loaded again (forgetFile): part of a scope's closure key, so its targets are found anew */
+    private static array $fileGen = [];
 
     private const EVENT_MODIFIERS = [
         'onTapGesture' => true, 'onAppear' => true, 'onDisappear' => true, 'task' => true,
@@ -137,7 +139,7 @@ final class Observer
         self::$deps ??= new WeakMap();
         $map = self::$deps[$target] ?? [];
         $id = spl_object_id($scope);
-        if (!isset($map[$property][$id])) {
+        if (($map[$property][$id] ?? null)?->get() !== $scope) { // none, or a freed scope's whose id this one took
             $map[$property][$id] = WeakReference::create($scope);
             self::$deps[$target] = $map;
         }
@@ -209,17 +211,51 @@ final class Observer
         return self::$active;
     }
 
-    /** Value snapshot that also captures 1-level object properties inside arrays (e.g. list<Message>). @internal */
+    /**
+     * Value snapshot that also captures one level of an object's properties: an object property's value
+     * (`$this->doc`, whose `title` the view reads) and the objects inside an array (list<Message>), so a
+     * change inside one is seen; deeper objects by identity. @internal
+     */
     public static function snapshot(mixed $val): mixed
     {
         if (is_array($val)) {
             $out = [];
             foreach ($val as $k => $v) {
-                $out[$k] = is_object($v) ? [spl_object_id($v), get_object_vars($v)] : $v;
+                $out[$k] = is_object($v) ? self::objectSnapshot($v) : $v;
             }
             return $out;
         }
-        return $val;
+        return is_object($val) ? self::objectSnapshot($val) : $val;
+    }
+
+    /** An object's identity and public properties, objects among them by identity (the snapshot holds none, so it keeps nothing alive); an engine object (State, a closure) by identity alone: a State tracks itself. */
+    private static function objectSnapshot(object $o): array
+    {
+        if (self::isEngineObject($o)) {
+            return [spl_object_id($o)];
+        }
+        $vars = get_object_vars($o);
+        foreach ($vars as $k => $v) {
+            if (is_object($v)) { $vars[$k] = spl_object_id($v); }
+        }
+        return [spl_object_id($o), $vars];
+    }
+
+    /**
+     * Forgets what was parsed of $file, loaded again (a view file's hot reload): the closures in it are parsed from
+     * its new source, and scopes find their targets anew. @internal
+     */
+    public static function forgetFile(string $file): void
+    {
+        unset(self::$fileTokens[$file]);
+        $prefix = "$file:";
+        foreach ([&self::$closureCache, &self::$lineCursor] as &$cache) {
+            foreach (array_keys($cache) as $key) {
+                if (str_starts_with($key, $prefix)) { unset($cache[$key]); }
+            }
+        }
+        unset($cache);
+        self::$fileGen[$file] = (self::$fileGen[$file] ?? 0) + 1;
     }
 
     /** Registers a plain property snapshot for async/event diffing in sync(). @internal */
@@ -262,7 +298,13 @@ final class Observer
         $file = (string)$rf->getFileName();
         $start = (int)$rf->getStartLine();
         $end = (int)$rf->getEndLine();
-        $key = "$file:$start:$end";
+        // The objects it captured are part of the key: the same closure made again over another object (a row's
+        // item) targets that object's properties, not those of the one it was first made over.
+        $key = "$file:$start:$end:" . (self::$fileGen[$file] ?? 0);
+        if (($bound = $rf->getClosureThis()) !== null) { $key .= ':' . spl_object_id($bound); }
+        foreach ($rf->getClosureUsedVariables() as $v) {
+            if (is_object($v) && !$v instanceof Closure) { $key .= ':' . spl_object_id($v); }
+        }
         if ($scope->hasClosureKey($key)) {
             foreach ($scope->targets() as [$ref, $prop]) {
                 if (($obj = $ref->get()) !== null) {
@@ -301,11 +343,9 @@ final class Observer
             $vars['this'] = $thisObj;
         }
         $accesses = self::parseClosureAt($file, $start, $end);
-        $explicitVars = [];
         if ($accesses !== null) {
             foreach ($accesses['props'] as [$varName, $prop]) {
                 $v = substr($varName, 1);
-                $explicitVars[$v] = true;
                 $obj = $vars[$v] ?? null;
                 if (is_object($obj) && !self::isEngineObject($obj)) {
                     self::addTarget($scope, $targets, $seen, $obj, $prop);
@@ -313,7 +353,6 @@ final class Observer
             }
             foreach ($accesses['methods'] as [$varName, $method]) {
                 $v = substr($varName, 1);
-                $explicitVars[$v] = true;
                 $obj = $vars[$v] ?? null;
                 if (is_object($obj) && !self::isEngineObject($obj) && method_exists($obj, $method)) {
                     foreach (self::parseMethodProps($obj, $method) as $prop) {
@@ -321,12 +360,14 @@ final class Observer
                     }
                 }
             }
+            // A variable read other than as $var->name — passed to a function (fmt($this)), read by a name in a
+            // variable ($this->$key, $this->{…}) — may reach any property: all of them, beside the ones named.
             foreach ($accesses['bare'] as $varName => $_) {
                 $v = substr($varName, 1);
                 $val = $vars[$v] ?? null;
                 if ($val instanceof Closure) {
                     self::collectClosureTargets($scope, $val, $targets, $seen, $visitedClosures);
-                } elseif (!isset($explicitVars[$v]) && is_object($val) && !self::isEngineObject($val)) {
+                } elseif (is_object($val) && !self::isEngineObject($val)) {
                     foreach (array_keys(get_object_vars($val)) as $prop) {
                         self::addTarget($scope, $targets, $seen, $val, (string)$prop);
                     }
@@ -465,6 +506,8 @@ final class Observer
                 } else {
                     $props[$name] = true;
                 }
+            } elseif ($t->is(T_VARIABLE) && $t->text === '$this' && !(($tokens[$i + 1] ?? null)?->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR]) && ($tokens[$i + 2] ?? null)?->is(T_STRING))) {
+                foreach (get_object_vars($obj) as $p => $_) { $props[$p] = true; } // passed on, or read by a name in a variable: any property
             }
         }
         return self::$methodCache[$key] = array_keys($props);

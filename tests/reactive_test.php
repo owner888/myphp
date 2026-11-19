@@ -224,6 +224,106 @@ $hp->frame(1);
 same([2, 2], [$plainBuildsA, $plainBuildsB], 'Observer::sync() only invalidated B; A stayed at 2 builds');
 check($hp->byText('Plain B: 88') !== null, 'zero-boilerplate plain properties: updated B text rendered');
 
+// 7. What a closure reads that no `$var->name` in its source names is still tracked
+$newState = fn() => new class {
+    public int $a = 1;
+    public int $b = 2;
+    public ?object $doc = null;
+    public function label(): string { $k = 'b'; return (string)$this->{$k}; }
+};
+$clean = function (object $s, \Closure $f, \Closure $change): bool { // whether the scope that ran $f is still clean after $change($s)
+    $scope = new \MyPHP\UI\Reactive\Scope();
+    Observer::run($scope, $f, $f);
+    $change($s);
+    return $scope->isClean();
+};
+$s = $newState();
+check($clean($s, function () use ($s) { return $s->a; }, fn($s) => $s->b = 3), 'a change of a property the closure does not read keeps its scope clean');
+$s = $newState();
+check(!$clean($s, function () use ($s) { $k = 'b'; return $s->a . $s->$k; }, fn($s) => $s->b = 3), '$obj->$name: a change of the property it names dirties the scope');
+$s = $newState();
+check(!$clean($s, function () use ($s) { return $s->a . json_encode($s); }, fn($s) => $s->b = 3), 'an object passed to a function: a change of what it reads dirties the scope');
+$s = $newState();
+check(!$clean($s, function () use ($s) { return $s->label(); }, fn($s) => $s->b = 3), 'a method reading $this->{$k}: a change of any property dirties the scope');
+$s = $newState();
+$s->doc = new class { public string $title = 'Draft'; };
+check(!$clean($s, function () use ($s) { return $s->doc->title; }, fn($s) => $s->doc->title = 'Final'), '$obj->doc->title: a change inside the nested object dirties the scope');
+
+$scope = new \MyPHP\UI\Reactive\Scope();
+$f = function () use ($s) { return $s->doc->title; };
+Observer::run($scope, $f, $f);
+$scope->begin();
+$s->doc->title = 'Sent';
+Observer::sync();
+check($scope->dirty, 'Observer::sync() sees a change inside a nested object');
+
+$f = function () use ($s) { return $s->doc->title; };
+for ($i = 0; $i < 3; $i++) { $gone = new \MyPHP\UI\Reactive\Scope(); Observer::run($gone, $f, $f); unset($gone); } // freed: their object ids come again
+$scope = new \MyPHP\UI\Reactive\Scope();
+Observer::run($scope, $f, $f);
+$scope->begin();
+$s->doc->title = 'Archived';
+Observer::sync();
+check($scope->dirty, 'a scope that took a freed scope\'s object id is subscribed all the same');
+
+$mk = fn(object $o) => function () use ($o) { return $o->a; };
+[$o1, $o2] = [$newState(), $newState()];
+$scope = new \MyPHP\UI\Reactive\Scope();
+$c = $mk($o1); Observer::run($scope, $c, $c);
+$c = $mk($o2); Observer::run($scope, $c, $c);
+$o2->a = 7;
+check(!$scope->isClean(), 'the same closure made again over another object tracks that object, not the first');
+
+// A view file loaded again (hot reload) is parsed from its new source
+$file = sys_get_temp_dir() . '/myphp_reactive_view_' . getmypid() . '.php';
+$s = $newState();
+$load = function () use ($file, $s): \Closure { return require $file; };
+file_put_contents($file, "<?php\nreturn function () use (\$s) { return \$s->a; };\n");
+$scope = new \MyPHP\UI\Reactive\Scope();
+$f = $load(); Observer::run($scope, $f, $f);
+file_put_contents($file, "<?php\nreturn function () use (\$s) { return \$s->b; };\n");
+Observer::forgetFile((string)realpath($file));
+$f = $load(); Observer::run($scope, $f, $f);
+$s->b = 8;
+check(!$scope->isClean(), 'Observer::forgetFile: the closures of a file loaded again track what the new source reads');
+unlink($file);
+
+// 8. A plain property an app event's listener changed redraws, as one a timer changed
+$evPlain = new class { public string $last = ''; };
+$hev = new Headless(function (Context $c) use ($evPlain) {
+    Content::render(fn() => VStack()(function () use ($evPlain) { return Text("Last: {$evPlain->last}"); }), $c);
+}, 300, 200);
+$hev->frame(1);
+\MyPHP\App::onNotificationClick(function (string $id) use ($evPlain): void { $evPlain->last = $id; });
+$hev->rt->needsFrame = false;
+(new \MyPHP\AppHandler())->notificationClicked('reactive-test');
+check($hev->rt->needsFrame === true, 'AppHandler: a listener changing a plain property wakes the window');
+$hev->frame(1);
+check($hev->byText('Last: reactive-test') !== null, 'AppHandler: the view shows what the listener changed');
+
+// 9. The press (and the focus) moving rebuilds the Computed subtrees it left or went to, not the other interactive ones
+$pressBuilds = [0, 0, 0];
+$hpress = new Headless(function (Context $c) use (&$pressBuilds) {
+    Content::render(function () use (&$pressBuilds) {
+        return VStack(spacing: 8)(
+            function () use (&$pressBuilds) { $pressBuilds[0]++; return Button('Press A', action: function (): void {}); },
+            function () use (&$pressBuilds) { $pressBuilds[1]++; return Button('Press B', action: function (): void {}); },
+            function () use (&$pressBuilds) { $pressBuilds[2]++; return Button('Press C', action: function (): void {}); },
+        );
+    }, $c);
+}, 300, 300);
+$hpress->frame(2);
+same([1, 1, 1], $pressBuilds, 'three interactive Computed subtrees built once');
+[$px, $py] = $hpress->middle($hpress->byText('Press A'));
+$hpress->input->mouse($px, $py);
+$hpress->input->push(['down', $px, $py, 0, 1, 0]);
+$hpress->input->push(['up', $px, $py, 0, 1, 0]);
+$hpress->frame(1); // the click: its second pass builds every interactive subtree again
+$afterClick = $pressBuilds;
+$hpress->frame(2); // the press let go: only the subtree it was in shows it
+check($pressBuilds[0] > $afterClick[0], 'the subtree the press left is built again');
+same([$afterClick[1], $afterClick[2]], [$pressBuilds[1], $pressBuilds[2]], 'the other interactive subtrees stay as they were');
+
 // 6. Zero reference cycles across 50 frames with State, Observer and Computed
 gc_collect_cycles();
 gc_disable();

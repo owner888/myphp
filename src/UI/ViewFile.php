@@ -106,6 +106,7 @@ final class ViewFile
         if (function_exists('opcache_invalidate')) {
             opcache_invalidate($this->path, true);
         }
+        Reactive\Observer::forgetFile($this->path); // its closures' dependencies parsed from the new source, not the one it replaced
         try {
             $this->loaded = $this->load();
             return true;

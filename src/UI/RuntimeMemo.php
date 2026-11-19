@@ -34,6 +34,10 @@ trait RuntimeMemo
     private bool $memoStale = true;
     /** That state last frame, and the pointer then (null outside the window). */
     private ?array $memoSeen = null;
+    /** For Computed memos: whether what every node may read changed since the frame before (memoStale, but for the focus and the press), and the ids the focus or the press left or went to, whose memos alone are built again. */
+    private bool $reactiveStale = true;
+    /** @var array<int, true> */
+    private array $reactiveTouched = [];
     private ?array $memoPointer = null;
     /** Whether what is being built read the keys of the frame (shortcut(), takeKeys(), submitMods()). */
     private bool $readsKeys = false;
@@ -96,12 +100,35 @@ trait RuntimeMemo
             }
         }
         $this->memoPointer = $pointer;
-        $seen = [$this->focus, $this->focusVisible, $this->tip, $this->tipAnchor, $this->tipByFocus, $this->pointerPress['id'] ?? null, $this->pointerPress['down'] ?? null,
+        // What only the nodes it names show (the focus and its ring, the press), apart from what every node may read.
+        $local = [$this->focus, $this->focusVisible, $this->pointerPress['id'] ?? null, $this->pointerPress['down'] ?? null];
+        $global = [$this->tip, $this->tipAnchor, $this->tipByFocus,
             $this->sliding, $this->valueDrag !== null, $this->drag !== null, $this->dataOver, $this->fileOver, $this->menuAsked, $this->menuChosen, $this->modal, $this->windowFocus,
             $this->fullScreen, $this->captured, $this->reduceMotion, $this->rightToLeft, $this->dirOverride, $this->inspector?->open ?? false,
             $this->selection->scope, $this->selection->anchor, $this->selection->caret];
-        $this->memoStale = $seen !== $this->memoSeen;
+        $seen = [$local, $global];
+        $last = $this->memoSeen;
+        $this->memoStale = $seen !== $last;
+        $this->reactiveStale = $last === null || $global !== $last[1];
+        $this->reactiveTouched = [];
+        if (!$this->reactiveStale && $local !== $last[0]) { // the focus or the press moved: the nodes it left and the ones it went to
+            foreach ([$last[0][0], $local[0], $last[0][2], $local[2]] as $id) {
+                if ($id !== null && $id !== 0) { $this->reactiveTouched[$id] = true; }
+            }
+        }
         $this->memoSeen = $seen;
+    }
+
+    /** Whether Computed memo $id holds a node the focus or the press moved from or to, or sits inside one (a row of the list that took the focus). */
+    private function touchedByFocus(int $id, array $ids): bool
+    {
+        foreach ($this->reactiveTouched as $t => $_) {
+            if (isset($ids[$t])) { return true; }
+        }
+        for ($a = $this->parents[$id] ?? 0, $n = 0; $a !== 0 && $n < 1024; $a = $this->parents[$a] ?? 0, $n++) {
+            if (isset($this->reactiveTouched[$a])) { return true; }
+        }
+        return false;
     }
 
     /**
@@ -187,7 +214,7 @@ trait RuntimeMemo
             return null;
         }
         if ($m['interactive'] ?? true) {
-            if ($this->pass !== 0 || $this->memoStale) {
+            if ($this->pass !== 0 || $this->reactiveStale || ($this->reactiveTouched !== [] && $this->touchedByFocus($id, $m['ids']))) {
                 return null;
             }
             if ($m['area'] !== null) {

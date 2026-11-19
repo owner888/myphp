@@ -465,6 +465,7 @@ final class Window
         foreach ($this->listeners['fileDrop'] ?? [] as $fn) {
             $fn($e);
         }
+        UI\Reactive\Observer::sync();
         $this->page?->filesDropped($paths, $x, $y);
     }
 
@@ -475,6 +476,7 @@ final class Window
         foreach ($this->listeners['close'] ?? [] as $fn) {
             $fn($e);
         }
+        UI\Reactive\Observer::sync();
         return !$e->canceled;
     }
 
@@ -941,6 +943,7 @@ final class Window
         foreach ($this->listeners[$event] ?? [] as $fn) {
             $fn($this);
         }
+        UI\Reactive\Observer::sync(); // what the listeners changed shows, in this window and the others
     }
 
     /** Captures the window's state once it stopped changing for 0.3 s (mygo's stateChanged): zooming and full screen transitions resize it on the way. */
@@ -1282,6 +1285,7 @@ final class Window
         foreach ($listeners as $fn) {
             $fn($e);
         }
+        UI\Reactive\Observer::sync();
         return true;
     }
 

@@ -150,6 +150,8 @@ final class Ipc
         } catch (Throwable $e) {
             self::closeAll($channels);
             return self::reply($id, $secret, null, $e->getMessage());
+        } finally {
+            UI\Reactive\Observer::sync(); // what the call changed of the state native views read shows
         }
         if ($result instanceof Generator) {
             self::pump($result, $channels, $page, $id, $secret);
