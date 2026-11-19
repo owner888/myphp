@@ -109,6 +109,23 @@ if [ "$ANDROID_CHANNEL" = "play" ]; then
     echo "==> Play Store channel: removing REQUEST_INSTALL_PACKAGES permission..."
     php -r '$f=$argv[1]; file_put_contents($f, preg_replace("/\s*<uses-permission[^>]*REQUEST_INSTALL_PACKAGES[^>]*\/>/", "", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
 fi
+# The project's android/ folder: manifest-permissions.xml goes before <application>, manifest-application.xml (services, receivers) into it
+EXTRA_DIR=""
+if [ -n "$PROJECT_DIR" ] && [ -d "${PROJECT_DIR}/android" ]; then EXTRA_DIR="${PROJECT_DIR}/android"; fi
+if [ -n "$EXTRA_DIR" ]; then
+    php -r '
+    [$f, $dir] = [$argv[1], $argv[2]];
+    $m = file_get_contents($f);
+    foreach ([["manifest-permissions.xml", "<application"], ["manifest-application.xml", "</application>"]] as [$name, $anchor]) {
+        $snippet = "$dir/$name";
+        if (!is_file($snippet)) continue;
+        $pos = strpos($m, $anchor);
+        if ($pos === false) { fwrite(STDERR, "manifest anchor $anchor missing\n"); exit(1); }
+        $m = substr($m, 0, $pos) . trim(file_get_contents($snippet)) . "\n" . substr($m, $pos);
+    }
+    file_put_contents($f, $m);
+    ' "${WORK_DIR}/AndroidManifest.xml" "$EXTRA_DIR"
+fi
 DEBUG_MODE=""
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
 "$AAPT2" link $DEBUG_MODE \
@@ -136,11 +153,17 @@ if [ "$ANDROID_CHANNEL" = "play" ]; then
     file_put_contents($f, $code);
     ' "${WORK_DIR}/src/com/owner888/myphp/MyphpActivity.java"
 fi
+# The project's own Java (android/java), compiled with the template's
+PROJECT_JAVA=""
+if [ -n "$EXTRA_DIR" ] && [ -d "${EXTRA_DIR}/java" ]; then
+    PROJECT_JAVA="$(find "${EXTRA_DIR}/java" -name "*.java")"
+fi
 "$JAVAC" -source 17 -target 17 \
     -d "${WORK_DIR}/classes" \
     -cp "$PLATFORM_JAR" \
     $(find "${WORK_DIR}/gen" -name "*.java") \
-    $(find "${WORK_DIR}/src" -name "*.java")
+    $(find "${WORK_DIR}/src" -name "*.java") \
+    $PROJECT_JAVA
 
 # 4. Dex with d8
 echo "==> Converting .class to classes.dex with d8..."
@@ -155,6 +178,21 @@ cp "${WORK_DIR}/dex/classes.dex" .
 
 mkdir -p "lib/arm64-v8a"
 cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
+
+# The project's native libraries (android/jniLibs/<abi>/*.so): only for an ABI the APK has the PHP runtime of, or the app would install where it cannot start.
+# A file named lib*.so is also run as a program: it lands in the app's native library directory, which needs extractNativeLibs (the default; a release sets it).
+if [ -n "$EXTRA_DIR" ] && [ -d "${EXTRA_DIR}/jniLibs" ]; then
+    for abi_dir in "${EXTRA_DIR}/jniLibs/"*/; do
+        [ -d "$abi_dir" ] || continue
+        abi="$(basename "$abi_dir")"
+        if [ -d "lib/$abi" ]; then
+            echo "==> Adding native libraries for $abi from ${abi_dir}"
+            cp "${abi_dir}"*.so "lib/$abi/"
+        else
+            echo "==> Skipping android/jniLibs/$abi: this APK has no PHP runtime for it"
+        fi
+    done
+fi
 
 mkdir -p "assets/src"
 cp -r "${ROOT_DIR}/src/"* "assets/src/"
