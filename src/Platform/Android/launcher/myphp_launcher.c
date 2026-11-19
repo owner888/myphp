@@ -284,7 +284,9 @@ int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics,
  * the ffi.enable configuration directive") on a PHP whose php_embed.c was not patched. */
 static void myphp_ini_defaults(HashTable *configuration_hash)
 {
-    static const char *const ini[][2] = {{"ffi.enable", "1"}, {"opcache.enable", "1"}, {"opcache.enable_cli", "1"}};
+    /* opcache locks a file in the app's cache folder: a stock Android's SELinux policy denies the lock on the memfd opcache
+     * uses by default (build-android-php.sh builds PHP without memfd_create), and there is no /tmp for it to fall back to */
+    const char *const ini[][2] = {{"ffi.enable", "1"}, {"opcache.enable", "1"}, {"opcache.enable_cli", "1"}, {"opcache.lockfile_path", g_cache_dir}};
     for (size_t i = 0; i < sizeof ini / sizeof ini[0]; i++) {
         zval v;
         ZVAL_NEW_STR(&v, zend_string_init(ini[i][1], strlen(ini[i][1]), 1));

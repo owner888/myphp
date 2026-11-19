@@ -258,6 +258,11 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ] || [ "$0" -nt "${PHP_DIR}/libs/libphp.so
     sed -i '' 's/#define HAVE_DN_SKIPNAME 1/\/* #undef HAVE_DN_SKIPNAME *\//' main/php_config.h
     sed -i '' 's/#define HAVE_RES_NSEARCH 1/\/* #undef HAVE_RES_NSEARCH *\//' main/php_config.h
     sed -i '' 's/#define HAVE_RES_SEARCH 1/\/* #undef HAVE_RES_SEARCH *\//' main/php_config.h
+    # opcache's lock is a memfd by default, and fcntl() on one is denied (EACCES, "Cannot create lock") by the SELinux policy
+    # of a stock Android (untrusted_app has no "lock" on a memfd's tmpfs); a phone with a permissive policy hides it. Without
+    # memfd_create opcache locks a file made in opcache.lockfile_path (the launcher sets it to the app's cache folder), which
+    # the app may lock.
+    sed -i '' 's/#define HAVE_MEMFD_CREATE 1/\/* #undef HAVE_MEMFD_CREATE *\//' main/php_config.h
 
     # Inject getdtablesize macro before PHP_CONFIG_H guard
     php -r '

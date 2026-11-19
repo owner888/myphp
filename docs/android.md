@@ -34,6 +34,11 @@
   export ANDROID_KEY_PASS="your-key-password"
   ```
 
+### 3.5 标准 SELinux 策略下必须能运行
+- 不要只在「SELinux 为 permissive」的手机上验证：多数用户的设备是 enforcing。opcache 默认用 `memfd` 做锁，`fcntl()` 在标准策略下被拒绝（`Cannot create lock - Permission denied`，应用一启动就崩溃），permissive 的手机只会在日志里留一条 `avc: denied`，看不出来。
+- 做法：`build-android-php.sh` 编译 PHP 时去掉 `memfd_create`，opcache 改为在 `opcache.lockfile_path`（启动器设为应用的缓存目录）里建一个文件锁。
+- 验证：用 enforcing 的模拟器（`getenforce` 为 `Enforcing`，系统镜像是 `user` 版本），比如 Android TV 的 arm64 镜像；日志里不应出现该应用的 `avc: denied`。
+
 ### 4. 提交格式要求（.aab 格式）
 - Google Play 官方强制要求新上架应用必须提交 **Android App Bundle (`.aab`)** 格式，单一 `.apk` 仅用于开发调试与离线分发。
 - 出包命令：`myphp build -platform android/arm64 -format aab -channel play`（`-channel play` 去掉 `REQUEST_INSTALL_PACKAGES` 并关闭应用内 APK 自更新；`-format` 默认是 `apk`）。输出在 `dist/<name>.aab`。
