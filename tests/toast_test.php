@@ -152,3 +152,29 @@ $tick(0.016);
 same(1, count($viewport->ghosts), 'closed, it goes with its exit transition');
 $tick(0.3);
 same(0, count($viewport->ghosts), 'and is gone after it');
+
+// Where the theme's look shows a toast: the bottom by default, above the keyboard; the top; the center; its own time.
+$now = 0; $ctx = null; $keyboard = 0.0;
+$h = poseTester(function (Context $c) use (&$ctx, &$keyboard): void {
+    $ctx = $c;
+    $c->keyboard = $keyboard;
+    $c->text('page');
+    $c->toasts();
+}, $now, 400, 300);
+$where = function (string $text) use ($h): array { $h->frame(); return $h->rect($h->byText($text)); };
+$ctx->toast('High', \Alignment::top);
+$ctx->toast('Middle', \Alignment::center);
+$ctx->toast('Right', \Alignment::bottomTrailing, 20.0);
+[, $hy] = $where('High'); [, $my, , $mh] = $where('Middle'); [$rx, , $rw] = $where('Right');
+check($hy < 40, 'top at the top: ' . $hy);
+check(abs(($my + $mh / 2) - 150) < 2, 'center in the middle: ' . $my);
+check($rx + $rw > 340, 'trailing at the right: ' . ($rx + $rw));
+$left = fn(string $title): float => $ctx->runtime->toastTimes(\array_values(\array_filter($ctx->runtime->toastList(), fn($t) => $t->title === $title))[0]->id)[1];
+check(abs($left('Right') - 20.0) < 1.0 && abs($left('High') - Runtime::TOAST_FOR) < 1.0, 'duration sets how long it shows');
+$ctx->closeToast('');
+$ctx->toast('Low');
+[$lx, $ly, $lw, $lh] = $where('Low');
+check($ly > 200 && abs(($lx + $lw / 2) - 200) < 2, 'the default is the bottom, centered: ' . json_encode([$lx, $ly, $lw]));
+$keyboard = 120.0;
+[, $ky, , $kh] = $where('Low');
+check($ky + $kh <= 300 - 120, 'above the keyboard: ' . ($ky + $kh));

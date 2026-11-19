@@ -484,8 +484,8 @@ abstract class View
         return $this;
     }
 
-    /** Shows $message in a toast at the bottom of the window, which fades by itself, as it is set; $message is null again then. myphp's own: SwiftUI has no toast. */
-    public function toast(?string &$message): static { $this->events[] = ['toast', [&$message]]; return $this; }
+    /** Shows $message in a toast, which fades by itself, as it is set; $message is null again then. $alignment is where in the window: Alignment::bottom by default (above the keyboard and the home indicator), top (below the status bar), center, with leading or trailing; $duration the seconds it shows, 4 when 0. myphp's own: SwiftUI has no toast. */
+    public function toast(?string &$message, \Alignment $alignment = \Alignment::bottom, float $duration = 0.0): static { $this->events[] = ['toast', [&$message, $alignment, $duration]]; return $this; }
 
     /** Whether the text inside can be selected and copied, as SwiftUI's textSelection(.enabled). */
     public function textSelection(\TextSelectability $s): static { $this->events[] = ['select', $s]; return $this; }
@@ -1245,7 +1245,7 @@ abstract class View
                     $whole->contextMenu(static fn(\MyPHP\UI\Menu $m) => Menu::items($m, $items, $env));
                     break;
                 case 'toast':
-                    if ($a[0] !== null) { $c->toast(Localized::string($a[0], $env)); $a[0] = null; } // $a[0] the binding
+                    if ($a[0] !== null) { $c->toast(Localized::string($a[0], $env), $a[1], $a[2]); $a[0] = null; } // $a[0] the binding
                     break;
                 case 'popover':
                     $content = $a[1];

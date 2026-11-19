@@ -85,7 +85,7 @@ $h = poseTester(function (Context $c) use (&$undone, &$closed): void {
 }, $now, 400, 300);
 $h->frame();
 $b = olFind($h->root, 'Delete'); $h->click($b->x + 2, $b->y + 2); $h->frame();
-$undo = end($h->root->kids)->kids[0]->kids[1] ?? null; // the toast's action, after its text
+$undo = end($h->root->kids)->kids[0]->kids[0]->kids[1] ?? null; // viewport, the place's column, the toast: its action, after its text
 check($undo !== null && olFind($h->root, 'Deleted') !== null, 'the toast with its action');
 $h->click($undo->x + 2, $undo->y + 2); $h->frame();
 check($undone === 1 && olFind($h->root, 'Deleted') === null, 'Undo runs and closes the toast');

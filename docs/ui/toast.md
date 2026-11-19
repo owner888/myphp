@@ -1,6 +1,6 @@
 # Toast
 
-`->toast($message)` shows a message near the bottom of the window for a
+`->toast($message)` shows a message, near the bottom of the window by default, for a
 few seconds, as the outcome of what the user just did, while the property
 it binds is set; it sets it back to null as it goes. SwiftUI has none: it
 is myphp's own.
@@ -17,6 +17,13 @@ $view = fn() => ListView($app->notes)(fn(string $n) => HStack()(
     Button('Delete', role: ButtonRole::destructive, action: fn() => $app->trash($n))->buttonStyle(ButtonStyle::borderless),
 ))->toast($app->message);
 ```
+
+Where it shows, and for how long, are arguments: `->toast($app->message, alignment: Alignment::top, duration: 6)`.
+`alignment` is SwiftUI's `Alignment`: `bottom` by default (centered, above
+the software keyboard and the home indicator), `top` (below the status
+bar), `center`, or with `Leading` or `Trailing` (`bottomTrailing`, …);
+toasts of different places show at once. `duration` is the seconds it
+shows, 4 when left out. In code: `$c->toast($message, \Alignment::top, 6.0)`.
 
 A message already showing shows anew; others stack above it, the newest
 three showing. The time of the toasts stops while the pointer rests on

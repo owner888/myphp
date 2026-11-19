@@ -23,6 +23,8 @@ final class Toast
         public ?\Closure $onClose = null,
         /** What else the look of the toast needs. */
         public mixed $data = null,
+        /** Where in the window the toast shows, as SwiftUI's Alignment (top, center, bottom, and with leading or trailing); the bottom, centered, when null. A look of the app's own (toastViewportBase) decides for itself. */
+        public ?\Alignment $alignment = null,
     ) {}
 
     /** How long the toast shows, in seconds, 0 until it is closed. */

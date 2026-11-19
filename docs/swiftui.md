@@ -282,7 +282,7 @@ property the control sets back to false when the user dismisses it.
 | `.alert("Title", isPresented:) { Button("OK") {} } message: { }` | `->alert('Title', isPresented: $app->asking, actions: [Button(…), …], message: '…')` |
 | `.confirmationDialog` | `->confirmationDialog('Title', isPresented: $app->asking, actions: [Button(…), Button('Cancel', role: ButtonRole::cancel)])` |
 | `.popover(isPresented:)` | `->popover(isPresented: $app->open, content: fn() => …)` |
-| A toast (no SwiftUI equivalent) | `->toast($app->message)`: shows while the message is set |
+| A toast (no SwiftUI equivalent) | `->toast($app->message, alignment: Alignment::top, duration: 6)`: shows while the message is set; bottom (above the keyboard) and 4 seconds by default |
 
 ```php
 $app = new class { public bool $asking = false; public int $deleted = 0; };

@@ -3974,10 +3974,10 @@ final class Context
         $this->runtime?->announce($text);
     }
 
-    /** Shows $message near the bottom of the window for a few seconds, as the outcome of what the user just did: one already showing shows anew, others stack above it, three at most; it shows while the pointer rests on it; screen readers read it out. addToast with $message as the id and the title (mygo's Toast). */
-    public function toast(string $message): void
+    /** Shows $message near the bottom of the window (or where $alignment says: top, center, bottom, with leading or trailing) for a few seconds ($duration seconds when it is more than 0), as the outcome of what the user just did: one already showing shows anew, others stack above it, three at most; it shows while the pointer rests on it; screen readers read it out. addToast with $message as the id and the title (mygo's Toast). */
+    public function toast(string $message, ?\Alignment $alignment = null, float $duration = 0.0): void
     {
-        $this->addToast(new Toast($message, $message));
+        $this->addToast(new Toast($message, $message, timeout: $duration, alignment: $alignment));
     }
 
     /** Shows $message as toast() does, for longer, with a button of $label that runs $action, as Undo after deleting, and closes the toast; Tab reaches the button (mygo's ToastAction). */
@@ -4068,39 +4068,61 @@ final class Context
         $t = $this->theme;
         [$fill, $text] = $t->inverse();
         $this->toastViewport(false, function (Node $viewport, array $toasts) use ($t, $fill, $text): void {
-            $viewport->bottom($t->space(6))->alignItems(Node::CENTER);
-            $viewport->gap = $t->space(2);
+            // One column for each place the toasts are shown in, over the window's own edges (the safe area, the keyboard), and
+            // over each other not at all: the bottom's stands above the keyboard, the top's below the status bar.
+            $groups = [];
             foreach ($toasts as $ts) {
-                $p = $this->toastBase($ts);
-                $box = $p->root;
-                $box->dir = Node::ROW; $box->gap = $t->space(4);
-                $box->alignItems(Node::CENTER)->padding($t->space(2.5), $t->space(4))->radius($t->space(2))->maxWidth($this->width - $t->space(12))->background($fill)->textColor($text)->shadow(0, 6, 20, 0, 0x000000, 0.25);
-                $fade = 0.2; $opacity = 1.0;
-                if (!$this->runtime->toastsPaused()) {
-                    if ($p->age() < $fade) {
-                        $opacity = $p->age() / $fade; $this->runtime->animate();
-                    } elseif ($p->left() > 0 && $p->left() < $fade) {
-                        $opacity = $p->left() / $fade; $this->runtime->animate();
-                    } elseif ($p->left() > 0) {
-                        $this->runtime->after($p->left() - $fade);
-                    }
-                }
-                $box->opacity($opacity);
-                if ($ts->description === '') {
-                    $this->text($ts->title);
+                $groups[($ts->alignment ?? \Alignment::bottom)->name][] = $ts;
+            }
+            foreach ($groups as $name => $inGroup) {
+                $top = str_starts_with($name, 'top');
+                $bottom = str_starts_with($name, 'bottom');
+                $horizontal = match (true) {
+                    str_ends_with($name, 'Leading') || $name === 'leading' => Node::START,
+                    str_ends_with($name, 'Trailing') || $name === 'trailing' => Node::END,
+                    default => Node::CENTER,
+                };
+                $column = $this->column(0, $t->space(2))->absolute()->left(0)->right(0)->alignItems($horizontal)->padding(0, $t->space(6))->passThrough();
+                if ($top) {
+                    $column->top($this->windowSafeArea[0] + $t->space(4));
+                } elseif ($bottom) {
+                    $column->bottom(max($this->windowSafeArea[2], $this->keyboard) + $t->space(6))->justify(Node::END);
                 } else {
-                    $this->column(0, $t->space(0.5))->shrink(1);
-                      $this->text($ts->title)->fontWeight(600);
-                      $this->text($ts->description)->textColor($text, 0.75);
+                    $column->top(0)->bottom(0)->justify(Node::CENTER);
+                }
+                foreach ($inGroup as $ts) {
+                    $p = $this->toastBase($ts);
+                    $box = $p->root;
+                    $box->dir = Node::ROW; $box->gap = $t->space(4);
+                    $box->alignItems(Node::CENTER)->padding($t->space(2.5), $t->space(4))->radius($t->space(2))->maxWidth($this->width - $t->space(12))->background($fill)->textColor($text)->shadow(0, 6, 20, 0, 0x000000, 0.25);
+                    $fade = 0.2; $opacity = 1.0;
+                    if (!$this->runtime->toastsPaused()) {
+                        if ($p->age() < $fade) {
+                            $opacity = $p->age() / $fade; $this->runtime->animate();
+                        } elseif ($p->left() > 0 && $p->left() < $fade) {
+                            $opacity = $p->left() / $fade; $this->runtime->animate();
+                        } elseif ($p->left() > 0) {
+                            $this->runtime->after($p->left() - $fade);
+                        }
+                    }
+                    $box->opacity($opacity);
+                    if ($ts->description === '') {
+                        $this->text($ts->title);
+                    } else {
+                        $this->column(0, $t->space(0.5))->shrink(1);
+                          $this->text($ts->title)->fontWeight(600);
+                          $this->text($ts->description)->textColor($text, 0.75);
+                        $this->end();
+                    }
+                    if ($ts->action !== '') {
+                        $b = $p->actionButton()->padding($t->space(1), $t->space(2.5))->radius($t->radius)->textColor(Theme::mix($t->accent, $text, 0.35))->fontWeight(600);
+                        if ($this->hovered($b)) { $b->background($text, 0.12); }
+                          $this->text($ts->action);
+                        $this->end();
+                    }
                     $this->end();
                 }
-                if ($ts->action !== '') {
-                    $b = $p->actionButton()->padding($t->space(1), $t->space(2.5))->radius($t->radius)->textColor(Theme::mix($t->accent, $text, 0.35))->fontWeight(600);
-                    if ($this->hovered($b)) { $b->background($text, 0.12); }
-                      $this->text($ts->action);
-                    $this->end();
-                }
-                $this->end();
+                $this->end(); // the group's column
             }
         });
     }
