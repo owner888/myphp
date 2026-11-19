@@ -61,6 +61,17 @@ jobs:
           for archive in dist-runtimes/myphp-runtime-ios-*.tar.gz; do
             ./scripts/check-ios-runtime-archive.sh "$archive"
           done
+      # A stock Android's SELinux policy denies the lock on the memfd opcache uses by default ("Cannot create lock", the app dies
+      # at its first line): the runtime must be built without memfd_create.
+      - name: Check the Android archive has no memfd_create
+        run: |
+          mkdir -p check-android
+          tar -xzf dist-runtimes/myphp-runtime-android-arm64-php-${MYPHP_PHONE_PHP_VERSION}.tar.gz -C check-android
+          if ! grep -q '^/\* #undef HAVE_MEMFD_CREATE \*/' check-android/build/android/php-${MYPHP_PHONE_PHP_VERSION}/main/php_config.h; then
+            echo "error: the Android runtime is built with memfd_create" >&2
+            exit 1
+          fi
+
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

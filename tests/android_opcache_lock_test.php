@@ -12,7 +12,4 @@ check(str_contains($script, "s/#define HAVE_MEMFD_CREATE 1/"), 'PHP is built wit
 $launcher = (string)file_get_contents("$root/src/Platform/Android/launcher/myphp_launcher.c");
 check(str_contains($launcher, '{"opcache.lockfile_path", g_cache_dir}'), 'opcache locks a file in the app\'s cache folder');
 check(str_contains($launcher, '{"opcache.enable", "1"}'), 'opcache is still on');
-$cfg = "$root/build/android/php-" . (getenv('MYPHP_PHONE_PHP_VERSION') ?: '8.5.12') . '/main/php_config.h';
-if (is_file($cfg)) {
-    check(preg_match('/^#define HAVE_MEMFD_CREATE/m', (string)file_get_contents($cfg)) === 0, 'the PHP built here has no memfd_create');
-}
+// What the archive CI publishes holds is checked in CI itself (the phone-runtimes workflow reads the php_config.h in it).

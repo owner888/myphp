@@ -11,7 +11,7 @@ foreach (['iOS' => 'src/Platform/iOS/launcher/main.m', 'Android' => 'src/Platfor
     $src = (string)file_get_contents("$root/$file");
     check(!str_contains($src, 'php_embed_module.ini_entries'), "$os: no ini_entries, which php_embed_init replaces");
     check(str_contains($src, 'php_embed_module.ini_defaults = myphp_ini_defaults;'), "$os: the INI as php_embed's defaults");
-    preg_match('/static void myphp_ini_defaults\(HashTable \*configuration_hash\)\s*\{\s*(?:static )?const char \*const ini\[\]\[2\] = \{(.*?)\};/s', $src, $m);
+    preg_match('/static void myphp_ini_defaults\(HashTable \*configuration_hash\)\s*\{(?:\s|\/\*.*?\*\/)*(?:static )?const char \*const ini\[\]\[2\] = \{(.*?)\};/s', $src, $m);
     check(str_contains($m[1] ?? '', '{"ffi.enable", "1"}'), "$os: FFI on");
     $init = strpos($src, 'php_embed_init(');
     $set = strpos($src, 'php_embed_module.ini_defaults =');
@@ -21,6 +21,9 @@ foreach (['iOS' => 'src/Platform/iOS/launcher/main.m', 'Android' => 'src/Platfor
 // ("Unable to create opcache lock file in /tmp: Operation not permitted", exit 254): the app's own tmp instead.
 $mainM = (string)file_get_contents("$root/src/Platform/iOS/launcher/main.m");
 check(str_contains($mainM, '{"opcache.lockfile_path", getenv("TMPDIR")}'), 'iOS: OPcache locks in the app\'s TMPDIR, not /tmp');
+// Android: a stock SELinux policy denies the lock on the memfd opcache uses by default; PHP is built without memfd_create and locks a file in the app's cache folder
+$android = (string)file_get_contents("$root/src/Platform/Android/launcher/myphp_launcher.c");
+check(str_contains($android, '{"opcache.lockfile_path", g_cache_dir}'), 'Android: OPcache locks a file in the app\'s cache folder');
 $tmpdir = strpos($mainM, 'setenv("TMPDIR"');
 check($tmpdir !== false && $tmpdir < strpos($mainM, 'php_embed_init('), 'iOS: TMPDIR set before php_embed_init reads it');
 same(['512M'], (function () use ($root) { preg_match('/\{"memory_limit", "([^"]+)"\}/', (string)file_get_contents("$root/src/Platform/iOS/launcher/main.m"), $m); return [$m[1] ?? null]; })(), 'iOS: memory_limit 512M, as the launcher set and lost too');
