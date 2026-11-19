@@ -101,6 +101,7 @@ archive, delta updates from the last versions published, and
 | Flag | |
 |---|---|
 | `-platform list` | comma separated targets: `darwin/arm64`, `darwin/amd64`, `darwin/universal`, `linux/amd64`, `linux/arm64` (default: this machine's) |
+| `-format apk\|aab` | the Android package: `apk` (the default), or `aab`, the app bundle Google Play takes (signed with the upload key of `ANDROID_KEYSTORE_*`; Play makes the APKs and signs them with its own key) |
 | `-launcher micro\|exec` | `micro` (the default) makes the app one static binary of PHP, which runs where no PHP is installed (see `myphp micro`); `exec` makes a launcher that runs the PHP that built the app, by its path. Windows apps hold the PHP that builds them, phones' their own runtime |
 | `-php version` | the PHP version of micro.sfx |
 | `-debug` | keep development features such as the inspector |

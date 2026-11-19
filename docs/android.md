@@ -36,6 +36,11 @@
 
 ### 4. 提交格式要求（.aab 格式）
 - Google Play 官方强制要求新上架应用必须提交 **Android App Bundle (`.aab`)** 格式，单一 `.apk` 仅用于开发调试与离线分发。
+- 出包命令：`myphp build -platform android/arm64 -format aab -channel play`（`-channel play` 去掉 `REQUEST_INSTALL_PACKAGES` 并关闭应用内 APK 自更新；`-format` 默认是 `apk`）。输出在 `dist/<name>.aab`。
+- 实现与注意：
+  - 不依赖 Gradle 和 bundletool：用 `aapt2 --proto-format` 链接资源，把 base 模块（`manifest/`、`dex/`、`lib/`、`assets/`、`res/`、`resources.pb`）和 `BundleConfig.pb` 打成 zip，再用 `jarsigner` 签名（`ANDROID_KEYSTORE_*` 那把上传密钥，Google Play 用它校验，并用自己的应用签名密钥给分发的 APK 签名）。
+  - 清单里的 `android:extractNativeLibs="true"` 保留：随包的 `lib*.so` 如果是要当程序运行的（例如子进程），Play 分发时仍会把它解压到应用的原生库目录。
+  - 可以用 Google 的 bundletool 自行校验：`java -jar bundletool.jar validate --bundle=dist/<name>.aab`，或 `build-apks --mode=universal` 生成一个通用 APK 装机试。
 
 ---
 

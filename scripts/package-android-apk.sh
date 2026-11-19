@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Package Android APK without Gradle.
-# Uses aapt2, javac, d8, zipalign, apksigner.
+# Package Android APK (or, with MYPHP_ANDROID_FORMAT=aab, the app bundle Google Play takes) without Gradle.
+# Uses aapt2, javac, d8, zipalign, apksigner (an APK) or jarsigner (a bundle).
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$(dirname "$0")/phone-build-dir.sh"
@@ -12,6 +12,8 @@ TEMPLATE_DIR="${ROOT_DIR}/bin/template/android"
 PROJECT_DIR="${1:-}"
 OUTPUT_APK="${2:-${BUILD_DIR}/myphp-debug.apk}"
 APP_NAME="${3:-}"
+FORMAT="${MYPHP_ANDROID_FORMAT:-apk}" # apk, or aab: the app bundle of Google Play
+case "$FORMAT" in apk|aab) ;; *) echo "error: MYPHP_ANDROID_FORMAT is apk or aab, not $FORMAT" >&2; exit 1 ;; esac
 
 if [ -n "${ANDROID_HOME:-}" ] && [ -d "${ANDROID_HOME}" ]; then
     SDK_DIR="${ANDROID_HOME}"
@@ -44,6 +46,7 @@ else
     JAVAC="$(command -v javac)"
     KEYTOOL="$(command -v keytool)"
 fi
+JARSIGNER="$(dirname "$KEYTOOL")/jarsigner"
 AAPT2="${BUILD_TOOLS_DIR}/aapt2"
 D8="${BUILD_TOOLS_DIR}/d8"
 ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
@@ -129,7 +132,9 @@ if [ -n "$EXTRA_DIR" ]; then
 fi
 DEBUG_MODE=""
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" = "1" ]; then DEBUG_MODE="--debug-mode"; fi
-"$AAPT2" link $DEBUG_MODE \
+PROTO_FORMAT="" # a bundle's resources and manifest are in aapt2's protobuf format, which bundletool (Play) turns into the APKs
+if [ "$FORMAT" = "aab" ]; then PROTO_FORMAT="--proto-format"; fi
+"$AAPT2" link $DEBUG_MODE $PROTO_FORMAT \
     -I "$PLATFORM_JAR" \
     --manifest "${WORK_DIR}/AndroidManifest.xml" \
     --rename-manifest-package "$BUNDLE_ID" \
@@ -236,6 +241,26 @@ elif [ -d "${TEMPLATE_DIR}/assets" ]; then
     cp -r "${TEMPLATE_DIR}/assets/"* "assets/"
 fi
 
+if [ "$FORMAT" = "aab" ]; then
+    # The base module, as bundletool lays one out: manifest/, dex/, lib/, assets/, res/ and resources.pb; the bundle is
+    # that under base/, with BundleConfig.pb beside it.
+    echo "==> Assembling the app bundle..."
+    MODULE="${WORK_DIR}/aab/base"
+    rm -rf "${WORK_DIR}/aab"
+    mkdir -p "${MODULE}/manifest" "${MODULE}/dex"
+    mv AndroidManifest.xml "${MODULE}/manifest/"
+    mv resources.pb "${MODULE}/"
+    mv classes.dex "${MODULE}/dex/"
+    for d in lib assets res; do
+        [ -d "$d" ] && mv "$d" "${MODULE}/$d"
+    done
+    "${ROOT_DIR}/scripts/android-bundle-config.sh" "${WORK_DIR}/aab/BundleConfig.pb"
+    UNSIGNED_AAB="${WORK_DIR}/unsigned.aab"
+    rm -f "$UNSIGNED_AAB"
+    (cd "${WORK_DIR}/aab" && zip -q -X -D -r "$UNSIGNED_AAB" BundleConfig.pb base)
+fi
+
+if [ "$FORMAT" = "apk" ]; then
 # 6. Zip into unaligned APK:
 # Android 30+ requires resources.arsc to be stored uncompressed (-0).
 # For release builds (myphp build), compress lib/ (-9) with extractNativeLibs=true to shrink APK size by ~60% (~12 MB vs ~32 MB).
@@ -266,6 +291,8 @@ rm -f "${WORK_DIR}/aligned.apk"
 # Check alignment
 "$ZIPALIGN" -c -v 4 "${WORK_DIR}/aligned.apk" | grep -i "resources.arsc" || true
 
+fi
+
 # 8. Setup Keystore (supports production release keystore via env vars or ANDROID_KEYSTORE_BASE64)
 if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && [ -z "${ANDROID_KEYSTORE_PATH:-}" ]; then
     ANDROID_KEYSTORE_PATH="${WORK_DIR}/release.keystore"
@@ -289,9 +316,20 @@ if [ ! -f "$KEYSTORE" ]; then
         -dname "CN=Android Debug,O=Android,C=US"
 fi
 
-# 9. Sign APK
+# 9. Sign: an APK with apksigner; a bundle with jarsigner (Google Play checks a bundle's JAR signature, and signs the APKs it makes with its own key)
 FINAL_APK="$OUTPUT_APK"
 mkdir -p "$(dirname "$FINAL_APK")"
+if [ "$FORMAT" = "aab" ]; then
+    echo "==> Signing the app bundle with jarsigner..."
+    cp "$UNSIGNED_AAB" "$FINAL_APK"
+    "$JARSIGNER" -sigalg SHA256withRSA -digestalg SHA-256 \
+        -keystore "$KEYSTORE" -storepass "$KEYSTORE_PASS" -keypass "$KEY_PASS" "$FINAL_APK" "$KEY_ALIAS" > /dev/null
+    echo "==> Verifying signature..."
+    "$JARSIGNER" -verify "$FINAL_APK" | head -1
+    echo "==> App bundle packaged successfully: $FINAL_APK"
+    ls -lh "$FINAL_APK"
+    exit 0
+fi
 echo "==> Signing APK with apksigner..."
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \

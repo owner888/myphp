@@ -1023,6 +1023,7 @@ update-<platform>.json: publish them where updates point to, or with -upload.
 
 Flags:
   -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64, windows/amd64, windows/arm64, android/arm64, ios/arm64 (default: this machine's)
+  -format apk|aab       the Android package: apk (the default), or aab, the app bundle Google Play takes
   -launcher micro|exec  micro (the default) makes the app one static binary of PHP, which runs where no PHP
                         is installed: its micro.sfx is downloaded once, or built (see myphp micro); exec
                         makes a launcher that runs the PHP that built the app, by its path. Windows
@@ -1058,8 +1059,10 @@ function build(array $args): void
     $php = option($args, 'php');
     $sign = option($args, 'sign', '');
     $channel = option($args, 'channel', '');
+    $format = option($args, 'format', 'apk');
+    in_array($format, ['apk', 'aab'], true) || fail("-format is apk or aab, not $format");
     $out = option($args, 'o', '');
-    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer'), 'channel' => $channel];
+    $opts = ['format' => $format, 'debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'skipInstaller' => flag($args, 'skip-installer'), 'channel' => $channel];
     $skipBuildCommand = flag($args, 'skip-build-command');
     $upload = flag($args, 'upload');
     ['dir' => $dir, 'config' => $c] = project($args);
@@ -1197,21 +1200,23 @@ function formatSize(int $n): string
     return $n < 1 << 20 ? sprintf('%d KB', ($n + (1 << 10) - 1) >> 10) : sprintf('%.1f MB', $n / (1 << 20));
 }
 
-/** Packages the Android APK without Gradle. @return list<string> */
+/** Packages the Android APK, or with -format aab the app bundle of Google Play, without Gradle. @return list<string> */
 function buildAndroid(string $dir, array $c, string $arch, array $opts): array
 {
     $out = path($dir, $c['out']);
     is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
     $name = orElse($c['name'], 'app');
-    $apk = "$out/$name.apk";
+    $format = $opts['format'] ?? 'apk';
+    $apk = "$out/$name.$format";
     if (!empty($opts['channel'])) {
         putenv('MYPHP_ANDROID_CHANNEL=' . $opts['channel']);
     }
+    putenv("MYPHP_ANDROID_FORMAT=$format");
     logf("Making android/$arch: $apk");
     $script = dirname(__DIR__) . '/scripts/package-android-apk.sh';
     is_executable($script) || chmod($script, 0755);
     $cmd = [$script, $dir, $apk, $name];
-    sh($cmd, $dir) === 0 || fail("Failed to package Android APK");
+    sh($cmd, $dir) === 0 || fail("Failed to package the Android " . strtoupper($format));
     return [$apk];
 }
 
