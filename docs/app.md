@@ -71,7 +71,7 @@ PHP runs the app on one thread, the main one, which also draws the UI:
 |---|---|
 | `onReady($fn)` | the app has launched; `whenReady()` also runs its function right away when the app is already ready |
 | `onActivate(fn(bool $hasVisibleWindows))` | the app was activated again, e.g. by a click on its Dock icon (macOS) |
-| `onDidBecomeActive($fn)`, `onDidResignActive($fn)` | the app became, or stopped being, the active app |
+| `onDidBecomeActive($fn)`, `onDidResignActive($fn)` | the app became, or stopped being, the active app (on Android its activity resumed or paused, which another screen over it, as the system's permission dialog, also does) |
 | `onWindowCreated(fn(Window $w))` | a window was created |
 | `onWindowAllClosed($fn)` | the last window closed, unless the app is quitting |
 | `onBeforeQuit(fn(QuitEvent $e))` | a quit started, before the windows close; `$e->cancel()` cancels it |

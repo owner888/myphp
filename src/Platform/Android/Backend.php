@@ -135,9 +135,11 @@ final class Backend implements Platform\Backend
                         break;
                     case Android::EVENT_PAUSE:
                         $win?->onPause();
+                        $this->h->didResignActive(); // App::onDidResignActive: an app keeps what a person set when it goes to the background
                         break;
                     case Android::EVENT_RESUME:
                         $win?->onResume();
+                        $this->h->didBecomeActive();
                         break;
                     case Android::EVENT_CONFIGURATION:
                         $this->lastInsetsPx = [(int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3], (int)$ev->keyboard];
