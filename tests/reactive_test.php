@@ -324,6 +324,51 @@ $hpress->frame(2); // the press let go: only the subtree it was in shows it
 check($pressBuilds[0] > $afterClick[0], 'the subtree the press left is built again');
 same([$afterClick[1], $afterClick[2]], [$pressBuilds[1], $pressBuilds[2]], 'the other interactive subtrees stay as they were');
 
+// 10. A stack whose value is the frame before's keeps its nodes, though the view's closure made it again (ViewKey)
+$vk = new class { public int $tick = 0; public int $b = 0; public bool $red = false; };
+$lines = fn(string $p, int $n) => array_map(fn(int $i) => Text("$p$i"), range(1, $n));
+$hvk = new Headless(function (Context $c) use ($vk, $lines) {
+    Content::render(fn() => VStack()(
+        Text("Tick {$vk->tick}"),
+        VStack()(...$lines('A', 10)),
+        VStack()(Text("B is {$vk->b}"), ...$lines('B', 10)),
+        VStack()(VStack()(...$lines('C', 10)))->foregroundStyle($vk->red ? \Color::red : \Color::blue),
+        VStack()(Button('Go', action: function () use ($vk): void { $vk->b++; }), ...$lines('D', 10)),
+    ), $c);
+}, 400, 1200);
+$hvk->frame(2);
+[$a1, $b1, $c1, $d1] = [$hvk->byText('A1'), $hvk->byText('B1'), $hvk->byText('C1'), $hvk->byText('D1')];
+$vk->tick++;
+$hvk->frame(1);
+check($hvk->byText('Tick 1') !== null, 'the value that changed shows');
+check($hvk->byText('A1') === $a1 && $hvk->byText('B1') === $b1 && $hvk->byText('C1') === $c1, 'the stacks whose values are the same keep their nodes');
+check($hvk->byText('D1') !== $d1, 'a stack holding a closure (a button\'s action) is built again');
+$vk->b++;
+$hvk->frame(1);
+check($hvk->byText('B is 1') !== null && $hvk->byText('B1') !== $b1, 'a stack whose value changed is built again');
+check($hvk->byText('A1') === $a1, 'the others stay kept');
+$vk->red = true;
+$hvk->frame(1);
+check($hvk->byText('C1') !== $c1, 'a kept stack is built again when its environment changes (the color around it)');
+$keyed = array_merge(array_keys((new \MyPHP\UI\Declarative\Env(\MyPHP\UI\Theme::light()))->memoKey()), \MyPHP\UI\Declarative\Env::NOT_IN_MEMO_KEY);
+same(array_keys(get_class_vars(\MyPHP\UI\Declarative\Env::class)), array_values(array_intersect(array_keys(get_class_vars(\MyPHP\UI\Declarative\Env::class)), $keyed)), 'each property of Env is in its memo key or named out of it');
+check(array_diff(\MyPHP\UI\Declarative\Env::NOT_IN_MEMO_KEY, array_keys(get_class_vars(\MyPHP\UI\Declarative\Env::class))) === [], 'the properties named out of the memo key are Env\'s');
+
+// A view that builds a thousand nodes anew frame after frame is told how to keep its parts
+$built = new class { public int $tick = 0; };
+$many = array_map(fn(int $i) => "Row $i", range(1, \MyPHP\UI\Runtime::BUILT_MANY + 50));
+$hbuilt = new Headless(function (Context $c) use ($built, $many) {
+    Content::render(fn() => VStack()(Text("Tick {$built->tick}"), ...array_map(fn(string $s) => Text($s), $many)), $c); // the texts in the stack whose tick changes: none kept
+}, 400, 300);
+for ($i = 0; $i <= \MyPHP\UI\Runtime::BUILT_FRAMES; $i++) { $built->tick++; $hbuilt->frame(1); }
+check(array_filter($hbuilt->rt->warnings, fn(string $w) => str_contains($w, 'closure children')) !== [], 'a view that builds all of itself each frame is told to split into closure children');
+$kept = new class { public int $tick = 0; };
+$hkept = new Headless(function (Context $c) use ($kept, $many) {
+    Content::render(fn() => VStack()(Text("Tick {$kept->tick}"), VStack()(...array_map(fn(string $s) => Text($s), $many))), $c); // the texts in a stack of their own: kept
+}, 400, 300);
+for ($i = 0; $i <= \MyPHP\UI\Runtime::BUILT_FRAMES; $i++) { $kept->tick++; $hkept->frame(1); }
+check(array_filter($hkept->rt->warnings, fn(string $w) => str_contains($w, 'closure children')) === [], 'a view whose parts are kept is not told');
+
 // 6. Zero reference cycles across 50 frames with State, Observer and Computed
 gc_collect_cycles();
 gc_disable();

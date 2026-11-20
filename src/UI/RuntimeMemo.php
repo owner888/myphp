@@ -119,6 +119,34 @@ trait RuntimeMemo
         $this->memoSeen = $seen;
     }
 
+    /** Nodes the frame's passes built anew, not kept (Context counts them as they are added). @internal Context */
+    public int $builtNodes = 0;
+    /** Frames in a row that built BUILT_MANY nodes or more anew, and whether that was told. */
+    private int $builtRun = 0;
+    private bool $builtTold = false;
+    /** How many nodes built anew, over how many frames in a row, tell of a view that builds all of itself each frame. */
+    public const BUILT_MANY = 1000, BUILT_FRAMES = 30;
+
+    /**
+     * Tells, once, of a view whose frames build BUILT_MANY nodes or more anew frame after frame: one whose parts are
+     * not kept, as closure children or stacks told by value are (docs/ui/performance.md). A warning for the inspector,
+     * logged in development.
+     */
+    private function noteBuilt(): void
+    {
+        $built = $this->builtNodes;
+        $this->builtNodes = 0;
+        if ($this->builtTold) { return; }
+        $this->builtRun = $built >= self::BUILT_MANY ? $this->builtRun + 1 : 0;
+        if ($this->builtRun < self::BUILT_FRAMES) { return; }
+        $this->builtTold = true;
+        $msg = sprintf('ui: %d frames in a row each built %d nodes or more anew (%d the last): split the view into closure children'
+            . ' (VStack()(fn() => …, fn() => …)) along the state each part reads, so that a change builds only its part (docs/ui/performance.md)',
+            self::BUILT_FRAMES, self::BUILT_MANY, $built);
+        $this->warn($msg);
+        if (\MyPHP\App::isDev()) { \MyPHP\Logger::warn($msg, 'ui'); }
+    }
+
     /** Whether Computed memo $id holds a node the focus or the press moved from or to, or sits inside one (a row of the list that took the focus). */
     private function touchedByFocus(int $id, array $ids): bool
     {
@@ -183,7 +211,7 @@ trait RuntimeMemo
         $readKeys = $this->readsKeys;
         $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
-        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints']) : null;
+        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints', 'builtNodes']) : null;
         $n->memo = 1;
         if ($adds === null) {
             if (($old = $this->memos[$id]['node'] ?? null) !== null && $old !== $n && $old->placed === $this->frameNumber) { self::detach($old, -1); }
@@ -201,13 +229,14 @@ trait RuntimeMemo
 
     /**
      * Reactive subtree cache lookup for Computed: reuses the retained Node
-     * subtree when its reactive Scope is clean and no targeted input event
-     * reached an interactive node inside it.
+     * subtree when its reactive Scope is clean, $deps (its scope's version,
+     * and a stack's value: ViewKey) are as they were, and no targeted input
+     * event reached an interactive node inside it.
      */
-    public function reactiveMemoHit(int $id, int $version, array $ctx, TextStyle $style): ?Node
+    public function reactiveMemoHit(int $id, array $deps, array $ctx, TextStyle $style): ?Node
     {
         $m = $this->memos[$id] ?? null;
-        if ($m === null || $m['deps'] !== [$version] || $m['ctx'] !== $ctx || $m['style'] != $style || ($m['area'] === null && $m['ids'] === [])) {
+        if ($m === null || $m['deps'] !== $deps || $m['ctx'] !== $ctx || $m['style'] != $style || ($m['area'] === null && $m['ids'] === [])) {
             return null;
         }
         if ($this->memoKeyed && ($m['keys'] || ($this->focus !== null && isset($m['ids'][$this->focus])))) {
@@ -247,7 +276,7 @@ trait RuntimeMemo
     }
 
     /** Stores the retained Node subtree built by a reactive Computed scope. */
-    public function reactiveMemoEnd(int $id, int $version, array $ctx, TextStyle $style, Node $n, bool $clean): bool
+    public function reactiveMemoEnd(int $id, array $deps, array $ctx, TextStyle $style, Node $n, bool $clean): bool
     {
         [$before, $keys, $animating, $wake, $unmeasured] = array_pop($this->memoMarks);
         $asked = $this->animating || $this->wakeAt !== null || $this->unmeasuredRect;
@@ -255,7 +284,7 @@ trait RuntimeMemo
         $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
         $adds = $clean && !$asked && !$this->consumed
-            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints'])
+            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints', 'builtNodes'])
             : null;
         $n->memo = 1;
         if ($adds === null) {
@@ -271,7 +300,7 @@ trait RuntimeMemo
             || isset($adds['tips']) || isset($adds['sliders']) || isset($adds['steppers'])
             || isset($adds['fields']) || isset($adds['draggables']) || isset($adds['menuNodes']) || isset($adds['toggles']);
         $this->memos[$id] = [
-            'deps' => [$version], 'ctx' => $ctx, 'style' => $style, 'node' => $n, 'adds' => $adds,
+            'deps' => $deps, 'ctx' => $ctx, 'style' => $style, 'node' => $n, 'adds' => $adds,
             'ids' => $old['ids'] ?? [], 'area' => $old['area'] ?? null, 'states' => [],
             'frame' => $this->frameNumber, 'keys' => $readKeys, 'interactive' => $interactive,
         ];
@@ -500,5 +529,6 @@ trait RuntimeMemo
                 unset($this->memos[$id], $this->scopes[$id]);
             }
         }
+        $this->noteBuilt();
     }
 }

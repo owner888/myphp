@@ -160,6 +160,7 @@ final class Context
         }
         $top->kids[] = $n;
         $n->context = $this;
+        if ($this->runtime !== null) { $this->runtime->builtNodes++; } // built anew, not kept (RuntimeMemo::noteBuilt)
         $n->disabledIn = $top->disabled || $top->disabledIn; // inside a disabled node (mygo's IsDisabled)
         if ($this->theme !== $this->window && $n->theme === null) { // built in a themed() scope: its theme, which an overlay opened there, at the root, takes as its own
             if ($top === $this->root) { self::takeTheme($n, $this->theme); } else { $n->theme = $this->theme; }
@@ -945,9 +946,10 @@ final class Context
     /**
      * Builds or reuses a reactive Computed subtree keyed by $key, tracking
      * PHP 8.4 Property Hooks and State<T> reads automatically through
-     * Reactive\Observer. @internal
+     * Reactive\Observer; with $value (a stack's, ViewKey), reused only
+     * while it is the same value too. @internal
      */
-    public function reactiveMemo(int|string $key, Declarative\Env $env, Closure $build, ?Closure $userClosure = null): Node
+    public function reactiveMemo(int|string $key, Declarative\Env $env, Closure $build, ?Closure $userClosure = null, ?array $value = null): Node
     {
         $top = array_last($this->stack);
         [$base] = $this->place($top);
@@ -958,14 +960,10 @@ final class Context
             $top->rtl, $top->isDisabled(), $this->selectScope(), $this->theme, $this->scale, $this->width, $this->height,
             $this->toolbars, $this->inert, $this->inOverlay, $this->overlayInModal, $this->router, $this->form,
             $this->checks !== null, $this->listRow[0] ?? null, count($this->sidebars), count($this->accordions),
-            count($this->trees), $this->vibrancy, $this->titleBar,
-            $env->axis, $env->stackAxis, $env->disabled, $env->locale, $env->font, $env->weight, $env->italic,
-            $env->mono, $env->underline, $env->strikethrough, $env->color, $env->tint, $env->buttonStyle,
-            $env->labelStyle, $env->pickerStyle, $env->textFieldStyle, $env->listStyle, $env->formRow, $env->inList,
-            $env->redacted, $env->textAlign, $env->lineLimit, $env->linesReserved,
+            count($this->trees), $this->vibrancy, $this->titleBar, $env->memoKey(),
         ];
         $style = $this->inheritedText();
-        if ($rt !== null && $scope !== null && $scope->isClean() && ($n = $rt->reactiveMemoHit($id, $scope->version, $ctx, $style)) !== null) {
+        if ($rt !== null && $scope !== null && $scope->isClean() && ($n = $rt->reactiveMemoHit($id, $value === null ? [$scope->version] : [$scope->version, $value], $ctx, $style)) !== null) {
             if (isset($this->keyed[$id])) { $rt->duplicateKey($id, $key, Inspector::callSite()); }
             $this->keyed[$id] = true;
             foreach ($rt->memoContextAdds($id) as $prop => [$list, $added]) {
@@ -992,7 +990,7 @@ final class Context
         $n = $top->kids[$count];
         $n->placed = $rt?->frameNumber ?? 0;
         $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base', 'scopeTop', 'scopeFlags', 'scopeVal']);
-        if ($rt !== null && $scope !== null && $rt->reactiveMemoEnd($id, $scope->version, $ctx, $style, $n, $adds !== null)) {
+        if ($rt !== null && $scope !== null && $rt->reactiveMemoEnd($id, $value === null ? [$scope->version] : [$scope->version, $value], $ctx, $style, $n, $adds !== null)) {
             $rt->memoKeepContext($id, $adds);
             $keeper = $rt->memoKeeper(fn(): self => new self($this->metrics, $rt, 0, 0, $this->theme, $this->scale));
             $stack = [$n];

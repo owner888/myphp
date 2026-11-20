@@ -1307,13 +1307,36 @@ abstract class View
     {
         if ($content === null) { return; }
         if ($content instanceof Closure) { (new Computed($content))->render($c, $env); return; }
-        if ($content instanceof View) { $content->render($c, $env); return; }
+        if ($content instanceof View) { self::renderKept($c, $env, $content); return; }
         foreach ($content as $v) {
             if ($v === null || $v === false) { continue; }
             if ($v instanceof Closure) { (new Computed($v))->render($c, $env); continue; }
             if (is_array($v) || $v instanceof \Traversable) { self::renderAll($c, $env, $v); continue; }
             if (!$v instanceof View) { throw new \TypeError('a view\'s content holds views, closures, arrays of them and null, not ' . get_debug_type($v)); }
-            $v->render($c, $env);
+            self::renderKept($c, $env, $v);
         }
+    }
+
+    /** The fewest views a stack told by value holds for it to be kept: under it, telling and keeping cost about what building does. */
+    private const KEPT_FROM = 8;
+    /** What a stack kept by value is built with Observer::run() for: nothing it reads by name, its value being compared instead (ViewKey). */
+    private static ?Closure $readsNothing = null;
+
+    /**
+     * Renders $v, a stack whose value is the frame before's kept as it was
+     * built (SwiftUI's diff of view values): the closure that made it ran
+     * again, but its subtree is not built, laid out or painted again while
+     * its value (ViewKey), its environment and the states it reads stay.
+     */
+    private static function renderKept(Context $c, Env $env, View $v): void
+    {
+        $rt = $c->runtime;
+        if ($rt !== null && $v->identity === null && ($v instanceof Stack || $v instanceof ZStack)
+            && ($key = ViewKey::of($v, $rt->frameNumber)) !== null && $key[1] >= self::KEPT_FROM) {
+            $c->reactiveMemo('__value_' . $c->upcomingId(), $env, static function () use ($c, $env, $v): void { $v->render($c, $env); },
+                self::$readsNothing ??= static fn() => null, $key[0]);
+            return;
+        }
+        $v->render($c, $env);
     }
 }

@@ -95,6 +95,24 @@ final class Env
         return $e;
     }
 
+    /**
+     * The environment's properties a kept subtree is not built again for: the page's plumbing (its route, stack, bars,
+     * title), made anew each frame, and the theme, which Context::reactiveMemo compares itself. Every other property is
+     * in memoKey(), so one added to Env is compared with no list to update (reactive_test checks this list).
+     */
+    public const NOT_IN_MEMO_KEY = ['theme', 'route', 'stack', 'toolbarTaken', 'title', 'titleMode', 'backdrop', 'toolbar', 'scrollProxy', 'animation', 'refresh'];
+
+    /** What of the environment a kept subtree (Computed, a stack told by value) is built again for when it changes. @internal @return array<string, mixed> */
+    public function memoKey(): array
+    {
+        $key = get_object_vars($this);
+        foreach (self::NOT_IN_MEMO_KEY as $name) { unset($key[$name]); }
+        foreach ($key as $name => $v) {
+            if (is_object($v) && !$v instanceof \UnitEnum) { $key[$name] = [$v::class, (array)$v]; } // a font, a color: made anew each frame, compared by what it is
+        }
+        return $key;
+    }
+
     /** The environment inside a frame's box, a column, the stack's axis kept. @internal */
     public function inBox(): self
     {
