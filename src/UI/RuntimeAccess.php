@@ -228,7 +228,7 @@ trait RuntimeAccess
             $page->bounds = $n->world->bounds($n->x + $n->padL(), $n->y + $n->padT(), max(0.0, $n->w - $n->padL() - $n->padR()), max(0.0, $n->h - $n->padT() - $n->padB())); // its content box
             $t->nodes[] = $page;
         }
-        if ($n->scroll !== null) {
+        if ($n->scroll !== null && !$n->scrollUnclipped) {
             $box = $n->world->bounds($n->x, $n->y, $n->w, $n->h);
             $clip = $clip === null ? $box : self::intersect($clip, $box);
         }

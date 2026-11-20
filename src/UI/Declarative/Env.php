@@ -67,6 +67,8 @@ final class Env
     public ?\ScrollDismissesKeyboardMode $scrollDismissesKeyboard = null;
     /** Whether a List's or Form's own background shows behind its sections (scrollContentBackground), null for the system's (it does). */
     public ?\Visibility $scrollContentBackground = null;
+    /** Whether the scroll views inside leave their content unclipped at their edges (scrollClipDisabled). */
+    public bool $scrollClipDisabled = false;
 
     public function __construct(public Theme $theme) {}
 

@@ -883,7 +883,7 @@ final class Painter
         $grown = static fn(Node $k, float $m): array => [$k->x - $m, $k->y - $m, $k->x + $k->w + $m, $k->y + $k->h + $m];
         $area = $grown($n, $n->inkMargin());
         $inv = $n->world->set ? $n->world->inverse() : Affine::identity();
-        if ($n->scroll !== null || $n->clip !== 0 || $inv === null) {
+        if (($n->scroll !== null && !$n->scrollUnclipped) || $n->clip !== 0 || $inv === null) {
             return $area; // all inside within the box
         }
         $in = static function (Node $k, array $r) use ($inv): array { // $r of $k's layout in $n's
@@ -902,9 +902,10 @@ final class Painter
                     $area = [min($area[0], $r[0]), min($area[1], $r[1]), max($area[2], $r[2]), max($area[3], $r[3])];
                 }
                 if ($k->kids !== []) {
-                    if ($k->scroll !== null || $k->clip !== 0) {
-                        $c = $in($k, [($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x : -1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y : -1e6,
-                            ($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x + $k->w : 1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y + $k->h : 1e6]);
+                    $kScrollClips = $k->scroll !== null && !$k->scrollUnclipped;
+                    if ($kScrollClips || $k->clip !== 0) {
+                        $c = $in($k, [($k->clip & Node::CLIP_X) !== 0 || $kScrollClips ? $k->x : -1e6, ($k->clip & Node::CLIP_Y) !== 0 || $kScrollClips ? $k->y : -1e6,
+                            ($k->clip & Node::CLIP_X) !== 0 || $kScrollClips ? $k->x + $k->w : 1e6, ($k->clip & Node::CLIP_Y) !== 0 || $kScrollClips ? $k->y + $k->h : 1e6]);
                         $stack[] = [$k, $meet($c, $clip)];
                     } else {
                         $stack[] = [$k, $clip];
@@ -1034,7 +1035,7 @@ final class Painter
 
     private static function node(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
-        if ($list->clipped($n->x, $n->y, $n->w, $n->h) && ($n->kids === [] || $n->clip !== 0 || $n->scroll !== null)) {
+        if ($list->clipped($n->x, $n->y, $n->w, $n->h) && ($n->kids === [] || $n->clip !== 0 || ($n->scroll !== null && !$n->scrollUnclipped))) {
             return; // out of the clip; a container that clips nothing goes on, its children reaching past its box (absolute, transformed, overflowing)
         }
         if ($n->kind === Node::INPUT) {
@@ -1225,13 +1226,14 @@ final class Painter
                 self::callDraw($n, false, $list, $t, $text, $rt); // over the node's own face, under its children, with the text painter for what needs the atlas
             }
         }
-        if ($n->scroll !== null) {
+        $scrollClips = $n->scroll !== null && !$n->scrollUnclipped;
+        if ($scrollClips) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
         } elseif ($n->clip !== 0) { // an axis not clipped reaches as far as the clip around it does
             $list->pushClip(($n->clip & Node::CLIP_X) !== 0 ? $n->x : -1e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->y : -1e6, ($n->clip & Node::CLIP_X) !== 0 ? $n->w : 2e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->h : 2e6);
         }
         $outerMask = $list->mask();
-        $rounded = ($n->scroll !== null || $n->clip === (Node::CLIP_X | Node::CLIP_Y)) && self::roundClip($n, $list);
+        $rounded = ($scrollClips || $n->clip === (Node::CLIP_X | Node::CLIP_Y)) && self::roundClip($n, $list);
         foreach ($n->ghosts as $g) { // children leaving go under the others
             self::paint($g, $list, $text, $t, $rt);
         }
@@ -1245,7 +1247,7 @@ final class Painter
             self::callDraw($n, true, $list, $t, $text, $rt); // over the children, inside a scrolling container's clip (mygo's DrawOver)
         }
         if ($rounded) { $list->setMask($outerMask); }
-        if ($n->clip !== 0 && $n->scroll === null) {
+        if ($n->clip !== 0 && !$scrollClips) {
             $list->popClip();
         }
         if ($n->debug) {
@@ -1255,7 +1257,7 @@ final class Painter
             $list->ring($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $t->focus, $t->focusAlpha, max(0.0, $n->radius - 1), 2.0);
         }
         if ($n->scroll !== null) {
-            $list->popClip();
+            if ($scrollClips) { $list->popClip(); }
             // The thumbs show while the pointer is over the container (desktop), while actively scrolling (touch), or while dragging one.
             if ($rt !== null && $rt->showScrollbar($n)) {
                 $dragging = $rt->dragging($n->scroll);

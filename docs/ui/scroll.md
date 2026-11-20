@@ -18,8 +18,11 @@ $view = fn() => ScrollView()(
 );
 ```
 
-A scroll view takes the room it is offered. For the rows of a collection,
-a [list](list.md), which builds only those in view.
+A scroll view takes the room it is offered and clips its content to its
+bounds by default; `->scrollClipDisabled()` lets shadows, badges or
+mascot overlays hanging outside its frame stay visible and clickable as
+they scroll with the content. For the rows of a collection, a
+[list](list.md), which builds only those in view.
 
 ## Scrolling from code
 

@@ -2233,16 +2233,17 @@ final class Runtime
         }
         $this->visible[$n->id] = [$vx, $vy, $vx1 > $vx ? $vx1 - $vx : 0.0, $vy1 > $vy ? $vy1 - $vy : 0.0]; // as it shows, clipped (mygo's vx, vy, vw, vh)
         if ($clipper !== 0) { $this->clippedBy[$n->id] = $clipper; }
-        $axes = ($n->scroll !== null ? Node::CLIP_X | Node::CLIP_Y : 0) | $n->clip;
+        $scrollClips = $n->scroll !== null && !$n->scrollUnclipped;
+        $axes = ($scrollClips ? Node::CLIP_X | Node::CLIP_Y : 0) | $n->clip;
         if ($axes !== 0 && $parent !== null) { // what is inside it takes the pointer only within it, in its own layout (mygo's clip chain)
             $this->clipAxes[$n->id] = $axes;
             $clipper = $n->id;
         }
-        if ($n->scroll !== null || ($n->clip & Node::CLIP_X) !== 0) {
+        if ($scrollClips || ($n->clip & Node::CLIP_X) !== 0) {
             if ($bx > $clip[0]) { $clip[0] = $bx; }
             if ($bx1 < $clip[2]) { $clip[2] = $bx1; }
         }
-        if ($n->scroll !== null || ($n->clip & Node::CLIP_Y) !== 0) {
+        if ($scrollClips || ($n->clip & Node::CLIP_Y) !== 0) {
             if ($by > $clip[1]) { $clip[1] = $by; }
             if ($by1 < $clip[3]) { $clip[3] = $by1; }
         }

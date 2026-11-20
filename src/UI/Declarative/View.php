@@ -368,10 +368,14 @@ abstract class View
     /** How a finger scrolling the ScrollView, ListView or Form inside closes the keyboard, as SwiftUI's scrollDismissesKeyboard: immediately as it scrolls, interactively as it reaches the keyboard, never (automatic, the system's here). */
     public function scrollDismissesKeyboard(\ScrollDismissesKeyboardMode $mode = \ScrollDismissesKeyboardMode::automatic): static { $this->sets['scrollDismissesKeyboard'] = $mode; return $this; }
 
+    /** Disables or re-enables clipping of the ScrollView, ListView or Form inside to its frame, so content, shadows or overlays hanging over its edges stay visible and clickable as they scroll, as SwiftUI's scrollClipDisabled(). */
+    public function scrollClipDisabled(bool $disabled = true): static { $this->sets['scrollClipDisabled'] = $disabled; return $this; }
+
     /**
      * The scroll modifiers of $env on the scroll container $n of the view
-     * built: its bars hidden (scrollIndicators), the height a finger
-     * scrolling it closes the keyboard from (scrollDismissesKeyboard). @internal
+     * built: its bars hidden (scrollIndicators), its clip disabled
+     * (scrollClipDisabled), the height a finger scrolling it closes the
+     * keyboard from (scrollDismissesKeyboard). @internal
      */
     public static function scrollTraits(Context $c, Env $env, Node $n): Node
     {
@@ -379,6 +383,7 @@ abstract class View
             [$visibility, $axis] = $env->scrollIndicators;
             if (($visibility === \ScrollIndicatorVisibility::hidden || $visibility === \ScrollIndicatorVisibility::never) && ($axis === \Axis::vertical ? $n->scrollY : $n->scrollX)) { $n->scrollbars(false); }
         }
+        if ($env->scrollClipDisabled) { $n->scrollClipDisabled(true); }
         $n->dismissesKeyboard = match ($env->scrollDismissesKeyboard) {
             \ScrollDismissesKeyboardMode::immediately => -INF,
             \ScrollDismissesKeyboardMode::interactively => $c->height - $c->keyboard, // the keyboard's top, in the window

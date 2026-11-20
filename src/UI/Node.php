@@ -207,6 +207,8 @@ final class Node
     public float $caretWidth = 1.0;
     /** scrollbars(false)'s: a scroll container that shows no bars, which take no press. */
     public bool $hideScrollbars = false;
+    /** scrollClipDisabled(true)'s: a scroll container that does not clip its children to its box (SwiftUI's scrollClipDisabled). */
+    public bool $scrollUnclipped = false;
     /**
      * A scroll container's keyboard dismissal (SwiftUI's scrollDismissesKeyboard): a finger scrolling it at or below
      * this height in the window (the keyboard's top, interactively) takes the focus from a field, which closes the
@@ -971,6 +973,18 @@ final class Node
     public function scrollbars(bool $visible): static
     {
         $this->hideScrollbars = !$visible;
+        return $this;
+    }
+
+    /**
+     * Lets this scroll container's children show and take input outside its
+     * box, as SwiftUI's scrollClipDisabled(): shadows, badges or a mascot
+     * hanging over the edge of a scrolling card or row are not cut off as
+     * they scroll.
+     */
+    public function scrollClipDisabled(bool $disabled = true): static
+    {
+        $this->scrollUnclipped = $disabled;
         return $this;
     }
 

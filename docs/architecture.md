@@ -8970,7 +8970,10 @@ changed, which no hot reload can take.
   `Runtime::record` (pointer order) follow; the layout keeps the views'
   order. The scroll ones go through the environment to
   `View::scrollTraits` on each scroll container: its bars
-  (`scrollbars(false)`), and `Node::$dismissesKeyboard`, the height from
+  (`scrollbars(false)`), its clip (`scrollClipDisabled(true)` →
+  `Node::$scrollUnclipped`, skipping the scroll box's clip in `Painter`,
+  `Runtime::record` and `RuntimeAccess`), and `Node::$dismissesKeyboard`,
+  the height from
   which a finger scrolling it takes the focus from a field: -INF at once,
   the keyboard's top interactively; `Runtime` keeps the container a
   finger scrolls until it lifts (`scrollEnd`), so a finger moved on past

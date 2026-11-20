@@ -141,3 +141,31 @@ $sheet = function (?float $radius, ?\Visibility $grabber): array {
 [$g1, $r1] = $sheet(12.0, \Visibility::hidden);
 same([1, 0], [$g0, $g1], 'a phone\'s sheet has a grabber; presentationDragIndicator(.hidden) none');
 check(in_array(32.0, $r0, true) && in_array(12.0, $r1, true) && !in_array(32.0, $r1, true), 'its corners the system\'s 32, or presentationCornerRadius\'s: ' . json_encode([$r0, $r1]));
+
+// scrollClipDisabled: content hanging outside a ScrollView's frame paints unclipped and receives clicks.
+$clipCase = function (bool $unclipped): array {
+    $s = new class { public bool $tapped = false; };
+    $h = new Headless(fn(Context $c) => Content::render(function () use ($unclipped, $s) {
+        $sv = ScrollView()(
+            Button('Bear', action: function () use ($s): void { $s->tapped = true; })
+                ->frame(width: 60, height: 60)
+                ->offset(y: -30),
+        )->frame(width: 200, height: 100)->accessibilityLabel('sv');
+        return VStack()(Spacer()->frame(height: 80), $unclipped ? $sv->scrollClipDisabled() : $sv);
+    }, $c), 300, 300);
+    $h->frame(2);
+    $list = $h->paint();
+    $clipY = $list->buf[1 * 16 + 13]; // quad 1 (the button's box) clip y
+    $bear = $h->byText('Bear');
+    $sv = $h->byLabel('sv');
+    $r = $h->rect($bear);
+    $svR = $h->rect($sv);
+    // Click 10pt above the ScrollView's top edge (inside the button shifted by offset(y: -30)).
+    $h->click($r[0] + $r[2] / 2, $svR[1] - 10);
+    return [$sv?->scrollUnclipped, $clipY, $s->tapped];
+};
+[$u0, $clipY0, $tap0] = $clipCase(false);
+[$u1, $clipY1, $tap1] = $clipCase(true);
+same([false, true], [$u0, $u1], 'scrollClipDisabled sets scrollUnclipped on the scroll container');
+check($clipY0 > 0 && !$tap0, 'clipped by default: quad clip is constrained to ScrollView and top half ignores clicks');
+same([0.0, true], [$clipY1, $tap1], 'scrollClipDisabled(): quad clip stays at window root (0) and top half above ScrollView takes clicks');

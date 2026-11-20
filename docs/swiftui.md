@@ -218,7 +218,7 @@ and the views of what the framework does: `VideoPlayer`, `WebView`,
 | `List(items) { Row($0) }` | `ListView($items, id: 'id')(fn(array $item, int $i) => …)`: only the rows in view are built, for millions of rows |
 | `List(selection: $chosen)` | `ListView($items, id: 'id', selection: $app->chosen)` |
 | `.listRowBackground(Color.clear)`, `.listRowInsets(EdgeInsets(…))`, `.listRowSeparator(.hidden, edges: .bottom)` | on the row's view: `->listRowBackground(Color(Color::clear))` (any view, under the row's content), `->listRowInsets(new EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))`, `->listRowSeparator(Visibility::hidden, edges: Edge::bottom)` |
-| `.scrollContentBackground(.hidden)`, `.scrollIndicators(.hidden)`, `.scrollDismissesKeyboard(.immediately)` | the same names: a `Form`'s or `List`'s own background gone (a `->background(…)` of the view shows), no bars, the keyboard closed as a finger scrolls (`interactively`: as it reaches the keyboard) |
+| `.scrollContentBackground(.hidden)`, `.scrollIndicators(.hidden)`, `.scrollDismissesKeyboard(.immediately)`, `.scrollClipDisabled()` | the same names: a `Form`'s or `List`'s own background gone (a `->background(…)` of the view shows), no bars, the keyboard closed as a finger scrolls (`interactively`: as it reaches the keyboard), content/shadows hanging over the scroll edges not clipped |
 | `ForEach(items, id: \.id) { }` | `Each($items, id: 'id')(fn(array $item) => …)` |
 | `.swipeActions { Button(role: .destructive) }` | `->swipeActions(Button('Delete', role: ButtonRole::destructive, action: …))` on a row: a full swipe performs the first |
 | `.onMove` | `->onMove(fn(array $from, int $to) => …)` on the list |
