@@ -83,10 +83,30 @@ final class ViewKey
             if (!isset(self::EVENTS[$name])) { return null; }
         }
         $out = [$v::class];
+        $defaults = self::$defaults[$v::class] ??= self::defaults($v::class);
         foreach ($props as $name => $value) {
+            if (isset($defaults[$name]) && $value === $defaults[$name][0]) { continue; } // as every view of its class has it: left out, as in the other's
+            if ($value === null || is_scalar($value) || $value instanceof \UnitEnum) { $out[$name] = $value; continue; }
             $kept = self::value($value, $views);
             if ($kept === self::class) { return null; }
             $out[$name] = $kept;
+        }
+        return $out;
+    }
+
+    /** @var array<class-string, array<string, array{0: mixed}>> each view class's properties with a default, by their key in an (array) cast */
+    private static array $defaults = [];
+
+    /** The defaults of $class's properties, its parents' private ones too, keyed as (array) names them: a view's key leaves those it holds out. @return array<string, array{0: mixed}> */
+    private static function defaults(string $class): array
+    {
+        $out = [];
+        for ($c = new \ReflectionClass($class); $c !== false; $c = $c->getParentClass()) {
+            foreach ($c->getProperties() as $p) {
+                if ($p->isStatic() || $p->getDeclaringClass()->name !== $c->name || !$p->hasDefaultValue()) { continue; }
+                $key = $p->isPrivate() ? "\0{$c->name}\0{$p->name}" : ($p->isProtected() ? "\0*\0{$p->name}" : $p->name);
+                $out[$key] = [$p->getDefaultValue()];
+            }
         }
         return $out;
     }

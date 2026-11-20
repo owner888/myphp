@@ -9,10 +9,10 @@
 | list, a million rows | 0.5 | 343 |
 | table, a million rows × 5 | 2.0 | 627 |
 | 2000 texts, not virtualized | 6.3 | 1971 |
-| declarative 10×25, one value changing: one closure, stacks kept by value | 2.3 | 806 |
-| declarative 10×25, one value changing: closure children (`Computed`) | 0.27 | 807 |
+| declarative 10×25, one value changing: one closure, stacks kept by value | 1.6 | 806 |
+| declarative 10×25, one value changing: closure children (`Computed`) | 0.28 | 807 |
 
-The two declarative rows are the same 500-node page with one value changing each frame. Kept by value, the stacks are neither laid out nor painted again (layout 0.02 ms), but the view closure still makes their views and `ViewKey` compares them (build 2.0 ms); in closure children whose state did not change, nothing of them is made (build 0.09 ms). Closure children stay the way to keep a page cheap; stacks kept by value catch what was not split.
+The two declarative rows are the same 500-node page with one value changing each frame. Kept by value, the stacks are neither laid out nor painted again (layout 0.02 ms), but the view closure still makes their views and `ViewKey` compares them, leaving out what is at its class's default (build 1.3 ms); in closure children whose state did not change, nothing of them is made (build 0.09 ms). Closure children stay the way to keep a page cheap; stacks kept by value catch what was not split.
 
 A node costs about 4 µs to build, 0.5 µs to lay out and 0.7 µs to record; 9,000 nodes are rebuilt, laid out and painted in about 4–6 ms a frame at 60 fps, and a million-row `ListView` or `Table` costs about 1.3 ms and 8 MB flat, as only the rows in view are built.
 
