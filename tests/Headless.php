@@ -645,7 +645,14 @@ final class Headless
         $src = file_get_contents($path);
         if ($src === false) { throw new \RuntimeException($path); }
         require_once __DIR__ . '/../src/UI/Declarative/functions.php';
-        return str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;' . self::declarativeUses($src), var_export(dirname($path), true)], $src);
+        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;' . self::declarativeUses($src), var_export(dirname($path), true)], $src);
+        return self::guardConsts($src); // a view made again (another test) declares its constants once
+    }
+
+    /** $src's lines `const NAME = …;` as define()s of its namespace guarded by defined(), so that it can run twice: a line declaring several stays a const of the namespace. */
+    private static function guardConsts(string $src): string
+    {
+        return (string)preg_replace('/^const (\w+) = ((?:(?!, [A-Z_0-9]+ = ).)*);$/m', 'defined(__NAMESPACE__ . \'\\\\$1\') || define(__NAMESPACE__ . \'\\\\$1\', $2);', $src);
     }
 
     /** The global enums of the declarative views, which a view file in an example's namespace names as the app's global ones. */
@@ -729,7 +736,7 @@ final class Headless
         require_once __DIR__ . '/../src/UI/Declarative/functions.php';
         $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;' . self::declarativeUses($src), var_export(dirname($path), true)], $src);
         // Its constants in its namespace too, as two examples name theirs alike (WINDOW_W); a line declaring several stays a const of the namespace.
-        $src = preg_replace('/^const (\w+) = ((?:(?!, [A-Z_0-9]+ = ).)*);$/m', 'defined(__NAMESPACE__ . \'\\\\$1\') || define(__NAMESPACE__ . \'\\\\$1\', $2);', $src);
+        $src = self::guardConsts($src);
         if (isset(self::$loaded[$name])) { $src = self::withoutDeclarations($src); } // loaded before (another test): its classes are there, its state made anew
         self::$loaded[$name] = true;
         $argv = [$path, ...$args];

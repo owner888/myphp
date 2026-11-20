@@ -1252,3 +1252,40 @@ same(0, count($r->moveHistory) + count($r->moveQueue), 'rubiks-cube: Auto-Solve 
 \MyPHP\UI\CanvasAtlas::take();
 
 
+
+// Every example's view, as it first shows, builds fewer than BUILT_MANY nodes anew each frame its root runs again: none
+// is told in development to split into closure children (docs/ui/performance.md). An example its main.php cannot give
+// headless as this generic run loads it (its state made only once its windows open, a state Headless::load does not
+// guess, a backend it needs) is named on stderr, not failed: its own tests above cover it; a PHP warning in such a run
+// says only that, so it is turned into that note rather than a failure.
+$heavy = []; $unchecked = [];
+foreach (glob(__DIR__ . '/../examples/*/view.php') as $file) {
+    $name = basename(dirname($file));
+    if (!is_file(dirname($file) . '/main.php')) { continue; }
+    set_error_handler(static function (int $no, string $msg, string $file = '', int $line = 0): never { throw new \ErrorException($msg, 0, $no, $file, $line); });
+    try {
+        // Loaded once, up to the first of App::setName, App::whenReady its state is made before: a main.php run twice
+        // would require its classes' files again.
+        $main = (string)file_get_contents(dirname($file) . '/main.php');
+        $var = preg_match('~Content::file\(__DIR__ \. \'/view\.php\', \$(\w+)~', $main, $m) ? $m[1] : 's';
+        $made = strpos($main, '$' . $var . ' = ');
+        $stop = $made === false ? 'App::setName' : null; // made some other way: as Headless::load finds it, before its name is set
+        foreach (['App::setName', 'App::whenReady'] as $at) {
+            $pos = strpos($main, $at);
+            if ($stop === null && $pos !== false && $made < $pos) { $stop = $at; }
+        }
+        if ($stop === null) { $unchecked[] = "$name: its state is made once its windows open"; continue; }
+        [$view] = Headless::load($name, $stop);
+        if ($view === null) { $unchecked[] = "$name: no state to bind its view to"; continue; }
+        $t = new Headless($view, 1100, 800);
+        $t->frame(\MyPHP\UI\Runtime::BUILT_FRAMES + 2);
+        if (array_filter($t->rt->warnings, fn(string $w) => str_contains($w, 'closure children')) !== []) { $heavy[] = $name; }
+    } catch (\Throwable $e) {
+        $unchecked[] = "$name: " . $e->getMessage();
+    } finally {
+        restore_error_handler();
+    }
+}
+\MyPHP\UI\CanvasAtlas::take();
+same([], $heavy, 'no example builds ' . \MyPHP\UI\Runtime::BUILT_MANY . ' nodes or more anew each frame its view runs again');
+if ($unchecked !== []) { fwrite(STDERR, "  examples not checked for nodes built each frame:\n    " . implode("\n    ", $unchecked) . "\n"); }
