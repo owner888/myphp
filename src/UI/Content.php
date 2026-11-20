@@ -61,6 +61,7 @@ final class Content
         require_once __DIR__ . '/Declarative/functions.php';
         if ($c->runtime !== null) {
             Reactive\Observer::bindRoot($c->runtime->rootScope(), $view, $c->state);
+            $c->runtime->declarative = true;
         }
         Declarative\Transaction::frame($c);
         $c->root->alignItems(Node::CENTER)->justify(Node::CENTER);

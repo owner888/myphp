@@ -121,6 +121,8 @@ trait RuntimeMemo
 
     /** Nodes the frame's passes built anew, not kept (Context counts them as they are added). @internal Context */
     public int $builtNodes = 0;
+    /** Whether the frame was built from a declarative view (Content::render), whose parts closure children keep: one the engine's builder builds (the framework's own windows) is not told of them. @internal Content */
+    public bool $declarative = false;
     /** Frames in a row that built BUILT_MANY nodes or more anew, and whether that was told. */
     private int $builtRun = 0;
     private bool $builtTold = false;
@@ -135,8 +137,10 @@ trait RuntimeMemo
     private function noteBuilt(): void
     {
         $built = $this->builtNodes;
+        $declarative = $this->declarative;
         $this->builtNodes = 0;
-        if ($this->builtTold) { return; }
+        $this->declarative = false;
+        if ($this->builtTold || !$declarative) { $this->builtRun = 0; return; }
         $this->builtRun = $built >= self::BUILT_MANY ? $this->builtRun + 1 : 0;
         if ($this->builtRun < self::BUILT_FRAMES) { return; }
         $this->builtTold = true;
@@ -211,7 +215,7 @@ trait RuntimeMemo
         $readKeys = $this->readsKeys;
         $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
-        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints', 'builtNodes']) : null;
+        $adds = $clean && !$asked && $this->pass === 0 ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints', 'builtNodes', 'declarative']) : null;
         $n->memo = 1;
         if ($adds === null) {
             if (($old = $this->memos[$id]['node'] ?? null) !== null && $old !== $n && $old->placed === $this->frameNumber) { self::detach($old, -1); }
@@ -284,7 +288,7 @@ trait RuntimeMemo
         $this->readsKeys = $keys || $readKeys; $this->animating = $animating || $this->animating; $this->unmeasuredRect = $unmeasured || $this->unmeasuredRect;
         $this->wakeAt = $wake === null ? $this->wakeAt : ($this->wakeAt === null ? $wake : min($wake, $this->wakeAt));
         $adds = $clean && !$asked && !$this->consumed
-            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints', 'builtNodes'])
+            ? self::memoAdds($before, get_object_vars($this), ['memos', 'memoMarks', 'readsKeys', 'animating', 'wakeAt', 'unmeasuredRect', 'scopes', 'rootScope', 'reactivePoints', 'builtNodes', 'declarative'])
             : null;
         $n->memo = 1;
         if ($adds === null) {

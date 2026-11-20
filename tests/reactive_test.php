@@ -368,6 +368,11 @@ $hkept = new Headless(function (Context $c) use ($kept, $many) {
 }, 400, 300);
 for ($i = 0; $i <= \MyPHP\UI\Runtime::BUILT_FRAMES; $i++) { $kept->tick++; $hkept->frame(1); }
 check(array_filter($hkept->rt->warnings, fn(string $w) => str_contains($w, 'closure children')) === [], 'a view whose parts are kept is not told');
+$hengine = new Headless(function (Context $c) use ($many) {
+    $c->column(); foreach ($many as $s) { $c->text($s); } $c->end(); // the engine's builder, as the framework's own windows: no closure children to split into
+}, 400, 300);
+$hengine->frame(\MyPHP\UI\Runtime::BUILT_FRAMES + 1);
+check(array_filter($hengine->rt->warnings, fn(string $w) => str_contains($w, 'closure children')) === [], 'a view the engine\'s builder builds is not told to split into closure children');
 
 // 6. Zero reference cycles across 50 frames with State, Observer and Computed
 gc_collect_cycles();
