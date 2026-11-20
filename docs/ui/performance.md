@@ -33,6 +33,32 @@ $view = fn() => VStack(spacing: 8)(
 )->padding();
 ```
 
+## What a frame costs
+
+Judge myphp's speed from these mechanisms and from measurements (`php tests/bench.php`, `MYPHP_FRAME_STATS=1`), not from "PHP is slower than native": most frames do far less than build, lay out and paint the whole view. Which of four kinds a frame is decides what it costs:
+
+1. **Nothing changed: no frame.** A frame is drawn only when an input event arrives, a `State` or watched property changes, or an animation or `TimelineView` asks for the next tick. An idle window costs 0% CPU and GPU.
+2. **Only drawings move: paint only.** A drawing that moves as it is painted (one calling `Painter::animationFrame()` while it paints, as an indeterminate progress bar does) asks for frames that only paint again: when nothing else happened — no input, no state change, the window the same size and zoom — the last frame's nodes are painted again at the new time, and the view is neither built nor laid out (`Runtime::mayRepaint`, `Runtime::beginRepaint`). An animation of the view's values (`withAnimation`, a transition) asks while the view is built, so its frames are of the next kind.
+3. **Some state changed: the root and what changed are built.** The root view closure runs again, and so does every child that is not a closure. Each closure child (`fn() => …`) or `Computed(fn() => …)` whose `Scope` is clean is not built at all: its node subtree from the frame before is placed again as it was laid out — measured as it was and only moved where it now goes (`Layout::arrange`) — and what its build registered (the clicks it takes, the states inside it) is given back. While it sits where it did, under the same clip, opacity and theme, its hit-test recording is replayed (`memoReplay`) and its quads are copied (`memoRepaint`); moved, under a transform or a mask, or holding the focus, it is recorded and painted again, still not built. Only the subtrees whose dependencies changed are built and laid out anew.
+4. **Everything is built.** A view written as one closure with no closure children is built, laid out, recorded and painted in full on every frame it draws. This is where the per-node costs above add up to the whole page: 2,000 non-virtualized texts take about 5 ms of PHP, close to the 8.3 ms a frame has at 120 Hz. `tests/bench.php` measures this kind for each view in the table above, and `declarative 10×25 Computed` against `declarative 10×25 full rebuild`, the same page with one value changing each frame.
+
+A kept subtree is built again, not reused, when:
+
+- a property it read changed (its `Scope` is dirty);
+- it is offered another size than it was laid out at: forgotten, and built again in another pass of the frame;
+- what it is built in changed: the theme, the scale, the window's size, its environment (font, tint, styles, disabled, locale…), its inherited text style;
+- it holds controls (clicks, a field, a list, a scroll view) and a pointer event fell inside it, the focus or the press moved into or out of it (or of a node around it), or state every control may read changed (a menu or modal opened, the window's focus, a drag, a tooltip, the text selection, full screen, Reduce Motion, right to left), or the frame is in its second pass after its first handled an input;
+- it reads keys and keys came, or the focus is inside it when keys come;
+- a scroll position, list or text field inside it moved;
+- its build asked for a frame of its own (an animation, a timer, a measurement) or handled an input: such a build is not kept.
+
+To keep frames cheap:
+
+- Split a page into closure children (`VStack()(fn() => …, fn() => …)`) along the state each part reads, so a change rebuilds only its part. The root closure should read little and build little.
+- Use `ListView` or `Table` for long collections: only the rows in view are built.
+- Use `->drawingGroup()` for a static subtree that is expensive to paint.
+- Measure before optimizing: `MYPHP_FRAME_STATS=1` logs frames over 8 ms with their build, layout, quad recording and presentation times.
+
 ## Memory
 
 A development run (`myphp dev`, `myphp run`) logs memory every 10 seconds after collecting cycles (`MemoryWatch`), warning if memory grows steadily or if closures form reference cycles. All reactive `Observer` and `Scope` subscriptions use `WeakMap` and `WeakReference`, leaving `0` reference cycles (`gc_collect_cycles() === 0`).

@@ -6,9 +6,12 @@ namespace MyPHP\UI;
 use Closure;
 
 /**
- * Native UI for a window: a view of the app's state, built every frame, as
- * SwiftUI's body: a closure returning the root View (VStack, Text…), or a
- * view file (Content::file). One Content can serve several windows. A
+ * Native UI for a window: a view of the app's state, as SwiftUI's body: a
+ * closure returning the root View (VStack, Text…), or a view file
+ * (Content::file). The root runs again each frame that is built (none is
+ * built while nothing changes, nor for a frame that only paints again);
+ * its closure children are built only when what they read changed, else
+ * placed again as they were (docs/ui/performance.md). One Content can serve several windows. A
  * closure taking a Context builds with the engine's builder, @internal: the
  * framework's own windows.
  */
