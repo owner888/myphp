@@ -10,6 +10,7 @@ use MyPHP\UI\{Content, Context, Key, Node};
 use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePickerComponents, Axis, Alignment, ToggleStyle, HorizontalAlignment, GridItem, GeometryProxy, ScrollViewProxy, UnitPoint, Binding, ListStyle, ButtonRole;
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
+require __DIR__ . '/../src/UI/Declarative/functions.php'; // regression: plain `require` (as Composer autoload.files uses) must be idempotent
 
 $s = new class {
     public int $n = 0;
