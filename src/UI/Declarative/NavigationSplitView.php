@@ -82,11 +82,11 @@ final class NavigationSplitView extends View
                   if ($title !== null) { (new Text($title))->font(\Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); } // a toolbar's title, 15 bold on the Mac
                   if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
                 $c->end();
-            } elseif ($items !== null) { // a title bar of the system's: the toolbar a row under it
-                $c->open(new Node(Node::CONTAINER, Node::ROW))->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(6, 12);
-                  $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items);
+            } elseif ($title !== null || $items !== null) { // a title bar of the system's: the detail's title and toolbar a row under it
+                $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, 44)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, 20, 0, 20);
+                  if ($title !== null) { (new Text($title))->font(\Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); }
+                  if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
                 $c->end();
-                $c->attach(new Node(Node::BOX, 0, 0, 0, 0, 1, 0, null, $t->border));
             }
             View::renderAll($c, $env->along(Node::COLUMN)->with(['toolbarTaken' => $toolbar !== null]), $views);
           $c->end();

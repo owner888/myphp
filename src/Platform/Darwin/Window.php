@@ -49,6 +49,7 @@ final class Window implements Platform\Window, Platform\NativeTips
     /** @internal the window's content view, which holds the page or the native view, and the material behind it (setVibrancy), as mygo's: AppKit draws a broken title bar for a web inspector docked in the window's frame view */
     public $container = null;
     private $effect = null;
+    private $toolbar = null;
     /** The view of the nodes painted under the materials (Node::belowMaterials), over the videos, made as a frame first has some; whether it shows any, and whether it is to be put in its place among the views. */
     private $under = null;
     private bool $underShown = false, $underNew = false;
@@ -284,6 +285,10 @@ final class Window implements Platform\Window, Platform\NativeTips
                     if ($win->w->page() === null) { ObjC::msg('v:', $win->view, 'draw'); } // a frame at the new size now, before this step of the resize is committed, as mygo's setFrameSize: asks: asked for later, it would come a step late and the layer would stretch the last one meanwhile
                 }
                 if ($event === 'enterFullScreen' || $event === 'leaveFullScreen') {
+                    if ($win->toolbar !== null) {
+                        ObjC::msg('v:b', $win->toolbar, 'setVisible:', $event === 'leaveFullScreen');
+                        if ($win->w->page() === null && $win->view !== null) { ObjC::msg('v:', $win->view, 'draw'); }
+                    }
                     $win->blackOut($event === 'enterFullScreen' && $win->w->blackOutAsked());
                 }
                 if ($event === 'blur') {
@@ -331,6 +336,18 @@ final class Window implements Platform\Window, Platform\NativeTips
                 'windowWillMove:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $note) => \MyPHP\Native\WindowDrag::the()->willMove(Mem::addr(ObjC::msg('p:', $note, 'object')))], // the window server begins to move it: a drag region's press is its
                 'windowDidMiniaturize:' => ['v@:@', 'v(ppp)', $fire('minimize')],
                 'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
+                'window:willUseFullScreenPresentationOptions:' => ['Q@:@Q', 'L(pppL)', function ($self, $cmd, $ns, int $proposed): int {
+                    $win = self::$open[Mem::addr($ns)] ?? null;
+                    // Auto-hide the empty NSToolbar in full screen (NSApplicationPresentationAutoHideToolbar = 1 << 11)
+                    // so AppKit does not pin an opaque blank toolbar window over our full-size Metal view.
+                    return ($win?->toolbar !== null && ($proposed & 4) !== 0) ? ($proposed | (1 << 11)) : $proposed;
+                }],
+                'windowWillEnterFullScreen:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($of) {
+                    $win = $of($note);
+                    if ($win?->toolbar !== null) {
+                        ObjC::msg('v:b', $win->toolbar, 'setVisible:', false);
+                    }
+                }],
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
                 'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
                 // A window showing a video goes in and out of full screen by its own animation, as video players do (IINA): AppKit's
@@ -402,6 +419,10 @@ final class Window implements Platform\Window, Platform\NativeTips
             ObjC::msg('v:', $m['view'], 'release');
         }
         $this->materials = [];
+        if ($this->toolbar !== null) {
+            ObjC::msg('v:', $this->toolbar, 'release');
+            $this->toolbar = null;
+        }
     }
 
     /** Shows the window and gives it the keyboard; a modal child shows as a sheet of its parent, another stays above it; a flyout takes the keyboard only when focusable, and a panel or a flyout never activates the app. */
@@ -788,6 +809,7 @@ final class Window implements Platform\Window, Platform\NativeTips
             $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
             ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
             ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
+            $this->toolbar = $tb;
         }
         if ($o->minWidth > 0 || $o->minHeight > 0) { $this->setMinimumSize($o->minWidth, $o->minHeight); }
         if ($o->maxWidth > 0 || $o->maxHeight > 0) { $this->setMaximumSize($o->maxWidth, $o->maxHeight); }
@@ -854,8 +876,15 @@ final class Window implements Platform\Window, Platform\NativeTips
      */
     public function titleBar(): array
     {
-        if (!$this->hiddenTitleBar || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) {
+        if (!$this->hiddenTitleBar) {
             return ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
+        }
+        if (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN) {
+            // In full screen, traffic lights hide into macOS's slide-down menu bar, while a hiddenInset window
+            // keeps its unified SwiftUI toolbar row (sidebar toggle, navigationTitle, toolbar items).
+            return $this->toolbar !== null
+                ? ['height' => 48.0, 'left' => 8.0, 'right' => 0.0, 'controls' => 24.0]
+                : ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
         }
         $zoom = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 2);
         $z = ObjC::msg('r:', $zoom, 'frame');

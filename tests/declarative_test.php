@@ -24,6 +24,21 @@ same($btnCheck->rect($rowKids[0])[3], $btnCheck->rect($rowKids[1])[3], 'bordered
 same($btnCheck->rect($rowKids[0])[2], $btnCheck->rect($rowKids[1])[2], 'bordered and borderedProminent buttons with same text have identical width');
 same($btnCheck->rect($rowKids[0])[3], $btnCheck->rect($rowKids[2])[3], 'icon+title bordered button matches plain button height');
 
+// Full-screen hiddenInset NavigationSplitView / TabView(.sidebarAdaptable) keeps sidebar header, toggle, navigationTitle and toolbar visible.
+$fsApp = new class { public string $tab = 'lab'; };
+$fsH = new Headless(function (Context $c) use ($fsApp): void {
+    $c->titleBar = ['height' => 48.0, 'left' => 8.0, 'right' => 0.0, 'controls' => 24.0];
+    Content::render(fn() => TabView(selection: $fsApp->tab)(
+        Tab('Lab', systemImage: 'chart.xyaxis.line', value: 'lab')(
+            Text('Body')->navigationTitle('Backtest Lab')->toolbar(Button('Sync', systemImage: 'arrow.clockwise'))
+        ),
+        Tab('Sweep', systemImage: 'cpu', value: 'sweep')(Text('Sweep')),
+    )->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c);
+}, 1470, 923);
+$fsH->frame(2);
+check($fsH->byText('Backtest Lab') !== null && $fsH->byLabel('Hide Sidebar') !== null && $fsH->byLabel('Sync') !== null, 'full-screen hiddenInset keeps navigationTitle, sidebar toggle and toolbar');
+check($fsH->rect($fsH->byText('Lab'))[1] >= 48.0, 'full-screen sidebar items start below the 48pt unified toolbar row');
+
 $s = new class {
     public int $n = 0;
     public bool $wifi = false;
