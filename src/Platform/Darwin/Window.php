@@ -867,9 +867,12 @@ final class Window implements Platform\Window, Platform\NativeTips
         $frame = ObjC::msg('r:', $this->ns, 'frame');
         $content = ObjC::msg('r:', $this->ns, 'contentLayoutRect');
         $height = round($frame->h - $content->y - $content->h);
-        $c = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'frame'); // in the title bar's view, from its bottom
-        $bar = ObjC::msg('r:', ObjC::msg('p:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'superview'), 'frame');
-        return ['height' => $height, 'left' => ceil($z->x + $z->w), 'right' => 0.0, 'controls' => $bar->h - $c->y - $c->h / 2]; // controls: the window controls' middle, from the top, which the title bar may be taller than
+        $close = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0);
+        $cb = ObjC::msg('r:', $close, 'bounds');
+        $zb = ObjC::msg('r:', $zoom, 'bounds');
+        $center = ObjC::msg('q:qp', $close, 'convertPoint:toView:', ObjC::point($cb->w / 2, $cb->h / 2), null);
+        $rightEdge = ObjC::msg('q:qp', $zoom, 'convertPoint:toView:', ObjC::point($zb->w, 0), null);
+        return ['height' => $height, 'left' => ceil($rightEdge->x), 'right' => 0.0, 'controls' => $frame->h - $center->y]; // controls: exact window-top distance to traffic lights' vertical center
     }
 
     /**

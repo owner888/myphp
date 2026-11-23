@@ -39,9 +39,9 @@ final class NavigationSplitView extends View
         $inset = $bar['height'] > 0;
         $barH = ($bar['controls'] ?? 0) > 0 ? 2 * $bar['controls'] : $bar['height']; // a row with the window controls in its middle
         $width = $this->sidebar->columnWidth ?? 220.0;
-        // The sidebar's button, a circle as macOS 26's: at the sidebar's end as it shows, after the window controls as it hides, gliding between.
-        $button = 36.0;
-        [$open, $closed] = [$width - 10 - $button, $bar['left'] + 16];
+        // The sidebar's toggle button, as AppKit's NSToolbar toggleSidebar: quiet borderless icon aligned with traffic lights.
+        $button = 28.0;
+        [$open, $closed] = [$width - 12 - $button, $bar['left'] + 12];
         $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->alignItems(Node::STRETCH);
           $visible = !$this->hasVisibility || $this->visibility !== \NavigationSplitViewVisibility::detailOnly;
           $shown = $c->animate($n, 'sidebar', $visible ? 1 : 0, 0.25);
@@ -94,10 +94,15 @@ final class NavigationSplitView extends View
         if ($this->hasVisibility && $inset) { // the sidebar's button, next to the window controls whether it shows or not
             $label = Localized::string($visible ? 'Hide Sidebar' : 'Show Sidebar', $env);
             $c->key('sidebar toggle');
-            $toggle = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->absolute()->left($closed + ($open - $closed) * $shown)->top(($barH - $button) / 2)->size($button, $button)->radius($button / 2)
-                ->label($label)->tooltip($label)->center()
-                ->material(new \MyPHP\Plugins\Glass\Glass(tint: $t->surface, tintAlpha: 0.6, interactive: true)); // Liquid Glass, the Glass plugin's, tinted as the surface: under a vibrant sidebar nothing myphp painted shows through to frost (the developer asked for it less clear); it grows as pressed and lights up under the pointer
-              $c->image(Image::symbol('sidebar.left', 18, $t->text), 18, 18);
+            $toggle = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->absolute()
+                ->left($closed + ($open - $closed) * $shown)->top(($barH - $button) / 2)->size($button, $button)->radius(6)
+                ->label($label)->tooltip($label)->center();
+            $hovered = $c->hovered($toggle);
+            if ($hovered) {
+                $pressed = $c->runtime?->input->mouseDown ?? false;
+                $toggle->background($t->dark ? 0xffffff : 0x000000, $pressed ? ($t->dark ? 0.13 : 0.10) : ($t->dark ? 0.08 : 0.05));
+            }
+              $c->image(Image::symbol('sidebar.left', 16, $hovered ? $t->text : $t->textMuted), 16, 16);
             $c->end();
             if ($c->clicked($toggle)) { $this->visibility = $visible ? \NavigationSplitViewVisibility::detailOnly : \NavigationSplitViewVisibility::all; }
         }
