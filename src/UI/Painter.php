@@ -1427,6 +1427,7 @@ final class Painter
             foreach ($e->kids as $k) { $walk($k, false); }
         };
         $walk($n, true);
+        $walk = null;
         $list->setOpacity($saved);
     }
 
@@ -1466,6 +1467,7 @@ final class Painter
             foreach ($n->kids as $k) { $move($k); }
         };
         $move($e);
+        $move = null;
         $world = $list->world();
         self::paint($e, $list, $text, $t, $rt);
         $list->setWorld($world);

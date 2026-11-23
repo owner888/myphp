@@ -173,7 +173,7 @@ final class Text implements TextPainter
         $s = $this->ct->scale();
         $dx = round($x * $s) / $s; $dy = round($y * $s) / $s; // snapped to the device grid
         $pw = (int)round($w * $s); $ph = (int)round($h * $s);
-        if ($pw <= 0 || $ph <= 0 || $pw > 4096 || $ph > 4096) { return null; }
+        if ($pw <= 0 || $ph <= 0 || $pw >= $this->atlas->w || $ph >= $this->atlas->h) { return null; }
         // Turned by a sixteenth of a degree at the finest, in a mask as large as it then covers, around the same center.
         $rotate = fmod($rotate, 360); if ($rotate < 0) { $rotate += 360; }
         $rotate = round($rotate * 16) / 16; if ($rotate == 360) { $rotate = 0.0; }
@@ -182,6 +182,7 @@ final class Text implements TextPainter
             $sin = abs(sin($rotate * M_PI / 180)); $cos = abs(cos($rotate * M_PI / 180));
             $cw = (int)ceil($pw * $cos + $ph * $sin) + 2; $ch = (int)ceil($pw * $sin + $ph * $cos) + 2;
             $cw += ($cw - $pw) & 1; $ch += ($ch - $ph) & 1; // of the same parity, so that the center stays on the grid
+            if ($cw >= $this->atlas->w || $ch >= $this->atlas->h) { return null; }
         }
         $key = "s{$svg->id}/{$pw}x{$ph}/$rotate";
         $slot = $this->atlas->get($key);
@@ -249,7 +250,7 @@ final class Text implements TextPainter
             $n = match ($c[0]) { Path::MOVE, Path::LINE => 1, Path::QUAD => 2, Path::CUBE => 3, default => 0 };
             for ($i = 0; $i < $n; $i++) { $key .= pack('VV', (int)round(($c[1 + 2 * $i] - $x0) * $s * 4) & 0xffffffff, (int)round(($c[2 + 2 * $i] - $y0) * $s * 4) & 0xffffffff); }
         }
-        if ($w < 4096 && $h < 4096) { // the atlas keeps a pixel of padding beside each bitmap
+        if ($w < $this->atlas->w && $h < $this->atlas->h) { // the atlas keeps a pixel of padding beside each bitmap
             return [$this->pathMask($key, $path, $width, $x0, $y0, $w, $h)];
         }
         $t = self::PATH_TILE; $quads = [];

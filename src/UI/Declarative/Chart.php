@@ -75,22 +75,24 @@ final class Chart extends View
     }
 
     /** The marks of the content, flat. @return list<ChartMark> */
+    private static function collectMark(mixed $m, array &$out): void
+    {
+        if ($m === null) { return; }
+        if ($m instanceof ChartMark) { $out[] = $m; return; }
+        if (is_array($m)) { foreach ($m as $x) { self::collectMark($x, $out); } return; }
+        throw new \LogicException('a Chart holds marks (BarMark, LineMark, AreaMark, PointMark, RuleMark, SectorMark), not ' . get_debug_type($m));
+    }
+
     private function marks(): array
     {
         $out = [];
-        $add = function (mixed $m) use (&$out, &$add): void {
-            if ($m === null) { return; }
-            if ($m instanceof ChartMark) { $out[] = $m; return; }
-            if (is_array($m)) { foreach ($m as $x) { $add($x); } return; }
-            throw new \LogicException('a Chart holds marks (BarMark, LineMark, AreaMark, PointMark, RuleMark, SectorMark), not ' . get_debug_type($m));
-        };
         foreach ($this->content as $item) {
             if ($item instanceof Closure) {
                 if ($this->data === null) { throw new \LogicException('Chart()(fn($item) => …) takes the items: Chart($data)(fn($item) => BarMark(…))'); }
-                foreach ($this->data as $key => $d) { $add($item($d, $key)); }
+                foreach ($this->data as $key => $d) { self::collectMark($item($d, $key), $out); }
                 continue;
             }
-            $add($item);
+            self::collectMark($item, $out);
         }
         return $out;
     }

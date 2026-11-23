@@ -193,4 +193,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(count($slots) < count($quads), 'the tiles it covers whole share one mask: ' . count($slots) . ' masks');
     $seen = $text->pathQuad($big, 0, fn(float $x, float $y, float $w, float $h): bool => $x < 300 && $y < 300);
     same(4, count($seen), 'only the tiles that show');
+    // Regression: a path between 2048 and 4095 device pixels (e.g. 1051pt at 2x = 2103px) must tile against Atlas(2048, 2048)
+    $mid = (new \MyPHP\UI\Path)->moveTo(0, 0)->lineTo(1051, 165);
+    check(count($text->pathQuad($mid, 2.0)) > 1, 'path between 2048px and 4096px tiles against 2048px atlas without throwing');
 }

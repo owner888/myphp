@@ -79,3 +79,17 @@ foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(__DIR__ 
     }
 }
 same([], $bad, 'draw and drawOver callbacks are static and take their node as their third argument');
+
+// Chart marks collection leaves 0 reference cycles (regression: $add closure capturing &$add leaked Chart per frame)
+$chartState = new class { public float $v = 1.0; };
+$hc = new Headless(\MyPHP\UI\Content::view(fn() => \Chart()(
+    \LinePlot(x: [0.0, 1.0], y: [$chartState->v, 2.0])->foregroundStyle(\Color::secondary->opacity(0.55)),
+)->frame(height: 160))->view, 1200, 400);
+$hc->frame(3);
+gc_collect_cycles();
+gc_disable();
+for ($i = 0; $i < 30; $i++) { $chartState->v = 1.0 + ($i % 4); $hc->frame(); }
+gc_enable();
+same(0, gc_collect_cycles(), 'Chart rebuilds leave 0 reference cycles');
+
+

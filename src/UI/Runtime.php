@@ -2932,6 +2932,7 @@ final class Runtime
         };
         foreach ($top as $id) { $add($id); }
         foreach ($order as $id) { $add($id); } // popovers of anchors that cycle
+        $add = null;
         return $out;
     }
 
