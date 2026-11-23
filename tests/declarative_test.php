@@ -12,6 +12,18 @@ use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePicker
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 require __DIR__ . '/../src/UI/Declarative/functions.php'; // regression: plain `require` (as Composer autoload.files uses) must be idempotent
 
+// SwiftUI ButtonStyle.bordered and ButtonStyle.borderedProminent share identical outer height (plain title and icon+title).
+$btnCheck = new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 8)(
+    Button('15m', action: fn() => null)->buttonStyle(\ButtonStyle::bordered),
+    Button('15m', action: fn() => null)->buttonStyle(\ButtonStyle::borderedProminent),
+    Button('Sync', action: fn() => null, systemImage: 'arrow.clockwise')->buttonStyle(\ButtonStyle::bordered),
+), $c), 400, 100);
+$btnCheck->frame(2);
+$rowKids = $btnCheck->root->kids[0]->kids;
+same($btnCheck->rect($rowKids[0])[3], $btnCheck->rect($rowKids[1])[3], 'bordered and borderedProminent buttons have identical height');
+same($btnCheck->rect($rowKids[0])[2], $btnCheck->rect($rowKids[1])[2], 'bordered and borderedProminent buttons with same text have identical width');
+same($btnCheck->rect($rowKids[0])[3], $btnCheck->rect($rowKids[2])[3], 'icon+title bordered button matches plain button height');
+
 $s = new class {
     public int $n = 0;
     public bool $wifi = false;

@@ -36,8 +36,13 @@ final class Button extends View
             $t = $env->theme;
             $prominent = $style === \ButtonStyle::borderedProminent;
             $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->alignItems(Node::CENTER);
-            if ($style !== \ButtonStyle::borderless && $style !== \ButtonStyle::plain) { // the face of a button() around the label: padded, its surface and border, or the accent
-                $n->padding($t->space(1.5), $t->space(3.5))->radius($t->radius);
+            if ($style !== \ButtonStyle::borderless && $style !== \ButtonStyle::plain) { // the face of a button() around the label: same outer height as makeButtonNode
+                $edge = 2.0;
+                $py = $t->space(1.5);
+                $px = $t->space(3.5);
+                $textH = $c->metrics()->measure('X', $t->fontSize)[1];
+                $minH = $t->controlHeight > 0 ? $t->controlHeight : ($textH + 2 * $py + $edge);
+                $n->padding($py, ($t->controlHeight > 0 ? 20.0 : $px) + $edge / 2)->minHeight($minH)->radius($t->controlHeight > 0 ? $minH / 2 : $t->radius);
                 $n->color = $prominent ? $t->accent : ($c->hovered($n) ? $t->surfaceHover : $t->surface);
                 $n->bordered = !$prominent;
             } elseif ($env->labelStyle === \LabelStyle::iconOnly) { // an icon of a toolbar: room around it to click, a face while hovered, as AppKit's toolbar items
@@ -88,7 +93,7 @@ final class Button extends View
         $h = max($h, $metrics->measure('X', $size)[1]);
         [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
         $bordered = !$primary;
-        $edge = $bordered ? 2.0 : 0.0;
+        $edge = 2.0; // SwiftUI bordered & borderedProminent share identical outer dimensions
         [$py, $px] = [$t->space(1.5), $t->space(3.5)];
         if ($t->controlHeight > 0) {
             $py = max($py, ($t->controlHeight - $h - $edge) / 2);

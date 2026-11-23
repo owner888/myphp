@@ -2519,22 +2519,29 @@ final class Context
      * its end, a badge say. Chosen, it is the accent while the sidebar has
      * the focus and gray otherwise, as AppKit's.
      */
-    public function sidebarItem(string $id, string $label, string|SVG|Closure|null $icon = null, ?Closure $trailing = null): Node
+    public function sidebarItem(string $id, string $label, string|SVG|Closure|null $icon = null, ?Closure $trailing = null, ?int $tint = null): Node
     {
         $t = $this->theme;
+        $accent = $tint ?? $t->accent;
         $sb = &$this->sidebars[count($this->sidebars) - 1];
         $chosen = $sb['selected'] === $id;
-        $focused = $this->focused($sb['node']);
         $sb['items'][] = $id; $sb['labels'][] = $label;
-        $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->padding($t->space(1.5), $t->space(2))->radius($t->radius)->alignItems(Node::CENTER)
+        $pillColor = $t->dark ? 0xffffff : 0x000000;
+        $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? $pillColor : null)->padding($t->space(1.5), $t->space(2.5))->radius(8)->alignItems(Node::CENTER)
             ->role(Role::TREE_ITEM)->level($sb['depth'] + 1)->checked($chosen);
+        if ($chosen) {
+            $n->bgAlpha = $t->dark ? 0.11 : 0.08;
+        }
         $n->choosable = true;
         if ($chosen) { $sb['chosen'] = $n; }
-        if (!$chosen && $this->hovered($n)) { $n->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
-        $fg = $chosen && $focused ? $t->accentText : $t->text;
-          if ($icon instanceof SVG) { $this->icon($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
-          elseif ($icon instanceof Closure) { $this->image($icon($chosen && $focused ? $t->accentText : $t->accent), 16, 16)->role(Role::NONE); }
-          elseif ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
+        if (!$chosen && $this->hovered($n)) {
+            $n->color = $pillColor;
+            $n->bgAlpha = ($this->runtime?->input->mouseDown ?? false) ? ($t->dark ? 0.10 : 0.07) : ($t->dark ? 0.06 : 0.04);
+        }
+        $fg = $t->text;
+          if ($icon instanceof SVG) { $this->icon($icon, 16, $accent); }
+          elseif ($icon instanceof Closure) { $this->image($icon($accent), 16, 16)->role(Role::NONE); }
+          elseif ($icon !== null) { $this->text($icon, 16, $accent)->role(Role::NONE); }
           $this->text($label, $t->fontSize, $fg)->singleLine();
           if ($trailing !== null) { $this->spacer(); $trailing(); }
         $this->end();

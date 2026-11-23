@@ -9,7 +9,7 @@ spl_autoload_register(static function (string $class): void {
             require $file;
         }
     }
-});
+}, true, true);
 
 // PHP 8.5 array_first / array_last polyfills when running on PHP 8.4:
 if (!function_exists('array_first')) {

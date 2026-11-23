@@ -48,21 +48,21 @@ final class NavigationSplitView extends View
           $w = $width * $shown; // it slides out to the left as it hides
           $c->open(new Node(Node::CONTAINER, Node::ROW))->size($w, 0)->shrink(0)->alignItems(Node::STRETCH)->clip();
             $side = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->size($width, 0)->shrink(0)->margin(0, 0, 0, $w - $width);
-            if (!$vibrant) { $side->background($t->surface); }
+            if (!$vibrant) { $side->background($t->dark ? \MyPHP\UI\Theme::mix($t->background, 0x000000, 0.22) : $t->surface); }
               if ($inset) { $c->attach(new Node(Node::BOX, 0, 0, 0, 0, $barH))->fillWidth()->shrink(0)->dragWindow(); } // under the window controls: the window moves by it
               if ($asList) { // a list of the app's data, or one with modifiers (searchable, contextMenu): the ListView itself in the sidebar, as SwiftUI's
                   $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
                     $list = $this->sidebar->render($c, $env->along(Node::COLUMN));
                   $c->end();
-                  if ($list !== null && $vibrant) { $list->color = null; }
+                  if ($list !== null) { $list->color = null; }
               } else {
                   $list = $c->sidebar($chosen, function () use ($c, $env): void { self::items($c, $env, $this->sidebar->content()); }, $width)->grow(1);
-                  if ($vibrant) { $list->color = null; }
+                  $list->color = null;
               }
             $c->end();
           $c->end();
           if (!$asList && $chosen !== (string)($selection ?? '')) { $selection = self::tagOf($this->sidebar->content(), $chosen) ?? $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar, the tag itself (an int id stays an int, as SwiftUI's Hashable): before the detail, whose actions may choose too
-          if ($w > 0) { $c->attach(new Node(Node::BOX, 0, 0, 0, 1, 0, 0, null, $t->border)); }
+          if ($w > 0) { $c->attach(new Node(Node::BOX, 0, 0, 0, 1, 0, 0, null, $t->dark ? 0x000000 : $t->border)); }
           $detail = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->minWidth(0)->minHeight(0)->alignSelf(Node::STRETCH);
             $views = is_array($this->detail) ? $this->detail : [$this->detail];
             $title = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['title'] ?? null) : null;
@@ -71,14 +71,17 @@ final class NavigationSplitView extends View
             // A background of the detail reaches under the title bar too, as SwiftUI's backgrounds go into the safe area.
             $bg = null;
             if (count($views) === 1 && $views[0] instanceof View) { foreach ($views[0]->mods as [$name, $m]) { if ($name === 'background') { $bg = $m[0]; } } }
-            if ($bg !== null && $bg->alpha > 0) { $detail->background($bg->rgb($env), $bg->alpha); }
-            if ($inset) { // the title bar's room: the detail's navigationTitle, left of the window controls when the sidebar hides
+            if ($bg !== null) {
+                if ($bg->alpha > 0) { $detail->background($bg->rgb($env), $bg->alpha); }
+            } elseif ($vibrant) {
+                $detail->background($t->background);
+            }
+            if ($inset) { // the title bar's room: the detail's navigationTitle, left of the window controls when the sidebar hides (no bottom border line, as macOS SwiftUI)
                 $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, $bar['right'] + 20, 0, 20 + (1 - $shown) * ($this->hasVisibility ? $closed + $button + 12 - 20 : $bar['left'])) // right of the button as the sidebar hides
                   ->dragWindow();
                   if ($title !== null) { (new Text($title))->font(\Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); } // a toolbar's title, 15 bold on the Mac
                   if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
                 $c->end();
-                $c->attach(new Node(Node::BOX, 0, 0, 0, 0, 1, 0, null, $t->border));
             } elseif ($items !== null) { // a title bar of the system's: the toolbar a row under it
                 $c->open(new Node(Node::CONTAINER, Node::ROW))->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(6, 12);
                   $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items);
@@ -142,7 +145,7 @@ final class NavigationSplitView extends View
                 default => throw new \LogicException('a sidebar item is a Label or a Text, not ' . get_debug_type($v)),
             };
             $badge = $v->badgeValue === null ? null : static fn() => $c->badge(is_int($v->badgeValue) ? number_format($v->badgeValue) : Localized::string($v->badgeValue, $env));
-            $item = $c->sidebarItem((string)$v->tagValue, Localized::string($title, $env), $icon, $badge);
+            $item = $c->sidebarItem((string)$v->tagValue, Localized::string($title, $env), $icon, $badge, $env->tint?->rgb($env));
             foreach ($v->events as [$kind, $a]) { if ($kind === 'help') { $item->tooltip(Localized::string($a, $env)); } } // help(), as an item's
         }
     }
