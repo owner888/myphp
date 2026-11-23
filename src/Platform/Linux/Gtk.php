@@ -83,6 +83,7 @@ final class Gtk
 
             void* gtk_window_new(int);
             void gtk_window_set_title(void*, const char*);
+            gboolean gtk_window_set_default_icon_from_file(const char*, void**);
             void gtk_window_set_default_size(void*, int, int);
             void gtk_window_resize(void*, int, int);
             void gtk_window_move(void*, int, int);

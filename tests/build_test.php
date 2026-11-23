@@ -314,6 +314,7 @@ for ($off = 8; $off < strlen($icns); $off += $size) {
 }
 same(['ic11' => 32, 'ic12' => 64, 'ic07' => 128, 'ic13' => 256, 'ic08' => 256, 'ic14' => 512, 'ic09' => 512, 'ic10' => 1024], $kinds, 'every entry a PNG of its size, without icp4 and icp5');
 $icon = Icns::defaultIcon();
+same('icns', substr(Icns::fromPng(Icns::png(64, str_repeat("\x10\x20\x30\xff", 64 * 64))), 0, 4), 'Icns::fromPng decodes in PHP on every platform');
 same(["\x89PNG\r\n\x1a\n", 1024, 1024], [substr($icon, 0, 8), unpack('N', $icon, 16)[1], unpack('N', $icon, 20)[1]], 'the icon myphp init gives');
 
 // S3: the PUT Object example of the Signature Version 4 documentation, the URLs of buckets.
@@ -481,10 +482,9 @@ file_put_contents($stubLog, '');
 Upload::publish(['updates' => ['github' => 'o/r']], '1.3.0-beta.1+7', ["$d/update-darwin-arm64.json"], 'notes', 'ua', 'myphp.json', fn() => null);
 same('gh release create v1.3.0-beta.1+7 --repo o/r --draft --title v1.3.0-beta.1+7 --notes notes --prerelease', file($stubLog, FILE_IGNORE_NEW_LINES)[1], 'a pre-release version, a prerelease (only apps that take prereleases update to it)');
 // myphp build: the app of each platform in its directory, signed.
-file_put_contents($stubLog, '');
 $root = bldDir();
 $myphp('init', "$root/b");
-unlink("$root/b/resources/icon.png"); // ImageIO decodes it, on macOS
+file_put_contents("$root/b/resources/icon.png", Icns::png(64, str_repeat("\x10\x20\x30\xff", 64 * 64))); // decoded in PHP on every platform
 bldWrite("$root/b", ['resources/darwin-arm64/bin/tool' => 'arm', 'resources/darwin-amd64/bin/tool' => 'amd', 'resources/notes.txt' => 'notes']);
 $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-launcher', 'exec', '-skip-dmg', '-platform', 'darwin/arm64,darwin/amd64', "$root/b"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
 $out = stream_get_contents($pipes[1]);
@@ -559,38 +559,66 @@ foreach (['"a" = "b"' => 'line 1: want a ; after', "\n\"a\" = \"b" => 'line 2: w
 
 // myphp dev: the development app built, launched, relaunched as App::relaunch() asks, hot reloaded on a saved view file (the file MYPHP_HOT_RELOAD names lists it), restarted on a saved entry (its classes, which a hot reload cannot take), built again on another change, until it quits.
 $stub = bldDir();
-file_put_contents("$stub/cc", "#!/bin/sh\nwhile [ \$# -gt 0 ]; do if [ \"\$1\" = -o ]; then printf '#!/bin/sh\\nexec sh \"\$DEVAPP\" \"\$0\"\\n' > \"\$2\"; chmod +x \"\$2\"; fi; shift; done\n");
-file_put_contents("$stub/codesign", "#!/bin/sh\nexit 0\n");
+file_put_contents("$stub/cc", <<<'SH'
+#!/bin/sh
+while [ $# -gt 0 ]; do if [ "$1" = -o ]; then printf '#!/bin/sh
+exec sh "$DEVAPP" "$0"
+' > "$2"; chmod +x "$2"; fi; shift; done
+
+SH);
+file_put_contents("$stub/codesign", "#!/bin/sh
+exit 0
+");
 chmod("$stub/cc", 0755); chmod("$stub/codesign", 0755);
 // The app: asks to be relaunched, then runs until the change replaces it, then quits.
-file_put_contents("$stub/app.sh", "echo \"\$MYPHP_DEV \$MYPHP_ENV \$(pwd)\" >> \"\$DEVLOG\"\nn=\$(wc -l < \"\$DEVLOG\")\n[ \$n -eq 1 ] && exit 75\n[ \$n -eq 2 ] || [ \$n -eq 3 ] && { sleep 5; exit 3; }\nexit 0\n");
-$root = bldDir();
+file_put_contents("$stub/app.sh", <<<'SH'
+#!/bin/sh
+echo "$MYPHP_DEV $MYPHP_ENV $(pwd)" >> "$DEVLOG"
+n=$(wc -l < "$DEVLOG")
+[ $n -eq 1 ] && exit 75
+[ $n -eq 2 ] || [ $n -eq 3 ] && { sleep 5; exit 3; }
+exit 0
+
+SH);
+chmod("$stub/app.sh", 0755);
 $myphp('init', '-name', 'Demo', "$root/d");
-unlink("$root/d/resources/icon.png");
+file_put_contents("$root/d/resources/icon.png", Icns::png(64, str_repeat("\x10\x20\x30\xff", 64 * 64)));
 file_put_contents("$root/d/resources/data.txt", 'data');
-file_put_contents("$root/d/view.php", "<?php\nreturn fn() => null;\n");
-$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'dev'], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, "$root/d",
-    ['DEVAPP' => "$stub/app.sh", 'DEVLOG' => "$stub/log", 'PATH' => "$stub:" . getenv('PATH')] + getenv());
-for ($i = 0; $i < 100 && substr_count((string)@file_get_contents("$stub/log"), "\n") < 2; $i++) { usleep(100_000); }
+file_put_contents("$root/d/view.php", "<?php
+return fn() => null;
+");
+$devEnv = ['DEVAPP' => "$stub/app.sh", 'DEVLOG' => "$stub/log", 'PATH' => "$stub:" . getenv('PATH')] + (PHP_OS_FAMILY === 'Linux' ? ['MYPHP_PHP' => "$stub/app.sh"] : []) + getenv();
+$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'dev'], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, "$root/d", $devEnv);
+for ($i = 0; $i < 100 && substr_count((string)@file_get_contents("$stub/log"), "
+") < 2; $i++) { usleep(100_000); }
 usleep(300_000);
-file_put_contents("$root/d/view.php", "// changed\n", FILE_APPEND);
+file_put_contents("$root/d/view.php", "// changed
+", FILE_APPEND);
 for ($i = 0; $i < 30 && !is_file("$root/d/.myphp/hot-reload"); $i++) { usleep(100_000); }
-check(str_starts_with((string)@file_get_contents("$root/d/.myphp/hot-reload"), "$root/d/view.php\n# "), 'a saved view file: a hot reload, the file named, no build');
+check(str_starts_with((string)@file_get_contents("$root/d/.myphp/hot-reload"), "$root/d/view.php
+# "), 'a saved view file: a hot reload, the file named, no build');
 usleep(300_000);
-file_put_contents("$root/d/app.php", "\n// changed\n", FILE_APPEND);
-for ($i = 0; $i < 50 && substr_count((string)@file_get_contents("$stub/log"), "\n") < 3; $i++) { usleep(100_000); }
+file_put_contents("$root/d/app.php", "
+// changed
+", FILE_APPEND);
+for ($i = 0; $i < 50 && substr_count((string)@file_get_contents("$stub/log"), "
+") < 3; $i++) { usleep(100_000); }
 usleep(300_000);
 file_put_contents("$root/d/resources/data.txt", 'data!');
 $out = stream_get_contents($pipes[1]);
 same(0, proc_close($p), 'myphp dev ends as the app quits: ' . $out);
 check(str_contains($out, 'Built Demo Dev') && str_contains($out, 'Relaunched Demo Dev') && str_contains($out, 'Reloaded Demo Dev (view.php changed)') && str_contains($out, 'Restarting: app.php changed, which a hot reload cannot take') && str_contains($out, 'Restarted Demo Dev')
-    && str_contains($out, 'Rebuilt Demo Dev (resources/data.txt changed)') && str_contains($out, 'Demo Dev quit'), 'built, relaunched, hot reloaded, restarted for the entry, rebuilt, quit: ' . str_replace("\n", ' | ', $out));
+    && str_contains($out, 'Rebuilt Demo Dev (resources/data.txt changed)') && str_contains($out, 'Demo Dev quit'), 'built, relaunched, hot reloaded, restarted for the entry, rebuilt, quit: ' . str_replace("
+", ' | ', $out));
 same(array_fill(0, 4, "1 development $root/d"), file("$stub/log", FILE_IGNORE_NEW_LINES), 'run in the project, told it is under myphp dev');
-$devApp = glob("$root/d/.myphp/dev/darwin-*/Demo Dev.app")[0] ?? '';
-same(['com.example.demo.dev', 'Demo Dev', 'data!'], [\MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleIdentifier'], \MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleName'], file_get_contents("$devApp/Contents/Resources/data.txt")], 'the development app: its own identifier and name, with the resources');
-
-
-
+if (PHP_OS_FAMILY === 'Linux') {
+    $devApp = glob("$root/d/.myphp/dev/linux-*/demo-dev")[0] ?? '';
+    $info = json_decode((string)file_get_contents("$devApp/info.json"), true);
+    same(['com.example.demo.dev', 'Demo Dev', 'demo-dev.png', 'data!'], [$info['CFBundleIdentifier'] ?? null, $info['CFBundleName'] ?? null, $info['MyPHPIcon'] ?? null, file_get_contents("$devApp/data.txt")], 'the Linux development app: its own identifier, name, icon and resources');
+} else {
+    $devApp = glob("$root/d/.myphp/dev/darwin-*/Demo Dev.app")[0] ?? '';
+    same(['com.example.demo.dev', 'Demo Dev', 'icns', 'data!'], [\MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleIdentifier'], \MyPHP\Native\Plist::parse(file_get_contents("$devApp/Contents/Info.plist"))['CFBundleName'], substr((string)file_get_contents("$devApp/Contents/Resources/AppIcon.icns"), 0, 4), file_get_contents("$devApp/Contents/Resources/data.txt")], 'the development app: its own identifier, name, icon and resources');
+}
 // Linux (mygo's build.go for linux, deb_test.go and pkgbuild_test.go): the desktop entry, the MIME package, the Debian package and the PKGBUILD.
 /** The entries of a tar archive, by name: [type, mode, contents or link target]; PAX paths followed. @return array<string, array{string, int, string}> */
 function bldTar(string $tar): array

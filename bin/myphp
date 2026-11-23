@@ -579,7 +579,7 @@ function devConfig(array $c): array
  */
 function singleKeys(): bool
 {
-    if (!stream_isatty(STDIN)) {
+    if (!stream_isatty(STDIN) || PHP_OS_FAMILY === 'Windows') {
         return false;
     }
     if (!function_exists('pcntl_async_signals')) {
@@ -683,7 +683,7 @@ function devInputs(string $dir, array $c): array
 
 /**
  * A development session (mygo's devSession): it builds the development
- * app in .myphp/dev/darwin-<arch>, launches it with MYPHP_DEV=1 and its
+ * app in .myphp/dev/<os>-<arch>, launches it with MYPHP_DEV=1 and its
  * environment, and builds and launches it again as what it is made of
  * changes.
  */
@@ -691,7 +691,9 @@ final class DevSession
 {
     /** @var resource|null the running app */
     public $app = null;
-    public string $exe = '';
+    /** @var list<string> the command that starts the built app */
+    public array $cmd = [];
+    public string $bundle = '';
     /** @var list<string> what follows the project's folder on the command line, for the app's \$argv */
     public array $appArgs = [];
     /** The fingerprint of the running build. */
@@ -710,19 +712,25 @@ final class DevSession
     {
         ['config' => $c] = project([$this->root]);
         $dc = devConfig($c);
+        $os = hostOs();
         $arch = hostArch();
-        $dir = "{$this->root}/.myphp/dev/darwin-$arch";
+        $dir = "{$this->root}/.myphp/dev/$os-$arch";
         is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
         generateI18n($this->root, $c);
         $framework = frameworkOf($c);
+        $slug = Slug::ofConfig($dc);
+        $reserved = $os === 'darwin' ? Resources::reserved(hasCatalog($dc)) : Linux::reserved($slug);
         try {
-            $res = Resources::collect($this->root, $c['configFile'], $dc['resources'], 'darwin', $arch, natives($this->root, $framework, $arch), Resources::reserved(hasCatalog($dc)));
+            $res = Resources::collect($this->root, $c['configFile'], $dc['resources'], $os, $arch, natives($this->root, $framework, $arch, $os), $reserved);
         } catch (RuntimeException $e) {
             fail($e->getMessage());
         }
-        $icns = $this->icon($c);
+        $icns = $os === 'darwin' ? $this->icon($c) : null;
+        $png = $os !== 'darwin' ? $this->pngIcon($c) : null;
         $name = orElse(Dmg::fsName($dc['name']), 'app');
-        $plist = Bundle::xml(Bundle::infoPlist($dc, $name, $icns !== null, false, [], [], false));
+        $meta = $os === 'darwin'
+            ? Bundle::xml(Bundle::infoPlist($dc, $name, $icns !== null, false, [], [], false))
+            : json_encode(Linux::info($dc, $slug, false) + ($png !== null ? ['MyPHPIcon' => "$slug.png"] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL;
         // Fingerprint what the app is made of, to skip relaunching when a change did not affect it.
         $h = hash_init('sha256');
         foreach (devInputs($this->root, $c) as $p => $_) {
@@ -737,46 +745,95 @@ final class DevSession
                 hash_update($h, "{$r['name']}\0" . substr($path, strlen($r['src'])) . "\0{$st['mode']}\0" . (($st['mode'] & 0170000) === 0040000 ? '' : "{$st['size']}\0{$st['mtime']}\0"));
             });
         }
-        hash_update($h, ($icns ?? '') . $plist . PHP_BINARY);
+        hash_update($h, ($icns ?? $png ?? '') . $meta . PHP_BINARY);
         $sum = hash_final($h);
         if ($sum === $this->sum) {
             return false;
         }
         generateBindings($this->root, $c);
         $stage = "$dir/.staging-" . getmypid();
-        sh(['rm', '-rf', $stage]);
-        mkdir("$stage/$name.app/Contents/MacOS", 0755, true);
+        removeTree($stage);
         try {
-            $contents = "$stage/$name.app/Contents";
-            mkdir("$contents/Resources");
-            if ($icns !== null) {
-                file_put_contents("$contents/Resources/" . Resources::ICON, $icns);
+            if ($os === 'darwin') {
+                mkdir("$stage/$name.app/Contents/MacOS", 0755, true);
+                $contents = "$stage/$name.app/Contents";
+                mkdir("$contents/Resources");
+                if ($icns !== null) {
+                    file_put_contents("$contents/Resources/" . Resources::ICON, $icns);
+                }
+                Resources::copy($res, "$contents/Resources");
+                $plist = Bundle::xml(Bundle::infoPlist($dc, $name, $icns !== null, false, writeLocalizations($this->root, $dc, "$contents/Resources"), [], false));
+                file_put_contents("$contents/Info.plist", $plist);
+                file_put_contents("$contents/PkgInfo", 'APPL????');
+                buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch, $this->root);
+                $m = $dc['macos'];
+                embedProfile($this->root, $m, $contents, $this->sign, false);
+                Codesign::sign("$stage/$name.app", $this->sign, ($m['entitlements'] ?? '') !== '' ? path($this->root, $m['entitlements']) : '', array_map(fn(string $f) => path($this->root, $f), $m['helperEntitlements']), false, $c['configFile']);
+                $final = "$dir/$name.app";
+                replacePath("$stage/$name.app", $final);
+                $cmd = ["$final/Contents/MacOS/$name"];
+                $bundle = '';
+            } else {
+                mkdir("$stage/$slug", 0755, true);
+                $appDir = "$stage/$slug";
+                if ($png !== null) {
+                    file_put_contents("$appDir/$slug.png", $png);
+                }
+                file_put_contents("$appDir/" . Linux::INFO, $meta);
+                Resources::copy($res, $appDir);
+                $final = "$dir/$slug";
+                replacePath($appDir, $final);
+                $cmd = $os === 'linux' ? [$this->writeLinuxLauncher("$final/$slug", $final, $c['entry'])] : [PHP_BINARY, ...PHP_FLAGS, path($this->root, $c['entry'])];
+                $bundle = $final;
             }
-            Resources::copy($res, "$contents/Resources");
-            $plist = Bundle::xml(Bundle::infoPlist($dc, $name, $icns !== null, false, writeLocalizations($this->root, $dc, "$contents/Resources"), [], false));
-            file_put_contents("$contents/Info.plist", $plist);
-            file_put_contents("$contents/PkgInfo", 'APPL????');
-            buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch, $this->root);
-            $m = $dc['macos'];
-            embedProfile($this->root, $m, $contents, $this->sign, false);
-            Codesign::sign("$stage/$name.app", $this->sign, ($m['entitlements'] ?? '') !== '' ? path($this->root, $m['entitlements']) : '', array_map(fn(string $f) => path($this->root, $f), $m['helperEntitlements']), false, $c['configFile']);
-            $final = "$dir/$name.app";
-            replacePath("$stage/$name.app", $final);
         } catch (RuntimeException $e) {
             fail($e->getMessage());
         } finally {
-            sh(['rm', '-rf', $stage]);
+            removeTree($stage);
         }
         $this->stop();
-        $this->launch("$final/Contents/MacOS/$name");
+        $this->launch($cmd, $bundle);
         $this->sum = $sum;
         return true;
+    }
+
+    /** Writes the shell launcher of a Linux development bundle, naming its bundle in MYPHP_BUNDLE and running $entry in the project. */
+    private function writeLinuxLauncher(string $out, string $bundle, string $entry): string
+    {
+        $flags = implode(' ', array_map('escapeshellarg', PHP_FLAGS));
+        $lines = [
+            '#!/bin/sh',
+            'export MYPHP_BUNDLE=' . escapeshellarg($bundle),
+            'cd ' . escapeshellarg($this->root) . ' || exit 1',
+            'php=${MYPHP_PHP:-' . escapeshellarg(PHP_BINARY) . '}',
+            'exec "$php" ' . $flags . ' ' . escapeshellarg("{$this->root}/$entry") . ' "$@"',
+            '',
+        ];
+        file_put_contents($out, implode(PHP_EOL, $lines)) !== false || fail("cannot write $out");
+        chmod($out, 0755);
+        return $out;
+    }
+
+    /** The app icon as a checked PNG on Linux and Windows, null without one. */
+    private function pngIcon(array $c): ?string
+    {
+        if (($c['icon'] ?? '') === '') {
+            return null;
+        }
+        $src = @file_get_contents(path($this->root, $c['icon']));
+        $src !== false || fail("icon {$c['icon']}: cannot read it");
+        try {
+            MyPHP\Native\Build\Png::decode($src);
+        } catch (RuntimeException $e) {
+            fail("icon {$c['icon']}: {$e->getMessage()}");
+        }
+        return $src;
     }
 
     /** The app icon as .icns, rendered only when it changed. */
     private function icon(array $c): ?string
     {
-        if (($c['icon'] ?? '') === '') {
+        if (PHP_OS_FAMILY !== 'Darwin' || ($c['icon'] ?? '') === '') {
             return null;
         }
         $p = path($this->root, $c['icon']);
@@ -788,12 +845,14 @@ final class DevSession
         return $this->icns;
     }
 
-    /** Starts the build at $exe in the project, with MYPHP_DEV=1, which App::relaunch() asks to be started again. */
-    public function launch(string $exe): void
+    /** Starts the build at $cmd in the project, with MYPHP_DEV=1, which App::relaunch() asks to be started again. @param list<string> $cmd */
+    public function launch(array $cmd, string $bundle = ''): void
     {
-        $this->app = proc_open([$exe, ...$this->appArgs], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $this->root, $this->env + ['MYPHP_DEV' => '1'] + getenv());
-        $this->app !== false || fail("cannot start $exe");
-        $this->exe = $exe;
+        $env = $this->env + ['MYPHP_DEV' => '1'] + ($bundle !== '' ? ['MYPHP_BUNDLE' => $bundle] : []) + getenv();
+        $this->app = proc_open([...$cmd, ...$this->appArgs], [0 => ['file', Cmd::NULL, 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $this->root, $env);
+        $this->app !== false || fail('cannot start ' . $cmd[0]);
+        $this->cmd = $cmd;
+        $this->bundle = $bundle;
     }
 
     /** The exit code of the app when it exited, null while it runs or when none runs. */
@@ -904,7 +963,7 @@ function dev(array $args): void
         }
         $code = $s->exited();
         if ($code === DEV_RELAUNCH_CODE) { // App::relaunch(): start the same build again
-            $s->launch($s->exe);
+            $s->launch($s->cmd, $s->bundle);
             logf("Relaunched {$s->name}");
         } elseif ($code === 0) {
             logf("{$s->name} quit");
@@ -1385,8 +1444,9 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
             buildLinuxMicroLauncher("$stage/$slug", "$stage/app", $c['entry'], $opts['micro']);
             removeTree("$stage/app"); // in the launcher now, as in the .app
         }
-        file_put_contents("$stage/" . Linux::INFO, json_encode(Linux::info($c, $slug, !$opts['debug']), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
         // The desktop entry, the icon and the MIME package (mygo's writeLinuxDesktop), which the packages install where desktops look for them.
+        $info = Linux::info($c, $slug, !$opts['debug']) + (($c['icon'] ?? '') !== '' ? ['MyPHPIcon' => "$slug.png"] : []);
+        file_put_contents("$stage/" . Linux::INFO, json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL);
         $langs = linuxLanguages($dir, $c);
         $artifacts = ["$stage/$slug"];
         $png = null;

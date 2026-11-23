@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native\Build;
 
-use MyPHP\Native\{ImageIO, Mem, Zlib};
+use MyPHP\Native\Zlib;
 use RuntimeException;
 
 /**
@@ -21,22 +21,24 @@ final class Icns
 {
     public const ENTRIES = [['ic11', 32], ['ic12', 64], ['ic07', 128], ['ic13', 256], ['ic08', 256], ['ic14', 512], ['ic09', 512], ['ic10', 1024]];
 
-    /** The .icns of a PNG (or any image ImageIO reads), decoded by ImageIO on macOS. */
+    /** The .icns of a square PNG, decoded in PHP over zlib (Png::decode) on every platform. */
     public static function fromPng(string $png): string
     {
         if (!str_starts_with($png, "\x89PNG\r\n\x1a\n")) {
             throw new RuntimeException('icon must be a PNG');
         }
-        $w = unpack('N', $png, 16)[1]; $h = unpack('N', $png, 20)[1];
+        [$w, $h, $src] = Png::decode($png);
         if ($w !== $h) {
             throw new RuntimeException("icon must be square, got {$w}x$h");
         }
-        $img = ImageIO::decode($png, $w); // premultiplied: CoreGraphics draws into nothing else
-        try {
-            return self::fromPixels($img['w'], $img['h'], \FFI::string($img['pix'], $img['w'] * $img['h'] * 4));
-        } finally {
-            Mem::free($img['pix']);
+        $levels = [];
+        $body = '';
+        foreach (self::ENTRIES as [$kind, $size]) {
+            $levels[$size] ??= self::pack(self::sums($src, $w, $h, $size), $size);
+            $p = self::png($size, $levels[$size]);
+            $body .= $kind . pack('N', strlen($p) + 8) . $p;
         }
+        return 'icns' . pack('N', strlen($body) + 8) . $body;
     }
 
     /** The .icns of $w by $h pixels of premultiplied RGBA, top row first. */
@@ -72,7 +74,7 @@ final class Icns
      * source is premultiplied by ImageIO, whose 8-bit values times 255 stand
      * for mygo's color times alpha.
      *
-     * @param list<int> $src
+     * @param list<float|int> $src
      * @return list<float>
      */
     private static function sums(array $src, int $w, int $h, int $size): array

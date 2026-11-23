@@ -55,6 +55,9 @@ final class Backend implements Platform\Backend
         if (!$f->gtk_init_check(null, null)) {
             throw new \RuntimeException('myphp: cannot open display (is DISPLAY or WAYLAND_DISPLAY set?)');
         }
+        if (($bundle = \MyPHP\Native\Bundle::path()) !== null && ($icon = \MyPHP\Native\Bundle::info('MyPHPIcon')) !== null && is_file("$bundle/$icon")) {
+            $f->gtk_window_set_default_icon_from_file("$bundle/$icon", null);
+        }
         // SIGINT and SIGTERM quit as Quit does, so the quit listeners run; a second exits right away (mygo's quitOnSignals).
         foreach ([2, 15] as $sig) {
             Gtk::onSignal($sig, function () use ($sig): void {

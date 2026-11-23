@@ -116,14 +116,32 @@ final class Shell implements Platform\Shell
         return !$remote;
     }
 
-    /** The app's icon: the icon theme's of its program name, which its desktop entry names. */
+    /** The app's icon: the icon theme's of its program name, or its bundle's MyPHPIcon before a package installs it. */
     public function appIcon(int $size): string
     {
         $f = Gtk::ffi();
         $icon = $f->g_themed_icon_new($f->g_get_prgname());
         $png = self::themeIcon($icon, $size);
         $f->g_object_unref($icon);
-        return $png !== '' ? $png : throw new RuntimeException('myphp: the icon theme has no icon of the app');
+        if ($png !== '') {
+            return $png;
+        }
+        if (($bundle = \MyPHP\Native\Bundle::path()) !== null && ($name = \MyPHP\Native\Bundle::info('MyPHPIcon')) !== null && ($bytes = @file_get_contents("$bundle/$name")) !== false) {
+            $loader = $f->gdk_pixbuf_loader_new();
+            $ok = $bytes !== '' && $f->gdk_pixbuf_loader_write($loader, $bytes, strlen($bytes), null);
+            $ok = $f->gdk_pixbuf_loader_close($loader, null) && $ok;
+            $pix = $ok ? $f->gdk_pixbuf_loader_get_pixbuf($loader) : null;
+            if ($pix !== null) {
+                $scaled = $f->gdk_pixbuf_get_width($pix) === $size && $f->gdk_pixbuf_get_height($pix) === $size ? null : $f->gdk_pixbuf_scale_simple($pix, $size, $size, 2);
+                $png = Clipboard::png($scaled ?? $pix);
+                if ($scaled !== null) { $f->g_object_unref($scaled); }
+            }
+            $f->g_object_unref($loader);
+            if ($png !== '') {
+                return $png;
+            }
+        }
+        throw new RuntimeException('myphp: the icon theme has no icon of the app');
     }
 
     /**
