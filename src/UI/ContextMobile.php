@@ -146,13 +146,13 @@ trait ContextMobile
               $this->row(0, 8)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 52 + $top)->padding($top + 4, 16, 4, 16)->alignItems(Node::CENTER)->justify(Node::CENTER);
                 if ($onShowSidebar !== null) { // iPadOS & Android Pad HIG TabView(.sidebarAdaptable): circular glass sidebar button beside the floating top tab capsule
                     $sbBtn = $this->row(0, 0)->size(44, 44)->radius(22)->systemMaterial('glass')->center()->focusable()->shrink(0)->role(Role::BUTTON)->label('Show Sidebar');
-                      if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->surface)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.85; }
+                      if (!($this->runtime?->systemMaterials ?? true) && !\MyPHP\App::isAndroid()) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.72; }
                       $this->image(Image::symbol('sidebar.left', 18, $t->accent), 18, 18)->role(Role::NONE);
                     $this->end();
                     if ($this->clicked($sbBtn)) { $onShowSidebar(); $n->changed = true; }
                 }
                 $pill = $this->row(0, 0)->size(0, 44)->padding(4)->radius(22)->systemMaterial('glass')->alignItems(Node::STRETCH)->shrink(1)->minWidth(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
-                  if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->surface)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.85; }
+                  if (!($this->runtime?->systemMaterials ?? true) && !\MyPHP\App::isAndroid()) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.72; }
                   foreach ($items as $i => [, $label]) {
                       $on = $i === $index;
                       $tab = $this->row(0, 0)->padding(0, 16)->radius(18)->alignItems(Node::CENTER)->focusable()->role(Role::TAB)->label($label);

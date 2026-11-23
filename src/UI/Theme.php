@@ -105,7 +105,7 @@ final class Theme
         if (\MyPHP\App::isIOS() || \MyPHP\App::isAndroid()) {
             return 17.0;
         }
-        return PHP_OS_FAMILY === 'Darwin' ? 13.0 : 14.0;
+        return 13.0; // macOS, Windows and Linux share macOS HIG's 13pt desktop control size
     }
 
     /** The fill of tooltips and toasts and their text (mygo's inverse). @return array{0: int, 1: int} */

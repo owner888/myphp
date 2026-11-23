@@ -39,11 +39,11 @@ final class NavigationSplitView extends View
         $vibrant = $c->vibrancy(); // the window's material shows through the sidebar, as a Mac's
         $bar = $c->titleBar(); // a hidden title bar: the content goes under it, the window controls over the sidebar
         $inset = $bar['height'] > 0;
+        $showToggle = $this->hasVisibility;
         $barH = $inset
             ? (($bar['controls'] ?? 0) > 0 ? 2 * $bar['controls'] : $bar['height'])
-            : ($touch ? 44.0 : 0.0); // iPadOS UISplitViewController navigation bar height (44pt below safeArea.top)
+            : (($touch || $showToggle) ? 44.0 : 0.0); // 44pt unified toolbar row on Windows, Linux, iPadOS & Android Pad
         $topOffset = $inset ? 0.0 : $safeTop;
-        $showToggle = $this->hasVisibility && ($inset || $touch);
         $width = $this->sidebar->columnWidth ?? ($touch ? 260.0 : 220.0); // iPadOS primary column width (260pt at 17pt UIKit text) vs macOS 220pt
         $button = $touch ? 36.0 : 28.0;
         $iconSz = $touch ? 18 : 16;
@@ -89,7 +89,7 @@ final class NavigationSplitView extends View
             } elseif ($vibrant) {
                 $detail->background($t->background);
             }
-            $hasDetailBar = $inset || ($touch && ($showToggle || $title !== null || $items !== null));
+            $hasDetailBar = $inset || $showToggle || ($touch && ($title !== null || $items !== null));
             if ($hasDetailBar) { // macOS hiddenInset unified toolbar or iPadOS UISplitViewController detail navigation bar
                 $leadBase = $inset ? $bar['left'] : $safeLeft;
                 $leadPad = 20 + (1 - $shown) * ($showToggle ? $closed + $button + 12 - 20 : $leadBase);

@@ -34,7 +34,7 @@ same(17.0, Theme::defaultFontSize(), 'iOS starts from 17 points');
 putenv('MYPHP_PLATFORM=android');
 same(17.0, Theme::defaultFontSize(), 'Android too, the one design');
 putenv($was === false ? 'MYPHP_PLATFORM' : "MYPHP_PLATFORM=$was");
-same(PHP_OS_FAMILY === 'Darwin' ? 13.0 : 14.0, Theme::defaultFontSize(), 'the desktop: 13 on macOS, 14 elsewhere, as mygo');
+same(13.0, Theme::defaultFontSize(), 'the desktop: 13 on macOS, Windows and Linux (unified macOS HIG)');
 $phone = Theme::light(); $phone->fontSize = $phone->baseFontSize = 17.0;
 same(1.0, $phone->textScale(), 'a phone theme at the platform\'s size scales text by 1');
 closeFloat(17.0, Font::preferred(Font::BODY, true, $phone->textScale())[0], 'so body is 17 on it');

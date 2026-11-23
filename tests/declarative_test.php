@@ -68,6 +68,24 @@ $ipadH->clickLabel('Show Sidebar');
 $ipadH->frame(3);
 check($ipadH->byLabel('Hide Sidebar') !== null && $ipadH->rect($ipadH->byText('Sweep'))[0] < 260.0, 'iPadOS/Android Pad tapping Show Sidebar on top capsule restores sidebar');
 
+// Windows & Linux desktop HIG parity (no hiddenInset traffic lights: titleBar height == 0, touch == false):
+// Still renders the macOS-HIG 44pt unified toolbar, navigationTitle, toolbar actions, and Hide/Show Sidebar toggle!
+$winLinApp = new class { public string $tab = 'lab'; };
+$winLinH = new Headless(function (Context $c) use ($winLinApp): void {
+    $c->titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
+    Content::render(fn() => TabView(selection: $winLinApp->tab)(
+        Tab('Lab', systemImage: 'chart.xyaxis.line', value: 'lab')(
+            Text('Body')->navigationTitle('Backtest Lab')->toolbar(Button('Sync', systemImage: 'arrow.clockwise'))
+        ),
+        Tab('Sweep', systemImage: 'cpu', value: 'sweep')(Text('Sweep')),
+    )->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c);
+}, 1180, 780);
+$winLinH->frame(2);
+check($winLinH->byLabel('Hide Sidebar') !== null && $winLinH->byText('Backtest Lab') !== null && $winLinH->byLabel('Sync') !== null, 'Windows/Linux desktop renders macOS-HIG sidebar toggle, navigationTitle, and toolbar');
+$winLinH->clickLabel('Hide Sidebar');
+$winLinH->frame(6); usleep(300_000); $winLinH->frame(3);
+check($winLinH->byLabel('Show Sidebar') !== null && $winLinH->rect($winLinH->byText('Body'))[0] < 50.0, 'Windows/Linux Hide Sidebar collapses sidebar and glides Show Sidebar to toolbar leading');
+
 $s = new class {
     public int $n = 0;
     public bool $wifi = false;

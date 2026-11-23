@@ -72,7 +72,10 @@ final class Symbols implements Platform\Symbols
         'textformat' => ['font-x-generic', 'preferences-desktop-font'], 'textformat.size' => ['preferences-desktop-font', 'font-x-generic'],
         'bold' => ['format-text-bold'], 'italic' => ['format-text-italic'], 'paintpalette' => ['color-select'],
         'pencil' => ['document-edit'], 'square.and.pencil' => ['document-edit', 'document-new'], 'lock' => ['changes-prevent', 'system-lock-screen'], 'lock.display' => ['system-lock-screen'],
-        'character.book.closed' => ['accessories-dictionary'], 'battery.0' => ['battery-level-0', 'battery-empty'], 'progress.indicator' => ['content-loading'],
+        'character.book.closed' => ['accessories-dictionary'], 'book.closed' => ['accessories-dictionary'], 'book.closed.fill' => ['accessories-dictionary'],
+        'house' => ['go-home', 'user-home'], 'house.fill' => ['go-home', 'user-home'],
+        'checklist' => ['view-list-bullet', 'view-list'], 'tray.and.arrow.down' => ['document-save', 'folder-download'],
+        'battery.0' => ['battery-level-0', 'battery-empty'], 'progress.indicator' => ['content-loading'],
         'person.crop.circle' => ['avatar-default', 'system-users'], 'person.crop.circle.fill' => ['avatar-default', 'system-users'],
         'star.fill' => ['starred'], 'star.leadinghalf.fill' => ['semi-starred'], 'star.leadinghalf.filled' => ['semi-starred'],
         // Files and time
@@ -103,7 +106,8 @@ final class Symbols implements Platform\Symbols
         'textformat.characters.arrow.left.and.right' => null, 'character.textbox.badge.sparkles' => null, 'sparkles' => null, 'book.and.wrench' => null,
         'macwindow' => null, 'macwindow.on.rectangle' => null, 'macwindow.and.cursorarrow' => null, 'macwindow.and.pointer.arrow' => null,
         'menubar.rectangle' => null, 'menubar.dock.rectangle' => null, 'filemenu.and.selection' => null, 'cursorarrow.click' => null, 'pointer.arrow.click' => null,
-        'app.badge' => null, 'app.badge.checkmark.fill' => null, 'bolt.badge.a' => null, 'bolt.badge.automatic' => null,
+        'app.badge' => null, 'app.badge.checkmark.fill' => null, 'bolt' => null, 'bolt.fill' => null, 'bolt.badge.a' => null, 'bolt.badge.automatic' => null,
+        'chart.line.uptrend.xyaxis' => null, 'chart.xyaxis.line' => null,
         'circle.fill' => null, 'rectangle.fill' => null, 'square.stack.3d.up' => null, 'square.2.layers.3d.top.filled' => null, 'square.dashed' => null,
         'square.dashed.inset.filled' => null, 'square.dotted' => null, 'circle.dashed.inset.fill' => null, 'circle.dashed.inset.filled' => null, 'inset.filled.circle.dashed' => null,
         'inset.filled.bottomthird.rectangle' => null, 'inset.filled.topleft.rectangle' => null, 'inset.filled.topthird.middlethird.bottomthird.rectangle' => null,
@@ -115,14 +119,20 @@ final class Symbols implements Platform\Symbols
     ];
 
     private static ?FFI $g = null;
+    private ?\MyPHP\Platform\Android\Symbols $material = null;
     /** @var array<string, ?string> the theme's icon of each name asked, null for none */
     private array $found = [];
     /** @var array<string, true> the names told in the log as drawn empty */
     private array $told = [];
 
+    private function material(): \MyPHP\Platform\Android\Symbols
+    {
+        return $this->material ??= new \MyPHP\Platform\Android\Symbols();
+    }
+
     public function exists(string $name): bool
     {
-        return $this->icon($name) !== null;
+        return $this->icon($name) !== null || $this->material()->exists($name);
     }
 
     public function draw(string $name, float $size, float $weight, int $rgb, float $scale): array
@@ -130,6 +140,9 @@ final class Symbols implements Platform\Symbols
         $px = max(1, (int)round($size * $scale));
         $icon = $this->icon($name);
         if ($icon === null) {
+            if ($this->material()->exists($name)) {
+                return $this->material()->draw($name, $size, $weight, $rgb, $scale);
+            }
             $why = array_key_exists($name, self::NAMES) && self::NAMES[$name] !== null ? 'the icon theme has none of ' . implode(', ', self::NAMES[$name]) : 'no freedesktop icon is mapped to it';
             return $this->empty($name, $px, $why);
         }

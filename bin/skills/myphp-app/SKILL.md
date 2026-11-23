@@ -127,7 +127,8 @@ App::run();
    - **Remote Images**: Always use `AsyncImage($url)` (built-in fiber download & memory cache), never manual `Image::fromBytes()` downloads.
    - **Custom SVGs**: `Image($svg)` without `->resizable()` renders as a monochrome template icon. For multi-color SVGs/illustrations, always call `Image(SVG::parse($xml))->resizable()->scaledToFit()->frame(width: 44, height: 44)`.
 2. **Adaptive Multi-Platform Navigation**:
-   - Use one `TabView(selection: $this->tab)` with `->tabViewStyle(TabViewStyle::sidebarAdaptable)` and `->tint($accent)`: it automatically becomes a left sidebar on macOS/Windows/Linux and landscape iPad, and a bottom tab bar on iPhone/Android.
+   - **Cross-Platform HIG Alignment**: Desktops (`macOS`, `Windows`, `Linux`) follow **macOS HIG** (`13pt` controls, `220pt` sidebar, unified toolbar with quiet `sidebar.left` toggle); Tablets (`iPadOS`, `Android Pad`) follow **iPadOS HIG** (`17pt` controls, `260pt` landscape sidebar with `>=44pt` touch targets morphing to/from centered floating top glass capsule TabBar, `700pt` centered page sheets); Phones (`iOS`, `Android`) follow **iOS HIG**.
+   - Use one `TabView(selection: $this->tab)` with `->tabViewStyle(TabViewStyle::sidebarAdaptable)` and `->tint($accent)` across all 6 form factors.
    - Keep a separate `Router` property per tab (`$this->homePath`, `$this->mePath`).
    - Hide the floating phone tab bar on detail pages with `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar)`, and hide the top navigation bar on custom hero pages with `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::navigationBar)`.
 3. **Bindings & Identity**:
