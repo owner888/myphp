@@ -98,7 +98,43 @@ final class TabView extends View
         }
         try {
             if ($this->style === \TabViewStyle::automatic && !($c->runtime?->touch ?? false)) { return $this->desktop($c, $env, $index); }
-            if ($this->style === \TabViewStyle::sidebarAdaptable && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_SIDEBAR) { return $this->split($c, $env); }
+            $touch = $c->runtime?->touch ?? false;
+            $placement = $c->tabsPlacement();
+            if ($this->style === \TabViewStyle::sidebarAdaptable && $placement !== \MyPHP\UI\Context::TABS_BOTTOM) {
+                $host = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->alignItems(Node::STRETCH);
+                $kept = $c->runtime?->local($host->id, static fn() => new class { public ?\NavigationSplitViewVisibility $sidebar = null; }, null, 'sidebar');
+                $wantSidebar = !$touch || ($kept?->sidebar !== null
+                    ? $kept->sidebar !== \NavigationSplitViewVisibility::detailOnly
+                    : $placement === \MyPHP\UI\Context::TABS_SIDEBAR);
+                if ($wantSidebar) {
+                    $this->split($c, $env->along(Node::COLUMN), $kept);
+                    $c->end();
+                    View::takeRoom($host, $env->axis, View::FLEX_X | View::FLEX_Y);
+                    return $host;
+                }
+                $onShowSidebar = $kept !== null
+                    ? static function () use ($kept, $c): void { $kept->sidebar = \NavigationSplitViewVisibility::all; $c->runtime?->changed(); }
+                    : null;
+                $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env), $t->role === \TabRole::prominent], $this->tabs);
+                $backdrop = new Backdrop();
+                $chosenAtStart = $this->selection;
+                $minimize = match ($this->minimize) { \TabBarMinimizeBehavior::onScrollDown => 1, \TabBarMinimizeBehavior::onScrollUp => -1, default => 0 };
+                $n = $c->tabView($items, $index, function (int $i) use ($c, $env, $backdrop): void {
+                    if ($i < 0) { $this->moreList($c, $env, $backdrop); return; }
+                    $c->key('tab' . $i);
+                    $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);
+                      View::renderAll($c, $env->along(Node::COLUMN)->with(['backdrop' => $backdrop]), [self::stacked($this->tabs[$i]->content)]);
+                    $c->end();
+                }, $minimize, $backdrop, $this->accessory === null ? null : function () use ($c, $env): void {
+                    $v = ($this->accessory)();
+                    if ($v instanceof View) { View::renderAll($c, $env->along(Node::ROW), [$v]); }
+                }, \MyPHP\UI\Context::TABS_TOP, $onShowSidebar);
+                if ($backdrop->color !== null) { $n->background($backdrop->color); }
+                if ($this->selection === $chosenAtStart) { $this->selection = $this->tabs[$index]->value ?? $this->selection; }
+                $c->end();
+                View::takeRoom($host, $env->axis, View::FLEX_X | View::FLEX_Y);
+                return $host;
+            }
             $items = array_map(fn(Tab $t) => [$t->icon(24), Localized::string($t->title, $env), $t->role === \TabRole::prominent], $this->tabs); // a prominent tab apart, at the bar's end (iOS 27's)
             $backdrop = new Backdrop();
             $chosenAtStart = $this->selection;
@@ -164,7 +200,7 @@ final class TabView extends View
     }
 
     /** The tabs as a NavigationSplitView, as sidebarAdaptable's where there is room: a Label of each in the sidebar, choosing it, beside its views. */
-    private function split(Context $c, Env $env): ?Node
+    private function split(Context $c, Env $env, ?object $kept = null): ?Node
     {
         $chosen = new Binding(get: fn() => $this->selection, set: function ($v) { $this->selection = $v; });
         $sidebar = new ListView(null, null, $chosen, true);
@@ -174,8 +210,8 @@ final class TabView extends View
             $this->groups,
         ));
         $shown = array_find($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? $this->tabs[0] ?? null;
-        $kept = $c->runtime?->local($c->upcomingId(), static fn() => new class { public \NavigationSplitViewVisibility $sidebar = \NavigationSplitViewVisibility::all; }); // whether the sidebar shows, its button's
-        $visibility = $kept === null ? \NavigationSplitViewVisibility::all : $kept->sidebar;
+        $kept ??= $c->runtime?->local($c->upcomingId(), static fn() => new class { public ?\NavigationSplitViewVisibility $sidebar = null; }, null, 'sidebar');
+        $visibility = $kept?->sidebar ?? \NavigationSplitViewVisibility::all;
         $split = new NavigationSplitView($sidebar, $shown === null ? [] : (count($shown->content) === 1 && $shown->content[0] instanceof View ? $shown->content[0] : $shown->content), $visibility, true);
         $n = $split->render($c, $env);
         if ($kept !== null) { $kept->sidebar = $visibility; }

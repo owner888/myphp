@@ -34,14 +34,20 @@ final class NavigationSplitView extends View
         $asList = $this->asList(); // a list keeps its own selection, if it has one: a list of a search finding nothing has none
         if (!$asList) { $selection = &$this->sidebar->selection(); }
         $chosen = $asList ? '' : (string)($selection ?? ''); // the sidebar's items are keyed by their tags as strings
+        $touch = $c->runtime?->touch ?? false;
+        [$safeTop, $safeRight, $safeBottom, $safeLeft] = $c->safeArea;
         $vibrant = $c->vibrancy(); // the window's material shows through the sidebar, as a Mac's
         $bar = $c->titleBar(); // a hidden title bar: the content goes under it, the window controls over the sidebar
         $inset = $bar['height'] > 0;
-        $barH = ($bar['controls'] ?? 0) > 0 ? 2 * $bar['controls'] : $bar['height']; // a row with the window controls in its middle
-        $width = $this->sidebar->columnWidth ?? 220.0;
-        // The sidebar's toggle button, as AppKit's NSToolbar toggleSidebar: quiet borderless icon aligned with traffic lights.
-        $button = 28.0;
-        [$open, $closed] = [$width - 12 - $button, $bar['left'] + 12];
+        $barH = $inset
+            ? (($bar['controls'] ?? 0) > 0 ? 2 * $bar['controls'] : $bar['height'])
+            : ($touch ? 44.0 : 0.0); // iPadOS UISplitViewController navigation bar height (44pt below safeArea.top)
+        $topOffset = $inset ? 0.0 : $safeTop;
+        $showToggle = $this->hasVisibility && ($inset || $touch);
+        $width = $this->sidebar->columnWidth ?? ($touch ? 260.0 : 220.0); // iPadOS primary column width (260pt at 17pt UIKit text) vs macOS 220pt
+        $button = $touch ? 36.0 : 28.0;
+        $iconSz = $touch ? 18 : 16;
+        [$open, $closed] = [$width - 12 - $button, ($inset ? $bar['left'] : $safeLeft) + 12];
         $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->alignItems(Node::STRETCH);
           $visible = !$this->hasVisibility || $this->visibility !== \NavigationSplitViewVisibility::detailOnly;
           $shown = $c->animate($n, 'sidebar', $visible ? 1 : 0, 0.25);
@@ -49,15 +55,22 @@ final class NavigationSplitView extends View
           $c->open(new Node(Node::CONTAINER, Node::ROW))->size($w, 0)->shrink(0)->alignItems(Node::STRETCH)->clip();
             $side = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->size($width, 0)->shrink(0)->margin(0, 0, 0, $w - $width);
             if (!$vibrant) { $side->background($t->dark ? \MyPHP\UI\Theme::mix($t->background, 0x000000, 0.22) : $t->surface); }
-              if ($inset) { $c->attach(new Node(Node::BOX, 0, 0, 0, 0, $barH))->fillWidth()->shrink(0)->dragWindow(); } // under the window controls: the window moves by it
+              $sideTop = $inset ? $barH : ($showToggle ? $topOffset + $barH : $topOffset);
+              if ($sideTop > 0) {
+                  $hdr = $c->attach(new Node(Node::BOX, 0, 0, 0, 0, $sideTop))->fillWidth()->shrink(0);
+                  if ($inset) { $hdr->dragWindow(); } // under the window controls: the window moves by it
+              }
               if ($asList) { // a list of the app's data, or one with modifiers (searchable, contextMenu): the ListView itself in the sidebar, as SwiftUI's
-                  $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
+                  $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0)->padding(0, 0, $safeBottom, $safeLeft);
                     $list = $this->sidebar->render($c, $env->along(Node::COLUMN));
                   $c->end();
                   if ($list !== null) { $list->color = null; }
               } else {
                   $list = $c->sidebar($chosen, function () use ($c, $env): void { self::items($c, $env, $this->sidebar->content()); }, $width)->grow(1);
                   $list->color = null;
+                  if ($safeBottom > 0 || $safeLeft > 0) {
+                      $list->padding($t->space(2.5), $t->space(2.5), $t->space(2.5) + $safeBottom, $t->space(2.5) + $safeLeft);
+                  }
               }
             $c->end();
           $c->end();
@@ -66,7 +79,7 @@ final class NavigationSplitView extends View
           $detail = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->minWidth(0)->minHeight(0)->alignSelf(Node::STRETCH);
             $views = is_array($this->detail) ? $this->detail : [$this->detail];
             $title = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['title'] ?? null) : null;
-            $toolbar = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['toolbar'] ?? null) : null; // the detail's toolbar, at the end of the window's toolbar, as SwiftUI's on a Mac
+            $toolbar = count($views) === 1 && $views[0] instanceof View ? ($views[0]->sets['toolbar'] ?? null) : null; // the detail's toolbar, at the end of the window's toolbar, as SwiftUI's on a Mac / iPad
             $items = $toolbar === null ? null : function () use ($c, $env, $toolbar): void { View::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $toolbar); };
             // A background of the detail reaches under the title bar too, as SwiftUI's backgrounds go into the safe area.
             $bg = null;
@@ -76,10 +89,14 @@ final class NavigationSplitView extends View
             } elseif ($vibrant) {
                 $detail->background($t->background);
             }
-            if ($inset) { // the title bar's room: the detail's navigationTitle, left of the window controls when the sidebar hides (no bottom border line, as macOS SwiftUI)
-                $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, $bar['right'] + 20, 0, 20 + (1 - $shown) * ($this->hasVisibility ? $closed + $button + 12 - 20 : $bar['left'])) // right of the button as the sidebar hides
-                  ->dragWindow();
-                  if ($title !== null) { (new Text($title))->font(\Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); } // a toolbar's title, 15 bold on the Mac
+            $hasDetailBar = $inset || ($touch && ($showToggle || $title !== null || $items !== null));
+            if ($hasDetailBar) { // macOS hiddenInset unified toolbar or iPadOS UISplitViewController detail navigation bar
+                $leadBase = $inset ? $bar['left'] : $safeLeft;
+                $leadPad = 20 + (1 - $shown) * ($showToggle ? $closed + $button + 12 - 20 : $leadBase);
+                $trailPad = ($inset ? $bar['right'] : $safeRight) + 20;
+                $hdrRow = $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, $topOffset + $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding($topOffset, $trailPad, 0, $leadPad);
+                if ($inset) { $hdrRow->dragWindow(); }
+                  if ($title !== null) { (new Text($title))->font($touch ? \Font::headline : \Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); }
                   if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
                 $c->end();
             } elseif ($title !== null || $items !== null) { // a title bar of the system's: the detail's title and toolbar a row under it
@@ -88,23 +105,28 @@ final class NavigationSplitView extends View
                   if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
                 $c->end();
             }
+            $savedSafe = $c->safeArea;
+            if ($hasDetailBar) { $c->safeArea[0] = 0.0; }
+            if ($w > 0) { $c->safeArea[3] = 0.0; }
             View::renderAll($c, $env->along(Node::COLUMN)->with(['toolbarTaken' => $toolbar !== null]), $views);
+            $c->safeArea = $savedSafe;
           $c->end();
         $c->end();
-        if ($this->hasVisibility && $inset) { // the sidebar's button, next to the window controls whether it shows or not
+        if ($showToggle) { // the sidebar's button, next to the window controls on macOS or in the iPadOS navigation bar
             $label = Localized::string($visible ? 'Hide Sidebar' : 'Show Sidebar', $env);
             $c->key('sidebar toggle');
             $toggle = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->absolute()
-                ->left($closed + ($open - $closed) * $shown)->top(($barH - $button) / 2)->size($button, $button)->radius(6)
+                ->left($closed + ($open - $closed) * $shown)->top($topOffset + ($barH - $button) / 2)->size($button, $button)->radius($touch ? $button / 2 : 6)
                 ->label($label)->tooltip($label)->center();
+            $toggle->floats = true;
             $hovered = $c->hovered($toggle);
             if ($hovered) {
                 $pressed = $c->runtime?->input->mouseDown ?? false;
                 $toggle->background($t->dark ? 0xffffff : 0x000000, $pressed ? ($t->dark ? 0.13 : 0.10) : ($t->dark ? 0.08 : 0.05));
             }
-              $c->image(Image::symbol('sidebar.left', 16, $hovered ? $t->text : $t->textMuted), 16, 16);
+              $c->image(Image::symbol('sidebar.left', $iconSz, $touch ? $t->accent : ($hovered ? $t->text : $t->textMuted)), $iconSz, $iconSz);
             $c->end();
-            if ($c->clicked($toggle)) { $this->visibility = $visible ? \NavigationSplitViewVisibility::detailOnly : \NavigationSplitViewVisibility::all; }
+            if ($c->clicked($toggle)) { $this->visibility = $visible ? \NavigationSplitViewVisibility::detailOnly : \NavigationSplitViewVisibility::all; $c->runtime?->changed(); }
         }
         View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
         return $n;

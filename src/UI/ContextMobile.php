@@ -56,11 +56,11 @@ trait ContextMobile
      * (iOS 26's tabViewBottomAccessory, Telegram's update capsule); over the page's bottom where the bar is hidden.
      * @param list<array{0: SVG|Closure(int): Image|null, 1: string}> $items @param Closure(int, string): void $content
      */
-    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0, ?object $backdrop = null, ?Closure $accessory = null): Node
+    public function tabView(array $items, int &$index, Closure $content, int $minimize = 0, ?object $backdrop = null, ?Closure $accessory = null, ?string $forcePlacement = null, ?Closure $onShowSidebar = null): Node
     {
         $t = $this->theme;
         $index = max(0, min($index, count($items) - 1));
-        $where = $this->tabsPlacement();
+        $where = $forcePlacement ?? $this->tabsPlacement();
         if ($where === self::TABS_BOTTOM) { // the bar floats over the page, as iOS 26's: the page's scroll goes on under it
             $moreFrom = count($items) > 5 ? 4 : null; // the bar's room: four tabs and More
             if ($backdrop !== null && property_exists($backdrop, 'moreFrom')) { $backdrop->moreFrom = $moreFrom; }
@@ -143,9 +143,16 @@ trait ContextMobile
             $top = $this->safeArea[0];
             $n = $this->column(0, 0, 1)->fill();
               // iPadOS 26's: a capsule of glass centered over the page under the status bar, each tab's title in it, the chosen one on a capsule of its own
-              $this->row(0, 0)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 52 + $top)->padding($top + 4, 16, 4, 16)->alignItems(Node::CENTER)->justify(Node::CENTER)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
-                $pill = $this->row(0, 0)->size(0, 44)->padding(4)->radius(22)->systemMaterial('glass')->alignItems(Node::STRETCH)->shrink(1)->minWidth(0);
-                  if (!($this->runtime?->systemMaterials ?? true) && !\MyPHP\App::isAndroid()) { $this->box(0, 0, $t->background)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.72; }
+              $this->row(0, 8)->alignSelf(Node::STRETCH)->shrink(0)->size(0, 52 + $top)->padding($top + 4, 16, 4, 16)->alignItems(Node::CENTER)->justify(Node::CENTER);
+                if ($onShowSidebar !== null) { // iPadOS & Android Pad HIG TabView(.sidebarAdaptable): circular glass sidebar button beside the floating top tab capsule
+                    $sbBtn = $this->row(0, 0)->size(44, 44)->radius(22)->systemMaterial('glass')->center()->focusable()->shrink(0)->role(Role::BUTTON)->label('Show Sidebar');
+                      if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->surface)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.85; }
+                      $this->image(Image::symbol('sidebar.left', 18, $t->accent), 18, 18)->role(Role::NONE);
+                    $this->end();
+                    if ($this->clicked($sbBtn)) { $onShowSidebar(); $n->changed = true; }
+                }
+                $pill = $this->row(0, 0)->size(0, 44)->padding(4)->radius(22)->systemMaterial('glass')->alignItems(Node::STRETCH)->shrink(1)->minWidth(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST);
+                  if (!($this->runtime?->systemMaterials ?? true)) { $this->box(0, 0, $t->surface)->absolute()->top(0)->bottom(0)->start(0)->end(0)->radius(22)->role(Role::NONE)->bgAlpha = 0.85; }
                   foreach ($items as $i => [, $label]) {
                       $on = $i === $index;
                       $tab = $this->row(0, 0)->padding(0, 16)->radius(18)->alignItems(Node::CENTER)->focusable()->role(Role::TAB)->label($label);

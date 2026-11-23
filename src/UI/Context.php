@@ -2526,9 +2526,17 @@ final class Context
         $sb = &$this->sidebars[count($this->sidebars) - 1];
         $chosen = $sb['selected'] === $id;
         $sb['items'][] = $id; $sb['labels'][] = $label;
+        $touch = $t->controlHeight > 0;
+        $iconSz = $touch ? 20 : 16;
         $pillColor = $t->dark ? 0xffffff : 0x000000;
-        $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? $pillColor : null)->padding($t->space(1.5), $t->space(2.5))->radius(8)->alignItems(Node::CENTER)
+        $n = $this->key("item:$id")->row(0, $t->space($touch ? 2.5 : 2), 0, $chosen ? $pillColor : null)
+            ->padding($t->space(1.5), $t->space($touch ? 3 : 2.5))
+            ->radius($touch ? 10 : 8)
+            ->alignItems(Node::CENTER)
             ->role(Role::TREE_ITEM)->level($sb['depth'] + 1)->checked($chosen);
+        if ($touch) {
+            $n->minHeight(44.0); // iPadOS / UIKit minimum 44pt touch target
+        }
         if ($chosen) {
             $n->bgAlpha = $t->dark ? 0.11 : 0.08;
         }
@@ -2539,9 +2547,9 @@ final class Context
             $n->bgAlpha = ($this->runtime?->input->mouseDown ?? false) ? ($t->dark ? 0.10 : 0.07) : ($t->dark ? 0.06 : 0.04);
         }
         $fg = $t->text;
-          if ($icon instanceof SVG) { $this->icon($icon, 16, $accent); }
-          elseif ($icon instanceof Closure) { $this->image($icon($accent), 16, 16)->role(Role::NONE); }
-          elseif ($icon !== null) { $this->text($icon, 16, $accent)->role(Role::NONE); }
+          if ($icon instanceof SVG) { $this->icon($icon, $iconSz, $accent); }
+          elseif ($icon instanceof Closure) { $this->image($icon($accent), $iconSz, $iconSz)->role(Role::NONE); }
+          elseif ($icon !== null) { $this->text($icon, $iconSz, $accent)->role(Role::NONE); }
           $this->text($label, $t->fontSize, $fg)->singleLine();
           if ($trailing !== null) { $this->spacer(); $trailing(); }
         $this->end();

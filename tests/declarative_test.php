@@ -39,6 +39,35 @@ $fsH->frame(2);
 check($fsH->byText('Backtest Lab') !== null && $fsH->byLabel('Hide Sidebar') !== null && $fsH->byLabel('Sync') !== null, 'full-screen hiddenInset keeps navigationTitle, sidebar toggle and toolbar');
 check($fsH->rect($fsH->byText('Lab'))[1] >= 48.0, 'full-screen sidebar items start below the 48pt unified toolbar row');
 
+// iPadOS & Android Pad HIG TabView(.sidebarAdaptable) parity:
+// 1) Landscape tablet respects status-bar safeArea[0] = 24pt, uses >=44pt touch rows, and shows Hide Sidebar;
+// 2) Tapping Hide Sidebar morphs into the Floating Top Capsule Tab Bar with a leading Show Sidebar button;
+// 3) Tapping Show Sidebar on the top capsule expands back into the Sidebar!
+$ipadApp = new class { public string $tab = 'lab'; };
+$ipadH = new Headless(function (Context $c) use ($ipadApp): void {
+    $c->safeArea = [24.0, 0.0, 20.0, 0.0];
+    Content::render(fn() => TabView(selection: $ipadApp->tab)(
+        Tab('Lab', systemImage: 'chart.xyaxis.line', value: 'lab')(
+            Text('Body')->navigationTitle('Backtest Lab')->toolbar(Button('Sync', systemImage: 'arrow.clockwise'))
+        ),
+        Tab('Sweep', systemImage: 'cpu', value: 'sweep')(Text('Sweep')),
+    )->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c);
+}, 1180, 820);
+$ipadH->rt->touch = true;
+$ipadH->theme = \MyPHP\UI\Theme::phone(true);
+$ipadH->frame(2);
+check($ipadH->byLabel('Hide Sidebar') !== null && $ipadH->rect($ipadH->byLabel('Hide Sidebar'))[1] >= 24.0, 'iPadOS/Android Pad sidebar toggle clears 24pt status bar safeArea');
+check($ipadH->rect($ipadH->byText('Backtest Lab'))[1] >= 24.0, 'iPadOS/Android Pad detail navigationTitle clears 24pt status bar safeArea');
+$findKey = function (\MyPHP\UI\Node $n, string $k) use (&$findKey): ?\MyPHP\UI\Node { if ($n->key === $k) { return $n; } foreach ($n->kids as $ch) { if (($f = $findKey($ch, $k)) !== null) { return $f; } } return null; };
+$labRow = $findKey($ipadH->root, 'item:lab'); $findKey = null;
+check($labRow !== null && $ipadH->rect($labRow)[3] >= 44.0, 'iPadOS/Android Pad sidebar item meets 44pt touch target height');
+$ipadH->clickLabel('Hide Sidebar');
+$ipadH->frame(3);
+check($ipadH->byLabel('Show Sidebar') !== null && $ipadH->rect($ipadH->byText('Sweep'))[0] > 260.0, 'iPadOS/Android Pad collapsing sidebar morphs into centered floating top capsule tab bar');
+$ipadH->clickLabel('Show Sidebar');
+$ipadH->frame(3);
+check($ipadH->byLabel('Hide Sidebar') !== null && $ipadH->rect($ipadH->byText('Sweep'))[0] < 260.0, 'iPadOS/Android Pad tapping Show Sidebar on top capsule restores sidebar');
+
 $s = new class {
     public int $n = 0;
     public bool $wifi = false;
