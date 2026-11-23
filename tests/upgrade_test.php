@@ -16,3 +16,5 @@ check(str_contains($bin, "sh(['composer', 'global', 'update', 'owner888/myphp'])
 check(str_contains($bin, "fail(\"MyPHP here is a project's dependency (\$root): in that project, composer update owner888/myphp\")"), 'a project\'s dependency is the project\'s to update');
 check(str_contains($bin, "\$section('MyPHP', ["), 'myphp doctor says when a newer MyPHP is out');
 check(str_contains((string)file_get_contents(dirname(__DIR__) . '/docs/cli.md'), '## myphp upgrade'), 'docs/cli.md has myphp upgrade');
+check(!str_contains($bin, "sh(['git', '-C', \$root, 'pull'"), 'git pull captures output instead of printing duplicate raw git stdout');
+check(str_contains($bin, "trim(\$before) === trim(\$after)"), 'checkout upgrade distinguishes up-to-date from actual fast-forward');

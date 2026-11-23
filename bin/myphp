@@ -2736,8 +2736,16 @@ function upgrade(array $args): void
     if (is_dir("$root/.git")) {
         [, $dirty] = Cmd::output(['git', '-C', $root, 'status', '--porcelain']);
         trim($dirty) === '' || fail("$root has changes of yours: commit or stash them, then myphp upgrade");
-        sh(['git', '-C', $root, 'pull', '--ff-only']) === 0 || fail("git pull in $root failed");
-        logf('upgraded the checkout in ' . $root);
+        [, $before] = Cmd::output(['git', '-C', $root, 'rev-parse', 'HEAD']);
+        [$code, $pull] = Cmd::output(['git', '-C', $root, 'pull', '--ff-only']);
+        $code === 0 || fail(trim($pull) !== '' ? "git pull in $root failed:\n" . trim($pull) : "git pull in $root failed");
+        [, $after] = Cmd::output(['git', '-C', $root, 'rev-parse', 'HEAD']);
+        if (trim($before) === trim($after)) {
+            logf('myphp ' . VERSION . ' is the latest');
+        } else {
+            $newVer = preg_match("/^const VERSION = '([^']*)';$/m", (string)@file_get_contents("$root/bin/myphp"), $vm) === 1 ? $vm[1] : VERSION;
+            logf($newVer !== VERSION ? 'upgraded myphp ' . VERSION . " to $newVer ($root)" : 'upgraded the checkout in ' . $root);
+        }
         return;
     }
     $latest !== null || fail('the latest release could not be asked (offline?); try again');
