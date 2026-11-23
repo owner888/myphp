@@ -16,6 +16,12 @@ final class HTTPURLResponse
         public readonly array $allHeaderFields = [],
     ) {}
 
+    /** Whether $statusCode is 2xx (200..299). */
+    public function ok(): bool
+    {
+        return $this->statusCode >= 200 && $this->statusCode < 300;
+    }
+
     public function value(string $forHTTPHeaderField): ?string
     {
         return $this->allHeaderFields[strtolower($forHTTPHeaderField)] ?? null;

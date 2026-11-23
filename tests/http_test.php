@@ -52,3 +52,9 @@ try {
         @rmdir($dir);
     }
 })();
+
+same([true, false, false], [
+    (new \MyPHP\HTTPURLResponse('https://example.com', 200))->ok(),
+    (new \MyPHP\HTTPURLResponse('https://example.com', 404))->ok(),
+    (new \MyPHP\HTTPURLResponse('https://example.com', 500))->ok(),
+], 'HTTPURLResponse::ok() checks 2xx statusCode');
