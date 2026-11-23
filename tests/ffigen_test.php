@@ -136,4 +136,38 @@ check(str_contains($gtkPhp, 'public static function g_file_test(mixed $filename,
 loadGeneratedPhp($gtkPhp, 'gtk');
 same(0, \MyPHP\Tests\Generated\Gtk3Ffi::GTK_WINDOW_TOPLEVEL, 'Generated Linux GTK wrapper constant');
 
+// 6. Cross-platform extern "C" guard + bare stem resolveLibrary() + available() test
+$xplatHeader = <<<'C'
+#ifndef QUANT_SWEEP_H
+#define QUANT_SWEEP_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define SWEEP_VERSION 1
+
+int sweep_add(int a, int b);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+C;
+
+$xplatPhp = FfiGen::fromCHeader($xplatHeader, 'QuantSweepTestFfi', 'MyPHP\\Tests\\Generated', 'quant_sweep');
+check(!str_contains($xplatPhp, 'extern "C"'), 'FfiGen strips #ifdef __cplusplus extern "C" { } wrapper');
+check(str_contains($xplatPhp, 'public static function resolveLibrary(?string $library = null): ?string'), 'FfiGen generates cross-platform resolveLibrary()');
+check(str_contains($xplatPhp, 'public static function available(?string $library = null): bool'), 'FfiGen generates available() check');
+loadGeneratedPhp($xplatPhp, 'xplat');
+$resolvedStem = \MyPHP\Tests\Generated\QuantSweepTestFfi::resolveLibrary();
+$expectedName = match (PHP_OS_FAMILY) {
+    'Darwin' => 'libquant_sweep.dylib',
+    'Windows' => 'quant_sweep.dll',
+    default => 'libquant_sweep.so',
+};
+same($expectedName, basename((string)$resolvedStem), 'resolveLibrary maps bare stem to host OS shared library filename');
+same(false, \MyPHP\Tests\Generated\QuantSweepTestFfi::available('/nonexistent/libmissing_12345.dylib'), 'available() returns false cleanly for missing library');
+
 

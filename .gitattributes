@@ -1,1 +1,6 @@
 * text=auto eol=lf
+/.github export-ignore
+/AGENTS.md export-ignore
+/docs export-ignore
+/examples export-ignore
+/tests export-ignore

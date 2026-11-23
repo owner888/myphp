@@ -29,9 +29,12 @@ final class FfiGen
         string $namespace = 'App\\Native',
         ?string $library = null
     ): string {
-        // Strip C comments and preprocessor directives for parsing
+        // Strip C comments, extern "C" guards, and preprocessor directives for parsing
         $clean = (string)preg_replace('~/\*.*?\*/~s', '', $headerContent);
         $clean = (string)preg_replace('~//[^\r\n]*~', '', $clean);
+        $clean = (string)preg_replace('/^[ \t]*#ifdef\s+__cplusplus\s+extern\s+"C"\s*\{\s*#endif/m', '', $clean);
+        $clean = (string)preg_replace('/^[ \t]*#ifdef\s+__cplusplus\s+\}\s*#endif/m', '', $clean);
+        $clean = (string)preg_replace('/\bextern\s+"C"\s+/', '', $clean);
 
         // Extract #define integer/float/string constants before stripping directives
         $constants = [];
@@ -101,13 +104,90 @@ final class FfiGen
             $out[] = '';
         }
 
+        $out[] = "    public const LIBRARY = $libExpr;";
+        $out[] = '';
         $out[] = "    public const CDEF = $cdefExport;";
         $out[] = '';
         $out[] = '    private static ?FFI $ffi = null;';
         $out[] = '';
-        $out[] = '    public static function ffi(): FFI';
+        $out[] = '    /**';
+        $out[] = '     * Resolves a cross-platform library stem or file name (e.g. "quant_sweep")';
+        $out[] = '     * to the running platform\'s shared library (.dylib / .so / .dll) inside the';
+        $out[] = '     * app bundle resources, project resources/<os>-<arch>/, or system search path.';
+        $out[] = '     */';
+        $out[] = '    public static function resolveLibrary(?string $library = null): ?string';
         $out[] = '    {';
-        $out[] = "        return self::\$ffi ??= FFI::cdef(self::CDEF, $libExpr);";
+        $out[] = '        $raw = $library ?? self::LIBRARY;';
+        $out[] = '        if ($raw === null || $raw === \'\') {';
+        $out[] = '            return null;';
+        $out[] = '        }';
+        $out[] = '        if (is_file($raw) || str_contains($raw, \'/\') || str_contains($raw, \'\\\\\')) {';
+        $out[] = '            return $raw;';
+        $out[] = '        }';
+        $out[] = '        $os = match (PHP_OS_FAMILY) { \'Darwin\' => \'darwin\', \'Windows\' => \'windows\', default => strtolower(PHP_OS_FAMILY) };';
+        $out[] = '        $arch = match (strtolower(php_uname(\'m\'))) { \'x86_64\', \'amd64\' => \'amd64\', \'arm64\', \'aarch64\' => \'arm64\', default => strtolower(php_uname(\'m\')) };';
+        $out[] = '        $candidates = [];';
+        $out[] = '        if (str_contains($raw, \'.so.\')) {';
+        $out[] = '            $candidates[] = $raw;';
+        $out[] = '        } else {';
+        $out[] = '            $stem = (string)preg_replace(\'/\.(?:dylib|dll|so)$/i\', \'\', $raw);';
+        $out[] = '            $bare = str_starts_with($stem, \'lib\') && strlen($stem) > 3 ? substr($stem, 3) : $stem;';
+        $out[] = '            $native = match ($os) {';
+        $out[] = '                \'darwin\' => ["lib{$bare}.dylib", "{$bare}.dylib"],';
+        $out[] = '                \'windows\' => ["{$bare}.dll", "lib{$bare}.dll"],';
+        $out[] = '                default => ["lib{$bare}.so", "{$bare}.so"],';
+        $out[] = '            };';
+        $out[] = '            foreach ([...$native, $raw] as $c) {';
+        $out[] = '                if (!in_array($c, $candidates, true)) {';
+        $out[] = '                    $candidates[] = $c;';
+        $out[] = '                }';
+        $out[] = '            }';
+        $out[] = '        }';
+        $out[] = '        $dirs = [];';
+        $out[] = '        if (class_exists(\\MyPHP\\Native\\Bundle::class)) {';
+        $out[] = '            $res = \\MyPHP\\Native\\Bundle::resources();';
+        $out[] = '            if ($res !== null) { $dirs[] = $res; }';
+        $out[] = '            $exe = \\MyPHP\\Native\\Bundle::executable();';
+        $out[] = '            if ($exe !== \'\') { $dirs[] = dirname($exe); }';
+        $out[] = '        }';
+        $out[] = '        $roots = [__DIR__, dirname(__DIR__), dirname(__DIR__, 2), dirname(__DIR__, 3)];';
+        $out[] = '        $cwd = getcwd();';
+        $out[] = '        if (is_string($cwd) && $cwd !== \'\') { $roots[] = $cwd; }';
+        $out[] = '        foreach ($roots as $r) {';
+        $out[] = '            $dirs[] = "$r/resources/$os-$arch";';
+        $out[] = '            $dirs[] = "$r/resources/$os";';
+        $out[] = '            $dirs[] = "$r/resources";';
+        $out[] = '        }';
+        $out[] = '        foreach ($dirs as $dir) {';
+        $out[] = '            foreach ($candidates as $cand) {';
+        $out[] = '                $p = "$dir/$cand";';
+        $out[] = '                if (is_file($p)) {';
+        $out[] = '                    return $p;';
+        $out[] = '                }';
+        $out[] = '            }';
+        $out[] = '        }';
+        $out[] = '        return $candidates[0];';
+        $out[] = '    }';
+        $out[] = '';
+        $out[] = '    public static function available(?string $library = null): bool';
+        $out[] = '    {';
+        $out[] = '        if (!extension_loaded(\'ffi\')) {';
+        $out[] = '            return false;';
+        $out[] = '        }';
+        $out[] = '        try {';
+        $out[] = '            self::ffi($library);';
+        $out[] = '            return true;';
+        $out[] = '        } catch (\\Throwable) {';
+        $out[] = '            return false;';
+        $out[] = '        }';
+        $out[] = '    }';
+        $out[] = '';
+        $out[] = '    public static function ffi(?string $library = null): FFI';
+        $out[] = '    {';
+        $out[] = '        if ($library !== null) {';
+        $out[] = '            return FFI::cdef(self::CDEF, self::resolveLibrary($library));';
+        $out[] = '        }';
+        $out[] = '        return self::$ffi ??= FFI::cdef(self::CDEF, self::resolveLibrary());';
         $out[] = '    }';
         $out[] = '';
         $out[] = '    public static function new(string $type, bool $owned = true, bool $persistent = false): CData';

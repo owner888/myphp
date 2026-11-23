@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.203.11';
+const VERSION = '1.203.12';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -245,7 +245,12 @@ function orElse(string $s, string $or): string
 /** The MyPHP checkout the project runs on: its configuration's framework, else this command's (which boot.php is told as MYPHP_HOME). */
 function frameworkOf(array $c): string
 {
-    return realpath($c['framework'] ?? FRAMEWORK) ?: fail('framework ' . $c['framework'] . ' does not exist');
+    $fw = $c['framework'] ?? null;
+    if (!is_string($fw) || $fw === '') {
+        return realpath(FRAMEWORK) ?: fail('framework ' . FRAMEWORK . ' does not exist');
+    }
+    $resolved = isset($c['projectDir']) ? path((string)$c['projectDir'], $fw) : $fw;
+    return realpath($resolved) ?: fail('framework ' . $fw . ' does not exist');
 }
 
 /** $p made absolute against the project's directory. */
@@ -308,6 +313,7 @@ function project(array $args): array
         }
         is_array($c) && ($c === [] || !array_is_list($c)) || fail("$name is not an object");
     }
+    $c['projectDir'] = $dir;
     $c['configFile'] = $name; // for messages, as mygo's configName
     $bad = fn(string $msg): never => fail("$name: $msg");
     $c['name'] = orElse((string)($c['name'] ?? ''), basename($dir));

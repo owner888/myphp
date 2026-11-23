@@ -4,6 +4,10 @@
 // (ViewFile), and by what renders views; their classes are MyPHP\UI\Declarative's.
 declare(strict_types=1);
 
+if (enum_exists(\Font::class, false)) {
+    return;
+}
+
 use MyPHP\UI\Declarative as D;
 use MyPHP\UI\{Image as UIImage, Node, SVG, Theme};
 
