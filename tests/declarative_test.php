@@ -11,6 +11,7 @@ use View, Font, Color, ButtonStyle, KeyEquivalent, Edge, PickerStyle, DatePicker
 
 require_once __DIR__ . '/../src/UI/Declarative/functions.php';
 require __DIR__ . '/../src/UI/Declarative/functions.php'; // regression: plain `require` (as Composer autoload.files uses) must be idempotent
+check(function_exists('array_first') && function_exists('array_last'), 'Declarative/functions.php loads PHP 8.4 array_first/array_last polyfills for Composer apps');
 
 // SwiftUI ButtonStyle.bordered and ButtonStyle.borderedProminent share identical outer height (plain title and icon+title).
 $btnCheck = new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 8)(

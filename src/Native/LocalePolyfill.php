@@ -388,11 +388,89 @@ namespace {
         {
             public const PROPERTY_SCRIPT = 0;
             public const SHORT_PROPERTY_NAME = 1;
-            public static function getIntPropertyValue(string $char, int $property): int
+            public const CHAR_CATEGORY_UNASSIGNED = 0;
+            public const CHAR_CATEGORY_UPPERCASE_LETTER = 1;
+            public const CHAR_CATEGORY_LOWERCASE_LETTER = 2;
+            public const CHAR_CATEGORY_DECIMAL_DIGIT_NUMBER = 9;
+            public const CHAR_CATEGORY_SPACE_SEPARATOR = 12;
+            public const CHAR_CATEGORY_LINE_SEPARATOR = 13;
+            public const CHAR_CATEGORY_PARAGRAPH_SEPARATOR = 14;
+            public const CHAR_CATEGORY_CONTROL_CHAR = 15;
+            public const CHAR_CATEGORY_FORMAT_CHAR = 16;
+            public const CHAR_CATEGORY_PRIVATE_USE_CHAR = 17;
+            public const CHAR_CATEGORY_SURROGATE = 18;
+            public const CHAR_CATEGORY_OTHER_PUNCTUATION = 23;
+
+            private static function cp(int|string $codepoint): ?int
+            {
+                if (is_int($codepoint)) {
+                    return $codepoint >= 0 && $codepoint <= 0x10FFFF ? $codepoint : null;
+                }
+                return $codepoint !== '' ? mb_ord($codepoint, 'UTF-8') : null;
+            }
+
+            public static function isUWhiteSpace(int|string $codepoint): ?bool
+            {
+                $cp = self::cp($codepoint);
+                if ($cp === null) {
+                    return null;
+                }
+                return ($cp >= 0x09 && $cp <= 0x0D)
+                    || $cp === 0x20 || $cp === 0x85 || $cp === 0xA0 || $cp === 0x1680
+                    || ($cp >= 0x2000 && $cp <= 0x200A)
+                    || $cp === 0x2028 || $cp === 0x2029 || $cp === 0x202F || $cp === 0x205F || $cp === 0x3000;
+            }
+
+            public static function iswhitespace(int|string $codepoint): ?bool
+            {
+                return self::isUWhiteSpace($codepoint);
+            }
+
+            public static function isupper(int|string $codepoint): ?bool
+            {
+                $cp = self::cp($codepoint);
+                if ($cp === null) {
+                    return null;
+                }
+                $ch = mb_chr($cp, 'UTF-8');
+                return $ch !== false && preg_match('/^\p{Lu}$/u', $ch) === 1;
+            }
+
+            public static function charType(int|string $codepoint): ?int
+            {
+                $cp = self::cp($codepoint);
+                if ($cp === null) {
+                    return null;
+                }
+                if ($cp < 0x20 || ($cp >= 0x7F && $cp <= 0x9F)) { return self::CHAR_CATEGORY_CONTROL_CHAR; }
+                if ($cp >= 0xD800 && $cp <= 0xDFFF) { return self::CHAR_CATEGORY_SURROGATE; }
+                if (($cp >= 0xE000 && $cp <= 0xF8FF) || $cp >= 0xF0000) { return self::CHAR_CATEGORY_PRIVATE_USE_CHAR; }
+                if ($cp === 0x2028) { return self::CHAR_CATEGORY_LINE_SEPARATOR; }
+                if ($cp === 0x2029) { return self::CHAR_CATEGORY_PARAGRAPH_SEPARATOR; }
+                if (self::isUWhiteSpace($cp)) { return self::CHAR_CATEGORY_SPACE_SEPARATOR; }
+                $ch = mb_chr($cp, 'UTF-8');
+                if ($ch === false) { return self::CHAR_CATEGORY_UNASSIGNED; }
+                if (preg_match('/^\p{Nd}$/u', $ch) === 1) { return self::CHAR_CATEGORY_DECIMAL_DIGIT_NUMBER; }
+                if (preg_match('/^\p{Lu}$/u', $ch) === 1) { return self::CHAR_CATEGORY_UPPERCASE_LETTER; }
+                if (preg_match('/^\p{Cf}$/u', $ch) === 1) { return self::CHAR_CATEGORY_FORMAT_CHAR; }
+                return self::CHAR_CATEGORY_LOWERCASE_LETTER;
+            }
+
+            public static function charDigitValue(int|string $codepoint): ?int
+            {
+                $cp = self::cp($codepoint);
+                if ($cp === null) { return null; }
+                if ($cp >= 0x30 && $cp <= 0x39) { return $cp - 0x30; }
+                if ($cp >= 0xFF10 && $cp <= 0xFF19) { return $cp - 0xFF10; }
+                return -1;
+            }
+
+            public static function getIntPropertyValue(int|string $char, int $property): int
             {
                 return 0;
             }
-            public static function getPropertyValueName(int $property, int $value, int $nameChoice): string
+
+            public static function getPropertyValueName(int $property, int $value, int $nameChoice = self::SHORT_PROPERTY_NAME): string
             {
                 return 'Latn';
             }

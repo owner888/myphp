@@ -191,20 +191,25 @@ final class Symbols implements Platform\Symbols
     /** The theme's icon of SF name $name: its first name whose symbolic icon the theme has, null for none. */
     private function icon(string $name): ?string
     {
+        $t = $this->theme();
+        if ($t === null) {
+            return null; // before GTK opens a display (headless tests): draw via embedded MaterialSymbols without caching null
+        }
         if (array_key_exists($name, $this->found)) {
             return $this->found[$name];
         }
         foreach (self::NAMES[$name] ?? [] as $icon) {
-            if (self::g()->gtk_icon_theme_has_icon($this->theme(), "$icon-symbolic")) { // the name the lookup takes, the forced symbolic one: by the plain name GTK finds its own colored PNGs first
+            if (self::g()->gtk_icon_theme_has_icon($t, "$icon-symbolic")) { // the name the lookup takes, the forced symbolic one: by the plain name GTK finds its own colored PNGs first
                 return $this->found[$name] = $icon;
             }
         }
         return $this->found[$name] = null;
     }
 
-    private function theme(): FFI\CData
+    private function theme(): ?FFI\CData
     {
-        return self::g()->gtk_icon_theme_get_default() ?? throw new RuntimeException('myphp: GTK has no icon theme before it opens the display (App::run)');
+        $g = self::g();
+        return $g->gdk_screen_get_default() === null ? null : $g->gtk_icon_theme_get_default();
     }
 
     /** GTK's icon theme and GdkPixbuf, an FFI of its own. */
@@ -212,6 +217,7 @@ final class Symbols implements Platform\Symbols
     {
         return self::$g ??= FFI::cdef('
             typedef struct { double red, green, blue, alpha; } GdkRGBA;
+            void* gdk_screen_get_default(void);
             void* gtk_icon_theme_get_default(void);
             int gtk_icon_theme_has_icon(void*, const char*);
             void* gtk_icon_theme_lookup_icon(void*, const char*, int, int);
