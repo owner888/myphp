@@ -23,7 +23,7 @@ Native iOS/iPadOS GPU UI support via Metal and CoreText, powered by an embedded 
 ## Building
 
 ```bash
-# Package an iOS application (.app and .ipa)
+# Package an iOS release application (.app and .ipa): compiles all PHP into the executable's __TEXT,__const segment (zero .php source files in the bundle)
 myphp build -platform ios/arm64 examples/counter-native
 ```
 

@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.203.23';
+const VERSION = '1.204.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -44,7 +44,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, FfiGen, Icns, JniGen, Linux, MachO, Pkgbuild, Provisioning, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
+use MyPHP\Native\Build\{AppImage, Bundle, Cmd, Codesign, Deb, DeviceManager, Dmg, Emulators, FfiGen, Icns, JniGen, Linux, MachO, Pkgbuild, Provisioning, Resources, Slug, Strings, TargetDevice, Upload, Windows, WinSign};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -1282,6 +1282,8 @@ function buildAndroid(string $dir, array $c, string $arch, array $opts): array
         putenv('MYPHP_ANDROID_CHANNEL=' . $opts['channel']);
     }
     putenv("MYPHP_ANDROID_FORMAT=$format");
+    putenv('MYPHP_ANDROID_DEBUGGABLE=' . ($opts['debug'] ? '1' : ''));
+    putenv('MYPHP_EXCLUDE=' . implode(':', $c['exclude'] ?? []));
     logf("Making android/$arch: $apk");
     $script = dirname(__DIR__) . '/scripts/package-android-apk.sh';
     is_executable($script) || chmod($script, 0755);
@@ -1305,6 +1307,8 @@ function buildIOS(string $dir, array $c, string $arch, array $opts): array
     putenv('MYPHP_EXCLUDE=' . implode(':', $c['exclude'] ?? []));
     putenv('MYPHP_IOS_SDK=iphoneos'); // a build is for devices
     iosSigning($dir, $c, $bundleId, '', $out);
+    putenv('MYPHP_IOS_RUN=');
+    putenv('MYPHP_IOS_RELEASE=' . ($opts['debug'] ? '' : '1'));
     $cmd = [$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName];
     sh($cmd, $dir) === 0 || fail("Failed to package iOS App");
     return ["$out/$exeName.app", "$out/$exeName.ipa"];
@@ -1346,6 +1350,9 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         copyTree($dir, "$contents/Resources/app", [basename($out), 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$contents/Resources/app/myphp/src", []);
         copyTree("$framework/plugins", "$contents/Resources/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
+        if (!$opts['debug']) {
+            AppImage::optimizeTree("$contents/Resources/app", "$contents/Resources/app/myphp/src", 'darwin');
+        }
         // The frontend, served at myphp://localhost/ (mygo's embedded frontendDist).
         if (($c['frontendDist'] ?? '') !== '') {
             copyTree(path($dir, $c['frontendDist']), "$contents/Resources/frontend", ['.DS_Store']);
@@ -1429,6 +1436,9 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
         copyTree($dir, "$stage/app", [basename($out), 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$stage/app/myphp/src", []);
         copyTree("$framework/plugins", "$stage/app/myphp/plugins", ['.DS_Store']); // the built-in plugins (Plugins::BUILT_IN)
+        if (!$opts['debug']) {
+            AppImage::optimizeTree("$stage/app", "$stage/app/myphp/src", 'linux');
+        }
         if (($c['frontendDist'] ?? '') !== '') {
             copyTree(path($dir, $c['frontendDist']), "$stage/frontend", ['.DS_Store']);
         }
@@ -1533,6 +1543,9 @@ function buildWindows(string $dir, array $c, string $arch, array $opts): array
         copyTree($dir, "$app/app", [basename($out), 'node_modules', 'myphp', 'tests', 'test', '*.local.php', Resources::DIR, ...$frontend, ...($c['exclude'] ?? [])], false);
         copyTree("$framework/src", "$app/app/myphp/src", []);
         copyTree("$framework/plugins", "$app/app/myphp/plugins", ['.DS_Store']);
+        if (!$opts['debug']) {
+            AppImage::optimizeTree("$app/app", "$app/app/myphp/src", 'windows');
+        }
         if (($c['frontendDist'] ?? '') !== '') {
             copyTree(path($dir, $c['frontendDist']), "$app/frontend", ['.DS_Store']);
         }
@@ -2171,7 +2184,7 @@ function appPhar(string $appDir, string $entry): string
     $phar = sys_get_temp_dir() . '/myphp-' . getmypid() . '.phar';
     @unlink($phar);
     $code = sh([PHP_BINARY, '-d', 'phar.readonly=0', '-r', <<<PHP
-    \$p = new Phar('$phar'); \$p->buildFromDirectory('$appDir');
+    \$p = new Phar('$phar'); \$p->buildFromDirectory('$appDir'); if (Phar::canCompress(Phar::GZ)) { \$p->compressFiles(Phar::GZ); }
     \$p->setStub("<?php Phar::mapPhar('app.phar'); if ((\\\$argv[1] ?? '') === '--myphp-pty-spawn') { require 'phar://app.phar/myphp/src/Plugins/Terminal/Pty/spawn.php'; exit(127); } require 'phar://app.phar/$entry'; __HALT_COMPILER();");
     PHP]);
     $code === 0 || fail('building the phar failed');
@@ -3719,6 +3732,7 @@ function runCommand(array $args): void
             iosSigning($dir, $c, $bundleId, null, $out);
         }
         putenv('MYPHP_EXCLUDE=' . implode(':', $exclude));
+        putenv('MYPHP_IOS_RELEASE=');
         putenv('MYPHP_IOS_RUN=' . ($targetDev->type === 'device' ? '1' : '')); // on a device the app runs a copy of its PHP, which phoneSync changes (main.m's myphp_run_root)
         $step([$script, $mainPhp, $bundleId, $exeName, $out, $c['version'], $displayName], $dir) === 0 || fail("Failed to build iOS application");
 

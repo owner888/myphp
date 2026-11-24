@@ -44,11 +44,11 @@ final class Bundle
         return self::$launched === false ? null : self::$launched;
     }
 
-    /** Where the bundle's resources are (App::path('resources')): Contents/Resources on macOS, the bundle itself on iOS, on Linux and Windows the app's directory; null without a bundle. */
+    /** Where the bundle's resources are (App::path('resources')): Contents/Resources on macOS, the bundle itself on iOS, the files directory on Android, on Linux and Windows the app's directory; null without a bundle. */
     public static function resources(): ?string
     {
         $app = self::path();
-        return $app === null ? null : (self::flat() || \MyPHP\App::isIOS() ? $app : "$app/Contents/Resources");
+        return $app === null ? null : (self::flat() || \MyPHP\App::isIOS() || \MyPHP\App::isAndroid() ? $app : "$app/Contents/Resources");
     }
 
     /** Whether the bundle is a directory of the launcher, app/ and info.json (Build\Linux::INFO), as Linux's and Windows's are, rather than a .app. */
@@ -70,9 +70,12 @@ final class Bundle
         if (self::$info === null) {
             $app = self::path();
             if ($app !== null && self::flat()) {
-                $json = @file_get_contents("$app/" . Build\Linux::INFO);
-                $info = $json === false ? throw new \RuntimeException("myphp: $app has no " . Build\Linux::INFO . ': build the app with myphp build') : json_decode($json, true);
-                return self::$info = is_array($info) ? $info : throw new \RuntimeException("$app/" . Build\Linux::INFO . ' is no object');
+                $json = @file_get_contents("$app/info.json");
+                $info = $json === false ? throw new \RuntimeException("myphp: $app has no info.json: build the app with myphp build") : json_decode($json, true);
+                return self::$info = is_array($info) ? $info : throw new \RuntimeException("$app/info.json is no object");
+            }
+            if ($app !== null && \MyPHP\App::isAndroid()) {
+                return self::$info = getenv('MYPHP_PRODUCTION') === '1' ? ['MyPHPProduction' => true] : [];
             }
             $plistFile = $app === null ? '' : (\MyPHP\App::isIOS() ? "$app/Info.plist" : "$app/Contents/Info.plist");
             $xml = $plistFile === '' ? false : @file_get_contents($plistFile);

@@ -55,6 +55,8 @@ this machine alone; on Linux one whose packages depend on
 |---|---|
 | macOS | `My App.app`, signed, and `My App 0.1.0 arm64.dmg` (`My App 0.1.0.dmg` for `darwin/universal`), with [updates](plugins/updater.md) also the update archive and `update-darwin-<arch>.json` |
 | Linux | `my-app`, `my-app.desktop`, `my-app.png`, `my-app.xml` for the file types the app defines, the files of the app, their archive `my-app-0.1.0-linux-amd64.tar.gz`, the Debian package `my-app_0.1.0_amd64.deb`, and a [`PKGBUILD`](#arch-linux) |
+| Android | `<Name>.apk` (or `<Name>.aab` with `-format aab`), signed and 16 KB page-aligned: `libphp.so` + `libmyphp.so` + **`libapp.so`** (the app, `vendor/` and pruned framework compiled into a compressed `.rodata` ELF shared library — zero `.php` source files in the package) |
+| iOS | `<Name>.app` and `<Name>.ipa`, signed: the app, `vendor/` and pruned framework linked directly into the executable's `__TEXT,__const` read-only segment (zero `.php` source files in the bundle) |
 
 Other flags: `-debug` keeps development features such as the inspector,
 `-skip-dmg` and `-skip-notarize` skip those steps, `-sign` overrides the

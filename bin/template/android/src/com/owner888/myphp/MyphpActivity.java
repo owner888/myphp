@@ -87,6 +87,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
 
     static {
         try {
+            try {
+                System.loadLibrary("app");
+            } catch (UnsatisfiedLinkError ignored) {
+                // Development builds (`myphp run`) carry source assets instead of libapp.so
+            }
             System.loadLibrary("php");
             System.loadLibrary("myphp");
             Log.i(TAG, "Native libraries loaded successfully");
@@ -386,7 +391,23 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
                 throw new RuntimeException("reading " + mark + " failed: " + e, e);
             }
         }
-        copyAssetFolder("", targetDir);
+        String manifest = null;
+        try (InputStream in = getAssets().open(".myphp-assets-list")) {
+            manifest = new String(in.readAllBytes(), "UTF-8");
+        } catch (IOException ignored) {
+            // Legacy APK without .myphp-assets-list
+        }
+        if (manifest != null) {
+            for (String rel : manifest.split("
+")) {
+                String path = rel.trim();
+                if (!path.isEmpty()) {
+                    copyAssetFile(path, new File(targetDir, path));
+                }
+            }
+        } else {
+            copyAssetFolder("", targetDir);
+        }
         try (FileOutputStream os = new FileOutputStream(mark)) {
             os.write(installed.getBytes("UTF-8"));
         } catch (IOException e) {

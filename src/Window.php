@@ -86,8 +86,12 @@ final class Window
     /** The last change of the window's state captured, which stateChanged() waits to settle for. */
     private int $stateChange = 0;
     public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop'];
-    /** The NSVisualEffectView materials of WindowOptions::$vibrancy, as mygo's. */
-    public const MATERIALS = Platform\Darwin\Window::MATERIALS;
+    /** The NSVisualEffectView materials of WindowOptions::$vibrancy, as mygo's (Windows 11's backdrops as their nearest), and Node::systemMaterial's. */
+    public const MATERIALS = [
+        'titlebar' => 3, 'selection' => 4, 'menu' => 5, 'popover' => 6, 'sidebar' => 7, 'header' => 10,
+        'sheet' => 11, 'window' => 12, 'hud' => 13, 'fullscreen-ui' => 15, 'tooltip' => 17, 'content' => 18,
+        'under-window' => 21, 'under-page' => 22, 'mica' => 21, 'tabbed' => 21, 'acrylic' => 13,
+    ];
 
     public function __construct(WindowOptions $o)
     {

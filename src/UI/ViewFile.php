@@ -40,6 +40,9 @@ final class ViewFile
     public static function of(string $path, ?object $state = null): self
     {
         $real = str_starts_with($path, 'phar://') ? (is_file($path) ? $path : false) : realpath($path);
+        if ($real === false && is_file($path)) {
+            $real = self::cleanPath($path);
+        }
         if ($real === false) {
             throw new \InvalidArgumentException("myphp: no view file $path");
         }
@@ -53,6 +56,24 @@ final class ViewFile
             self::$bound[$state] = $files;
         }
         return $files[$real];
+    }
+
+    /** Normalized path when $path comes from a read-only native app image (libapp.so / embedded section) where realpath() sees no disk inode. */
+    private static function cleanPath(string $path): string
+    {
+        $abs = \MyPHP\Native\Paths::absolute($path);
+        $parts = [];
+        foreach (explode('/', strtr($abs, [chr(92) => '/'])) as $seg) {
+            if ($seg === '' || $seg === '.') {
+                continue;
+            }
+            if ($seg === '..') {
+                array_pop($parts);
+            } else {
+                $parts[] = $seg;
+            }
+        }
+        return (str_starts_with($abs, '/') ? '/' : '') . implode('/', $parts);
     }
 
     private static function made(string $path, ?object $state): self

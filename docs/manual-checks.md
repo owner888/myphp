@@ -204,3 +204,24 @@ instead.
    click to `App::onNotificationClick`; an embedded `WebView`
    (`Context::webView`) loads HTML/URLs, exchanges IPC messages with PHP
    via `window.myphp`, and answers `Page::eval()`.
+
+## Android
+
+0. [x] **Running, hot reload and release building** (`myphp doctor`, `myphp devices`,
+   `myphp run -d android <dir>`, `myphp build -platform android/arm64 <dir>`):
+   `myphp doctor` shows the Android SDK, NDK, and runtime built without
+   `memfd_create` (`ac_cv_func_memfd_create=no` so an `Enforcing` SELinux
+   emulator or stock phone allows OPcache's lock in `cacheDir`); `myphp run`
+   bundles `.php` assets for live hot reload; `myphp build` compiles the
+   application and pruned framework into `lib/arm64-v8a/libapp.so` (16 KB
+   page-aligned, ~8.3 MB APK, zero `.php` source files in the APK or extracted
+   to `filesDir`) and writes `.myphp-assets-list` so `MyphpActivity` copies
+   only app-owned resources.
+
+## Linux (Docker / Xvfb verification on macOS)
+
+0. [x] **Containerized Xvfb verification and screenshot**: on a Mac without a
+   Linux desktop, verify a built `linux/arm64` static binary (or source run)
+   inside Docker (`myphp-linux-gui:latest`) under `xvfb-run -a` and capture
+   a PNG via `myphp screenshot -out <path>.png <dir>` (or an X11 window dump)
+   to inspect layout, GTK 3/OpenGL rendering and exit status.

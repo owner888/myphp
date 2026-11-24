@@ -19,6 +19,7 @@
 
 #include <main/php.h>
 #include <sapi/embed/php_embed.h>
+#include "../../../Native/app_image.h"
 #include <Zend/zend.h>
 
 #define LOG_TAG "MyPHP"
@@ -325,11 +326,17 @@ static void* php_worker_thread(void *arg) {
         return NULL;
     }
     LOGI("PHP Embed initialized successfully!");
+    int has_app_image = myphp_app_image_mount(g_files_dir);
+    if (has_app_image) {
+        LOGI("Mounted native libapp.so image (%u entries)", g_app_img.count);
+    }
 
     zend_first_try {
         char init_code[2048];
         snprintf(init_code, sizeof(init_code),
             "putenv('MYPHP_PLATFORM=android');"
+            "putenv('MYPHP_BUNDLE=%s');"
+            "%s"
             "putenv('MYPHP_HOT_RELOAD=%s/.myphp-reload');" // where myphp run asks for a hot reload (ViewFile::hotReloadFile): beside app.php
             "ini_set('memory_limit', '512M'); require '%s/src/autoload.php';" // the framework the APK carries: an app needs no autoloader of its own, as on the desktop with Composer's
             // why PHP ended, in the log: the error that ended it (a fatal is written before the bailout, but not always through ub_write), an uncaught exception's trace
@@ -337,7 +344,7 @@ static void* php_worker_thread(void *arg) {
             "$app = '%s/app.php';"
             "if (!file_exists($app)) { error_log('[myphp] no app.php at ' . $app); }"
             "try { require $app; } catch (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); throw $e; }",
-            g_files_dir, g_files_dir, g_files_dir
+            g_files_dir, has_app_image ? "putenv('MYPHP_PRODUCTION=1');" : "", g_files_dir, g_files_dir, g_files_dir
         );
 
         LOGI("Executing app.php...");

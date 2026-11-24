@@ -8,7 +8,7 @@ namespace MyPHP\Tests;
 
 $root = dirname(__DIR__);
 $script = (string)file_get_contents("$root/scripts/build-android-php.sh");
-check(str_contains($script, "s/#define HAVE_MEMFD_CREATE 1/"), 'PHP is built without memfd_create');
+check(str_contains($script, "s/#define HAVE_MEMFD_CREATE 1/") && str_contains($script, 'ac_cv_func_memfd_create=no') && str_contains($script, 'opcache_uses_memfd'), 'PHP is built without memfd_create and stale memfd libphp.so binaries are replaced');
 $launcher = (string)file_get_contents("$root/src/Platform/Android/launcher/myphp_launcher.c");
 check(str_contains($launcher, '{"opcache.lockfile_path", g_cache_dir}'), 'opcache locks a file in the app\'s cache folder');
 check(str_contains($launcher, '{"opcache.enable", "1"}'), 'opcache is still on');

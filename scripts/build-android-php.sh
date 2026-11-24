@@ -62,6 +62,16 @@ ensure_php_embed_headers() {
     fi
 }
 
+# Whether libphp.so still calls memfd_create("opcache_lock", ...) (built before HAVE_MEMFD_CREATE was undefined, and
+# stamped before .build-script-sha256 existed): an enforcing SELinux denies fcntl(F_SETLKW) on a memfd and kills the app.
+opcache_uses_memfd() {
+    [ -f "${PHP_DIR}/libs/libphp.so" ] && strings "${PHP_DIR}/libs/libphp.so" | grep -c '^opcache_lock$' >/dev/null
+}
+if opcache_uses_memfd; then
+    echo "==> Existing Android libphp.so uses memfd opcache_lock (blocked by SELinux): replacing it..."
+    rm -f "${PHP_DIR}/libs/libphp.so" "${PHP_DIR}/libs/.build-script-sha256"
+fi
+
 # Made again when this script changed since (a fix of the runtime, as memfd_create's was), by the prebuilt archive as a first run
 # gets it: in a checkout, whose script a developer edited, from source, as the archive does not have the edit yet.
 FROM_SOURCE="${MYPHP_BUILD_FROM_SOURCE:-0}"
@@ -80,7 +90,7 @@ if [ "$FROM_SOURCE" != "1" ]; then
     if curl -fsSL --connect-timeout 10 --max-time 180 -o "${TMP_TAR}" "${PREBUILT_URL}" 2>/dev/null; then
         echo "==> Extracting prebuilt Android runtime..."
         tar -xzf "${TMP_TAR}" --strip-components=1 -C "${PHONE_BUILD}" && rm -f "${TMP_TAR}" # its members are build/android/...
-        if [ -f "${PHP_DIR}/libs/libphp.so" ]; then
+        if [ -f "${PHP_DIR}/libs/libphp.so" ] && ! opcache_uses_memfd; then
             ensure_php_embed_headers
             touch "${PHP_DIR}/libs/libphp.so"
             runtime_stamp "${PHP_DIR}/libs/libphp.so" "$0"
@@ -264,6 +274,7 @@ if [ ! -f "${PHP_DIR}/libs/libphp.so" ]; then
         ac_cv_func_setpgrp=yes \
         ac_cv_func_getpgrp_void=yes \
         ac_cv_func_setpgrp_void=yes \
+        ac_cv_func_memfd_create=no \
         ac_cv_lib_crypt_crypt=no \
         ac_cv_header_valgrind_valgrind_h=no
 

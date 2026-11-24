@@ -12,6 +12,7 @@
 #include <main/php.h>
 #include <sapi/embed/php_embed.h>
 #include <Zend/zend.h>
+#include "../../../Native/app_image.h"
 
 typedef struct {
     int type; // 0: down, 1: move, 2: up, 3: cancel
@@ -1207,8 +1208,9 @@ static void* php_worker_thread(void *arg) {
         php_embed_module.ini_defaults = myphp_ini_defaults;
         php_embed_init(1, php_argv);
 
+        int has_app_image = myphp_app_image_mount([root UTF8String]);
         NSString *appPhp = [root stringByAppendingPathComponent:@"app.php"];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:appPhp]) {
+        if (!has_app_image && ![[NSFileManager defaultManager] fileExistsAtPath:appPhp]) {
             myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[@"app.php not found at " stringByAppendingString:appPhp] UTF8String]);
         } else {
             myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", "Executing app.php...");
@@ -1217,12 +1219,9 @@ static void* php_worker_thread(void *arg) {
                 // and why PHP ended, in the log: a fatal error, an uncaught exception's trace (as the Android launcher's)
                 NSString *autoload = [NSString stringWithFormat:@"ini_set('memory_limit', '512M'); require '%@/src/autoload.php';"
                     "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
-                    "set_exception_handler(function (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); });", root]; // PHP ends after the handler, as with no handler
+                    "set_exception_handler(function (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); });"
+                    "require '%@';", root, appPhp]; // PHP ends after the handler, as with no handler
                 zend_eval_string((char *)[autoload UTF8String], NULL, "myphp_bootstrap");
-                zend_file_handle file_handle;
-                zend_stream_init_filename(&file_handle, [appPhp UTF8String]);
-                php_execute_script(&file_handle);
-                zend_destroy_file_handle(&file_handle);
             } zend_catch {
                 myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", "Uncaught PHP exception/bailout in app.php");
             } zend_end_try();
