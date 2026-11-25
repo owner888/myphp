@@ -73,11 +73,16 @@ final class PhpHttp
         };
         $sent = strlen($request->body ?? '');
         $told = 0.0;
-        $tell = static function (int $total, int $now, bool $last) use ($progress, $sent, &$told): void {
+        $tell = static function (int $upNow, int $downTotal, int $downNow, bool $last) use ($progress, $sent, &$told): void {
             if ($progress === null || (!$last && hrtime(true) / 1e9 - $told < self::PROGRESS_INTERVAL)) { return; }
             $told = hrtime(true) / 1e9;
-            if ($progress($sent, $sent, $total, $now) === false) { throw URLError::cancelled(); }
+            if ($progress($sent, $upNow, $downTotal, $downNow) === false) { throw URLError::cancelled(); }
         };
+        if ($sent > 0 && $progress !== null) {
+            $request = new Request($request->method, $request->url, $request->headers, $request->body, static function (int $upNow, int $upTotal) use ($tell): void {
+                $tell($upNow, 0, 0, $upNow >= $upTotal);
+            });
+        }
         $response = new HttpClient($timeout > 0 ? $timeout : null, $proxy)->follow($request);
         $out = null;
         try {
@@ -87,7 +92,6 @@ final class PhpHttp
             $total = (int)($response->header('content-length') ?? 0);
             $text = '';
             $got = 0;
-            $tell($total, 0, $sent > 0); // the body has gone
             foreach ($response->body as $chunk) {
                 $got += strlen($chunk);
                 if ($out === null) {
@@ -96,9 +100,9 @@ final class PhpHttp
                     throw new RuntimeException("$who: cannot write $saveTo");
                 }
                 if ($onData !== null) { $onData($chunk); }
-                $tell($total, $got, false);
+                $tell($sent, $total, $got, false);
             }
-            $tell(max($total, $got), $got, true);
+            $tell($sent, max($total, $got), $got, true);
             return new HttpResponse($response->status, $text, $response->headers);
         } catch (Throwable $e) {
             $response->body->close(); // a body left part way: its stream, or its connection, let go

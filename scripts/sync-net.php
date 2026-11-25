@@ -1,9 +1,10 @@
 <?php
 // Copies the pure-PHP network stack MyPHP carries in src/Net from the pig checkout it is developed in
 // (github.com/owner888/pig: packages/async, the event loop over stream_select and fibers, and packages/ai/src/Http,
-// HTTP/1.1 and HTTP/2 over it), its namespaces made MyPHP's:
+// HTTP/1.1 and HTTP/2 over it), its namespaces made MyPHP's; and, when a php-http checkout sits beside it
+// (github.com/owner888/php-http, the standalone Composer library), updates that checkout too:
 //
-//   php scripts/sync-net.php            # copy from $PIG_HOME, else ../pig
+//   php scripts/sync-net.php            # copy from $PIG_HOME, else ../pig (and update ../php-http if present)
 //   php scripts/sync-net.php --check    # say what differs, and exit 1 when something does (tests/net_sync_test.php)
 //
 // The copy is committed: MyPHP is installed as a checkout, which carries what it runs. It is never edited here; a
@@ -20,9 +21,10 @@ const PACKAGES = [
 ];
 
 /** What src/Net holds, as pig has it now: path under src/Net => contents. @return array<string, string> */
-function wanted(string $pig): array
+function wanted(string $pig, string $asyncNs = 'MyPHP\\Net\\Async', string $httpNs = 'MyPHP\\Net\\Http'): array
 {
     $out = [];
+    $map = ['Pig\\Async' => $asyncNs, 'Pig\\Ai\\Http' => $httpNs];
     foreach (PACKAGES as $from => [$to, , , $skip]) {
         $dir = "$pig/$from";
         is_dir($dir) || throw new RuntimeException("$dir does not exist: set PIG_HOME to a pig checkout");
@@ -31,7 +33,7 @@ function wanted(string $pig): array
             $rel = substr($f->getPathname(), strlen($dir) + 1);
             if ($f->getExtension() !== 'php' || in_array($rel, $skip, true)) { continue; }
             $text = (string)file_get_contents($f->getPathname());
-            foreach (PACKAGES as [, $ours, $theirs]) {
+            foreach ($map as $theirs => $ours) {
                 $text = str_replace($theirs, $ours, $text);
             }
             $out["$to/$rel"] = $text;
@@ -41,11 +43,10 @@ function wanted(string $pig): array
     return $out;
 }
 
-/** What src/Net holds. @return array<string, string> */
-function have(): array
+/** What $dir holds under Async/ and Http/. @return array<string, string> */
+function have(string $dir = ROOT . '/src/Net'): array
 {
     $out = [];
-    $dir = ROOT . '/src/Net';
     foreach (PACKAGES as [$to]) {
         if (!is_dir("$dir/$to")) { continue; }
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$dir/$to", FilesystemIterator::SKIP_DOTS)) as $f) {
@@ -76,4 +77,15 @@ foreach ($wanted as $p => $text) {
     is_dir(dirname($path)) || mkdir(dirname($path), 0755, true);
     file_put_contents($path, $text);
 }
-echo 'copied ' . count($wanted) . ' files, ' . count($differ) . " changed\n";
+echo 'copied ' . count($wanted) . ' files to src/Net, ' . count($differ) . " changed\n";
+
+$standalone = getenv('PHP_HTTP_HOME') ?: ROOT . '/../php-http';
+if (is_dir("$standalone/src")) {
+    $libWanted = wanted($pig, 'Owner888\\Async', 'Owner888\\Http');
+    foreach ($libWanted as $p => $text) {
+        $path = "$standalone/src/$p";
+        is_dir(dirname($path)) || mkdir(dirname($path), 0755, true);
+        file_put_contents($path, $text);
+    }
+    echo 'synced ' . count($libWanted) . " files to $standalone/src\n";
+}

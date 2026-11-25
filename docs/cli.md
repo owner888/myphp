@@ -348,7 +348,7 @@ Prints the MyPHP version.
 | `MYPHP_GENERATE=path` | makes `App::run()` write the TypeScript client and return |
 | `MYPHP_INSPECTOR=1` | keeps the inspector in a production build |
 | `MYPHP_UPDATER_PRIVATE_KEY` | the private key that signs updates |
-| `MYPHP_HTTP=php` | carries `Http`, `URLSession`, the updater (`Updater`) and the WebSocket plugin (`Plugins\WebSocket`) over MyPHP's own network stack in PHP (stream_select and fibers, HTTP/1.1 and HTTP/2, TLS by PHP's `openssl` extension) in place of the system's libcurl; `Http::useTransport('php')` does the same from code. Its timeout is of each step, not of the whole transfer |
+| `MYPHP_HTTP=curl` | switches `Http`, `URLSession`, the updater (`Updater`) and the WebSocket plugin (`Plugins\WebSocket`) back to the system's libcurl (`Http::useTransport('curl')` does the same from code); by default they run over MyPHP's own pure-PHP network stack (`stream_select` + fibers, HTTP/1.1 and HTTP/2, TLS by PHP's `openssl` extension, published standalone as `owner888/php-http`) |
 | `MYPHP_AUTOMATION` | lets another process drive the app, with the [automation plugin](automation.md); a run from the project's files in development listens without adding it |
 | `MYPHP_THEME=light\|dark` | in a run from the project's files in development, the appearance the app shows (`myphp screenshot -theme`) |
 | `MYPHP_DATA_HOME=dir` | in a run from the project's files in development on the Mac, where `App::path` looks in place of `~/Library` (`myphp screenshot -data`) |

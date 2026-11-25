@@ -40,9 +40,9 @@ final class Http
     private static ?string $transport = null;
 
     /**
-     * What carries the requests: 'curl', the system's libcurl (the default), or 'php', MyPHP's own stack in PHP
-     * (Net\PhpHttp: stream_select and fibers, TLS by PHP's openssl extension, HTTP/1.1 and HTTP/2), which waits on
-     * nothing of the system's and so behaves the same everywhere. null leaves it to MYPHP_HTTP in the environment.
+     * What carries the requests: 'php', MyPHP's own stack in PHP (the default: Net\PhpHttp, stream_select and fibers,
+     * TLS by PHP's openssl extension, HTTP/1.1 and HTTP/2, waiting on nothing of the system's), or 'curl', the system's
+     * libcurl. null leaves it to MYPHP_HTTP in the environment (MYPHP_HTTP=curl chooses curl).
      */
     public static function useTransport(?string $transport): void
     {
@@ -50,10 +50,10 @@ final class Http
         self::$transport = $transport;
     }
 
-    /** 'curl' or 'php': what useTransport() chose, else MYPHP_HTTP=php in the environment, else curl. */
+    /** 'php' or 'curl': what useTransport() chose, else MYPHP_HTTP=curl in the environment, else php. */
     public static function transport(): string
     {
-        return self::$transport ?? (getenv('MYPHP_HTTP') === 'php' ? 'php' : 'curl');
+        return self::$transport ?? (getenv('MYPHP_HTTP') === 'curl' ? 'curl' : 'php');
     }
 
     /** GET $url with $headers (name => value). */

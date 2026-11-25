@@ -8,7 +8,10 @@ namespace MyPHP\Tests;
 
 use MyPHP\{Http, HttpResponse, URLError};
 
-same('curl', Http::transport(), 'curl carries the requests unless told otherwise');
+same('php', Http::transport(), 'php carries the requests unless told otherwise');
+Http::useTransport('curl');
+same('curl', Http::transport(), 'useTransport("curl") switches back to libcurl');
+Http::useTransport(null);
 try {
     Http::useTransport('quic');
     check(false, 'a transport that is none is refused');
