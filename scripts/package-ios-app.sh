@@ -50,6 +50,7 @@ ENTRY_DIR="$(dirname "${ENTRY}")"
 echo "==> Compiling native iOS launcher..."
 APP_IMAGE_ASM=""
 APP_IMAGE_BIN=""
+BLOB_UNDEF_FLAGS=()
 if [ "${MYPHP_IOS_RELEASE:-}" = "1" ]; then
     echo "==> Compiling PHP bundle into native __TEXT,__const section..."
     APP_IMAGE_BIN="${BUILD_DIR}/app_image_$$.bin"
@@ -65,6 +66,8 @@ if [ "${MYPHP_IOS_RELEASE:-}" = "1" ]; then
         file_put_contents($argv[5], $blob);
         file_put_contents($argv[6], \MyPHP\Native\Build\AppImage::assemblySource($argv[5], true));
     ' "${ROOT_DIR}" "${ENTRY_DIR}" "${ENTRY}" "${MYPHP_EXCLUDE:-}" "${APP_IMAGE_BIN}" "${APP_IMAGE_ASM}"
+else
+    BLOB_UNDEF_FLAGS=(-Wl,-U,_myphp_app_blob -Wl,-U,_myphp_app_blob_end)
 fi
 # What PHP's ext-ffi looks up in the app's own process (FFI::cdef without a library), exported so that -Wl,-dead_strip
 # and strip -x keep it: the launcher's C bridge (Native\iOS), and libcurl's API (Native\Curl), linked in whole
@@ -78,7 +81,7 @@ if [ -n "${APP_IMAGE_ASM}" ]; then
     echo '_myphp_app_blob' >> "${EXPORT_LIST}"
     echo '_myphp_app_blob_end' >> "${EXPORT_LIST}"
 fi
-xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -Wl,-dead_strip -Wl,-exported_symbols_list,"${EXPORT_LIST}" -fobjc-arc \
+xcrun --sdk "$IOS_SDK" clang -target ${IOS_TARGET} -isysroot "${SDK_PATH}" -Os -Wl,-dead_strip -Wl,-exported_symbols_list,"${EXPORT_LIST}" ${BLOB_UNDEF_FLAGS[@]+"${BLOB_UNDEF_FLAGS[@]}"} -fobjc-arc \
     -I"${PHP_BUILD}" \
     -I"${PHP_BUILD}/main" \
     -I"${PHP_BUILD}/Zend" \
