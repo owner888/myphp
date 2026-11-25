@@ -4776,6 +4776,7 @@ final class Context
         $n->focusable = true;
         $n->ticks = $ticks;
         $n->paddingX($t->space(5) / 2); // the knob's half width each side: its center spans the values
+        $n->frame(maxWidth: INF); // 强制撑满容器，解决 Tab 切换布局收敛问题
         $n->minWidth($t->space(20)); // as mygo's: a slider of no width, growing in a row, keeps a track to drag
         $this->slide($n, $value, $min, $max, $step);
         $n->held = $this->animate($n, 'held', ($this->runtime?->sliding($n->id) ?? false) ? 1 : 0, 0.15);
