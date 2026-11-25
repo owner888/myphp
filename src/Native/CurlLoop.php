@@ -295,9 +295,25 @@ final class CurlLoop
         self::$polling = true;
         App::after(self::POLL, static function (): void {
             self::$polling = false;
+            self::look();
             self::wake();
             if (self::$waiters !== []) { self::poll(); }
         });
+    }
+
+    /**
+     * Acts on the sockets that are ready though their descriptor told nothing (macOS). A descriptor armed again now and
+     * then never fires, its socket readable: seen with eight transfers multiplexed on one HTTP/2 connection, one stall in
+     * a few hundred requests, all of them standing still until the descriptor was armed once more. Why CFFileDescriptor
+     * loses that arming is not known; poll(2) tells the state whatever the descriptor did, as it is all the phones have
+     * (pollSockets), so the fibers' tick looks, and a transfer waits POLL seconds at most for it.
+     */
+    private static function look(): void
+    {
+        if (self::$descriptors === []) { return; }
+        foreach (array_keys(self::$sockets) as $fd) { // drain may take a socket off the list, or watch it anew
+            if (isset(self::$sockets[$fd], self::$descriptors[$fd]) && ($events = self::ready($fd, self::$sockets[$fd])) !== 0) { self::drain($fd, $events); }
+        }
     }
 
     /** Resumes the fibers whose wait is over, each on its own turn of the run loop. */
