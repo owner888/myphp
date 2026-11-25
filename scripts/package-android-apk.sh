@@ -70,6 +70,7 @@ APP_VERSION="1.0.0"
 VERSION_CODE="1"
 ANDROID_CHANNEL="${MYPHP_ANDROID_CHANNEL:-apk}"
 ANDROID_ICON_BG=""
+
 if [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/myphp.json" ]; then
     BUNDLE_ID="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["identifier"] ?? "com.owner888.myphp";' "${PROJECT_DIR}/myphp.json")"
     APP_LABEL="$(php -r '$c = json_decode(file_get_contents($argv[1]), true) ?: []; echo $c["name"] ?? $c["displayName"] ?? $argv[2];' "${PROJECT_DIR}/myphp.json" "$APP_LABEL")"
@@ -94,8 +95,13 @@ cp -R "${TEMPLATE_DIR}/res/"* "${WORK_DIR}/res/"
 php -r '
 $f = $argv[1];
 $label = htmlspecialchars($argv[2], ENT_XML1 | ENT_QUOTES, "UTF-8");
-file_put_contents($f, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n    <string name=\"app_name\">{$label}</string>\n</resources>\n");
+file_put_contents($f, "<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">{$label}</string>
+</resources>
+");
 ' "${WORK_DIR}/res/values/strings.xml" "$APP_LABEL"
+
 if [ -n "$PROJECT_DIR" ] && { [ -f "${PROJECT_DIR}/resources/icon.png" ] || [ -f "${PROJECT_DIR}/resources/icon_foreground.png" ] || [ -f "${PROJECT_DIR}/resources/icon_monochrome.png" ]; }; then
     ANDROID_ICON_BG="${ANDROID_ICON_BG:-#FFFFFF}"
 fi
@@ -123,6 +129,7 @@ elif [ -n "$PROJECT_DIR" ] && [ -f "${PROJECT_DIR}/resources/icon_monochrome.png
     cp "${PROJECT_DIR}/resources/icon_monochrome.png" "${WORK_DIR}/res/drawable/ic_launcher_monochrome.png"
     php -r '$f = $argv[1]; $x = str_replace("<monochrome android:drawable=" . chr(34) . "@drawable/ic_launcher_foreground" . chr(34), "<monochrome android:drawable=" . chr(34) . "@drawable/ic_launcher_monochrome" . chr(34), file_get_contents($f)); file_put_contents($f, $x);' "${WORK_DIR}/res/mipmap-anydpi-v26/ic_launcher.xml"
 fi
+
 echo "==> Compiling resources with aapt2..."
 "$AAPT2" compile --dir "${WORK_DIR}/res" -o "${WORK_DIR}/res.zip"
 
@@ -130,11 +137,11 @@ echo "==> Compiling resources with aapt2..."
 echo "==> Linking APK and generating R.java..."
 cp "${TEMPLATE_DIR}/AndroidManifest.xml" "${WORK_DIR}/AndroidManifest.xml"
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" != "1" ]; then
-    php -r '$f=$argv[1]; file_put_contents($f, str_replace("<application ", "<application android:extractNativeLibs=\"true\" ", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
+    php -r '$f=$argv[1]; $c = file_get_contents($f); file_put_contents($f, preg_replace("/<application\s+/", "<application android:extractNativeLibs="true" ", $c));' "${WORK_DIR}/AndroidManifest.xml"
 fi
 if [ "$ANDROID_CHANNEL" = "play" ]; then
     echo "==> Play Store channel: removing REQUEST_INSTALL_PACKAGES permission..."
-    php -r '$f=$argv[1]; file_put_contents($f, preg_replace("/\s*<uses-permission[^>]*REQUEST_INSTALL_PACKAGES[^>]*\/>/", "", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
+    php -r '$f=$argv[1]; file_put_contents($f, preg_replace("/\s*<uses-permission[^>]*REQUEST_INSTALL_PACKAGES[^>]*/>/", "", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
 fi
 # The project's android/ folder: manifest-permissions.xml goes before <application>, manifest-application.xml (services, receivers) into it
 EXTRA_DIR=""
@@ -147,8 +154,10 @@ if [ -n "$EXTRA_DIR" ]; then
         $snippet = "$dir/$name";
         if (!is_file($snippet)) continue;
         $pos = strpos($m, $anchor);
-        if ($pos === false) { fwrite(STDERR, "manifest anchor $anchor missing\n"); exit(1); }
-        $m = substr($m, 0, $pos) . trim(file_get_contents($snippet)) . "\n" . substr($m, $pos);
+        if ($pos === false) { fwrite(STDERR, "manifest anchor $anchor missing
+"); exit(1); }
+        $m = substr($m, 0, $pos) . trim(file_get_contents($snippet)) . "
+" . substr($m, $pos);
     }
     file_put_contents($f, $m);
     ' "${WORK_DIR}/AndroidManifest.xml" "$EXTRA_DIR"
