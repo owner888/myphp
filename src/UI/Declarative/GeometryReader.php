@@ -27,7 +27,7 @@ final class GeometryReader extends View
         $c->end();
         // Built with the size of the frame before: laid out to another (the window resized), it builds again with it.
         $n->draw(static function (Painter $p, array $r) use ($size): void {
-            if (abs($r[2] - $size[0]) > 0.5 || abs($r[3] - $size[1]) > 0.5) { $p->animationFrame(); }
+            if (abs($r[2] - $size[0]) > 0.5 || abs($r[3] - $size[1]) > 0.5) { $p->invalidate(); }
         });
         View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
         return $n;

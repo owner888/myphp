@@ -35,6 +35,17 @@ final class Painter
     }
 
     /**
+     * Asks for the next frame built anew, where animationFrame() asks for
+     * one that only paints again: for a drawing that finds the view was
+     * built for a box other than the one layout gave it (a width read from
+     * the frame before), which only another build puts right.
+     */
+    public function invalidate(): void
+    {
+        $this->rt?->invalidate();
+    }
+
+    /**
      * animationFrame() for a drawing that looks as smooth at $fps frames a
      * second as at the display's rate, as a record turning, a slow wave or
      * a level meter (mygo's AnimationFrameRate): the window paints it

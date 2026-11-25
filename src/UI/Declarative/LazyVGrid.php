@@ -60,11 +60,14 @@ final class LazyVGrid extends View
         $first = $this->columns[0] ?? throw new \LogicException('LazyVGrid needs at least one GridItem');
         if ($this->selects) { return $this->chooser($c, $env, $first->minimum ?? 120.0); }
         $tracks = [];
+        $fitted = []; // each adaptive column's least width => the columns of it this build made
+        $spacing = $this->spacing;
         foreach ($this->columns as $col) {
             if ($col->kind === GridItem::ADAPTIVE) {
                 $min = $col->minimum ?? 120.0;
                 $width = $c->runtime?->rectOf($c->upcomingId())[2] ?? $c->width;
-                $cols = max(1, (int)floor(($width + $this->spacing) / ($min + $this->spacing)));
+                $cols = self::fitting($width, $min, $spacing);
+                $fitted[] = [$min, $cols];
                 array_push($tracks, ...array_fill(0, $cols, Track::fr()));
             } else {
                 $tracks[] = $col->track();
@@ -80,8 +83,20 @@ final class LazyVGrid extends View
               }
           }
         $c->end();
+        // Columns counted in the width of the frame before (the first frame, the window's): laid out to a width that fits another count, it builds again with it.
+        if ($fitted !== []) {
+            $n->draw(static function (Painter $p, array $r) use ($fitted, $spacing): void {
+                foreach ($fitted as [$min, $cols]) { if (self::fitting($r[2], $min, $spacing) !== $cols) { $p->invalidate(); return; } }
+            });
+        }
         View::takeRoom($n, $env->axis, View::FLEX_X);
         return $n;
+    }
+
+    /** How many columns $min wide at least, $spacing apart, fit in $width: one at least. */
+    private static function fitting(float $width, float $min, float $spacing): int
+    {
+        return max(1, (int)floor(($width + $spacing) / ($min + $spacing)));
     }
 
     /** The grid of one Each's items, those in view built, chosen as the binding says. */
@@ -118,7 +133,7 @@ final class LazyVGrid extends View
         $n->alignSelf(Node::STRETCH)->grow = 1;
         $c->end();
         $height = $kept->height;
-        $wrap->draw(static function (Painter $p) use ($kept, $height): void { if ($kept->height !== $height) { $p->animationFrame(); } }); // a row height found: built again with it
+        $wrap->draw(static function (Painter $p) use ($kept, $height): void { if ($kept->height !== $height) { $p->invalidate(); } }); // a row height found: built again with it
         if ($c->changed($n)) { $this->selection = $several ? $g->selection->all() : ($g->selected >= 0 ? $idOf($g->selected) : null); $this->commitBinding(); }
         if ($g->rows->submitted() && $this->primaryAction !== null) {
             ($this->primaryAction)($several ? $g->selection->all() : ($g->selected >= 0 ? [$idOf($g->selected)] : []));

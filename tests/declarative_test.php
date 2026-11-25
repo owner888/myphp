@@ -359,6 +359,23 @@ $h->frame(2);
 $h->w = 700; $h->frame(3);
 check($h->byText('w 700') !== null, 'GeometryReader builds again with the new width: ' . json_encode($h->texts()));
 
+// What is built for the width of the frame before asks for a frame built anew once laid out to another, not for one that
+// only paints again: beside a sidebar the first frame knows only the window's width, and nothing else brings the next.
+$pane = fn(View $v) => new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 0)(Text('side')->frame(width: 220), $v), $c), 1170, 600);
+$h = $pane(LazyVGrid(columns: [GridItem::adaptive(minimum: 220)], spacing: 12)(Text('a'), Text('b'), Text('c')));
+$h->windowFrame();
+$first = $h->rect($h->byText('a'))[2];
+check($h->rt->needsFrame, 'an adaptive LazyVGrid laid out narrower than the window asks to be built again');
+check(!$h->windowFrame(), 'and the next frame is built, not only painted');
+$second = $h->rect($h->byText('a'))[2];
+check($first < 220 && $second >= 220, "its columns then fit the width it has: $first, then $second");
+check(!$h->rt->needsFrame, 'and it asks for no more frames');
+$h = $pane(GeometryReader(fn(GeometryProxy $g) => Text(verbatim: 'w ' . (int)$g->size[0])));
+$h->windowFrame();
+check($h->byText('w 1170') !== null && $h->rt->needsFrame, 'a GeometryReader built with the window\'s width asks to be built again');
+check(!$h->windowFrame() && $h->byText('w 950') !== null, 'and is, with its own: ' . json_encode($h->texts()));
+check(!$h->rt->needsFrame, 'and it asks for no more frames');
+
 // Image->resizable()->scaledToFit() in a frame: as wide as the frame, as high as its aspect ratio makes it.
 $pic = \MyPHP\UI\Image::fromPixels(40, 30, str_repeat("\x80\x80\x80\xff", 1200));
 $h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(Image($pic)->resizable()->scaledToFit()->frame(width: 400)), $c), 600, 600);
