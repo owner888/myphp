@@ -166,16 +166,36 @@ final class Theme
         return $t;
     }
 
+    /**
+     * A desktop's bordered button, as AppKit's push button draws it (measured on its NSButton, light and dark): the
+     * text's color over what is behind it at this opacity, and at this one while pressed. Nothing changes under the
+     * pointer: only a toolbar's and a borderless button take a face there.
+     */
+    public const BUTTON_VEIL = 0.08, BUTTON_PRESSED_VEIL = 0.17;
+
+    /** The face of a desktop's prominent button filled with $rgb while pressed, as AppKit's: lighter in the dark (12% toward white), darker in the light (8% toward black). */
+    public function pressed(int $rgb): int
+    {
+        return $this->dark ? self::mix($rgb, 0xffffff, 0.12) : self::mix($rgb, 0x000000, 0.08);
+    }
+
+    /** The shades a control filled with $rgb shows hovered and pressed, as the accent's (withAccent). @return array{0: int, 1: int} */
+    public function shades(int $rgb): array
+    {
+        return $this->dark
+            ? [self::mix($rgb, 0xffffff, 0.2), self::mix($rgb, 0x000000, 0.15)]
+            : [self::mix($rgb, 0x000000, 0.12), self::mix($rgb, 0x000000, 0.25)];
+    }
+
     /** Uses the system's accent color, as mygo's follow: hover and pressed shades, the selection and the focus ring of it, and text on it black where white would not stand out, as on yellow. */
     public function withAccent(int $rgb): self
     {
         $t = clone $this;
         $t->accent = $rgb;
+        [$t->accentHover, $t->accentPressed] = $this->shades($rgb);
         if ($this->dark) {
-            [$t->accentHover, $t->accentPressed] = [self::mix($rgb, 0xffffff, 0.2), self::mix($rgb, 0x000000, 0.15)];
             [$t->selection, $t->selectionAlpha, $t->focus, $t->focusAlpha] = [$rgb, 0.4, self::mix($rgb, 0xffffff, 0.2), 0.6];
         } else {
-            [$t->accentHover, $t->accentPressed] = [self::mix($rgb, 0x000000, 0.12), self::mix($rgb, 0x000000, 0.25)];
             [$t->selection, $t->selectionAlpha, $t->focus, $t->focusAlpha] = [$rgb, 0.25, $rgb, 0.55];
         }
         $t->accentText = (self::luminance($rgb) & 255) > 165 ? 0x18181b : 0xffffff;

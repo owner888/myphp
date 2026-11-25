@@ -379,6 +379,65 @@ check($h->byText('w 1170') !== null && $h->rt->needsFrame, 'a GeometryReader bui
 check(!$h->windowFrame() && $h->byText('w 950') !== null, 'and is, with its own: ' . json_encode($h->texts()));
 check(!$h->rt->needsFrame, 'and it asks for no more frames');
 
+// A desktop's bordered and prominent buttons, as AppKit's push button (measured on NSButton): nothing changes under the
+// pointer; pressed, a prominent one is a shade of its face (lighter in the dark), of the tint where one colors it, and a
+// bordered one a deeper veil over what is behind it. With a label (a title and a symbol) as with a title alone, and in a
+// tinted TabView too (which makes the tint its pages' accent: its shades went with the theme's blue).
+$ran = new \ArrayObject();
+$h = new Headless(function (Context $c) use ($ran): void {
+    Content::render(fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 20)(
+        Button('Scan', action: function () use ($ran) { $ran[] = 1; }, systemImage: 'bolt.fill')->buttonStyle(ButtonStyle::borderedProminent),
+        Button('Title alone', action: fn() => null)->buttonStyle(ButtonStyle::borderedProminent),
+        Button('Bordered', action: fn() => null, systemImage: 'gear')->buttonStyle(ButtonStyle::bordered),
+        Button('Bordered title', action: fn() => null)->buttonStyle(ButtonStyle::bordered),
+    )->tint(Color::green), $c);
+}, 400, 300);
+$tinted = new class { public string $tab = 'one'; };
+$inTabs = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $tinted->tab)(Tab('One', systemImage: 'house', value: 'one')(
+    Button('Scan', action: fn() => null, systemImage: 'bolt.fill')->buttonStyle(ButtonStyle::borderedProminent),
+))->tint(Color::green), $c), 400, 300);
+$inTabs->frame();
+$h->frame();
+$buttons = function (Node $n) use (&$buttons): array { // the frame's buttons, in order
+    $out = $n->role === \MyPHP\UI\Role::BUTTON || $n->kind === Node::BUTTON ? [$n] : [];
+    foreach ($n->kids as $k) { array_push($out, ...$buttons($k)); }
+    return $out;
+};
+$face = fn(Node $n): array => [sprintf('%06x', $n->color ?? -1), $n->bgAlpha];
+$states = function (Headless $h, int $i) use ($buttons, $face): array { // its face at rest, under the pointer, pressed, and at rest again
+    $b = $buttons($h->root)[$i];
+    [$x, $y, $w, $hh] = $h->rect($b);
+    $at = [$x + $w / 2, $y + $hh / 2];
+    $rest = $face($b);
+    $over = $face($buttons($h->hover(...$at))[$i]);
+    $down = $face($buttons($h->press(...$at))[$i]);
+    $h->release(...$at);
+    return [$rest, $over, $down, $face($buttons($h->hover(0, 290))[$i])];
+};
+$theme = $h->theme;
+$green = sprintf('%06x', $buttons($h->root)[0]->color);
+$deeper = sprintf('%06x', $theme->pressed(hexdec($green)));
+foreach (['with a label', 'with a title'] as $i => $what) {
+    same([[$green, 1.0], [$green, 1.0], [$deeper, 1.0], [$green, 1.0]], $states($h, $i), "a prominent button $what: the tint, the same under the pointer, its shade pressed, the tint again");
+}
+$veil = $theme->dark ? 'ffffff' : '000000';
+foreach (['with a label', 'with a title'] as $i => $what) {
+    same([[$veil, 0.08], [$veil, 0.08], [$veil, 0.17], [$veil, 0.08]], $states($h, 2 + $i), "a bordered button $what: a veil of 8%, the same under the pointer, 17% pressed");
+}
+same([[$green, 1.0], [$green, 1.0], [$deeper, 1.0], [$green, 1.0]], $states($inTabs, 0), 'in a tinted TabView a prominent button is the tint and its shade, not the theme\'s accent');
+$h->rt->setWindowFocus(false); // AppKit's: in a window that is not key a prominent button is drawn as a bordered one
+$away = array_map($face, array_slice($buttons($h->frame(1)), 0, 2));
+$h->rt->setWindowFocus(true);
+$back = array_map($face, array_slice($buttons($h->frame(1)), 0, 2));
+same([[[$veil, 0.08], [$veil, 0.08]], [[$green, 1.0], [$green, 1.0]]], [$away, $back], 'a prominent button loses its tint while its window is not key, and has it again when it is');
+$phone = new Headless(fn(Context $c) => Content::render(fn() => Button('Scan', action: fn() => null)->buttonStyle(ButtonStyle::borderedProminent)->tint(Color::green), $c), 400, 300);
+$phone->rt->touch = true;
+$phone->rt->setWindowFocus(false);
+same([$green, 1.0], $face($buttons($phone->frame())[0]), 'on a touch screen it keeps it: there is no key window there');
+$buttons = null;
+same(1, count($ran), 'and the press released on it ran its action once');
+same([0x494949, 0xebebeb], [\MyPHP\UI\Theme::dark()->pressed(0x303030), \MyPHP\UI\Theme::light()->pressed(0xffffff)], 'pressed: 12% toward white in the dark, 8% toward black in the light');
+
 // Image->resizable()->scaledToFit() in a frame: as wide as the frame, as high as its aspect ratio makes it.
 $pic = \MyPHP\UI\Image::fromPixels(40, 30, str_repeat("\x80\x80\x80\xff", 1200));
 $h = new Headless(fn(Context $c) => Content::render(fn() => VStack()(Image($pic)->resizable()->scaledToFit()->frame(width: 400)), $c), 600, 600);

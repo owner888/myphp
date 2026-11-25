@@ -100,6 +100,7 @@ final class TabView extends View
         if ($env->tint !== null) {
             $tinted = clone $prevTheme;
             $tinted->accent = $env->tint->rgb($env);
+            [$tinted->accentHover, $tinted->accentPressed] = $tinted->shades($tinted->accent); // its shades with it: the theme's are its own accent's
             $c->theme = $tinted;
             $env = $env->with(['theme' => $tinted]);
         }

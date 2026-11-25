@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Declarative;
 
 use Closure;
-use MyPHP\UI\{Context, Node, Role};
+use MyPHP\UI\{Context, Node, Role, Theme};
 
 /**
  * Button, as SwiftUI's: a title, or a label view (Label, Image…), and the
@@ -32,9 +32,11 @@ final class Button extends View
     {
         $style = $env->buttonStyle ?? \ButtonStyle::automatic;
         if ($style === \ButtonStyle::automatic && $env->formRow && ($c->runtime?->touch ?? false)) { $style = \ButtonStyle::borderless; } // in a phone's form row, as SwiftUI's on iOS: its title in the tint, no face
+        // Filled with the tint: a prominent button, but on a desktop only while its window has the focus, as AppKit's, which draws it as a bordered one in a window that is not key.
+        $filled = $style === \ButtonStyle::borderedProminent && (($c->runtime?->touch ?? false) || ($c->runtime?->windowFocus ?? true));
         if ($this->label !== null) {
             $t = $env->theme;
-            $prominent = $style === \ButtonStyle::borderedProminent;
+            $prominent = $filled;
             $n = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->alignItems(Node::CENTER);
             if ($style !== \ButtonStyle::borderless && $style !== \ButtonStyle::plain) { // the face of a button() around the label: same outer height as makeButtonNode
                 $edge = 2.0;
@@ -43,7 +45,6 @@ final class Button extends View
                 $textH = $c->metrics()->measure('X', $t->fontSize)[1];
                 $minH = $t->controlHeight > 0 ? $t->controlHeight : ($textH + 2 * $py + $edge);
                 $n->padding($py, ($t->controlHeight > 0 ? 20.0 : $px) + $edge / 2)->minHeight($minH)->radius($t->controlHeight > 0 ? $minH / 2 : $t->radius);
-                $n->color = $prominent ? $t->accent : ($c->hovered($n) ? $t->surfaceHover : $t->surface);
                 $n->bordered = !$prominent;
             } elseif ($env->labelStyle === \LabelStyle::iconOnly) { // an icon of a toolbar: room around it to click, a face while hovered, as AppKit's toolbar items
                 $n->padding($t->space(1.5), $t->space(2))->radius($t->radius);
@@ -62,7 +63,7 @@ final class Button extends View
             View::takeRoom($n, $env->axis, $flex); // a label with frame(maxWidth: INF) stretches the button too
         } else {
             $title = Localized::string($this->title, $env);
-            $n = self::makeButtonNode($c, $env, $title, $style === \ButtonStyle::borderedProminent);
+            $n = self::makeButtonNode($c, $env, $title, $filled);
             // Its title in the environment's weight, slant and lines, as a SwiftUI button's Text: Button('B')->bold()
             if ($env->weight !== null && $env->weight !== \Weight::regular) { $n->fontWeight($env->weight->value); }
             if ($env->italic) { $n->italic(); }
@@ -73,10 +74,24 @@ final class Button extends View
             $n->bordered = false;
             if (!($this->label !== null && $env->labelStyle === \LabelStyle::iconOnly && $c->hovered($n))) { $n->color = null; }
             $n->fg = $style === \ButtonStyle::plain ? ($env->color?->rgb($env) ?? $env->theme->text) : ($env->tint?->rgb($env) ?? $env->theme->accent);
-        } elseif ($style === \ButtonStyle::borderedProminent && $env->tint !== null) {
-            $n->color = $env->tint->rgb($env);
+        } elseif (!($this->label === null && ($c->runtime?->isTouchFlashing($n->id) ?? false))) { // a title's flash under a finger is makeButtonNode's
+            $t = $env->theme;
+            $prominent = $filled;
+            $tinted = $this->role === \ButtonRole::destructive ? $t->danger : ($env->tint?->rgb($env) ?? $t->accent);
+            $over = !$env->disabled && $c->hovered($n);
+            $down = $over && ($c->runtime?->input->mouseDown ?? false) || ($c->runtime?->isTouchFlashing($n->id) ?? false);
+            if ($c->runtime?->touch ?? false) { // under a finger: the shades the theme has, of the tint or the destructive red where they color it
+                $base = $prominent ? $tinted : $t->surface;
+                [$hover, $pressed] = !$prominent ? [$t->surfaceHover, $t->surfacePressed] : ($base === $t->accent ? [$t->accentHover, $t->accentPressed] : $t->shades($base));
+                $n->color = $down ? $pressed : ($over ? $hover : $base);
+            } elseif ($prominent) { // a desktop's, as AppKit's push button (Theme::pressed): no change under the pointer, its press a shade of its face
+                $n->color = $down ? $t->pressed($tinted) : $tinted;
+            } else { // and a bordered one a veil of the text's color over what is behind it, deeper while pressed
+                $n->color = $t->dark ? 0xffffff : 0x000000;
+                $n->bgAlpha = $down ? Theme::BUTTON_PRESSED_VEIL : Theme::BUTTON_VEIL;
+            }
         }
-        if ($this->role === \ButtonRole::destructive) { $n->fg = $style === \ButtonStyle::borderedProminent ? 0xffffff : $env->theme->danger; if ($style === \ButtonStyle::borderedProminent) { $n->color = $env->theme->danger; } }
+        if ($this->role === \ButtonRole::destructive) { $n->fg = $filled ? 0xffffff : $env->theme->danger; }
         $n->keepFocus(); // a click leaves the keyboard focus where it is, as a macOS button's: the field or editor typed in keeps it
         if ($env->disabled) { $n->disabled(); }
         if ($this->label === null) { $n->label(Localized::string($this->title, $env)); }
@@ -91,7 +106,7 @@ final class Button extends View
         $metrics = $c->metrics();
         [$w, $h] = $metrics->measure($s, $size);
         $h = max($h, $metrics->measure('X', $size)[1]);
-        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
+        [$base, $fg] = $primary ? [$t->accent, $t->accentText] : [$t->surface, $t->text];
         $bordered = !$primary;
         $edge = 2.0; // SwiftUI bordered & borderedProminent share identical outer dimensions
         [$py, $px] = [$t->space(1.5), $t->space(3.5)];
@@ -110,8 +125,6 @@ final class Button extends View
             $n->fg = $t->accentText;
             $n->bordered = true;
             $n->borderColor = $t->focus;
-        } elseif ($c->runtime?->hovered($n->id) ?? false) {
-            $n->color = $c->runtime->input->mouseDown ? $pressed : $hover;
         }
         return $n;
     }

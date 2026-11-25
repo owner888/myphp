@@ -23,6 +23,13 @@ row), `borderedProminent` (filled with the tint, for the main action of a
 window or a dialog), `bordered`, `borderless` (its title in the tint) and
 `plain` (its label alone). `role: ButtonRole::destructive` makes it red;
 `ButtonRole::cancel` is the Cancel of an alert or a confirmation dialog.
+On the desktop a bordered or prominent button looks as AppKit's push
+button does: nothing changes under the pointer (only a toolbar's and a
+borderless button take a face there); pressed, a prominent one is a shade
+of its face — the tint's or the destructive red's where they color it,
+lighter in the dark and darker in the light — and a bordered one a deeper
+veil over what is behind it. While its window is not the key window a
+prominent button is drawn as a bordered one. With a title alone or a label.
 
 ## Content
 
