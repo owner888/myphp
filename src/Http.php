@@ -36,6 +36,26 @@ final class Http
     /** The most often a progress callback is called, in seconds: 30 times a second. */
     private const PROGRESS_INTERVAL = 1 / 30;
 
+    /** What useTransport() chose, null for the environment's. */
+    private static ?string $transport = null;
+
+    /**
+     * What carries the requests: 'curl', the system's libcurl (the default), or 'php', MyPHP's own stack in PHP
+     * (Net\PhpHttp: stream_select and fibers, TLS by PHP's openssl extension, HTTP/1.1 and HTTP/2), which waits on
+     * nothing of the system's and so behaves the same everywhere. null leaves it to MYPHP_HTTP in the environment.
+     */
+    public static function useTransport(?string $transport): void
+    {
+        $transport === null || $transport === 'curl' || $transport === 'php' || throw new \InvalidArgumentException("Http::useTransport: \"$transport\" is neither curl nor php");
+        self::$transport = $transport;
+    }
+
+    /** 'curl' or 'php': what useTransport() chose, else MYPHP_HTTP=php in the environment, else curl. */
+    public static function transport(): string
+    {
+        return self::$transport ?? (getenv('MYPHP_HTTP') === 'php' ? 'php' : 'curl');
+    }
+
     /** GET $url with $headers (name => value). */
     public static function get(string $url, array $headers = [], float $timeout = 0.0): HttpResponse
     {
@@ -151,6 +171,9 @@ final class Http
     {
         if (preg_match('/^[!#$%&\'*+.^_`|~0-9A-Za-z-]+$/', $method) !== 1) {
             throw new RuntimeException("$who: invalid method \"$method\"");
+        }
+        if (self::transport() === 'php') {
+            return Net\PhpHttp::send($method, $url, $headers, $body, $timeout, explode(',', $protocols), $agent, $who, $progress, $saveTo, $onData);
         }
         $f = Curl::ffi();
         $h = $f->curl_easy_init();
