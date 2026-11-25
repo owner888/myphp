@@ -1,6 +1,7 @@
 <?php
-// Loads Composer's autoloader if present, then MyPHP from ./myphp inside a built app,
-// $MYPHP_HOME in dev/screenshot, or myphp.json's framework, prepended ahead of vendor/.
+// Loads Composer's autoloader if present, then MyPHP, as a Flutter project finds its SDK: the one installed on the
+// machine, which the myphp command (dev, run, test, screenshot, build) names in $MYPHP_HOME; inside a built app, the
+// copy in ./myphp; or the checkout myphp.json's "framework" names, for a project that pins one of its own.
 declare(strict_types=1);
 
 if (is_file(__DIR__ . '/vendor/autoload.php')) {
@@ -15,4 +16,6 @@ $framework = is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp'
     : (getenv('MYPHP_HOME') ?: ($configured ?: null)));
 if ($framework !== null && is_file($framework . '/src/autoload.php')) {
     require_once $framework . '/src/autoload.php';
+} elseif (!class_exists(\MyPHP\App::class)) {
+    throw new RuntimeException('MyPHP was not found: run the app and its tests through the myphp command (myphp dev, myphp run, myphp test), or set MYPHP_HOME to a MyPHP checkout');
 }

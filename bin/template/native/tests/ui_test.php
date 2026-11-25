@@ -1,10 +1,9 @@
 <?php
 // Builds the view headless, with no window or display, and drives it as a
-// user would: php -d ffi.enable=1 tests/ui_test.php
+// user would: myphp test
 declare(strict_types=1);
 
-$framework = getenv('MYPHP_HOME') ?: json_decode(file_get_contents(__DIR__ . '/../myphp.json'), true)['framework'];
-require "$framework/tests/Headless.php";
+require (getenv('MYPHP_HOME') ?: throw new RuntimeException('run the tests with: myphp test')) . '/tests/Headless.php';
 require __DIR__ . '/../src/Counter.php';
 
 use MyPHP\Tests\Headless;

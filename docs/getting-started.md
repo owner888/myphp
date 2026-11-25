@@ -43,8 +43,10 @@ my-app/
 Run the headless UI test (needs no window or display, `< 50 ms`):
 
 ```sh
-php -d ffi.enable=1 tests/ui_test.php
+myphp test
 ```
+
+MyPHP is installed once on the machine, as the Flutter SDK is: the project does not carry it nor say where it is. `myphp.json`'s `"myphp"` is the least version the project needs, and `myphp upgrade` moves every project to the new release.
 
 ## Develop with Live Hot-Reload
 

@@ -43,7 +43,7 @@ Start a project with `myphp init -template native <dir>` (or `myphp init -templa
 
 ```
 my-app/
-  myphp.json        {"name": "MyApp", "displayName": "我的应用", "identifier": "com.example.app", "entry": "app.php", "framework": "../myphp"}
+  myphp.json        {"name": "MyApp", "displayName": "我的应用", "identifier": "com.example.app", "entry": "app.php", "myphp": "1.205.4"}
   boot.php          loads MyPHP
   app.php           creates state, sizes Window via Device::isDesktop(), runs App::run()
   src/Todos.php     state properties + action methods (no UI nodes)
@@ -151,7 +151,7 @@ App::run();
 ## 4. Verify Before Finishing
 
 1. **Syntax check**: `php -l` on every modified PHP file.
-2. **Headless UI test** (`php -d ffi.enable=1 tests/ui_test.php`):
+2. **Headless UI test** (`myphp test`, which runs `tests/*_test.php` on the installed MyPHP as `flutter test` does; or `php -d ffi.enable=1 tests/ui_test.php`):
    ```php
    $h = new Headless(Content::file(__DIR__ . '/../view.php', $app)->view, 402, 874);
    $h->rt->touch = true; $h->rt->strict = true;

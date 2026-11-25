@@ -415,8 +415,10 @@ check(!is_dir("$root/demo/.agents/skills/myphp-maintenance"), 'not the skill for
 check(is_file("$root/demo/.agents/skills/myphp-app/SKILL.md") && is_file("$root/demo/.agents/skills/myphp-app/references/pitfalls.md"), 'the app-writing skill, with its references');
 [$code, $out] = $myphp('init', "$root/demo");
 check($code !== 0 && str_contains($out, 'is not empty'), 'not into a project');
-exec(escapeshellarg(PHP_BINARY) . ' -d ffi.enable=1 ' . escapeshellarg("$root/demo/tests/ui_test.php") . ' 2>&1', $lines, $code);
-check(is_file("$root/demo/src/Counter.php") && $code === 0, 'its state in src/, and its headless test, which passes: ' . implode("\n", $lines));
+same([null, true], [$cfg['framework'] ?? null, is_string($cfg['myphp'] ?? null)], 'which names the MyPHP it needs, not where this machine has it');
+$p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', "$root/demo/tests/ui_test.php"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/demo", ['MYPHP_HOME' => dirname(__DIR__)] + getenv()); // as myphp test runs it (tests/test_command_test.php)
+$lines = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+check(is_file("$root/demo/src/Counter.php") && proc_close($p) === 0, 'its state in src/, and its headless test, which passes: ' . $lines);
 unlink("$root/demo/.agents/skills/myphp-app/SKILL.md");
 file_put_contents("$root/demo/.agents/skills/mine.md", 'mine');
 [$code] = $myphp('install-skills', "$root/demo");

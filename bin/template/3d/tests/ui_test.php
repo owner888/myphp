@@ -1,9 +1,8 @@
 <?php
-// Builds the 3D view headless and tests its interactions: php -d ffi.enable=1 tests/ui_test.php
+// Builds the 3D view headless and tests its interactions: myphp test
 declare(strict_types=1);
 
-$framework = getenv('MYPHP_HOME') ?: json_decode(file_get_contents(__DIR__ . '/../myphp.json'), true)['framework'];
-require "$framework/tests/Headless.php";
+require (getenv('MYPHP_HOME') ?: throw new RuntimeException('run the tests with: myphp test')) . '/tests/Headless.php';
 require __DIR__ . '/../src/SceneState.php';
 
 use MyPHP\Tests\Headless;

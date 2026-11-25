@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.205.3';
+const VERSION = '1.205.4';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -32,6 +32,7 @@ Commands:
 	devices              list connected devices and available simulators
 	emulators [flags]    list, launch and create emulators (Android AVDs, the iOS Simulator)
 	screenshot [dir]     run the app once and save a PNG of its window, and its elements
+	test [file ...]      run the project's tests (tests/*_test.php) on this MyPHP
 	micro                get the static PHP that the apps myphp build makes carry
 	keygen               create the key pair that signs updates
 	doctor               check that the development environment is ready
@@ -316,6 +317,11 @@ function project(array $args): array
     $c['projectDir'] = $dir;
     $c['configFile'] = $name; // for messages, as mygo's configName
     $bad = fn(string $msg): never => fail("$name: $msg");
+    // The MyPHP the project needs at least, as a Flutter project's environment: "myphp": "1.205.4" (">=1.205.4" and "^1.205.4" say the same).
+    if (($needs = $c['myphp'] ?? null) !== null) {
+        is_string($needs) && preg_match('/^(?:>=|\^)?\s*(\d+(?:\.\d+){0,2})$/', $needs, $m) === 1 || $bad('myphp ' . json_encode($needs) . ' is not a version, as "1.205.4"');
+        ($c['framework'] ?? '') !== '' || version_compare(VERSION, $m[1], '>=') || fail("$name: the project needs myphp {$m[1]} or later, this is " . VERSION . ': myphp upgrade');
+    }
     $c['name'] = orElse((string)($c['name'] ?? ''), basename($dir));
     $c['slug'] ??= '';
     is_string($c['slug']) && ($c['slug'] === '' || preg_match(Slug::PATTERN, $c['slug']) === 1) || $bad('slug ' . json_encode($c['slug']) . ' is not a slug (lower-case letters and digits, with single hyphens between them)');
@@ -457,7 +463,7 @@ function init(array $args): void
     is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
     $dir = realpath($dir);
     $name = $name !== '' ? $name : basename($dir);
-    $data = ['name' => $name, 'slug' => Slug::of($name), 'identifier' => 'com.example.' . str_replace('-', '', Slug::of($name)), 'framework' => realpath(FRAMEWORK)];
+    $data = ['name' => $name, 'slug' => Slug::of($name), 'identifier' => 'com.example.' . str_replace('-', '', Slug::of($name)), 'myphp' => VERSION]; // the MyPHP it needs at least: this one; where MyPHP is on the machine is not the project's to say
     logf("Creating $dir");
     writeTemplate(TEMPLATES . "/$template", $dir, $data);
     mkdir("$dir/resources");
@@ -466,7 +472,7 @@ function init(array $args): void
     $cwd = realpath((string)getcwd()) ?: (string)getcwd();
     $rel = $dir === $cwd ? '' : (str_starts_with($dir, $cwd . '/') ? substr($dir, strlen($cwd) + 1) : $dir);
     $cdLine = $rel !== '' ? "  cd $rel\n" : '';
-    echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  php -d ffi.enable=1 tests/ui_test.php  # test the view headless\n  myphp build                          # package the app\n\n";
+    echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  myphp test                           # test the view headless\n  myphp build                          # package the app\n\n";
 }
 
 /** The templates of myphp init: native 2D UI and 3D SceneView. */
@@ -2784,6 +2790,23 @@ function upgrade(array $args): void
     fail("MyPHP in $root is neither Composer's install nor a git checkout: install it with curl -fsSL https://myphp.ai/install.sh | sh");
 }
 
+/** myphp test, as flutter test: the project's test files run on this MyPHP, which they find as $MYPHP_HOME. */
+function test(array $args): void
+{
+    help($args, "test [file ...]\n\nRuns the tests of the project in the current directory, tests/*_test.php or the files given,\neach in a PHP of its own with FFI on and \$MYPHP_HOME this MyPHP (myphp.json's framework\nwhen it sets one), which the project's boot.php and its tests load. Fails when one of them does.");
+    ['dir' => $dir, 'config' => $c] = project([]);
+    $files = $args !== [] ? $args : (glob("$dir/tests/*_test.php") ?: []);
+    $files !== [] || fail("no tests: $dir/tests has no *_test.php");
+    $env = ['MYPHP_HOME' => frameworkOf($c)] + getenv();
+    $failed = [];
+    foreach ($files as $file) {
+        is_file($file) || fail("$file does not exist");
+        $p = proc_open([PHP_BINARY, ...PHP_FLAGS, $file], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, $env);
+        if (proc_close($p) !== 0) { $failed[] = $file; }
+    }
+    $failed === [] || fail(count($failed) . ' of ' . count($files) . ' test files failed: ' . implode(', ', array_map('basename', $failed)));
+}
+
 function keygen(array $args): void
 {
     help($args, "keygen [-out dir] [-force]\n\nCreates the key pair that signs updates.");
@@ -3917,6 +3940,7 @@ function run(string $cmd, array $args): void
         'devices' => devices($args),
         'emulators' => emulators($args),
         'screenshot' => screenshot($args),
+        'test' => test($args),
         'micro' => micro($args),
         'keygen' => keygen($args),
         'doctor' => doctor($args),

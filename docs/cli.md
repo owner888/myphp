@@ -305,6 +305,34 @@ installed: Composer's global install, the one `install.sh` makes, runs
 it has changes of yours. A project that has MyPHP as its own dependency (its
 `vendor/`) updates it there, as any package: `composer update owner888/myphp`.
 
+## myphp test
+
+```sh
+myphp test                     # tests/*_test.php of the project in this directory
+myphp test tests/ui_test.php   # the files given
+```
+
+Runs the project's tests, as `flutter test`: each file in a PHP of its own
+with FFI on and `$MYPHP_HOME` this MyPHP (or the checkout `myphp.json`'s
+`framework` names), which the project's `boot.php` and its tests load the
+framework from. It fails when one of them does.
+
+## One MyPHP for every project
+
+MyPHP is installed once on a machine, as the Flutter SDK is, and need not be
+a Composer dependency of a project: `myphp dev`, `run`, `test`, `screenshot`
+and `build` hand the project the MyPHP they belong to, and `myphp upgrade`
+moves every project to the new release at once. A project says the least
+version it needs in `myphp.json`:
+
+```json
+{ "myphp": "1.205.4" }
+```
+
+(`">=1.205.4"` and `"^1.205.4"` say the same.) With an older MyPHP every
+command that reads the project stops and says `myphp upgrade`. A project that
+sets `framework` to a checkout of its own is not checked.
+
 ## myphp version
 
 Prints the MyPHP version.
