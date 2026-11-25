@@ -1111,12 +1111,14 @@ function PhotosPicker(string $title, mixed &$selection, ?int $maxSelectionCount 
 }
 
 /**
- * An in-app update capsule, as Telegram's on Android: a small capsule of the accent color, 40 points high and as wide as
- * its content, the whole of it the button; a white disc with the mark of what a tap does, a bold title, and the download's $size (the version without one). The words are MyPHP's own strings, in the app's language. Shown
- * when $version !== '' and $status is 'available' | 'downloading' | 'installing' | 'failed'; the title follows the
- * status ("Downloading 45%...", "Update Now", "Download Failed · Retry"), $actionTitle is the one of an update that
- * waits (default "Update <app>", or the $store's, 'appstore' | 'play'). Float it over a TabView's page just above its tab bar:
- * TabView(…)(…)->bottomAccessory(fn() => UpdateCapsule(…)), as Telegram does.
+ * Cross-platform in-app update indicator:
+ * - On touch screens (iOS, Android, iPadOS, Android Pad), Telegram's update capsule: a 40pt accent pill with a white
+ *   icon disc, a bold status title ("Update <app>", "Downloading 45%...", "Update Now", "Download Failed · Retry") and
+ *   the download's $size (or version), floated over a TabView's page just above its tab bar with ->bottomAccessory().
+ * - On desktops (macOS, Windows, Linux), Arc's sidebar update pill: a quiet 28pt capsule pinned at the bottom of the
+ *   sidebar ("New Version Available") that smoothly morphs upward in place on hover into a card with an
+ *   "Automatic Updates" checkbox ($automaticUpdates, or persisted in updater.json) and a "Restart and Update" button.
+ * Shown when $version !== '' and $status is 'available' | 'downloading' | 'installing' | 'failed'.
  */
 function UpdateCapsule(
     string $version,
@@ -1127,49 +1129,21 @@ function UpdateCapsule(
     ?string $actionTitle = null,
     int $size = 0,
     ?string $store = null,
+    mixed &$automaticUpdates = D\UpdateCapsule::UNBOUND,
 ): D\View {
     if ($version === '' || !in_array($status, ['available', 'downloading', 'installing', 'failed'], true)) {
         return EmptyView();
     }
-    $isDownloading = $status === 'downloading';
-    $isFailed = $status === 'failed';
-    $waits = $status === 'available';
-    $color = $isFailed ? Color::rgb(0xED2020) : ($tint ?? Color::accentColor);
-    $words = MyPHP\L10n::in(MyPHP\I18n::locale()); // MyPHP's own strings: an app's "myphp.updateApp" … in its catalogs change or translate them
-    $title = match ($status) {
-        'downloading' => $words->get('updateDownloading', ['percent' => (int) round(max(0.0, min(1.0, $progress)) * 100)]),
-        'installing' => $words->get('updateNow'),
-        'failed' => $words->get('updateFailed'),
-        default => $actionTitle ?? match ($store) {
-            'appstore' => $words->get('updateOnAppStore'),
-            'play' => $words->get('updateOnGooglePlay'),
-            default => $words->get('updateApp', ['app' => MyPHP\App::name()]),
-        },
-    };
-    $end = $size > 0 ? MyPHP\I18n::formatNumber(MyPHP\I18n::locale(), $size / 1048576 >= 1 ? round($size / 1048576, 1) : round($size / 1024, 1), new MyPHP\NumberOptions(maxFractionDigits: 1)) . ($size >= 1048576 ? ' MB' : ' KB') : ltrim($version, 'vV'); // Telegram's: the download's size
-
-    $bar = HStack(alignment: VerticalAlignment::center, spacing: 8)(
-        Image(systemName: $waits || $isDownloading ? 'arrow.down.to.line' : 'arrow.clockwise')
-            ->font(Font::caption)
-            ->bold()
-            ->foregroundStyle($color)
-            ->frame(width: 22, height: 22, alignment: Alignment::center)
-            ->background(Color::white)
-            ->cornerRadius(11),
-        Text(verbatim: $title)
-            ->font(Font::subheadline)
-            ->bold()
-            ->foregroundStyle(Color::white)
-            ->lineLimit(1),
-        $waits ? Text(verbatim: $end)
-            ->font(Font::footnote)
-            ->bold()
-            ->foregroundStyle(Color::rgb(0xFFFFFF, 0.8))
-            ->lineLimit(1) : null,
-    )
-        ->padding(Edge::horizontal, 14)
-        ->frame(height: 40, alignment: Alignment::center)
-        ->background($color)
-        ->cornerRadius(20);
-    return $isDownloading || $onAction === null ? $bar : $bar->onTapGesture($onAction);
+    return new D\UpdateCapsule(
+        $version,
+        $status,
+        $progress,
+        $onAction,
+        $tint,
+        $actionTitle,
+        $size,
+        $store,
+        $automaticUpdates,
+        $automaticUpdates !== D\UpdateCapsule::UNBOUND,
+    );
 }

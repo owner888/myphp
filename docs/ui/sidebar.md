@@ -46,7 +46,9 @@ $view = fn() => NavigationSplitView(
 
 With nothing found, a list of its own says so, the same `searchable` on
 it, so the field stays as the rows go. `examples/notes` is a whole app of
-this shape.
+this shape. `->bottomAccessory(fn() => UpdateCapsule(version: $app->updateVersion, onAction: …))`
+pins an Arc-style update pill at the bottom of the desktop sidebar,
+morphing upward in place on hover without shifting the sidebar rows above it.
 
 ## Accessibility
 

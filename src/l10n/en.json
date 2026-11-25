@@ -5752,5 +5752,17 @@
   "updateOnGooglePlay": "Update on Google Play",
   "@updateOnGooglePlay": {
     "description": "The update capsule of an app that updates through Google Play."
+  },
+  "updateAvailable": "New Version Available",
+  "@updateAvailable": {
+    "description": "The desktop sidebar update pill and card header, as Arc's."
+  },
+  "updateAutomatic": "Automatic Updates",
+  "@updateAutomatic": {
+    "description": "The checkbox in the desktop sidebar update card for installing future updates automatically."
+  },
+  "updateRestart": "Restart and Update",
+  "@updateRestart": {
+    "description": "The primary action button in the desktop sidebar update card."
   }
 }

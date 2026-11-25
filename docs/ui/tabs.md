@@ -24,6 +24,10 @@ shows a count by it. `Tab(value:, role: TabRole::search)` is the app's
 search, `TabRole::prominent` a tab apart at a phone's bar's end;
 `->tabBarMinimizeBehavior(TabBarMinimizeBehavior::onScrollDown)` shrinks a
 phone's bar as its page scrolls down ([mobile](../mobile.md)).
+`->bottomAccessory(fn() => UpdateCapsule(version: $app->updateVersion, onAction: …))`
+floats an update capsule above a phone's tab bar (as Telegram's) and pins
+an Arc-style update pill at the bottom of the desktop sidebar that morphs
+upward on hover into an "Automatic Updates" + "Restart and Update" card.
 
 ## Accessibility
 

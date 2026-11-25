@@ -203,3 +203,28 @@ App::go(function () {
 `check()` and `install()` wait for the network inside `App::go()` without
 blocking the app. `Updater::enabled()` says whether the build can update
 itself, and `setPrereleases()` and `setSource()` choose what it checks.
+
+For a built-in quiet indicator across all 5 platforms, attach
+`UpdateCapsule` via `TabView::bottomAccessory()` (or `NavigationSplitView::bottomAccessory()`):
+on phones and tablets it floats Telegram's 40pt accent capsule above the
+tab bar; on desktops (`macOS`, `Windows`, `Linux`) it pins Arc's 28pt pill
+at the bottom of the sidebar ("New Version Available"), morphing
+upward in place on hover into a card with an "Automatic Updates" checkbox
+(bound to `automaticUpdates:`, or automatically synced with
+`Plugins\Updater\Updater::automaticDownloads()` / `updater.json`) and a
+"Restart and Update" button:
+
+<!-- no-test -->
+```php
+TabView(selection: $this->tab)(
+    Tab('Home', systemImage: 'house', value: 'home')(/* … */),
+)
+    ->tabViewStyle(TabViewStyle::sidebarAdaptable)
+    ->bottomAccessory(fn() => UpdateCapsule(
+        version: $this->availableVersion,
+        status: $this->updateStatus,      // 'available' | 'downloading' | 'installing' | 'failed'
+        progress: $this->updateProgress,  // 0.0 .. 1.0
+        automaticUpdates: $this->autoUpdates,
+        onAction: fn() => $this->installOrRelaunch(),
+    ));
+```

@@ -1043,3 +1043,115 @@ foreach ([\TextFieldStyle::automatic, \TextFieldStyle::plain] as $style) {
     $pw->shown = true; $h->frame(2);
     same(['••••••', 'secret'], [$hidden, $h->byLabel('Password')?->edit?->shown()], 'a SecureField hides its text, the TextField in its place shows it: ' . $style->name);
 }
+
+// UpdateCapsule across platforms: on a phone it is Telegram's 40pt capsule floating centered above the tab bar; on the
+// desktop it is Arc's 28pt pill at the bottom of the sidebar, morphing upward in place on hover into a 96pt card with
+// "Automatic Updates" and "Restart and Update", without shifting the sidebar items above it.
+$wasAppName = \MyPHP\App::name();
+\MyPHP\App::setName('Arc');
+$upApp = new class {
+    public string $tab = 'home';
+    public string $version = '1.2.0';
+    public string $status = 'available';
+    public float $progress = 0.0;
+    public bool $auto = false;
+    public int $actions = 0;
+};
+$upView = fn() => TabView(selection: $upApp->tab)(
+    Tab('Home', systemImage: 'house', value: 'home')(Text('Main page')),
+    Tab('Spaces', systemImage: 'folder', value: 'spaces')(Text('Spaces page')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable)->bottomAccessory(fn() => UpdateCapsule(
+    version: $upApp->version,
+    status: $upApp->status,
+    progress: $upApp->progress,
+    onAction: function () use ($upApp): void { $upApp->actions++; },
+    automaticUpdates: $upApp->auto,
+));
+// 1. Mobile (touch): Telegram capsule centered above bottom tab bar
+$hm = new Headless(fn(Context $c) => Content::render($upView, $c), 393, 852);
+$hm->rt->touch = true; $hm->theme = \MyPHP\UI\Theme::phone(false);
+$hm->frame(3);
+$mTitle = $hm->byText('Update Arc');
+check($mTitle !== null && in_array('1.2.0', $hm->texts(), true), 'mobile UpdateCapsule shows Update <app> and version');
+$hm->clickOn($mTitle); $hm->frame(2);
+same(1, $upApp->actions, 'tapping mobile UpdateCapsule runs onAction');
+
+// 2. Desktop: Arc pill pinned at bottom of the 220pt sidebar, morphing upward in place on hover
+$upApp->actions = 0;
+$hd = new Headless(function (Context $c) use ($upView): void { $c->disableAnimations(); Content::render($upView, $c); }, 900, 600);
+$hd->frame(3);
+$homeItemBefore = $hd->rect($hd->byText('Home'));
+$pillText = $hd->byText('New Version Available');
+check($pillText !== null, 'desktop UpdateCapsule shows New Version Available');
+same([false, false], [in_array('Automatic Updates', $hd->texts(), true), in_array('Restart and Update', $hd->texts(), true)],
+    'collapsed desktop pill hides card body');
+$pillCard = $hd->byLabel('New Version Available');
+$collapsedRect = $hd->rect($pillCard);
+same([8.0, 204.0, 28.0, 592.0], [$collapsedRect[0], $collapsedRect[2], $collapsedRect[3], $collapsedRect[1] + $collapsedRect[3]],
+    'collapsed pill sits 8pt inset across the 220pt sidebar, 28pt tall, 8pt from the bottom');
+
+// Hover over the pill: morphs upward to 96pt keeping bottom anchored at 592pt, sidebar items untouched
+[$px, $py] = $hd->middle($pillCard);
+$hd->hover($px, $py); $hd->frame(2);
+$expandedCard = $hd->byLabel('New Version Available');
+$expandedRect = $hd->rect($expandedCard);
+$homeItemAfter = $hd->rect($hd->byText('Home'));
+same([8.0, 204.0, 96.0, 592.0, $homeItemBefore], [$expandedRect[0], $expandedRect[2], $expandedRect[3], $expandedRect[1] + $expandedRect[3], $homeItemAfter],
+    'hovering morphs the card upward to 96pt with its bottom edge fixed and sidebar items unmoved');
+same([true, true], [in_array('Automatic Updates', $hd->texts(), true), in_array('Restart and Update', $hd->texts(), true)],
+    'expanded card reveals Automatic Updates checkbox and Restart and Update button');
+
+// Toggle Automatic Updates checkbox and click Restart and Update while hovered inside the card
+$hd->clickLabel('Automatic Updates'); $hd->frame(2);
+same(true, $upApp->auto, 'clicking Automatic Updates toggles the bound state');
+$ctaNode = $hd->byLabel('Restart and Update');
+$hd->clickOn($ctaNode); $hd->frame(2);
+same(1, $upApp->actions, 'clicking Restart and Update triggers onAction');
+
+// Move pointer away from the card: collapses back to the 28pt pill
+$hd->hover(500, 200); $hd->frame(2);
+$collapsedAgain = $hd->rect($hd->byLabel('New Version Available'));
+same([28.0, false], [$collapsedAgain[3], in_array('Restart and Update', $hd->texts(), true)],
+    'moving pointer outside collapses the card back to the 28pt pill');
+
+// App Store distribution hides Automatic Updates and shows Update on the App Store
+$hdStore = new Headless(function (Context $c) use ($upApp): void {
+    $c->disableAnimations();
+    Content::render(fn() => NavigationSplitView(
+        ListView(selection: $upApp->tab)(Label('Home', systemImage: 'house')->tag('home')),
+        Text('Detail'),
+    )->bottomAccessory(fn() => UpdateCapsule(version: '2.0.0', store: 'appstore', onAction: fn() => null)), $c);
+}, 900, 600);
+$hdStore->frame(2);
+[$sx, $sy] = $hdStore->middle($hdStore->byLabel('New Version Available'));
+$hdStore->hover($sx, $sy); $hdStore->frame(2);
+same([73.0, false, true], [
+    $hdStore->rect($hdStore->byLabel('New Version Available'))[3],
+    in_array('Automatic Updates', $hdStore->texts(), true),
+    in_array('Update on the App Store', $hdStore->texts(), true),
+], 'NavigationSplitView->bottomAccessory with store: appstore omits Automatic Updates');
+
+// Animated hover-in, flick into upper target area mid-animation, and hover-out collapse run cleanly without errors
+$hdAnim = new Headless(fn(Context $c) => Content::render($upView, $c), 900, 600);
+$hdAnim->frame(2);
+[$ax, $ay] = $hdAnim->middle($hdAnim->byLabel('New Version Available'));
+$hdAnim->hover($ax, $ay);
+usleep(40_000);
+$hdAnim->hover($ax, $ay - 50.0); // upper expanded area while still mid-animation ($inTarget path)
+usleep(40_000);
+$hdAnim->hover(500.0, 200.0); // pointer leaves while $open > 0.01 (!$isOpen collapsing path)
+$animH = $hdAnim->rect($hdAnim->byLabel('New Version Available'))[3];
+check($animH > 28.0 && $animH < 96.0, 'mid-collapse frame interpolates smoothly between 96pt and 28pt');
+
+// All statuses ('downloading', 'installing', 'failed') render cleanly in both collapsed and expanded states
+foreach (['downloading' => 'Downloading 45%...', 'installing' => 'New Version Available', 'failed' => 'Download Failed · Retry'] as $st => $expectedLabel) {
+    $upApp->status = $st;
+    $upApp->progress = 0.45;
+    $hd->hover(500.0, 200.0); $hd->frame(2);
+    $collapsedNode = $hd->byLabel($expectedLabel);
+    check($collapsedNode !== null, "desktop UpdateCapsule collapsed in status $st");
+    [$hx, $hy] = $hd->middle($collapsedNode);
+    $hd->hover($hx, $hy); $hd->frame(2);
+    check($hd->byLabel($expectedLabel) !== null, "desktop UpdateCapsule expanded in status $st");
+}
+\MyPHP\App::setName($wasAppName);

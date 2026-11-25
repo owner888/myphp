@@ -105,12 +105,9 @@ what scrolls under them goes on to the screen's edges.
 `->safeAreaInset(Edge::bottom, content: fn() => …)` (or `Edge::top`) puts a bar of yours along that edge of a view,
 as SwiftUI's: the view ends where the bar begins and the safe area on that side is the bar's, so a `TabView`'s bar
 floats over yours and your bar's background goes on to the screen's edge. `UpdateCapsule(version:, status:, progress:,
-onAction:, tint:, actionTitle:)` is an app's update, as Telegram's on Android: a small capsule of the accent color
-40 points high, a white disc, a bold title ("Update <app>", "Downloading 45%...", "Update Now") and the download's `size:` (the version without one), the words in the app's language (MyPHP's own strings, which an app's `myphp.updateApp`, `myphp.updateDownloading`, `myphp.updateNow`, `myphp.updateFailed` change; `store: 'appstore'|'play'` says "Update on the App Store"/"…Google Play"),
-floated over a `TabView`'s page just above its tab bar with `->bottomAccessory(fn() => UpdateCapsule(…))` (iOS 26's
-tabViewBottomAccessory; over the page's bottom where there is no bar below), nothing while `$version` is empty. While a field has
+onAction:, tint:, actionTitle:, size:, store:, automaticUpdates:)` is an app's in-app update indicator: on touch screens (iOS, Android, iPadOS, Android Pad) it is Telegram's capsule — 40 points high in the accent color, a white disc, a bold title ("Update <app>", "Downloading 45%...", "Update Now") and the download's `size:` (the version without one) — floated over a `TabView`'s page just above its tab bar with `->bottomAccessory(fn() => UpdateCapsule(…))` (iOS 26's tabViewBottomAccessory; over the page's bottom where there is no bar below); on the desktop (`macOS`, `Windows`, `Linux`) the same `->bottomAccessory(fn() => UpdateCapsule(…))` pins Arc's quiet 28-point pill ("New Version Available") at the bottom of the sidebar, smoothly morphing upward in place on hover into a card with an "Automatic Updates" checkbox (`automaticUpdates:`, or `updater.json` by default) and a "Restart and Update" button, nothing while `$version` is empty. The words are in the app's language (MyPHP's own strings, which an app's `myphp.updateApp`, `myphp.updateAvailable`, `myphp.updateAutomatic`, `myphp.updateRestart`, `myphp.updateDownloading`, `myphp.updateNow`, `myphp.updateFailed` change; `store: 'appstore'|'play'` says "Update on the App Store"/"…Google Play"). While a field has
 the focus, the keyboard takes the bottom and what it would cover of the
-field scrolls into view. On the desktop there is none of it.
+field scrolls into view. On the desktop there is no software keyboard.
 
 A field says which keyboard it wants as SwiftUI's does:
 `->keyboardType(KeyboardType::numberPad)`, `->textContentType(TextContentType::oneTimeCode)`

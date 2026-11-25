@@ -37,8 +37,9 @@ final class TabView extends View
     private ?\Closure $accessory = null;
 
     /**
-     * A view floating centered just above a phone's tab bar, over the page, as iOS 26's tabViewBottomAccessory:
-     * TabView(…)(…)->bottomAccessory(fn() => UpdateCapsule(…)). Nothing where $content returns null or EmptyView.
+     * An accessory view for the tabs: floating centered just above a phone's tab bar (as iOS 26's
+     * tabViewBottomAccessory and Telegram's update capsule), or pinned at the bottom of the sidebar on the desktop
+     * (as Arc's update pill): TabView(…)(…)->bottomAccessory(fn() => UpdateCapsule(…)).
      */
     public function bottomAccessory(?\Closure $content): static { $this->accessory = $content; return $this; }
 
@@ -69,15 +70,21 @@ final class TabView extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $paged = $this->style === \TabViewStyle::page || $this->style === \TabViewStyle::pageAlways || $this->style === \TabViewStyle::pageNever;
-        if ($this->accessory === null || $paged || ($c->runtime?->touch ?? false) && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_BOTTOM) { return $this->buildTabs($c, $env); } // a phone's bar carries it itself
-        // no bar across the bottom: the accessory floats over the page's bottom, centered
+        $touch = $c->runtime?->touch ?? false;
+        if ($this->accessory === null || $paged || ($touch && $c->tabsPlacement() === \MyPHP\UI\Context::TABS_BOTTOM) || ($this->style === \TabViewStyle::sidebarAdaptable && !$touch)) {
+            return $this->buildTabs($c, $env); // a phone's bar or the desktop's sidebar carries it itself
+        }
+        // no bar across the bottom (tablet top/split, or desktop top tabs): the accessory floats over the page's bottom
         $wrap = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->fill();
           $inner = $this->buildTabs($c, $env);
           $v = ($this->accessory)();
           if ($v instanceof View) {
-              $c->open(new Node(Node::CONTAINER, Node::ROW))->absolute()->bottom(16.0 + $c->safeArea[2])->start(0)->end(0)->justify(Node::CENTER)->alignItems(Node::CENTER)->floats = true;
+              $row = $c->open(new Node(Node::CONTAINER, Node::ROW))->absolute()->bottom(16.0 + $c->safeArea[2])->start(0)->end(0)->justify($touch ? Node::CENTER : Node::START)->alignItems(Node::CENTER);
+              if (!$touch) { $row->padding(0, 16); }
+              $row->floats = true;
                 View::renderAll($c, $env->along(Node::ROW), [$v]);
               $c->end();
+              if ($row->kids === []) { $row->gone = true; }
           }
         $c->end();
         return $inner === null ? null : $wrap;
@@ -212,7 +219,8 @@ final class TabView extends View
         $shown = array_find($this->tabs, fn(Tab $t) => $t->value === $this->selection) ?? $this->tabs[0] ?? null;
         $kept ??= $c->runtime?->local($c->upcomingId(), static fn() => new class { public ?\NavigationSplitViewVisibility $sidebar = null; }, null, 'sidebar');
         $visibility = $kept?->sidebar ?? \NavigationSplitViewVisibility::all;
-        $split = new NavigationSplitView($sidebar, $shown === null ? [] : (count($shown->content) === 1 && $shown->content[0] instanceof View ? $shown->content[0] : $shown->content), $visibility, true);
+        $split = (new NavigationSplitView($sidebar, $shown === null ? [] : (count($shown->content) === 1 && $shown->content[0] instanceof View ? $shown->content[0] : $shown->content), $visibility, true))
+            ->bottomAccessory(!($c->runtime?->touch ?? false) ? $this->accessory : null);
         $n = $split->render($c, $env);
         if ($kept !== null) { $kept->sidebar = $visibility; }
         return $n;

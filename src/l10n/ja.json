@@ -371,5 +371,8 @@
   "updateNow": "今すぐアップデート",
   "updateFailed": "ダウンロード失敗 · 再試行",
   "updateOnAppStore": "App Storeでアップデート",
-  "updateOnGooglePlay": "Google Playでアップデート"
+  "updateOnGooglePlay": "Google Playでアップデート",
+  "updateAvailable": "新しいバージョンがあります",
+  "updateAutomatic": "自動アップデート",
+  "updateRestart": "再起動してアップデート"
 }

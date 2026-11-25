@@ -92,4 +92,26 @@ for ($i = 0; $i < 30; $i++) { $chartState->v = 1.0 + ($i % 4); $hc->frame(); }
 gc_enable();
 same(0, gc_collect_cycles(), 'Chart rebuilds leave 0 reference cycles');
 
+// Desktop Arc UpdateCapsule hover-morphing rebuilds leave 0 reference cycles
+$upCycleState = new class { public string $tab = 'home'; public bool $auto = false; };
+$hu = new Headless(function (\MyPHP\UI\Context $c) use ($upCycleState): void {
+    $c->disableAnimations();
+    \MyPHP\UI\Content::render(fn() => \TabView(selection: $upCycleState->tab)(
+        \Tab('Home', systemImage: 'house', value: 'home')(\Text('Body')),
+    )->tabViewStyle(\TabViewStyle::sidebarAdaptable)->bottomAccessory(fn() => \UpdateCapsule(
+        version: '2.0.0',
+        automaticUpdates: $upCycleState->auto,
+        onAction: fn() => null,
+    )), $c);
+}, 900, 600);
+$hu->frame(3);
+[$ux, $uy] = $hu->middle($hu->byLabel('New Version Available'));
+gc_collect_cycles();
+gc_disable();
+for ($i = 0; $i < 20; $i++) {
+    $hu->hover($i % 2 === 0 ? $ux : 500.0, $i % 2 === 0 ? $uy : 200.0);
+}
+gc_enable();
+same(0, gc_collect_cycles(), 'UpdateCapsule hover-morphing rebuilds leave 0 reference cycles');
+
 

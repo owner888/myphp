@@ -37,6 +37,12 @@ final class Updater
 {
     private static ?Checker $active = null;
 
+    /** Whether an updater plugin was registered on App::use(). */
+    public static function isActive(): bool
+    {
+        return self::$active !== null;
+    }
+
     /** The plugin with the default options (mygo's updater.Plugin). */
     public static function plugin(): Plugin
     {

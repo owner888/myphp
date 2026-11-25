@@ -21,6 +21,13 @@ final class NavigationSplitView extends View
 
     private mixed $visibility = null;
     private bool $hasVisibility = false;
+    private ?\Closure $accessory = null;
+
+    /**
+     * A view pinned at the bottom of the sidebar on the desktop (Arc's update pill), or floating centered over the
+     * detail's bottom on a touch screen: NavigationSplitView(…)->bottomAccessory(fn() => UpdateCapsule(…)).
+     */
+    public function bottomAccessory(?\Closure $content): static { $this->accessory = $content; return $this; }
 
     /** $columnVisibility, bound: whether the sidebar shows (NavigationSplitViewVisibility), which a button by the window controls toggles, as SwiftUI's sidebar toggle. */
     public function __construct(public readonly ListView $sidebar, public readonly View|array $detail, mixed &$columnVisibility = null, bool $hasVisibility = false)
@@ -72,6 +79,16 @@ final class NavigationSplitView extends View
                       $list->padding($t->space(2.5), $t->space(2.5), $t->space(2.5) + $safeBottom, $t->space(2.5) + $safeLeft);
                   }
               }
+              if ($this->accessory !== null && !$touch) { // desktop: pinned at the bottom of the sidebar, as Arc's update pill
+                  $acc = ($this->accessory)();
+                  if ($acc instanceof View) {
+                      $c->key('sidebar accessory');
+                      $foot = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->alignSelf(Node::STRETCH)->shrink(0)->padding(4, 8, 8 + $safeBottom, 8 + $safeLeft);
+                        View::renderAll($c, $env->along(Node::COLUMN), [$acc]);
+                      $c->end();
+                      if ($foot->kids === []) { $foot->padding(0)->gone = true; }
+                  }
+              }
             $c->end();
           $c->end();
           if (!$asList && $chosen !== (string)($selection ?? '')) { $selection = self::tagOf($this->sidebar->content(), $chosen) ?? $chosen; $this->sidebar->commitBinding(); } // chosen in the sidebar, the tag itself (an int id stays an int, as SwiftUI's Hashable): before the detail, whose actions may choose too
@@ -110,6 +127,17 @@ final class NavigationSplitView extends View
             if ($w > 0) { $c->safeArea[3] = 0.0; }
             View::renderAll($c, $env->along(Node::COLUMN)->with(['toolbarTaken' => $toolbar !== null]), $views);
             $c->safeArea = $savedSafe;
+            if ($this->accessory !== null && $touch) { // tablet: floating centered over the detail's bottom
+                $acc = ($this->accessory)();
+                if ($acc instanceof View) {
+                    $c->key('detail accessory');
+                    $row = $c->open(new Node(Node::CONTAINER, Node::ROW))->absolute()->bottom(16.0 + $safeBottom)->start(0)->end(0)->justify(Node::CENTER)->alignItems(Node::CENTER);
+                    $row->floats = true;
+                      View::renderAll($c, $env->along(Node::ROW), [$acc]);
+                    $c->end();
+                    if ($row->kids === []) { $row->gone = true; }
+                }
+            }
           $c->end();
         $c->end();
         if ($showToggle) { // the sidebar's button, next to the window controls on macOS or in the iPadOS navigation bar
