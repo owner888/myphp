@@ -396,6 +396,13 @@ static int myphp_app_image_mount(const char *root_dir) {
         start = (const uint8_t *)dlsym(RTLD_DEFAULT, "myphp_app_blob");
         end = (const uint8_t *)dlsym(RTLD_DEFAULT, "myphp_app_blob_end");
     }
+    if (start == NULL) {
+        void *h = dlopen("libapp.so", RTLD_LAZY | RTLD_LOCAL);
+        if (h != NULL) {
+            start = (const uint8_t *)dlsym(h, "myphp_app_blob");
+            end = (const uint8_t *)dlsym(h, "myphp_app_blob_end");
+        }
+    }
     if (start == NULL || end == NULL || end <= start) {
         return 0;
     }

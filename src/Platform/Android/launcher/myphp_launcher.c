@@ -342,9 +342,9 @@ static void* php_worker_thread(void *arg) {
             // why PHP ended, in the log: the error that ended it (a fatal is written before the bailout, but not always through ub_write), an uncaught exception's trace
             "register_shutdown_function(function () { $e = error_get_last(); if ($e !== null && ($e['type'] & (E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR))) { error_log('[myphp] ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']); } });"
             "$app = '%s/app.php';"
-            "if (!file_exists($app)) { error_log('[myphp] no app.php at ' . $app); }"
+            "if (!%d && !file_exists($app)) { error_log('[myphp] no app.php at ' . $app); }"
             "try { require $app; } catch (\\Throwable $e) { error_log('[myphp] uncaught ' . get_class($e) . ': ' . $e->getMessage() . \"\\n\" . $e->getTraceAsString()); throw $e; }",
-            g_files_dir, has_app_image ? "putenv('MYPHP_PRODUCTION=1');" : "", g_files_dir, g_files_dir, g_files_dir
+            g_files_dir, has_app_image ? "putenv('MYPHP_PRODUCTION=1');" : "", g_files_dir, g_files_dir, g_files_dir, has_app_image
         );
 
         LOGI("Executing app.php...");

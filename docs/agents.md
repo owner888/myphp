@@ -137,19 +137,28 @@ myphp screenshot -size 1080x720 -theme dark -out /tmp/desktop-dark.png .
 myphp screenshot -size 402x874 -theme light -out /tmp/mobile-light.png .
 ```
 
-### Step 4: Live Hot-Reload on Desktop, iOS Simulator & Android (`myphp run`)
-When you and your agent iterate together while the app is open on your screen or
-phone:
+### Step 4: 4-Platform Live Verification (`macOS`, `Windows`, `iOS`, `Android`)
+When iterating or verifying a feature across desktop and mobile platforms:
 
 ```sh
-myphp dev                  # Desktop: hot reloads view.php on every save
-myphp run -d ios .         # iOS Simulator / iPhone: syncs & hot reloads on save
-myphp run -d android .     # Android phone / emulator: syncs & hot reloads on save
+myphp dev                  # macOS / Linux desktop: hot reloads view.php on every save
+myphp run -d ios .         # iOS Simulator / iPhone / iPad: syncs & hot reloads on save
+myphp run -d android .     # Android phone / Enforcing emulator: syncs & hot reloads on save
 ```
 
 Every time the agent edits and saves `view.php` or `pages/*.php`, your running
 desktop or mobile app updates its UI on the spot while keeping your current
 state!
+
+For **Windows** verification from a macOS host (with a local Windows 11 VM
+reachable via passwordless SSH, e.g. `ssh win`), install native PHP 8.4/8.5
+(`ext-ffi` enabled) and MinGW/LLVM-MinGW inside Windows — because `myphp build`
+on Windows bundles the host Windows `php.exe` and `ext/*.dll` alongside a
+compiled GUI launcher rather than cross-compiling from macOS. The agent syncs
+the project over SSH, runs `php -d ffi.enable=1 tests\ui_test.php` and
+`bin\myphp.cmd build -skip-installer .`, and captures a real Direct3D 11 + Mica
+window screenshot in the logged-in desktop session via `schtasks /IT` (since
+OpenSSH runs in Session 0) before `scp`-ing the PNG back for visual inspection.
 
 ---
 

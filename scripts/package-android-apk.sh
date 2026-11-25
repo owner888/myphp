@@ -95,11 +95,7 @@ cp -R "${TEMPLATE_DIR}/res/"* "${WORK_DIR}/res/"
 php -r '
 $f = $argv[1];
 $label = htmlspecialchars($argv[2], ENT_XML1 | ENT_QUOTES, "UTF-8");
-file_put_contents($f, "<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">{$label}</string>
-</resources>
-");
+file_put_contents($f, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n    <string name=\"app_name\">{$label}</string>\n</resources>\n");
 ' "${WORK_DIR}/res/values/strings.xml" "$APP_LABEL"
 
 if [ -n "$PROJECT_DIR" ] && { [ -f "${PROJECT_DIR}/resources/icon.png" ] || [ -f "${PROJECT_DIR}/resources/icon_foreground.png" ] || [ -f "${PROJECT_DIR}/resources/icon_monochrome.png" ]; }; then
@@ -137,11 +133,11 @@ echo "==> Compiling resources with aapt2..."
 echo "==> Linking APK and generating R.java..."
 cp "${TEMPLATE_DIR}/AndroidManifest.xml" "${WORK_DIR}/AndroidManifest.xml"
 if [ "${MYPHP_ANDROID_DEBUGGABLE:-}" != "1" ]; then
-    php -r '$f=$argv[1]; $c = file_get_contents($f); file_put_contents($f, preg_replace("/<application\s+/", "<application android:extractNativeLibs="true" ", $c));' "${WORK_DIR}/AndroidManifest.xml"
+    php -r '$f=$argv[1]; $c = file_get_contents($f); file_put_contents($f, preg_replace("/<application\s+/", "<application android:extractNativeLibs=\"true\" ", $c));' "${WORK_DIR}/AndroidManifest.xml"
 fi
 if [ "$ANDROID_CHANNEL" = "play" ]; then
     echo "==> Play Store channel: removing REQUEST_INSTALL_PACKAGES permission..."
-    php -r '$f=$argv[1]; file_put_contents($f, preg_replace("/\s*<uses-permission[^>]*REQUEST_INSTALL_PACKAGES[^>]*/>/", "", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
+    php -r '$f=$argv[1]; file_put_contents($f, preg_replace("/\s*<uses-permission[^>]*REQUEST_INSTALL_PACKAGES[^>]*\/>/", "", file_get_contents($f)));' "${WORK_DIR}/AndroidManifest.xml"
 fi
 # The project's android/ folder: manifest-permissions.xml goes before <application>, manifest-application.xml (services, receivers) into it
 EXTRA_DIR=""
@@ -216,6 +212,27 @@ cp "${WORK_DIR}/dex/classes.dex" .
 
 mkdir -p "lib/arm64-v8a"
 cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
+
+# Bundle 16KB-aligned libmyphp-sqlite3.so when the app uses MyPHP\Plugins\Sqlite
+if [ -n "$PROJECT_DIR" ] && grep -rq --include='*.php' --exclude-dir=vendor --exclude-dir=build --exclude-dir=dist 'Plugins\\Sqlite' "$PROJECT_DIR" 2>/dev/null; then
+    SQLITE_SO="${BUILD_DIR}/libs/libmyphp-sqlite3.so"
+    if [ ! -f "$SQLITE_SO" ]; then
+        echo "==> Compiling 16KB-aligned libmyphp-sqlite3.so for Android..."
+        NDK_DIR="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
+        [ -n "$NDK_DIR" ] || NDK_DIR="$(ls -1d "${HOME}/Library/Android/sdk/ndk/"* "${SDK_DIR}/ndk/"* 2>/dev/null | sort -V | tail -n 1)"
+        NDK_TC="${NDK_DIR}/toolchains/llvm/prebuilt/darwin-x86_64"
+        [ -d "$NDK_TC" ] || NDK_TC="${NDK_DIR}/toolchains/llvm/prebuilt/linux-x86_64"
+        SQLITE_ZIP="${BUILD_DIR}/sqlite-amalgamation-3490100.zip"
+        [ -f "$SQLITE_ZIP" ] || curl -fsSL -o "$SQLITE_ZIP" "https://www.sqlite.org/2025/sqlite-amalgamation-3490100.zip"
+        unzip -qo "$SQLITE_ZIP" -d "${BUILD_DIR}"
+        "${NDK_TC}/bin/aarch64-linux-android31-clang" -shared -fPIC -O2 \
+            -DSQLITE_THREADSAFE=1 -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_JSON1 \
+            -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 \
+            "${BUILD_DIR}/sqlite-amalgamation-3490100/sqlite3.c" -ldl -lm -o "$SQLITE_SO"
+        "${NDK_TC}/bin/llvm-strip" --strip-unneeded "$SQLITE_SO"
+    fi
+    cp "$SQLITE_SO" "lib/arm64-v8a/libmyphp-sqlite3.so"
+fi
 
 # The project's native libraries (android/jniLibs/<abi>/*.so): only for an ABI the APK has the PHP runtime of, or the app would install where it cannot start.
 # A file named lib*.so is also run as a program: it lands in the app's native library directory, which needs extractNativeLibs (the default; a release sets it).

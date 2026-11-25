@@ -32,6 +32,32 @@ final class Server
      */
     public static function listen(string $path): self
     {
+        if (!in_array('unix', stream_get_transports(), true)) {
+            if (is_file($path)) {
+                $addr = trim((string)@file_get_contents($path));
+                if ($addr !== '' && ($c = @stream_socket_client("tcp://$addr", $errno, $err, 0.2)) !== false) {
+                    fclose($c);
+                    throw new RuntimeException("another app listens on $path");
+                }
+                if (!@unlink($path)) {
+                    throw new RuntimeException("cannot remove the socket left at $path");
+                }
+            }
+            $server = @stream_socket_server('tcp://127.0.0.1:0', $errno, $err);
+            if ($server === false) {
+                throw new RuntimeException("cannot listen on 127.0.0.1: $err");
+            }
+            $bound = stream_socket_get_name($server, false);
+            if ($bound === false || @file_put_contents("$path.tmp", $bound) === false || !@rename("$path.tmp", $path)) {
+                fclose($server);
+                @unlink("$path.tmp");
+                throw new RuntimeException("cannot write the socket address to $path");
+            }
+            stream_set_blocking($server, false);
+            clearstatcache(true, $path);
+            $st = @stat($path);
+            return new self($server, $path, $st === false ? null : $st['ino']);
+        }
         clearstatcache(true, $path);
         if (($st = @lstat($path)) !== false) {
             if (($st['mode'] & 0o170000) !== 0o140000) {

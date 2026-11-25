@@ -171,11 +171,12 @@ final class NativeLibrary
      */
     public static function cdef(string $cdef, string $path): \FFI
     {
-        if (PHP_OS_FAMILY === 'Linux') {
+        if (PHP_OS_FAMILY === 'Linux' && !\MyPHP\App::isAndroid()) {
             $dl = \FFI::cdef('void *dlopen(const char *, int); char *dlerror(void);');
             $h = $dl->dlopen($path, 0x2 | 0x8); // RTLD_NOW | RTLD_DEEPBIND (glibc)
             if ($h === null) {
-                throw new \FFI\Exception((string)$dl->dlerror());
+                $err = $dl->dlerror();
+                throw new \FFI\Exception($err !== null ? \FFI::string($err) : "dlopen($path) failed");
             }
             self::$bound[] = $h;
         }

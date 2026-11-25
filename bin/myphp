@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.204.4';
+const VERSION = '1.204.5';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -256,7 +256,7 @@ function frameworkOf(array $c): string
 /** $p made absolute against the project's directory. */
 function path(string $dir, string $p): string
 {
-    return str_starts_with($p, '/') ? $p : "$dir/$p";
+    return \MyPHP\Native\Paths::isAbsolute($p) ? $p : "$dir/$p";
 }
 
 /** The myphp command running. */
@@ -511,7 +511,7 @@ function generateBindings(string $dir, array $config): bool
     $out = path($dir, $config['bindings']);
     @mkdir(dirname($out), 0755, true);
     $before = is_file($out) ? file_get_contents($out) : null;
-    $p = proc_open([PHP_BINARY, ...PHP_FLAGS, path($dir, $config['entry'])], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_GENERATE' => $out, 'MYPHP_HOME' => frameworkOf($config)] + getenv());
+    $p = proc_open([PHP_BINARY, ...PHP_FLAGS, path($dir, $config['entry'])], [0 => ['file', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_GENERATE' => $out, 'MYPHP_HOME' => frameworkOf($config)] + getenv());
     $code = proc_close($p);
     $code === 0 && is_file($out) || fail("generating {$config['bindings']}: {$config['entry']} exited with $code");
     if (file_get_contents($out) === $before) {
@@ -2723,9 +2723,14 @@ function phoneBuild(): string
 {
     static $dir = null;
     if ($dir === null) {
-        [$code, $out] = Cmd::output(['bash', '-c', 'ROOT_DIR="$1"; source "$1/scripts/phone-build-dir.sh"; printf %s "$PHONE_BUILD"', 'sh', (string)realpath(FRAMEWORK)]);
-        $code === 0 && trim($out) !== '' || fail('cannot tell where the phone runtimes are kept (scripts/phone-build-dir.sh)');
-        $dir = trim($out);
+        $env = (string)getenv('MYPHP_PHONE_BUILD');
+        if ($env !== '') {
+            $dir = $env;
+        } else {
+            $root = (string)realpath(FRAMEWORK);
+            $home = (string)getenv('HOME') !== '' ? (string)getenv('HOME') : (string)getenv('USERPROFILE');
+            $dir = str_ends_with(str_replace('\\', '/', $root), '/vendor/owner888/myphp') ? "$home/.myphp/phone" : "$root/build";
+        }
     }
     return $dir;
 }
@@ -2886,7 +2891,7 @@ function screenshot(array $args): void
             [$xvfb, $env['DISPLAY']] = startXvfb($tmp, $deadline);
         }
         $log = "$tmp/app.log";
-        $app = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', '/dev/null', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']], $pipes, $dir, $env + getenv());
+        $app = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']], $pipes, $dir, $env + getenv());
         $app !== false || fail("cannot run $entry");
         $s = new ScreenshotSession($app, $log, $env['MYPHP_AUTOMATION'], $deadline, (float)$timeout);
         $s->connect();
@@ -2914,7 +2919,7 @@ function screenshot(array $args): void
         $s->quit();
         $app = null;
     } finally {
-        if ($app !== null) { // a run that failed: the app asked to quit too, then killed
+        if (is_resource($app)) { // a run that failed: the app asked to quit too, then killed
             proc_terminate($app, 15);
             for ($end = microtime(true) + 2; proc_get_status($app)['running'] && microtime(true) < $end;) {
                 usleep(20_000);
@@ -3032,11 +3037,15 @@ final class ScreenshotSession
     /** Waits for the app to listen, and connects. */
     public function connect(): void
     {
+        $hasUnix = in_array('unix', stream_get_transports(), true);
         while (true) {
             $this->alive('before it listened');
-            if (file_exists($this->sock) && ($c = @stream_socket_client("unix://{$this->sock}", $errno, $err, 1.0)) !== false) {
-                $this->conn = $c;
-                return;
+            if (file_exists($this->sock)) {
+                $target = $hasUnix ? "unix://{$this->sock}" : (($addr = trim((string)@file_get_contents($this->sock))) !== '' ? "tcp://$addr" : '');
+                if ($target !== '' && ($c = @stream_socket_client($target, $errno, $err, 1.0)) !== false) {
+                    $this->conn = $c;
+                    return;
+                }
             }
             microtime(true) < $this->deadline || fail("the app did not listen for automation in {$this->timeout} s; it calls App::run(), from its project? Its output:\n" . tail($this->log));
             usleep(50_000);

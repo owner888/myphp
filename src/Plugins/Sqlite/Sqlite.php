@@ -91,6 +91,14 @@ final class Sqlite
      */
     public static function libraryPath(): string
     {
+        if ((string)getenv('MYPHP_SQLITE_LIBRARY') === '') {
+            if (\MyPHP\App::isIOS()) {
+                return '/usr/lib/libsqlite3.dylib';
+            }
+            if (\MyPHP\App::isAndroid()) {
+                return 'libmyphp-sqlite3.so';
+            }
+        }
         $path = NativeLibrary::find(__DIR__ . '/myphp-plugin.json', 'myphp-sqlite3', 'MYPHP_SQLITE_LIBRARY', 'sqlite');
         return \MyPHP\Native\Paths::absolute($path);
     }

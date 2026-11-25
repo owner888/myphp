@@ -162,5 +162,9 @@ App::run();
    *(Note: when navigating between pages in `NavigationStack`, run `$h->frame(30)` so the slide transition completes.)*
 3. **Visual screenshot check** (< 1s):
    Run `myphp screenshot -data /tmp/test-data -out /tmp/shot.png` (or via a `tests/preview.php` with `FakeApi` data; do not pass `-size` taller than ~800pt on a laptop screen) and inspect the PNG for layout, contrast, and alignment.
-4. **Device / Simulator run**:
-   Use `myphp devices` and `myphp run -d ios|android|macos .` (never raw `xcrun` or `adb` scripts).
+4. **4-Platform Verification (`macOS`, `Windows`, `iOS`, `Android`)**:
+   Every feature change must be verified across target platforms via `myphp` CLI (never raw `xcrun` or `adb` scripts):
+   - **macOS**: `myphp screenshot -size 1280x800 -out /tmp/macos.png .` and `myphp run -d macos .`.
+   - **Windows (local VM over SSH, e.g. `ssh win`)**: Windows builds bundle the host Windows `php.exe` + `ext/*.dll` and compile a native GUI launcher (`myphp build` cannot cross-bundle Windows from macOS). Sync changes to a Windows VM configured with PHP 8.4/8.5 (`ext-ffi` enabled) + MinGW/LLVM-MinGW, run `php -d ffi.enable=1 tests\ui_test.php` and `bin\myphp.cmd build -skip-installer .` over SSH, and trigger `bin\myphp.cmd screenshot` inside the logged-in desktop session via `schtasks /IT` (SSH runs in non-interactive Session 0 without DWM), then `scp` the PNG back to inspect D3D11 + Win11 Mica rendering.
+   - **iOS / iPadOS**: `myphp devices` and `myphp run -d ios .` (verify Dynamic Island / Home Indicator safe areas and iPad `sidebarAdaptable` landscape sidebar ↔ portrait top capsule morphing).
+   - **Android**: `myphp emulators --launch <id>` (use an `Enforcing` SELinux image) and `myphp run -d android .` (ensure any bundled `.so` uses `-Wl,-z,max-page-size=16384` for 16 KB page alignment).

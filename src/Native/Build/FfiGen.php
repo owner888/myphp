@@ -548,9 +548,9 @@ final class FfiGen
      */
     public static function normalizeWin32Annotations(string $line): string
     {
-        // Windows macros
+        // Windows & cross-platform library export macros
         $line = (string)preg_replace('/__declspec\s*\(\s*(?:dllexport|dllimport)\s*\)/i', '', $line);
-        $line = (string)preg_replace('/\b(?:WINAPI|APIENTRY|CALLBACK|WINBASEAPI|WINUSERAPI|__stdcall|__cdecl|__fastcall)\b/', '', $line);
+        $line = (string)preg_replace('/\b(?:WINAPI|APIENTRY|CALLBACK|WINBASEAPI|WINUSERAPI|__stdcall|__cdecl|__fastcall|[A-Z][A-Z0-9]*_(?:EXPORT|API|PUBLIC|EXTERN))\b/', '', $line);
         $line = (string)preg_replace('/\b_(?:In|Out|Inout|Reserved)(?:_opt|_z|_reads|_writes|_bytes|_count|[A-Za-z0-9_])*\s*(?:\([^)]*\))?/', '', $line);
         $line = (string)preg_replace('/\b(?:IN|OUT|OPTIONAL)\b(?=\s+[A-Za-z_])/', '', $line);
 

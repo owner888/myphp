@@ -398,8 +398,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             // Legacy APK without .myphp-assets-list
         }
         if (manifest != null) {
-            for (String rel : manifest.split("
-")) {
+            for (String rel : manifest.split("\n")) {
                 String path = rel.trim();
                 if (!path.isEmpty()) {
                     copyAssetFile(path, new File(targetDir, path));

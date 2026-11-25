@@ -158,6 +158,7 @@ from .myphp/dev. Work in `src/Native/Build/` (`tests/build_test.php`). Project `
 - New ObjC calls: selector/types from Apple's headers, letters in `ObjC::MAP`, structs via `ObjC::$c->new`/`ObjC::rect`, no variadics (`arrayWithObjects:`).
 - Record each solved problem in `docs/architecture.md` (one paragraph).
 - **A phone is checked on a stock one**: a permissive SELinux (a rooted or custom ROM phone) and the iOS Simulator hide what a user's device refuses (OPcache's lock, the sandbox's `/tmp`, `fork`). Use an `Enforcing` `user`-build emulator image (Android TV's arm64 one) and, for iOS, a device; the details are in `docs/architecture.md`, "What a stock phone refuses".
+- **4-platform app verification**: after feature changes on an app, run headless `tests/ui_test.php`, `myphp screenshot` / `myphp run -d macos`, `myphp run -d ios`, `myphp run -d android`, and on a Windows VM over SSH (`ssh win`, equipped with native PHP 8.4/8.5 + `ext-ffi` + MinGW because `myphp build` bundles the host Windows `php.exe`), run `ui_test.php`, `bin\myphp.cmd build -skip-installer`, and trigger `bin\myphp.cmd screenshot` in the logged-in desktop session (`schtasks /IT`) then `scp` the PNG back.
 - CJK in the iOS Simulator from the Mac's keyboard: switch the input method inside the simulator (iOS's keyboard), not the Mac's input source.
 
 ## Roadmap
