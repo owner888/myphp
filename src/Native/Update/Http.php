@@ -125,6 +125,10 @@ final class Http
         if ($scheme !== 'https' && !($scheme === 'http' && ($host === 'localhost' || $host === '::1' || str_starts_with($host, '127.')))) {
             throw new RuntimeException("refusing to download $url: updates need HTTPS");
         }
+        if (\MyPHP\Http::transport() === 'php') {
+            self::requestPhp($url, $host, $take, $stop);
+            return;
+        }
         $f = Curl::ffi();
         $h = $f->curl_easy_init();
         $m = $f->curl_multi_init();
@@ -200,6 +204,32 @@ final class Http
             if ($list !== null) {
                 $f->curl_slist_free_all($list);
             }
+        }
+    }
+
+    /** request() over MyPHP's own network stack (Http::useTransport('php'), MYPHP_HTTP=php). @param \Closure(string): bool $take @param ?\Closure(): bool $stop */
+    private static function requestPhp(string $url, string $host, \Closure $take, ?\Closure $stop): void
+    {
+        $headers = [];
+        if (self::$githubToken !== '' && $host === 'api.github.com') {
+            $headers['Authorization'] = 'Bearer ' . self::$githubToken;
+        }
+        $refused = false;
+        try {
+            $r = \MyPHP\Net\PhpHttp::send('GET', $url, $headers, null, 0.0, ['http', 'https'], self::$userAgent, "GET $url",
+                progress: $stop === null ? null : static function () use ($stop): void { if ($stop()) { throw new Canceled; } },
+                saveTo: null,
+                onData: static function (string $chunk) use ($take, &$refused): void {
+                    if (!$take($chunk)) { $refused = true; throw new Canceled; }
+                });
+        } catch (Canceled $e) {
+            if ($refused) {
+                throw new RuntimeException("$url is longer than expected");
+            }
+            throw $e;
+        }
+        if ($r->status !== 200) {
+            throw new RuntimeException("GET $url: {$r->status} " . self::statusText($r->status), $r->status);
         }
     }
 

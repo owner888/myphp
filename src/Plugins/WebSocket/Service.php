@@ -260,7 +260,7 @@ final class Service
         }
 
         // The connection outlives the request: no timeout, and like browsers, no redirects.
-        $t = new CurlTransport($url);
+        $t = \MyPHP\Http::transport() === 'php' ? new PhpTransport($url) : new CurlTransport($url);
         try {
             while (($r = $t->connected()) === null) {
                 yield Channel::wait(self::POLL_BUSY);

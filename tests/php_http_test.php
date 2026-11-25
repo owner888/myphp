@@ -73,6 +73,15 @@ try {
         }
         same([1 => 200, 2 => 200, 3 => 200], $got, 'requests made in fibers, the app not running');
     } finally {
+        // TlsRoots::systemFile() honors SSL_CERT_FILE (the phones' launcher sets it; ext/openssl ignores it without a default_cert_file).
+        $was = getenv('SSL_CERT_FILE');
+        putenv("SSL_CERT_FILE=$dir/repo.json");
+        try {
+            $ini = (string)(openssl_get_cert_locations()['ini_cafile'] ?? '');
+            same($ini !== '' && is_file($ini) ? $ini : "$dir/repo.json", \MyPHP\Net\Async\TlsRoots::systemFile(), 'SSL_CERT_FILE is the certificate file when openssl.cafile names none');
+        } finally {
+            putenv($was === false ? 'SSL_CERT_FILE' : "SSL_CERT_FILE=$was");
+        }
         Http::useTransport(null);
         $stop();
         array_map('unlink', glob("$dir/*") ?: []);
