@@ -154,6 +154,8 @@ final class Node
     /** A grid's column tracks and its first rows' (Track); null for a flex container. The rows beyond fit their content. */
     public ?array $gridCols = null;
     public array $gridRows = [];
+    /** A grid whose columns are counted in the width layout gives it (adaptiveGrid()): a Track each, or the least width of as many equal columns as fit; null otherwise. @var ?list<Track|float> */
+    public ?array $gridAdaptive = null;
     /** Where this node goes in its grid (mygo's gridCell): lines from 1, 0 for automatic placement, and spans, 0 for 1 and negative to the last line. */
     public int $cellCol = 0, $cellRow = 0, $colSpan = 0, $rowSpan = 0;
 
@@ -1834,6 +1836,31 @@ final class Node
     {
         $this->gridCols = $cols; $this->gridRows = $rows;
         return $this;
+    }
+
+    /**
+     * grid() with columns counted in the width the grid gets, as CSS's repeat(auto-fill, minmax($min, 1fr)): each float of
+     * $template stands for as many equal columns, that wide at least, as fit beside the template's tracks. Built for $width
+     * (the frame before's, or a guess); layout counts again in the width it arranges the grid at, in the same frame
+     * (Layout::wrapTexts). @param list<Track|float> $template
+     */
+    public function adaptiveGrid(array $template, float $width): static
+    {
+        $this->gridAdaptive = $template;
+        $this->gridCols = $this->adaptiveTracks($width);
+        return $this;
+    }
+
+    /** The column tracks of an adaptiveGrid() $width wide inside its padding. @internal Layout @return list<Track> */
+    public function adaptiveTracks(float $width): array
+    {
+        $gap = $this->gapX ?? $this->gap;
+        $tracks = [];
+        foreach ($this->gridAdaptive ?? [] as $t) {
+            if ($t instanceof Track) { $tracks[] = $t; continue; }
+            array_push($tracks, ...array_fill(0, max(1, (int)floor(($width + $gap) / ($t + $gap))), Track::fr()));
+        }
+        return $tracks;
     }
 
     /** Sets a grid's column tracks, as a sidebar and the rest: columnTracks(Track::fixed(220), Track::fr()) (mygo's ColumnTracks). */

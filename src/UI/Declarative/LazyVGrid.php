@@ -8,8 +8,8 @@ use MyPHP\UI\{Context, Node, Painter, Selection, Track};
 
 /**
  * LazyVGrid, as SwiftUI's with an adaptive column (GridItem::adaptive):
- * as many columns as fit cells $minimum wide at least in the width it is
- * given (as it was laid out the frame before), sharing the width left over,
+ * as many columns as fit cells $minimum wide at least in the width layout
+ * gives it, in the frame it is given it, sharing the width left over,
  * its views laid out in them row by row, $spacing apart. Of one Each, with
  * selection: — as myphp adds, after a List's and Finder's icon view — only
  * the rows in view are built, scrolling, a click choosing an item (Cmd- and
@@ -59,22 +59,15 @@ final class LazyVGrid extends View
     {
         $first = $this->columns[0] ?? throw new \LogicException('LazyVGrid needs at least one GridItem');
         if ($this->selects) { return $this->chooser($c, $env, $first->minimum ?? 120.0); }
-        $tracks = [];
-        $fitted = []; // each adaptive column's least width => the columns of it this build made
-        $spacing = $this->spacing;
+        $adaptive = false;
+        $template = [];
         foreach ($this->columns as $col) {
-            if ($col->kind === GridItem::ADAPTIVE) {
-                $min = $col->minimum ?? 120.0;
-                $width = $c->runtime?->rectOf($c->upcomingId())[2] ?? $c->width;
-                $cols = self::fitting($width, $min, $spacing);
-                $fitted[] = [$min, $cols];
-                array_push($tracks, ...array_fill(0, $cols, Track::fr()));
-            } else {
-                $tracks[] = $col->track();
-            }
+            if ($col->kind === GridItem::ADAPTIVE) { $adaptive = true; $template[] = $col->minimum ?? 120.0; } else { $template[] = $col->track(); }
         }
         $cellEnv = $env->along(Node::COLUMN);
-        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, $this->spacing))->grid($tracks);
+        // Adaptive columns are counted by layout, in the width it gives the grid (Node::adaptiveGrid): built here for the width of the frame before, the window's in the first.
+        $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, $this->spacing));
+        if ($adaptive) { $n->adaptiveGrid($template, $c->runtime?->rectOf($n->id)[2] ?? $c->width); } else { $n->grid($template); }
           foreach (ListView::flat($this->content) as $v) {
               $k = $v->render($c, $cellEnv);
               if ($k !== null) {
@@ -83,20 +76,8 @@ final class LazyVGrid extends View
               }
           }
         $c->end();
-        // Columns counted in the width of the frame before (the first frame, the window's): laid out to a width that fits another count, it builds again with it.
-        if ($fitted !== []) {
-            $n->draw(static function (Painter $p, array $r) use ($fitted, $spacing): void {
-                foreach ($fitted as [$min, $cols]) { if (self::fitting($r[2], $min, $spacing) !== $cols) { $p->invalidate(); return; } }
-            });
-        }
         View::takeRoom($n, $env->axis, View::FLEX_X);
         return $n;
-    }
-
-    /** How many columns $min wide at least, $spacing apart, fit in $width: one at least. */
-    private static function fitting(float $width, float $min, float $spacing): int
-    {
-        return max(1, (int)floor(($width + $spacing) / ($min + $spacing)));
     }
 
     /** The grid of one Each's items, those in view built, chosen as the binding says. */

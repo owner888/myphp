@@ -48,7 +48,9 @@ final class Layout
         self::$aligned = []; self::$scrolled = [];
         self::measure($c->root, false);
         self::arrange($c->root, 0, 0, $w, $h);
-        if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width), and wrapping rows at theirs
+        // Texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width), and wrapping rows at theirs.
+        // An adaptive grid arranged at a width that fits another count of columns takes them first, and what is in its cells wraps in a round of its own, at the width they have then.
+        for ($round = 0; $round < 2 && self::wrapTexts($c->root); $round++) {
             // A list's row aligned again, from where it showed, as high as its lines wrap: a list following its end keeps it in view as a reply grows past the list.
             foreach (self::$aligned as [$s, $aligning, $row, $top, $lag, $grew]) {
                 [$s->aligning, $s->shownRow, $s->shownTop, $s->lag, $s->grew] = [$aligning, $row, $top, $lag, $grew];
@@ -57,6 +59,8 @@ final class Layout
             foreach (self::$scrolled as [$s, $x, $y]) { [$s->x, $s->y] = [$x, $y]; }
             self::measure($c->root, false);
             self::arrange($c->root, 0, 0, $w, $h);
+            if (!self::$refitted) { break; }
+            self::$refitted = false;
         }
         $ids = $c->runtime?->takeReveals($c->reveal) ?? $c->reveal;
         if ($ids !== []) {
@@ -101,6 +105,10 @@ final class Layout
             }
             $n->wrapWidth = $n->w - $n->padL() - $n->padR(); $n->autoWrap = true; $n->layout = null; // inside its padding
             return true;
+        }
+        if ($n->gridAdaptive !== null && $n->w > 0) { // built for another width than it is arranged at: the columns that fit this one, its cells arranged again before what is in them wraps
+            $cols = $n->adaptiveTracks($n->w - $n->padL() - $n->padR());
+            if (count($cols) !== count($n->gridCols)) { $n->gridCols = $cols; self::$refitted = true; return true; }
         }
         // A wrapping row arranged at another width than it was measured at, as one given none (wrap(0)) or last frame's: its lines at this width, and so its height, in this frame (mygo's Wrap).
         $wrapped = $n->wraps && $n->w > 0 && abs($n->w - $n->wrapWidth) > 0.5;
@@ -994,6 +1002,8 @@ final class Layout
 
     /** The window's size as the layout goes: what attachTo keeps popovers in. @var array{0: float, 1: float} */
     private static array $window = [INF, INF];
+    /** Whether wrapTexts gave an adaptive grid other columns: the texts in its cells wrap in another round. */
+    private static bool $refitted = false;
     /** @var list<array{0: ListState, 1: array, 2: int, 3: float, 4: float, 5: bool}> the lists whose row this layout aligned (ListState::$aligning), as they were before: how, where they showed and their glide's lag; the arrange after texts wrap aligns them again from there */
     private static array $aligned = [];
     /** The scroll containers' states the frame laid out, and where they were to scroll as it began: [state, x, y] by the state's object id. @var array<int, array{0: ScrollState, 1: float, 2: float}> */

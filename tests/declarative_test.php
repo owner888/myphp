@@ -359,17 +359,20 @@ $h->frame(2);
 $h->w = 700; $h->frame(3);
 check($h->byText('w 700') !== null, 'GeometryReader builds again with the new width: ' . json_encode($h->texts()));
 
-// What is built for the width of the frame before asks for a frame built anew once laid out to another, not for one that
-// only paints again: beside a sidebar the first frame knows only the window's width, and nothing else brings the next.
+// Beside a sidebar the first frame knows only the window's width. An adaptive LazyVGrid's columns are counted by layout, in
+// the width it gets, so its first frame is right (no jump as a tab shows); what is built for the frame before's size
+// (GeometryReader) asks for a frame built anew, not for one that only paints again.
 $pane = fn(View $v) => new Headless(fn(Context $c) => Content::render(fn() => HStack(spacing: 0)(Text('side')->frame(width: 220), $v), $c), 1170, 600);
-$h = $pane(LazyVGrid(columns: [GridItem::adaptive(minimum: 220)], spacing: 12)(Text('a'), Text('b'), Text('c')));
-$h->windowFrame();
-$first = $h->rect($h->byText('a'))[2];
-check($h->rt->needsFrame, 'an adaptive LazyVGrid laid out narrower than the window asks to be built again');
-check(!$h->windowFrame(), 'and the next frame is built, not only painted');
-$second = $h->rect($h->byText('a'))[2];
-check($first < 220 && $second >= 220, "its columns then fit the width it has: $first, then $second");
+$long = 'thirty-two characters, one line.'; // 224 points of the test's cells: one line in a column of 229, two in one of 180 or 222
+$h = $pane(LazyVGrid(columns: [GridItem::adaptive(minimum: 220)], spacing: 12)(Text('a'), Text($long), Text('c')));
+$h->frame(1);
+[$ax, , $aw] = $h->rect($h->byText('a')); [$lx, , , $lh] = $h->rect($h->byText($long));
+same([229.0, 241.0], [round($aw), round($lx - $ax)], 'an adaptive LazyVGrid narrower than the window has the columns that fit its width in its first frame');
+same(16.0, $lh, 'and a text in a cell is not wrapped for the columns it was built with');
 check(!$h->rt->needsFrame, 'and it asks for no more frames');
+$h->w = 676; $h->frame(1);
+same(2, count(array_unique(array_map(fn(string $t) => $h->rect($h->byText($t))[1], ['a', $long, 'c']))), 'the window narrower, its columns fit that in the same frame: two, the third cell on a second row');
+same(222.0, $h->byText($long)->wrapWidth, 'and the text wraps at the width of its narrower column, in that frame');
 $h = $pane(GeometryReader(fn(GeometryProxy $g) => Text(verbatim: 'w ' . (int)$g->size[0])));
 $h->windowFrame();
 check($h->byText('w 1170') !== null && $h->rt->needsFrame, 'a GeometryReader built with the window\'s width asks to be built again');
