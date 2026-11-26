@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 $uses = ['PHP_BINARY' => [], 'glob(' => []];
-$allowed = ['PHP_BINARY' => ['Native/Bundle.php'], 'glob(' => ['Native/I18nGen.php']];
+$allowed = ['PHP_BINARY' => ['Native/Bundle.php', 'Net/Async/Dns.php'], 'glob(' => ['Native/I18nGen.php']];
 $src = realpath(__DIR__ . '/../src');
 $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($src, \FilesystemIterator::SKIP_DOTS));
 foreach ($it as $f) {
