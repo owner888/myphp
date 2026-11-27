@@ -9516,6 +9516,16 @@ only as a responder becomes first, and the password AutoFill it starts (the Pass
 either trait changes (`myphp_ios_set_text_traits`) it resigns and becomes first responder again, in the same turn of
 the run loop (the keyboard stays); the other traits still take `reloadInputViews`.
 
+**A focused field whose keyboard did not come up, or went away**: `iOS\Window` previously called `myphp_ios_show_keyboard`
+only on the edge where `$hasInputFocus` went from `false` to `true` (`!$this->keyboardVisible`). If the first frame asked
+for the keyboard before the `UIScene` had become `UISceneActivationStateForegroundActive` (`sceneDidBecomeActive:`), or
+if UIKit resigned the first responder / dismissed the keyboard externally (an alert or file picker presented, an iPad's
+dismiss key, or returning from background) while PHP's `TextField` kept its focus, tapping the field again never called
+`myphp_ios_show_keyboard`. Now a completed tap in `iOS\Window::onTouch` resets `$this->keyboardVisible = false` so the
+frame re-asserts the keyboard when a field holds focus, `myphp_ios_show_keyboard` ensures `g_window` is key and calls
+`reloadInputViews` if `g_view` is already first responder with `g_keyboard_height <= 0`, and `sceneDidBecomeActive:`
+re-triggers it when `g_wants_keyboard` was set before the scene activated.
+
 **r and R on a device**: `myphp run` on an iPhone ran `devicectl device process launch --console` straight to the
 terminal, without `phoneHot`: r and R were echoed and nothing reloaded; and the simulator's way, copying the saved
 files into the installed bundle, cannot work there, as a device's bundle is read-only. Now the app `myphp run` makes

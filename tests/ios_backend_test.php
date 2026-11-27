@@ -303,6 +303,7 @@ use MyPHP\UI\{Content, TextState};
     // Secure entry and the content type changing (a password's field to another): the view becomes first responder again,
     // as the keyboard reads them only then; reloadInputViews alone left the Passwords bar on every field after it.
     check(preg_match('/if \(anew\) \{\s*\[g_view resignFirstResponder\];\s*\[g_view becomeFirstResponder\];/', $mainM) === 1 && str_contains($mainM, 'BOOL anew = (secure != 0) != g_secure_entry'), 'main.m: a field after a password\'s gets the keyboard anew, not the password\'s');
+    check(str_contains($mainM, 'g_wants_keyboard = 1;') && str_contains($mainM, '- (void)sceneDidBecomeActive:(UIScene *)scene') && str_contains($iosWindowSrc, '$this->keyboardVisible = false; // a tap on a field brings the keyboard up'), 'iOS keyboard re-asserts on tap and on sceneDidBecomeActive');
     // r and R on a device: its bundle cannot be written, so an app myphp run made (MyPHPRun) runs a copy of its PHP in its
     // data, which myphp run changes by devicectl; its log is devicectl's --console, through phoneHot, launched again on R.
     $packageIosSh = (string)file_get_contents(__DIR__ . '/../scripts/package-ios-app.sh');

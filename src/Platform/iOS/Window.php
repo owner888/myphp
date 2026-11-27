@@ -457,6 +457,7 @@ final class Window implements Platform\Window
                     $input->mouse($ptX, $ptY);
                     $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
                     $this->touchInField = false;
+                    $this->keyboardVisible = false; // re-ensure first responder & keyboard if dismissed externally
                     if ($this->editMenuTouch !== null) { $this->editMenuTouch[3] = true; }
                     $this->requestFrame();
                     break;
@@ -488,6 +489,7 @@ final class Window implements Platform\Window
                     $input->mouseInside = false;
                     $input->mouseX = -1;
                     $input->mouseY = -1;
+                    $this->keyboardVisible = false; // a tap on a field brings the keyboard up even if it was already focused
                     $this->requestFrame();
                 }
                 break;

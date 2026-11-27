@@ -83,6 +83,7 @@ static UIWindow *g_window = NULL;
 static MTKView *g_view = NULL;
 static CADisplayLink *g_display_link = NULL;
 static volatile int g_needs_render = 0;
+static volatile int g_wants_keyboard = 0;
 
 #define NOTIF_CLICK_QUEUE_SIZE 16
 static char g_notif_click_queue[NOTIF_CLICK_QUEUE_SIZE][256];
@@ -1079,16 +1080,26 @@ void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalizat
 }
 
 void myphp_ios_show_keyboard(void) {
+    g_wants_keyboard = 1;
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (g_view && ![g_view isFirstResponder]) {
+        if (!g_view || !g_wants_keyboard) return;
+        if (g_window && !g_window.isKeyWindow) {
+            [g_window makeKeyAndVisible];
+        }
+        if (![g_view isFirstResponder]) {
             [g_view becomeFirstResponder];
+        } else if (g_keyboard_height <= 0.0f) {
+            [g_view reloadInputViews];
         }
     });
 }
 
 void myphp_ios_hide_keyboard(void) {
+    g_wants_keyboard = 0;
     dispatch_async(dispatch_get_main_queue(), ^{
-        [g_window endEditing:YES];
+        if (!g_wants_keyboard) {
+            [g_window endEditing:YES];
+        }
     });
 }
 
@@ -2028,6 +2039,16 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
 - (void)sceneDidEnterBackground:(UIScene *)scene {
     g_app_paused = 1;
     if (g_display_link) { g_display_link.paused = YES; }
+}
+
+- (void)sceneDidBecomeActive:(UIScene *)scene {
+    if (g_wants_keyboard && g_view) {
+        if (![g_view isFirstResponder]) {
+            [g_view becomeFirstResponder];
+        } else if (g_keyboard_height <= 0.0f) {
+            [g_view reloadInputViews];
+        }
+    }
 }
 
 - (void)sceneWillEnterForeground:(UIScene *)scene {
