@@ -29,6 +29,10 @@ final class Runtime
     private array $rects = [];
     /** @var array<int, list<array{0: float, 1: float, 2: float, 3: float}>> the boxes of the words of text inside a paragraph, by id, last frame */
     private array $frags = [];
+    /** @var array<int, true> the nodes that take a tap over what is under them though they act on none (Node::$hitTestable), last frame */
+    private array $hitTestables = [];
+    /** @var array<int, true> the nodes of an opacity of 0, last frame: what is in one takes no tap over what is under it, as SwiftUI's */
+    private array $clear = [];
     /** @var array<int, Scrollable> id => scroll state, from last frame */
     private array $scrolls = [];
     /** @var array<int, float> the scroll containers that close the keyboard as a finger scrolls them, by id: from what height (Node::$dismissesKeyboard) */
@@ -893,6 +897,8 @@ final class Runtime
         $this->rects = [];
         $this->listRows = [];
         $this->frags = [];
+        $this->hitTestables = [];
+        $this->clear = [];
         $this->order = [];
         $this->barrier = 0; $this->counter = 0; $this->overlays = []; $this->handles = []; $this->links = [];
         $this->sliders = [];
@@ -1262,7 +1268,27 @@ final class Runtime
                 }
             }
         }
-        return $best;
+        if ($best === null) {
+            return null;
+        }
+        // A view that draws over it, not inside it (a Color, a Text, a filled shape a ZStack puts on it), takes the tap,
+        // as SwiftUI's topmost view does: the views around it up to one taking clicks get it (clickTakers), the one covered none.
+        $cover = $best;
+        foreach ($this->hitTestables as $id => $_) {
+            if (($this->order[$id] ?? -1) > $at && $this->under($id, $x, $y) && !$this->within($id, $best) && !$this->cleared($id)) {
+                $cover = $id; $at = $this->order[$id];
+            }
+        }
+        return $cover;
+    }
+
+    /** Whether node $id or one around it has an opacity of 0, last frame. */
+    private function cleared(int $id): bool
+    {
+        for ($n = 0; $id !== 0 && $n < 1024; $id = $this->parents[$id] ?? 0, $n++) {
+            if (isset($this->clear[$id])) { return true; }
+        }
+        return false;
     }
 
     /**
@@ -2189,7 +2215,10 @@ final class Runtime
         if ($ignoring) { // it shows and reads to assistive technology, but takes neither the pointer nor the focus (mygo's ignoreInput)
             $this->passing[$n->id] = true;
             if ($this->focus === $n->id) { $this->focus = null; }
+        } elseif ($n->hitTestable && !$hidden) {
+            $this->hitTestables[$n->id] = true;
         }
+        if ($n->opacity <= 0) { $this->clear[$n->id] = true; }
         if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
             $this->samplePose($n);

@@ -806,6 +806,9 @@ final class Node
     /** @var ?list<array{0: float, 1: float, 2: float, 3: float}> where in its box it takes the pointer (hitAreas), null for all of it */
     public ?array $hitAreas = null;
 
+    /** Whether the node takes a tap over what is under it though it acts on none, as SwiftUI's views that draw (Text, Image, a Color, a filled shape, a background): a button it covers gets none. @internal */
+    public bool $hitTestable = false;
+
     /**
      * Has the node take the pointer only within $rects, [x, y, w, h] from
      * its box's top left, passing it through elsewhere as passThrough()

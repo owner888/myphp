@@ -31,6 +31,8 @@ final class Shape extends View
         return $this;
     }
 
+    protected function hitTestable(): bool { return $this->stroke === null || $this->fill !== null; } // filled; one only stroked lets taps through
+
     protected function build(Context $c, Env $env): ?Node
     {
         $color = $this->fill ?? ($this->stroke === null ? ($env->color ?? new ColorValue(\Color::primary)) : null);

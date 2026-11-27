@@ -35,6 +35,8 @@ final class AngularGradientView extends View
         return new ConicGradient(stops: $list, centerX: $cx, centerY: $cy, angle: $this->angle);
     }
 
+    protected function hitTestable(): bool { return true; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         $n = $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);

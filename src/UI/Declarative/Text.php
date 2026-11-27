@@ -18,6 +18,8 @@ final class Text extends View
      */
     public function __construct(public readonly string $text, public readonly bool $verbatim = false, public readonly array $args = [], public readonly array $parts = []) {}
 
+    protected function hitTestable(): bool { return true; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         if ($this->parts !== []) {

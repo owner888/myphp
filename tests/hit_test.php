@@ -32,3 +32,20 @@ same(['A'], $tapped(fn($log) => ZStack()($button('A', $log))), 'a single button 
 // allowsHitTesting(false): a tap goes to the topmost view there that takes taps.
 same(['A'], $tapped(fn($log) => ZStack()($button('A', $log)->overlay(RoundedRectangle(cornerRadius: 12)->stroke(\Color::gray, lineWidth: 1)))),
     'a stroked overlay: the button under it takes the tap');
+
+// What draws over a button takes the tap, as SwiftUI's views that draw do: a Color, a Text, an Image, a filled shape, a
+// background; the view around it up to one taking taps gets it, the button covered none. Color.clear, a stack's empty
+// room, an opacity of 0 and allowsHitTesting(false) let it through; a button's own label is the button's.
+$over = fn(\ArrayObject $log, $cover) => ZStack()($button('A', $log), $cover);
+same([], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200))), 'a Color over it takes the tap');
+same([], $tapped(fn($log) => $over($log, RoundedRectangle(cornerRadius: 12)->fill(\Color::gray)->frame(width: 200, height: 200))), 'a filled shape over it takes the tap');
+same([], $tapped(fn($log) => $over($log, Text('Over'))), 'a Text over it takes the tap where it is');
+same([], $tapped(fn($log) => $over($log, VStack()(Spacer())->frame(width: 200, height: 200)->background(\Color::white))), 'a background over it takes the tap');
+same(['A'], $tapped(fn($log) => $over($log, Color(\Color::clear)->frame(width: 200, height: 200))), 'Color.clear lets it through');
+same(['A'], $tapped(fn($log) => $over($log, VStack()(Spacer())->frame(width: 200, height: 200))), 'a stack\'s empty room lets it through');
+same(['A'], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200)->opacity(0))), 'a Color of opacity 0 lets it through');
+same(['A'], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200)->allowsHitTesting(false))), 'allowsHitTesting(false) lets it through');
+same(['A'], $tapped(fn($log) => ZStack()(Button(action: fn() => $log[] = 'A', label: VStack()(Image(systemName: 'star'), Text('A')))->frame(width: 200, height: 200))),
+    'the label of a button is the button\'s');
+same(['Outer'], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200))->frame(width: 300, height: 300)->onTapGesture(fn() => $log[] = 'Outer')),
+    'the view around what covers it, taking taps, gets the tap');

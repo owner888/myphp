@@ -53,6 +53,8 @@ final class LinearGradientView extends View
         return $deg < 0 ? $deg + 360.0 : $deg;
     }
 
+    protected function hitTestable(): bool { return true; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         return $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->linearGradient($this->toGradient($env));

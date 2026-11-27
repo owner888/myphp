@@ -22,6 +22,7 @@ $view = fn() => Text($app->hovered ? 'Click me!' : "Tapped {$app->taps}")
 - **`->onLongPressGesture(fn() => …)`** runs on a long press or secondary click.
 - **`->onHover(fn(bool $isHovered) => …)`** runs as the pointer enters and leaves the view.
 - **`->allowsHitTesting(false)`** lets pointer events pass through the view to what is behind it.
+- As SwiftUI's, a view that draws takes a tap over what is under it: a `Text`, an `Image`, a `Color`, a filled shape or a `->background()` over a button leaves the button none, and the view around it taking taps gets it. A stack's empty room, a shape only stroked, `Color.clear` and a view of `->opacity(0)` let it through.
 
 ## Drag, magnify and rotate gestures
 

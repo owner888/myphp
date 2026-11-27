@@ -39,6 +39,9 @@ abstract class View
     /** Builds the view's own node(s) into $c, its content inside; returns the outer node, or null for none. */
     abstract protected function build(Context $c, Env $env): ?Node;
 
+    /** Whether what it builds takes a tap over what is under it, as SwiftUI's views that draw do (Text, Image, a Color, a filled shape); a stack's empty room does not. */
+    protected function hitTestable(): bool { return false; }
+
     // ---- the inherited modifiers -------------------------------------------
 
     /** The font of the text inside: a text style (Font::title…) or Font::system(size, weight). */
@@ -902,6 +905,7 @@ abstract class View
         // Fast path for plain views with no boxing modifiers, identity, or animations (e.g. Text, Spacer, Icon, Stack)
         if ($this->mods === [] && $this->identity === null && $this->animated === null && $this->moves === null) {
             $node = $this->build($c, $env);
+            if ($node !== null && $this->hitTestable()) { $node->hitTestable = true; }
             if ($node !== null && $this->events !== []) {
                 $this->events($c, $node, $node, $env);
             }
@@ -935,6 +939,7 @@ abstract class View
             $outer[] = [$box, $layers[$i]];
         }
         $node = $this->build($c, $outer === [] ? $env : $env->inBox()); // in a box, a column: what takes the room takes the box's
+        if ($node !== null && $this->hitTestable()) { $node->hitTestable = true; }
         $whole = $outer === [] ? $node : $outer[0][0];
         if ($node !== null) {
             $this->apply($node, $layers[0], $env, $anim);
@@ -1052,11 +1057,12 @@ abstract class View
                     if ($maxH !== null && $maxH < INF && $env->axis === Node::ROW && $n->self === Node::STRETCH) { $n->heightPercent(100)->alignSelf(Node::CENTER); }
                     if ($align !== \Alignment::center || $maxW === INF || $maxH === INF || $w !== null || $h !== null) { $align->place($n); }
                     break;
-                case 'background': $n->background($a[0]->rgb($env), $a[0]->alpha); $n->bleed = self::safeAreaReach($n, \SafeAreaRegions::all, $a[1]); break;
+                case 'background': $n->background($a[0]->rgb($env), $a[0]->alpha); $n->bleed = self::safeAreaReach($n, \SafeAreaRegions::all, $a[1]); if ($a[0]->alpha > 0) { $n->hitTestable = true; } break; // a background takes taps, as SwiftUI's
                 case 'gradient':
                     $g = $a[0] instanceof LinearGradientView || $a[0] instanceof RadialGradientView || $a[0] instanceof AngularGradientView ? $a[0]->toGradient($env) : $a[0];
                     $n->gradient = $g;
                     $n->bleed = self::safeAreaReach($n, \SafeAreaRegions::all, $a[1]);
+                    $n->hitTestable = true;
                     break;
                 case 'ignoresSafeArea': $n->ignoresSafeArea = self::safeAreaReach($n, $a[0], $a[1]); break;
                 case 'radius': $n->radius($a[0]); break;

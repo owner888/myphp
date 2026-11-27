@@ -36,6 +36,8 @@ final class RadialGradientView extends View
         return new RadialGradient(centerX: $cx, centerY: $cy, radius: $this->endRadius, stops: $list);
     }
 
+    protected function hitTestable(): bool { return true; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         $n = $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH);

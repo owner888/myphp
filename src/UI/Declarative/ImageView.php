@@ -31,6 +31,8 @@ final class ImageView extends View
         return $contentMode === \ContentMode::fill ? $this->scaledToFill() : $this->scaledToFit();
     }
 
+    protected function hitTestable(): bool { return true; }
+
     protected function build(Context $c, Env $env): ?Node
     {
         if ($this->systemName !== null) {

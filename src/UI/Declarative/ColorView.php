@@ -10,6 +10,8 @@ final class ColorView extends View
 {
     public function __construct(public readonly ColorValue $color) {}
 
+    protected function hitTestable(): bool { return $this->color->alpha > 0; } // Color.clear takes none, as SwiftUI's
+
     protected function build(Context $c, Env $env): ?Node
     {
         $n = $c->attach(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1, null, $this->color->rgb($env)))->alignSelf(Node::STRETCH);
