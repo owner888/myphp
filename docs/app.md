@@ -69,7 +69,7 @@ PHP runs the app on one thread, the main one, which also draws the UI:
 
 | Event | When |
 |---|---|
-| `onReady($fn)` | the app has launched; `whenReady()` also runs its function right away when the app is already ready |
+| `onReady($fn)` | the app has launched; `whenReady()` also runs its function right away when the app is already ready. Both run each function in a fiber of its own, as SwiftUI's `.task`: a request in it waits without holding up the launch |
 | `onActivate(fn(bool $hasVisibleWindows))` | the app was activated again, e.g. by a click on its Dock icon (macOS) |
 | `onDidBecomeActive($fn)`, `onDidResignActive($fn)` | the app became, or stopped being, the active app (on Android its activity resumed or paused, which another screen over it, as the system's permission dialog, also does) |
 | `onWindowCreated(fn(Window $w))` | a window was created |

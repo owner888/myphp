@@ -295,13 +295,17 @@ final class Painter
      * Cuts what $n holds by its rounded corners, as mygo's clipRect: the
      * box inside its border, each corner's radius less the wider border
      * beside it, its corners continuous, through the list's mask; only
-     * upright and with no mask in force (one rounded clip at a time, the
-     * outermost), else the rectangle alone cuts. Tells whether it did.
+     * upright. Inside another rounded clip it takes that one's place when
+     * it lies wholly inside it (insideRound), as a picture clipped to a
+     * circle in a rounded card does: what it cuts is then what both would.
+     * Else, or with another mask in force, the rectangle alone cuts. Tells
+     * whether it did.
      */
     private static function roundClip(Node $n, DisplayList $list): bool
     {
         $r = $n->radii ?? [$n->radius, $n->radius, $n->radius, $n->radius];
-        if (max($r) <= 0 || $list->mask() !== null || $list->transformed()) {
+        $outer = $list->mask();
+        if (max($r) <= 0 || ($outer !== null && !DisplayList::roundMask($outer)) || $list->transformed()) {
             return false;
         }
         [$bt, $br, $bb, $bl] = [$n->borderSide(0), $n->borderSide(1), $n->borderSide(2), $n->borderSide(3)];
@@ -313,7 +317,42 @@ final class Painter
         [$x1, $y1] = $n->world->point($n->x + $n->w - $br, $n->y + $n->h - $bb);
         $half = min(abs($x1 - $x0), abs($y1 - $y0)) / 2; // a circle's or a capsule's (a radius of 100,000) rounds at most to half a side, as rect()'s: past it the mask's corners cut out all it holds
         $inner = array_map(fn(float $v): float => min($v, $half), $inner);
-        $list->setMask(DisplayList::roundedMask(min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0), $inner));
+        [$x, $y, $w, $h] = [min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0)];
+        if ($outer !== null && !self::insideRound($outer, $x, $y, $w, $h, $inner)) {
+            return false;
+        }
+        $list->setMask(DisplayList::roundedMask($x, $y, $w, $h, $inner));
+        return true;
+    }
+
+    /**
+     * Whether the rect x y w h, its corners rounded by $r (top left, top
+     * right, bottom right, bottom left), lies wholly inside the rounded
+     * clip $outer (DisplayList::roundedMask): inside its rect, and out of
+     * each of its rounded corners' squares, or at that corner itself,
+     * rounded no less (a picture filling a card's top, clipped as it is).
+     * @param array<int, mixed> $outer @param array{0: float, 1: float, 2: float, 3: float} $r
+     */
+    private static function insideRound(array $outer, float $x, float $y, float $w, float $h, array $r): bool
+    {
+        $e = 0.5; // half a point: edges that meet, laid out apart by rounding
+        [$ox, $oy, $ow, $oh] = [$outer[0], $outer[1], $outer[2], $outer[3]];
+        if ($x < $ox - $e || $y < $oy - $e || $x + $w > $ox + $ow + $e || $y + $h > $oy + $oh + $e) {
+            return false;
+        }
+        $or = [$outer[4], $outer[5], -1.0 - $outer[6], $outer[7]]; // roundedMask keeps the bottom right one as -1 less it
+        $left = $x < $ox + $e; $top = $y < $oy + $e; $right = $x + $w > $ox + $ow - $e; $bottom = $y + $h > $oy + $oh - $e; // at the outer's edges
+        $corners = [ // each: whether the rect reaches into the corner's square, and whether it is at the corner itself
+            [$x < $ox + $or[0] && $y < $oy + $or[0], $left && $top],
+            [$x + $w > $ox + $ow - $or[1] && $y < $oy + $or[1], $right && $top],
+            [$x + $w > $ox + $ow - $or[2] && $y + $h > $oy + $oh - $or[2], $right && $bottom],
+            [$x < $ox + $or[3] && $y + $h > $oy + $oh - $or[3], $left && $bottom],
+        ];
+        foreach ($corners as $k => [$reaches, $at]) {
+            if ($or[$k] > 0 && $reaches && !($at && $r[$k] >= $or[$k] - $e)) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -458,12 +497,14 @@ final class Painter
         self::paintFocusRing($this->list, $r[0], $r[1], $r[2], $r[3], $radius, $this->theme);
     }
 
-    /** Restricts what $fn draws to $r, its corners rounded by $radius, continuous (mygo's Clip; rounded only upright and inside no other rounded clip or mask, as roundClip). @param array{0: float, 1: float, 2: float, 3: float} $r */
+    /** Restricts what $fn draws to $r, its corners rounded by $radius, continuous (mygo's Clip; rounded only upright, and inside another rounded clip only lying wholly inside it, as roundClip). @param array{0: float, 1: float, 2: float, 3: float} $r */
     public function clip(array $r, \Closure $fn, float $radius = 0.0): void
     {
         $this->list->pushClip(...$r);
         $mask = $this->list->mask();
-        $rounded = $radius > 0 && $mask === null && !$this->list->transformed();
+        $corner = min($radius, min($r[2], $r[3]) / 2);
+        $rounded = $radius > 0 && !$this->list->transformed()
+            && ($mask === null || (DisplayList::roundMask($mask) && self::insideRound($mask, $r[0], $r[1], $r[2], $r[3], [$corner, $corner, $corner, $corner])));
         if ($rounded) { $this->list->setMask(DisplayList::roundedMask($r[0], $r[1], $r[2], $r[3], [$radius, $radius, $radius, $radius])); }
         try {
             $fn();

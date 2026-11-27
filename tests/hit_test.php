@@ -27,3 +27,8 @@ same(['Inner'], $tapped(fn($log) => VStack()($button('Inner', $log))->frame(widt
 same(['Outer'], $tapped(fn($log) => VStack()(Text('Label'))->frame(width: 300, height: 300)->onTapGesture(fn() => $log[] = 'Outer')),
     'a tap on a label in it goes to the view around');
 same(['A'], $tapped(fn($log) => ZStack()($button('A', $log))), 'a single button takes it');
+
+// A stroked shape ringing a button as its overlay (a card's or a field's border) leaves the tap to the button, with no
+// allowsHitTesting(false): a tap goes to the topmost view there that takes taps.
+same(['A'], $tapped(fn($log) => ZStack()($button('A', $log)->overlay(RoundedRectangle(cornerRadius: 12)->stroke(\Color::gray, lineWidth: 1)))),
+    'a stroked overlay: the button under it takes the tap');

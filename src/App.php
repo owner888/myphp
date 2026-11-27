@@ -296,7 +296,7 @@ final class App
         return self::listen(self::$onWindowAllClosed, $fn);
     }
 
-    /** Calls $fn once the app finished launching (mygo's OnReady), before the whenReady() callbacks. Returns a function that removes it. */
+    /** Calls $fn once the app finished launching (mygo's OnReady), before the whenReady() callbacks, in a fiber of its own as they are. Returns a function that removes it. */
     public static function onReady(Closure $fn): Closure
     {
         return self::listen(self::$onReady, $fn);
@@ -340,10 +340,14 @@ final class App
         return self::listen(self::$onQuit, $fn);
     }
 
+    /**
+     * Calls $fn once the app finished launching, at once when it has: in a fiber of its own (go()), as SwiftUI's
+     * .task runs, so a request it makes (URLSession, Http) waits without holding up the launch and the first frame.
+     */
     public static function whenReady(Closure $fn): void
     {
         if (self::$ready) {
-            $fn();
+            self::go($fn);
             return;
         }
         self::$whenReady[] = $fn;
@@ -403,12 +407,12 @@ final class App
             self::backend()->app()->activate();
         }
         foreach (self::$onReady as $fn) {
-            $fn();
+            self::go($fn); // each in a fiber, as whenReady's: one that waits lets the launch go on
         }
         $callbacks = self::$whenReady;
         self::$whenReady = [];
         foreach ($callbacks as $fn) {
-            $fn();
+            self::go($fn);
         }
         // After the windows the app opens when ready, which URLs may target.
         self::later(function (): void {
