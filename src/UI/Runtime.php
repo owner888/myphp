@@ -2218,11 +2218,11 @@ final class Runtime
         } elseif ($n->hitTestable && !$hidden) {
             $this->hitTestables[$n->id] = true;
         }
-        if ($n->opacity <= 0) { $this->clear[$n->id] = true; }
         if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
             $this->samplePose($n);
         }
+        if ($n->opacity <= 0 || $n->poseFade >= 1) { $this->clear[$n->id] = true; }
         if ($n->pose !== null || $n->draggable || $n->blocks || $n->ghosts !== [] || $n->focusGroup !== 0) { $this->recordTaint = true; } // what records what changes in place: a memo around it is recorded every frame
         if ($n->drags) { $this->dragSources[$n->id] = $n->dragValue; }
         if ($n->dataSource !== null) { $this->dataSources[$n->id] = $n->dataSource; }

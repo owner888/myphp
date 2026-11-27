@@ -44,6 +44,8 @@ same([], $tapped(fn($log) => $over($log, VStack()(Spacer())->frame(width: 200, h
 same(['A'], $tapped(fn($log) => $over($log, Color(\Color::clear)->frame(width: 200, height: 200))), 'Color.clear lets it through');
 same(['A'], $tapped(fn($log) => $over($log, VStack()(Spacer())->frame(width: 200, height: 200))), 'a stack\'s empty room lets it through');
 same(['A'], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200)->opacity(0))), 'a Color of opacity 0 lets it through');
+same(['A'], $tapped(fn($log) => $over($log, VStack()(Color(\Color::blue)->frame(width: 200, height: 200))->opacity(0))), 'a Color in a transparent parent lets it through');
+same([], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200)->opacity(0.5))), 'a partially transparent Color still takes the tap');
 same(['A'], $tapped(fn($log) => $over($log, Color(\Color::blue)->frame(width: 200, height: 200)->allowsHitTesting(false))), 'allowsHitTesting(false) lets it through');
 same(['A'], $tapped(fn($log) => ZStack()(Button(action: fn() => $log[] = 'A', label: VStack()(Image(systemName: 'star'), Text('A')))->frame(width: 200, height: 200))),
     'the label of a button is the button\'s');
