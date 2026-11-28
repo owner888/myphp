@@ -24,11 +24,11 @@ Follow these rules strictly. Do **not** invent custom styling, decorative cards,
 
 ## 2. Canonical Project Template (Copy This Shape)
 
-Start with `myphp init -template native <dir>` (or `-template 3d` for a 3D `SceneView` app):
+Start with `myphp create <dir>` (or `myphp create -template 3d <dir>` for a 3D `SceneView` app):
 
 ```
 my-app/
-  myphp.json        {"name": "MyApp", "displayName": "My App", "identifier": "com.example.myapp", "entry": "app.php", "myphp": "1.207.4"}
+  myphp.json        {"name": "MyApp", "displayName": "My App", "identifier": "com.example.myapp", "entry": "app.php", "myphp": "1.208.0"}
   boot.php          loads MyPHP
   app.php           creates state, opens Window with minimal WindowOptions, calls App::run()
   src/AppState.php  plain PHP properties + action methods (no UI code)
@@ -161,8 +161,8 @@ App::run();
 
 ## 5. Verify Before Finishing
 
-1. **Syntax check**: `php -l` on every modified PHP file.
-2. **Headless UI test & lint**: run `myphp test` (runs `tests/*_test.php` and prints `myphp: hint:` for SwiftUI anti-patterns — fix any hints before finishing):
+1. **Static analysis**: run `myphp analyze` (checks `php -l`, view hot-reload rules, Swift/PHP typos, and SwiftUI anti-patterns — fix all errors and hints).
+2. **Headless UI test**: run `myphp test` (runs `tests/*_test.php` on the installed MyPHP):
    ```php
    $h = new Headless(Content::file(__DIR__ . '/../view.php', $state)->view, 960, 680);
    $h->frame();

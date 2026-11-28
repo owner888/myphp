@@ -9,23 +9,24 @@ and package a 5-platform desktop & mobile app autonomously in minutes.
 
 ---
 
-## 1. Install the Bundled `myphp-app` Skill
+## 1. Install the Bundled `myphp-app` Skill (Once Globally)
 
-Every project created with `myphp init` automatically receives the official
-`myphp-app` agent skill inside `.agents/skills/myphp-app/SKILL.md` (and you can
-install or update it in any existing project at any time):
+Install the official `myphp-app` skill globally once — on macOS and Linux it
+symlinks directly to your MyPHP installation so `myphp upgrade` keeps every
+agent (`~/.agents/skills`, `~/.claude/skills`, `~/.pig/agent/skills`,
+`~/.codex/skills`) up to date automatically without cluttering app repos:
 
 ```sh
-# 1. Create a new project (includes .agents/skills/myphp-app out of the box)
-myphp init my-app
+# 1. Link the bundled skill globally (once per machine)
+myphp install-skills
+
+# 2. Create a clean new project
+myphp create my-app
 # or for a 5-platform 3D app:
-myphp init -template 3d my-3d-app
+myphp create -template 3d my-3d-app
 
-# 2. Or install/update the bundled skill in an existing project
+# Optional: copy into a single project directory instead
 myphp install-skills .
-
-# 3. Optional: install into your global Claude Code / Pig skills directory
-cp -R .agents/skills/myphp-app ~/.claude/skills/
 ```
 
 ### What the `myphp-app` skill gives your agent

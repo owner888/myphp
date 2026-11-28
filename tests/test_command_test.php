@@ -70,6 +70,43 @@ try {
     file_put_contents("$dir/myphp.json", json_encode(['myphp' => $version]));
     [$code, $out] = $run(['tests/a_test.php']);
     same([0, true, true], [$code, str_contains($out, 'hand-drawn bordered card'), str_contains($out, 'enables hiddenInset + sidebar vibrancy automatically')], "myphp test emits non-fatal SwiftUI hints: $out");
+
+    // Flutter-aligned CLI: create alias, help <cmd>, analyze, clean, and global install-skills symlink.
+    $created = "$dir/created_app";
+    $p = proc_open([PHP_BINARY, $bin, 'create', $created], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([0, false, true], [proc_close($p), is_dir("$created/.agents"), is_file("$created/app.php")], "myphp create scaffolds a clean project: $out");
+
+    $p = proc_open([PHP_BINARY, $bin, 'help', 'analyze'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([0, true], [proc_close($p), str_contains($out, 'Analyzes the MyPHP project')], "myphp help <cmd> shows command help: $out");
+
+    $p = proc_open([PHP_BINARY, $bin, 'analyze', $created], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([0, true], [proc_close($p), str_contains($out, 'No issues found!')], "myphp analyze passes on a clean template: $out");
+
+    // analyze catches named function in view.php and Swift dot syntax
+    file_put_contents("$created/view.php", "<?php function badHelper() {}\nreturn fn() => Text('Hi')->foregroundColor(Color.blue);\n");
+    $p = proc_open([PHP_BINARY, $bin, 'analyze', $created], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([1, true, true], [proc_close($p), str_contains($out, 'do not declare named function badHelper()'), str_contains($out, '->foregroundStyle')], "myphp analyze catches view declarations and Swift typos: $out");
+
+    // clean removes build/, dist/, .myphp/
+    mkdir("$created/build/tmp", 0755, true);
+    mkdir("$created/.myphp", 0755, true);
+    $p = proc_open([PHP_BINARY, $bin, 'clean', $created], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([0, false, false], [proc_close($p), is_dir("$created/build"), is_dir("$created/.myphp")], "myphp clean deletes build artifacts: $out");
+
+    // install-skills with no dir links globally into $HOME/.agents/skills/myphp-app
+    $fakeHome = "$dir/fake_home";
+    mkdir("$fakeHome/.pig/agent", 0755, true);
+    $p = proc_open([PHP_BINARY, $bin, 'install-skills'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, ['HOME' => $fakeHome, 'USERPROFILE' => $fakeHome] + getenv());
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([0, true, true], [proc_close($p), is_file("$fakeHome/.agents/skills/myphp-app/SKILL.md"), is_file("$fakeHome/.pig/agent/skills/myphp-app/SKILL.md")], "myphp install-skills installs globally: $out");
+    if (PHP_OS_FAMILY !== 'Windows') {
+        check(is_link("$fakeHome/.agents/skills/myphp-app") && is_link("$fakeHome/.pig/agent/skills/myphp-app"), 'global install uses symlinks so myphp upgrade stays in sync');
+    }
 } finally {
     $rm = function (string $d) use (&$rm): void {
         foreach (scandir($d) ?: [] as $e) { if ($e !== '.' && $e !== '..') { is_dir("$d/$e") && !is_link("$d/$e") ? $rm("$d/$e") : unlink("$d/$e"); } }

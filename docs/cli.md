@@ -20,28 +20,64 @@ cd my-app && myphp dev
 `myphp doctor` checks that the machine has what MyPHP needs: PHP 8.4 or
 later with `ext-ffi`, and the system's libraries.
 
-## myphp init
+## myphp create (alias: init)
 
 ```sh
-myphp init my-app                  # 2D declarative SwiftUI app
-myphp init -template 3d my-3d-app  # 5-platform 3D scene (SceneView + PBR + particles)
+myphp create my-app                  # 2D declarative SwiftUI app
+myphp create -template 3d my-3d-app  # 5-platform 3D scene (SceneView + PBR + particles)
 ```
 
 Creates a new project. The `native` template shows a 2D declarative user
 interface MyPHP draws on the GPU; the `3d` template scaffolds a 5-platform
 3D scene (`SceneView` with Cook-Torrance PBR material, PCF soft shadows,
 orbit controls and 3D particles). Both templates include `resources/icon.png`
-and the bundled agent skills.
+and keep the repository clean without copying `.agents/` into it.
 
 | Flag | |
 |---|---|
 | `-name name` | the application name (default: the directory's name) |
 | `-template native\|3d` | the project template (default `native`) |
 
+## myphp analyze
+
+```sh
+myphp analyze [dir]
+```
+
+Checks PHP syntax (`php -l`) across the project, enforces hot-reload rules (no
+`class` or named `function` declarations in `view.php` or `pages/*.php`),
+catches common Swift/PHP mixups (`Color.`, `->foregroundColor()`), and prints
+SwiftUI best-practice hints.
+
+## myphp clean
+
+```sh
+myphp clean [dir]
+```
+
+Deletes build artifacts (`build/`, `dist/`, `.myphp/`, and `myphp.json`'s `out`
+directory) inside the project.
+
+## myphp logs
+
+```sh
+myphp logs [-d device] [-v] [dir]
+```
+
+Streams live logs from a running Android device/emulator or booted iOS
+simulator without rebuilding or reinstalling the app.
+
 ## myphp install-skills
 
-Installs or updates the agent skills MyPHP bundles (`bin/skills`) in a
-project, for coding agents that write MyPHP apps.
+```sh
+myphp install-skills        # link globally into ~/.agents/skills (& detected ~/.claude, ~/.pig, ~/.codex)
+myphp install-skills .      # copy into a single project's .agents/skills/myphp-app
+```
+
+Installs or links the bundled `myphp-app` agent skill (`bin/skills/myphp-app`).
+With no directory argument (recommended), symlinks into your global user agent
+directories on macOS/Linux (and copies on Windows, refreshed automatically by
+`myphp upgrade`) so every project automatically gets the latest skill.
 
 ## myphp dev
 

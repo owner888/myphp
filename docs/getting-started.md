@@ -35,7 +35,6 @@ my-app/
 ├── tests/ui_test.php          builds the view headless and tests interactions
 ├── boot.php                   loads MyPHP and vendor/autoload.php (Composer)
 ├── myphp.json                 the app's name, identifier, version and options
-├── .agents/skills/myphp-app/  the bundled skill for AI coding agents
 └── resources/
     └── icon.png               the app icon, a 1024×1024 PNG
 ```

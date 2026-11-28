@@ -7,39 +7,47 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.207.4';
+const VERSION = '1.208.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
-myphp is the tool for MyPHP desktop applications.
+myphp is the tool for MyPHP desktop and mobile applications.
 
 Usage:
 
 	myphp <command> [arguments]
 
-Commands:
+Project:
 
-	init <dir>           create a new project (native UI, or a web frontend)
-	install-skills [dir] install or update the bundled MyPHP agent skills (alias: update-skills)
-	generate             write the typed TypeScript client for bound PHP services,
-	                     and the accessors of the app's catalogs of messages
-	ffigen [flags]       generate type-safe PHP bindings for C headers or Apple Objective-C classes
-	jnigen [flags]       generate type-safe PHP bindings for Android Java/Kotlin classes over JNI
-	i18n check [dir]     check the app's catalogs of messages
+	create <dir>         create a new project (alias: init)
 	dev                  run the app in development, restarting it on changes
-	build                build production apps (a .app and a .dmg, Linux packages)
 	run [flags] [dir]    run the app on an Android device, iOS simulator or desktop
+	build                build production apps (.app/.dmg, .exe, .deb, APK/AAB, .ipa)
+	test [file ...]      run the project's tests (tests/*_test.php) on this MyPHP
+	analyze [dir]        check PHP syntax, view hot-reload rules, and SwiftUI hints
+	clean [dir]          delete build/, dist/, and .myphp/ directories
+	generate             write the typed TypeScript client and i18n message accessors
+	i18n check [dir]     check the app's catalogs of messages
+
+Tools & Devices:
+
 	devices              list connected devices and available simulators
 	emulators [flags]    list, launch and create emulators (Android AVDs, the iOS Simulator)
+	logs [flags] [dir]   stream live logs from a running Android or iOS app
 	screenshot [dir]     run the app once and save a PNG of its window, and its elements
-	test [file ...]      run the project's tests (tests/*_test.php) on this MyPHP
-	micro                get the static PHP that the apps myphp build makes carry
+	ffigen [flags]       generate type-safe PHP bindings for C headers or Apple Objective-C classes
+	jnigen [flags]       generate type-safe PHP bindings for Android Java/Kotlin classes over JNI
 	keygen               create the key pair that signs updates
+
+SDK:
+
 	doctor               check that the development environment is ready
+	install-skills [dir] link/install bundled AI agent skills globally (or into a project dir)
+	micro                get the static PHP that the apps myphp build makes carry
 	upgrade [--check]    upgrade MyPHP to its latest release (--check: only say whether there is one)
 	version              print the MyPHP version
 
-Run "myphp <command> -h" for the flags of a command.
+Run "myphp help <command>" or "myphp <command> -h" for details on a command.
 
 TXT;
 
@@ -438,12 +446,12 @@ function sh(array $cmd, ?string $cwd = null): int
 
 // ---- init ---------------------------------------------------------------
 const INIT_USAGE = <<<'TXT'
-init [flags] [dir]
+create [flags] [dir]   (alias: init)
 
 Creates a new MyPHP project (in dir, or the current directory when omitted).
 The native template scaffolds a 2D declarative SwiftUI app drawn on the GPU;
 the 3d template scaffolds a 5-platform 3D SceneView app. Both include
-resources/icon.png and the bundled agent skills.
+resources/icon.png.
 
 Flags:
   -name name           application name (default: directory name)
@@ -468,11 +476,11 @@ function init(array $args): void
     writeTemplate(TEMPLATES . "/$template", $dir, $data);
     mkdir("$dir/resources");
     file_put_contents("$dir/resources/icon.png", Icns::defaultIcon());
-    writeSkills($dir);
     $cwd = realpath((string)getcwd()) ?: (string)getcwd();
     $rel = $dir === $cwd ? '' : (str_starts_with($dir, $cwd . '/') ? substr($dir, strlen($cwd) + 1) : $dir);
     $cdLine = $rel !== '' ? "  cd $rel\n" : '';
-    echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  myphp test                           # test the view headless\n  myphp build                          # package the app\n\n";
+    $skillTip = hasGlobalSkills() ? '' : "  myphp install-skills                 # enable AI agent skills globally (once)\n";
+    echo "\nCreated $name. Next steps:\n\n{$cdLine}  myphp dev                            # develop with live reload\n  myphp test                           # test the view headless\n  myphp analyze                        # check syntax and SwiftUI rules\n  myphp build                          # package the app\n{$skillTip}\n";
 }
 
 /** The templates of myphp init: native 2D UI and 3D SceneView. */
@@ -2768,6 +2776,7 @@ function upgrade(array $args): void
             logf('myphp ' . VERSION . ' is the latest');
         } else {
             $newVer = preg_match("/^const VERSION = '([^']*)';$/m", (string)@file_get_contents("$root/bin/myphp"), $vm) === 1 ? $vm[1] : VERSION;
+            installGlobalSkills(onlyExisting: true);
             logf($newVer !== VERSION ? 'upgraded myphp ' . VERSION . " to $newVer ($root)" : 'upgraded the checkout in ' . $root);
         }
         return;
@@ -2784,6 +2793,7 @@ function upgrade(array $args): void
         $global !== false && str_starts_with($root, $global . DIRECTORY_SEPARATOR)
             || fail("MyPHP here is a project's dependency ($root): in that project, composer update owner888/myphp");
         sh(['composer', 'global', 'update', 'owner888/myphp']) === 0 || fail('composer global update owner888/myphp failed');
+        installGlobalSkills(onlyExisting: true);
         logf("upgraded myphp " . VERSION . " to $latest");
         return;
     }
@@ -2820,6 +2830,154 @@ function swiftuiHints(string $dir): array
         $hints[] = "app.php: MyPHP 1.207+ enables hiddenInset + sidebar vibrancy automatically for split views; omit them from WindowOptions";
     }
     return $hints;
+}
+
+/** myphp analyze, as flutter analyze: PHP syntax, hot-reload view rules, Swift/PHP typo checks, and SwiftUI hints. */
+function analyze(array $args): void
+{
+    help($args, "analyze [dir]\n\nAnalyzes the MyPHP project in dir (current directory when omitted):\n  - PHP syntax (php -l) across app files\n  - Hot-reload rule: no class/function declarations in view.php or pages/*.php\n  - Common Swift/PHP syntax mistakes (Color., Font., .infinity, foregroundColor)\n  - SwiftUI best-practice hints (hand-drawn cards, redundant WindowOptions)");
+    ['dir' => $dir] = project($args);
+    $skip = ['vendor', 'build', 'dist', '.myphp', 'myphp', '.git', 'node_modules'];
+    $phpFiles = [];
+    $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        static fn(SplFileInfo $f): bool => !$f->isDir() || !in_array($f->getFilename(), $skip, true),
+    ));
+    foreach ($it as $f) {
+        if ($f->isFile() && strtolower($f->getExtension()) === 'php') {
+            $phpFiles[] = $f->getPathname();
+        }
+    }
+    sort($phpFiles, SORT_STRING);
+
+    $errors = [];
+    foreach ($phpFiles as $file) {
+        $rel = ltrim(substr($file, strlen($dir)), '/\\');
+        [$code, $out] = Cmd::output([PHP_BINARY, '-l', $file]);
+        if ($code !== 0) {
+            $errors[] = "$rel: " . trim($out);
+            continue;
+        }
+        $src = (string)file_get_contents($file);
+        $tokens = PhpToken::tokenize($src);
+        $isViewFile = $rel === 'view.php' || str_starts_with(str_replace('\\', '/', $rel), 'pages/');
+
+        // Check view.php / pages/*.php for named class/function declarations (breaks live reload)
+        if ($isViewFile) {
+            $n = count($tokens);
+            for ($i = 0; $i < $n; $i++) {
+                $t = $tokens[$i];
+                if (in_array($t->id, [T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM], true)) {
+                    // Allow anonymous `new class`
+                    $prev = $i - 1;
+                    while ($prev >= 0 && ($tokens[$prev]->isIgnorable())) { $prev--; }
+                    if ($prev >= 0 && $tokens[$prev]->id === T_NEW) { continue; }
+                    $errors[] = "$rel:{$t->line}: do not declare {$t->text} in a hot-reloaded view file; move it to src/";
+                } elseif ($t->id === T_FUNCTION) {
+                    $next = $i + 1;
+                    while ($next < $n && $tokens[$next]->isIgnorable()) { $next++; }
+                    if ($next < $n && $tokens[$next]->id === T_STRING) {
+                        $errors[] = "$rel:{$t->line}: do not declare named function {$tokens[$next]->text}() in a hot-reloaded view file; use a closure or move it to src/";
+                    }
+                }
+            }
+        }
+
+        // Check common Swift/PHP mixups outside comments and strings
+        $codeOnly = '';
+        foreach ($tokens as $t) {
+            if ($t->id === T_COMMENT || $t->id === T_DOC_COMMENT || $t->id === T_CONSTANT_ENCAPSED_STRING || $t->id === T_ENCAPSED_AND_WHITESPACE) {
+                $codeOnly .= str_repeat("\n", substr_count($t->text, "\n"));
+                continue;
+            }
+            $codeOnly .= $t->text;
+        }
+        foreach ([
+            '/->foregroundColor\s*\(/' => 'use ->foregroundStyle(...) instead of SwiftUI\'s deprecated ->foregroundColor(...)',
+            '/\b(?:Color|Font|Alignment|Edge|PickerStyle|ButtonStyle|ToggleStyle|TabViewStyle)\s*\.\s*[a-zA-Z_]/' => 'use PHP "::" (e.g. Color::secondary), not Swift "."',
+        ] as $pat => $msg) {
+            if (preg_match($pat, $codeOnly, $m, PREG_OFFSET_CAPTURE) === 1) {
+                $line = substr_count(substr($codeOnly, 0, $m[0][1]), "\n") + 1;
+                $errors[] = "$rel:$line: $msg";
+            }
+        }
+    }
+
+    $hints = swiftuiHints($dir);
+    foreach ($errors as $e) {
+        fwrite(STDERR, "  error • $e\n");
+    }
+    foreach ($hints as $h) {
+        echo "  hint  • $h\n";
+    }
+    if ($errors !== []) {
+        fail(count($errors) . ' issue(s) found');
+    }
+    echo $hints === [] ? "No issues found! (" . count($phpFiles) . " PHP files checked)\n" : "0 errors, " . count($hints) . " hint(s) (" . count($phpFiles) . " PHP files checked)\n";
+}
+
+/** myphp clean, as flutter clean: removes build/, dist/, .myphp/ and configured out dir inside the project. */
+function clean(array $args): void
+{
+    help($args, "clean [dir]\n\nDeletes build artifacts (build/, dist/, .myphp/, and myphp.json's out directory) in dir.");
+    ['dir' => $dir, 'config' => $c] = project($args);
+    $rootReal = realpath($dir) ?: $dir;
+    $targets = array_values(array_unique(array_filter([
+        'build',
+        'dist',
+        '.myphp',
+        is_string($c['out'] ?? null) && $c['out'] !== '' ? trim((string)$c['out'], '/\\') : null,
+    ])));
+    $removed = [];
+    foreach ($targets as $rel) {
+        $full = "$rootReal/$rel";
+        if (!is_dir($full)) { continue; }
+        $real = realpath($full);
+        if ($real === false || !str_starts_with($real, $rootReal . DIRECTORY_SEPARATOR)) { continue; } // never escape project dir
+        removeTree($real);
+        $removed[] = "$rel/";
+    }
+    if ($removed === []) {
+        logf('Already clean.');
+    } else {
+        logf('Removed ' . implode(', ', $removed));
+    }
+}
+
+/** myphp logs, as flutter logs: stream live logs from a running Android or iOS app without rebuilding. */
+function logsCommand(array $args): void
+{
+    help($args, "logs [flags] [dir]\n\nStreams live logs from an already-running Android device/emulator or iOS simulator.\n\nFlags:\n  -d, --device id|platform   target device ID, name or platform (android, ios)\n  -v, --verbose              print every line of the device log");
+    $deviceId = option($args, 'd') ?: (option($args, 'device') ?: (option($args, '-device') ?: ''));
+    $all = flag($args, 'v') || flag($args, 'verbose');
+    ['config' => $c] = project($args);
+
+    $targetDev = null;
+    if ($deviceId !== '') {
+        $targetDev = DeviceManager::findDevice($deviceId);
+    } else {
+        foreach (DeviceManager::list() as $dev) {
+            if ($dev->platform === 'android' || ($dev->platform === 'ios' && $dev->type === 'simulator' && $dev->status === 'booted')) {
+                $targetDev = $dev;
+                break;
+            }
+        }
+    }
+    if ($targetDev === null || !in_array($targetDev->platform, ['android', 'ios'], true)) {
+        fail('No running Android device or booted iOS simulator found. Run `myphp devices` or pass `-d <id>`.');
+    }
+
+    if ($targetDev->platform === 'android') {
+        logf("Streaming Android logs from {$targetDev->name} (Ctrl+C quits)");
+        streamLog("adb -s {$targetDev->id} logcat -v threadtime -s MyPHP:V MyPHP_Java:V AndroidRuntime:E DEBUG:I", 'android', $all);
+        return;
+    }
+    if ($targetDev->type !== 'simulator') {
+        fail('Live log streaming without launch is supported on booted iOS simulators and Android devices; for physical iOS devices use `myphp run -d ios`.');
+    }
+    $exeName = preg_match('/^[A-Za-z0-9._-]+$/', (string)$c['name']) === 1 ? $c['name'] : Slug::ofConfig($c);
+    logf("Streaming iOS simulator logs for $exeName on {$targetDev->name} (Ctrl+C quits)");
+    streamLog('xcrun simctl spawn ' . escapeshellarg($targetDev->id) . ' log stream --style compact --level debug --predicate ' . escapeshellarg("(process == \"$exeName\" AND NOT (subsystem BEGINSWITH \"com.apple.\")) OR (process == \"$exeName\" AND messageType == error) OR (eventMessage CONTAINS \"[myphp\" AND NOT (subsystem BEGINSWITH \"com.apple.\"))"), 'ios', $all);
 }
 
 /** myphp test, as flutter test: the project's test files run on this MyPHP, which they find as $MYPHP_HOME. */
@@ -3840,12 +3998,89 @@ function runCommand(array $args): void
 
 const SKILLS = __DIR__ . '/skills'; // the bundled skills, which apps do not ship
 
-/** Installs or updates the bundled agent skills in <dir>/.agents/skills (mygo's install-skills): replaces the bundled skill files, preserving unrelated files and skills. */
+/** Candidate global skill target paths for AI coding agents on this machine. @return list<array{path: string, always: bool}> */
+function globalSkillTargets(): array
+{
+    $home = getenv('HOME') ?: (getenv('USERPROFILE') ?: '');
+    if ($home === '') {
+        return [];
+    }
+    $home = rtrim($home, '/\\');
+    return [
+        ['path' => "$home/.agents/skills/myphp-app", 'always' => true, 'parent' => "$home/.agents"],
+        ['path' => "$home/.claude/skills/myphp-app", 'always' => false, 'parent' => "$home/.claude"],
+        ['path' => "$home/.pig/agent/skills/myphp-app", 'always' => false, 'parent' => "$home/.pig/agent"],
+        ['path' => "$home/.codex/skills/myphp-app", 'always' => false, 'parent' => "$home/.codex"],
+    ];
+}
+
+function hasGlobalSkills(): bool
+{
+    foreach (globalSkillTargets() as $t) {
+        if (is_file($t['path'] . '/SKILL.md') || is_link($t['path'])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Installs or refreshes the bundled myphp-app skill in global user agent directories.
+ * Uses a symlink to bin/skills/myphp-app on macOS/Linux so `myphp upgrade` updates all
+ * agents automatically, and copies on Windows (refreshed automatically by `myphp upgrade`).
+ * @return list<string>
+ */
+function installGlobalSkills(bool $onlyExisting = false): array
+{
+    $src = realpath(SKILLS . '/myphp-app');
+    if ($src === false || !is_dir($src)) {
+        return [];
+    }
+    $installed = [];
+    foreach (globalSkillTargets() as $t) {
+        $dst = $t['path'];
+        $exists = is_link($dst) || is_dir($dst);
+        if ($onlyExisting) {
+            if (!$exists) { continue; }
+            if (is_link($dst) && realpath($dst) === $src) { continue; } // symlink already tracks source
+        } else {
+            if (!$t['always'] && !is_dir($t['parent'])) { continue; }
+        }
+        @mkdir(dirname($dst), 0755, true);
+        if (PHP_OS_FAMILY !== 'Windows') {
+            if (is_link($dst)) {
+                if (realpath($dst) === $src) { $installed[] = $dst; continue; }
+                @unlink($dst);
+            } elseif (is_dir($dst)) {
+                removeTree($dst);
+            }
+            if (@symlink($src, $dst)) {
+                $installed[] = $dst;
+                continue;
+            }
+        }
+        copyTree($src, $dst, []);
+        @file_put_contents("$dst/.version", skillsStamp() . "\n");
+        $installed[] = $dst;
+    }
+    return $installed;
+}
+
+/** Installs or updates the bundled agent skills globally (default) or inside a project directory. */
 function installSkills(array $args): void
 {
-    help($args, "install-skills [dir]\n\nInstalls or updates the bundled MyPHP agent skills in .agents/skills.\nReplaces bundled skill files, preserving unrelated files and skills.");
+    help($args, "install-skills [dir]\n\nInstalls or links the bundled myphp-app AI agent skill.\nWith no arguments (default), symlinks into global user agent directories (~/.agents/skills,\nand detected ~/.claude/skills, ~/.pig/agent/skills, ~/.codex/skills) so `myphp upgrade`\nkeeps skills up to date automatically across every project.\nWith a project dir (e.g. `myphp install-skills .`), copies into <dir>/.agents/skills/myphp-app.");
+    $global = flag($args, 'global');
     count($args) <= 1 || fail('expected at most one project directory');
-    $dir = $args[0] ?? '.';
+    if ($global || $args === []) {
+        $paths = installGlobalSkills(onlyExisting: false);
+        $paths !== [] || fail('cannot resolve home directory for global skills');
+        foreach ($paths as $p) {
+            logf((is_link($p) ? 'Linked skill: ' : 'Installed skill: ') . $p);
+        }
+        return;
+    }
+    $dir = $args[0];
     is_dir($dir) || fail("$dir is not a directory");
     writeSkills($dir);
     logf('Installed skills in ' . rtrim($dir, '/') . '/.agents/skills');
@@ -3875,11 +4110,11 @@ function skillsStamp(): string
     return hash_final($ctx);
 }
 
-/** Silently updates <dir>/.agents/skills/myphp-app from local bin/skills/myphp-app only when version/content changed. */
+/** Silently updates an existing <dir>/.agents/skills/myphp-app copy when its content changed (never creates .agents/ in clean projects). */
 function syncSkillsIfNeeded(string $dir): void
 {
     $dst = "$dir/.agents/skills/myphp-app";
-    if (!is_dir("$dir/.agents") && !is_file("$dir/" . CONFIG)) {
+    if (!is_dir($dst) || is_link($dst)) {
         return;
     }
     $want = skillsStamp() . "\n";
@@ -3962,7 +4197,7 @@ function run(string $cmd, array $args): void
 {
     $GLOBALS['running'] = $cmd === 'gen' ? 'generate' : $cmd;
     match ($cmd) {
-        'init' => init($args),
+        'create', 'init' => init($args),
         'install-skills', 'update-skills' => installSkills($args),
         'dev' => dev($args),
         'generate', 'gen' => generate($args),
@@ -3974,14 +4209,17 @@ function run(string $cmd, array $args): void
         'run' => runCommand($args),
         'devices' => devices($args),
         'emulators' => emulators($args),
+        'logs' => logsCommand($args),
         'screenshot' => screenshot($args),
         'test' => test($args),
+        'analyze' => analyze($args),
+        'clean' => clean($args),
         'micro' => micro($args),
         'keygen' => keygen($args),
         'doctor' => doctor($args),
         'upgrade' => upgrade($args),
         'version', '-v', '--version' => print('myphp ' . VERSION . "\n"),
-        'help', '-h', '--help' => print(USAGE),
+        'help', '-h', '--help' => $args !== [] ? run($args[0], ['-h']) : print(USAGE),
         default => (function () use ($cmd): never { fwrite(STDERR, "myphp: unknown command \"$cmd\"\n\n" . USAGE); exit(2); })(),
     };
 }
