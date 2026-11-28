@@ -63,6 +63,13 @@ try {
         $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
         check(proc_close($p) !== 0 && str_contains($out, 'myphp test'), 'run without the command, the test says to use it');
     }
+
+    // SwiftUI anti-pattern hints on hand-drawn bordered cards and redundant split-view WindowOptions.
+    file_put_contents("$dir/view.php", '<?php return fn() => TabView(selection: $this->t)(Tab(\'A\', value: \'a\')(VStack()()->cornerRadius(12)->border(Color::separator)))->tabViewStyle(TabViewStyle::sidebarAdaptable);');
+    file_put_contents("$dir/app.php", "<?php new WindowOptions(vibrancy: 'sidebar', titleBarStyle: 'hiddenInset');");
+    file_put_contents("$dir/myphp.json", json_encode(['myphp' => $version]));
+    [$code, $out] = $run(['tests/a_test.php']);
+    same([0, true, true], [$code, str_contains($out, 'hand-drawn bordered card'), str_contains($out, 'enables hiddenInset + sidebar vibrancy automatically')], "myphp test emits non-fatal SwiftUI hints: $out");
 } finally {
     $rm = function (string $d) use (&$rm): void {
         foreach (scandir($d) ?: [] as $e) { if ($e !== '.' && $e !== '..') { is_dir("$d/$e") && !is_link("$d/$e") ? $rm("$d/$e") : unlink("$d/$e"); } }

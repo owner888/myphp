@@ -430,15 +430,17 @@ final class CheckingHighlighter implements Highlighter
 
     public function tokens(int $i, string $text, array $dst): array { return [$dst, true]; }
 }
-$bad = [];
-$lang = new Language('Check', highlighter: function (Snapshot $text) use (&$bad) { return new CheckingHighlighter($bad); });
-$ct = new EditorTest('', '|');
-$ct->st->buffer->setLanguage($lang);
-$ct->h->frame();
-$ct->typ('abc');
-$ct->h->frame();
-$ct->key(Key::COMMAND, Key::Z, 'z');
-$ct->h->frame();
-$ct->key(Key::COMMAND | Key::SHIFT, Key::Z, 'z');
-$ct->h->frame();
-same([], $bad, 'undo and redo give the highlighter each edit\'s texts');
+(static function (): void {
+    $bad = [];
+    $lang = new Language('Check', highlighter: function (Snapshot $text) use (&$bad) { return new CheckingHighlighter($bad); });
+    $ct = new EditorTest('', '|');
+    $ct->st->buffer->setLanguage($lang);
+    $ct->h->frame();
+    $ct->typ('abc');
+    $ct->h->frame();
+    $ct->key(Key::COMMAND, Key::Z, 'z');
+    $ct->h->frame();
+    $ct->key(Key::COMMAND | Key::SHIFT, Key::Z, 'z');
+    $ct->h->frame();
+    same([], $bad, 'undo and redo give the highlighter each edit\'s texts');
+})();

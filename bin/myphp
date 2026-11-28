@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.207.1';
+const VERSION = '1.207.2';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -2790,6 +2790,38 @@ function upgrade(array $args): void
     fail("MyPHP in $root is neither Composer's install nor a git checkout: install it with curl -fsSL https://myphp.ai/install.sh | sh");
 }
 
+/**
+ * Non-fatal SwiftUI best-practice hints printed after `myphp test`: nudges
+ * apps and AI agents away from hand-drawn CSS-style chrome toward MyPHP's
+ * native SwiftUI defaults (v1.207.1+).
+ * @return list<string>
+ */
+function swiftuiHints(string $dir): array
+{
+    $hints = [];
+    $entry = is_file("$dir/app.php") ? (string)file_get_contents("$dir/app.php") : '';
+    $viewFiles = array_values(array_filter([
+        is_file("$dir/view.php") ? "$dir/view.php" : null,
+        ...(glob("$dir/pages/*.php") ?: []),
+    ]));
+    $views = '';
+    foreach ($viewFiles as $vf) {
+        $src = (string)file_get_contents($vf);
+        $views .= "\n" . $src;
+        $rel = basename($vf);
+        if (preg_match('/->cornerRadius\([^)]*\)\s*->border\(Color::separator\)/', $src) === 1
+            || preg_match('/->border\(Color::separator\)\s*->cornerRadius\(/', $src) === 1) {
+            $hints[] = "$rel: hand-drawn bordered card detected; prefer native Form()(Section(header:, footer:)(...))";
+        }
+    }
+    if ($entry !== ''
+        && (str_contains($views, 'TabViewStyle::sidebarAdaptable') || str_contains($views, 'NavigationSplitView('))
+        && (preg_match("/vibrancy\s*:\s*'sidebar'/", $entry) === 1 || preg_match("/titleBarStyle\s*:\s*'hiddenInset'/", $entry) === 1)) {
+        $hints[] = "app.php: MyPHP 1.207+ enables hiddenInset + sidebar vibrancy automatically for split views; omit them from WindowOptions";
+    }
+    return $hints;
+}
+
 /** myphp test, as flutter test: the project's test files run on this MyPHP, which they find as $MYPHP_HOME. */
 function test(array $args): void
 {
@@ -2803,6 +2835,9 @@ function test(array $args): void
         is_file($file) || fail("$file does not exist");
         $p = proc_open([PHP_BINARY, ...PHP_FLAGS, $file], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, $env);
         if (proc_close($p) !== 0) { $failed[] = $file; }
+    }
+    foreach (swiftuiHints($dir) as $hint) {
+        fwrite(STDERR, "myphp: hint: $hint\n");
     }
     $failed === [] || fail(count($failed) . ' of ' . count($files) . ' test files failed: ' . implode(', ', array_map('basename', $failed)));
 }

@@ -5,11 +5,12 @@
 // or function here waits for a restart (R).
 declare(strict_types=1);
 
-return fn() => VStack(spacing: 12)(
-    fn() => Text('Count: {count}', count: $this->count)->font(Font::title),
-    HStack(spacing: 8)(
-        Button('Increment', action: $this->increment(...))->buttonStyle(ButtonStyle::borderedProminent),
-        Button('Reset', action: $this->reset(...))->disabled($this->count === 0),
+return fn() => Form()(
+    Section(header: 'Counter', footer: 'Native UI drawn by MyPHP on the GPU. Edit view.php and save: it hot reloads.')(
+        fn() => Text('Count: {count}', count: $this->count)->font(Font::title),
+        HStack(spacing: 8)(
+            Button('Increment', action: $this->increment(...))->buttonStyle(ButtonStyle::borderedProminent),
+            Button('Reset', action: $this->reset(...))->disabled($this->count === 0),
+        ),
     ),
-    Text('Native UI drawn by MyPHP on the GPU. Edit view.php and save: it hot reloads.')->foregroundStyle(Color::secondary),
-)->padding(24);
+)->navigationTitle('Counter');

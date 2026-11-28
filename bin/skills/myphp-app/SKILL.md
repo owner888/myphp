@@ -37,13 +37,48 @@ MyPHP draws SwiftUI-style declarative views directly on the GPU (Metal on macOS/
 
 *(Load `references/*.md` ONLY when needed: `references/async.md` for `URLSession`/SQLite/Secrets, `references/pitfalls.md` when debugging, `references/windows.md` for multi-window desktop apps.)*
 
+## 1.5. Zero-Boilerplate SwiftUI Rules (Do / Don't — MyPHP 1.207.1+)
+
+Never recreate web/Tailwind chrome by hand. MyPHP applies native Apple HIG styling automatically when you use SwiftUI's semantic views:
+
+| Don't (hand-drawn anti-pattern) | Do (native SwiftUI default) |
+|---|---|
+| `WindowOptions(vibrancy: 'sidebar', titleBarStyle: 'hiddenInset')` | Omit both — `TabView(.sidebarAdaptable)` / `NavigationSplitView` auto-enables `hiddenInset` + `sidebar` vibrancy on macOS and Mica on Windows 11 |
+| Hand-drawn `$card = fn(...) => VStack(...)->background(...)->cornerRadius(12)->border(Color::separator)` | `Form()(Section(header:, footer:)(...))` |
+| Hand-drawn top header `HStack(Text(...)->font(Font::title2), Spacer(), Button(...))` | `->navigationTitle('Title')` + `->toolbar(Button(...))` |
+| Wrapping `TextField` or `Picker(...)->pickerStyle(PickerStyle::segmented)` inside `HStack(Text, Spacer, ...)` in a `Form` | Put `TextField('Model Name', text: $this->name)` and `Picker('Preset', selection: $this->preset)(...)->pickerStyle(PickerStyle::segmented)` directly in `Section(...)` — desktop `Form` renders leading labels automatically (pass `->labelsHidden()` only to opt out) |
+| Manual `chartXScale`/`chartYScale` workarounds for 1-point charts, or big empty dark placeholder boxes | Write `Chart($data)(...)` directly (single points auto-widen & draw a dot); hide empty metric `Section`s or show `ContentUnavailableView` |
+
+### Desktop Golden Template (`view.php` — copy this shape)
+```php
+<?php // view.php — $this is AppState (closures only)
+declare(strict_types=1);
+
+$main = fn() => Form()(
+    Section(header: 'General', footer: 'Changes apply immediately.')(
+        TextField('Name', text: $this->name, prompt: 'Default'),
+        Picker('Preset', selection: $this->preset)(
+            Text('Fast')->tag('fast'),
+            Text('Balanced')->tag('balanced'),
+        )->pickerStyle(PickerStyle::segmented),
+        Toggle('Auto-save', isOn: $this->autoSave)->toggleStyle(ToggleStyle::switch),
+    ),
+)->navigationTitle('Workspace')->toolbar(
+    Button('Run', action: fn() => $this->run())->buttonStyle(ButtonStyle::borderedProminent),
+);
+
+return fn() => TabView(selection: $this->tab)(
+    Tab('Workspace', systemImage: 'slider.horizontal.3', value: 'main')($main()),
+    Tab('Logs', systemImage: 'terminal', value: 'logs')(ContentUnavailableView('No Logs', systemImage: 'terminal'))->badge(count($this->logs)),
+)->tabViewStyle(TabViewStyle::sidebarAdaptable);
+```
 ## 2. Project & Code Architecture
 
 Start a project with `myphp init -template native <dir>` (or `myphp init -template 3d <dir>` for a 3D `SceneView` app). Keep state & actions in `src/`, and pure closures in `view.php` and `pages/*.php` for instant hot reload (`Content::file()` binds `$this` to your state object):
 
 ```
 my-app/
-  myphp.json        {"name": "MyApp", "displayName": "我的应用", "identifier": "com.example.app", "entry": "app.php", "myphp": "1.205.4"}
+  myphp.json        {"name": "MyApp", "displayName": "我的应用", "identifier": "com.example.app", "entry": "app.php", "myphp": "1.207.2"}
   boot.php          loads MyPHP
   app.php           creates state, sizes Window via Device::isDesktop(), runs App::run()
   src/Todos.php     state properties + action methods (no UI nodes)
@@ -161,7 +196,11 @@ App::run();
    ```
    *(Note: when navigating between pages in `NavigationStack`, run `$h->frame(30)` so the slide transition completes.)*
 3. **Visual screenshot check** (< 1s):
-   Run `myphp screenshot -data /tmp/test-data -out /tmp/shot.png` (or via a `tests/preview.php` with `FakeApi` data; do not pass `-size` taller than ~800pt on a laptop screen) and inspect the PNG for layout, contrast, and alignment.
+   Run `myphp screenshot -data /tmp/test-data -out /tmp/shot.png` (or via a `tests/preview.php` with `FakeApi` data; do not pass `-size` taller than ~800pt on a laptop screen) and inspect the PNG against this checklist:
+   - No hand-drawn bordered cards (`background` + `cornerRadius` + `border(Color::separator)`) where `Form`/`Section` belongs;
+   - Window title & toolbar buttons align on the same native titlebar row as the `sidebar.left` toggle;
+   - Form controls (`TextField`, `Picker`, `Stepper`, `Toggle`) use automatic leading labels with right-aligned controls;
+   - No large empty dark placeholder boxes when data/charts are empty (hide the `Section` or show `ContentUnavailableView`).
 4. **4-Platform Verification (`macOS`, `Windows`, `iOS`, `Android`)**:
    Every feature change must be verified across target platforms via `myphp` CLI (never raw `xcrun` or `adb` scripts):
    - **macOS**: `myphp screenshot -size 1280x800 -out /tmp/macos.png .` and `myphp run -d macos .`.
