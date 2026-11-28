@@ -7,131 +7,88 @@ description: Write new PHP desktop (macOS, Windows, Linux) and mobile (Android, 
 
 MyPHP draws SwiftUI-style declarative views directly on the GPU (Metal on macOS/iOS, Direct3D 11 on Windows, OpenGL/GLES on Linux/Android) in pure PHP 8.4+ / 8.5. Write SwiftUI's view names, argument labels, and modifiers in PHP syntax; never guess React, HTML, or CSS APIs.
 
-## 1. Quick Reference: SwiftUI -> MyPHP
+## 1. Hard Rules: Zero Hand-Drawn Chrome (MyPHP 1.207.4+)
 
-| SwiftUI | MyPHP (`src/UI/Declarative/functions.php`) |
+Follow these rules strictly. Do **not** invent custom styling, decorative cards, gradients, extra banners, or unrequested tabs. Let MyPHP's native Apple HIG defaults do the styling:
+
+| Don't (anti-pattern — NEVER write) | Do (native SwiftUI default) |
 |---|---|
-| `VStack(spacing: 12) { … }` | `VStack(spacing: 12)( … )` — second `()` holds children, comma-separated |
-| `if cond { Text("a") }` | `$cond ? Text('a') : null` (`null` renders nothing; arrays flatten) |
-| `ForEach(items, id: \.id) { … }` | `Each($items, id: 'id')(fn(array $item, int $i) => …)` |
-| `List { … }` | `ListView($items, id: 'id')(fn($item) => …)` or `ListView()(Section()(…))` |
-| `Link("Docs", destination: url)` | `WebLink('Docs', destination: $url)` (or `Link(...)`) |
-| `@State var x` / `$x` binding | `$x = State(false)` or PHP 8.4 Property Hooks (`Observer::get` / `Observer::set`) or state property: `Toggle('Wi-Fi', isOn: $this->wifi)` |
-| `@Observable` / fine-grained subtree | Plain `public int $count = 0;` + child closure `fn() => Text("Count: {$this->count}")` (auto-tracks closure's `$this->prop` reads; retains subtree and skips build/layout/paint when clean) |
-| `.font(.largeTitle)` | `->font(Font::largeTitle)`, `->foregroundStyle(Color::secondary)` |
-| `URLSession.shared` | `URLSession::shared()->data(for: $req)`, `->json()`, `->decode()`, `->upload()` |
-| `AsyncImage(url:)` | `AsyncImage($url, content: fn($img) => $img->resizable()->scaledToFill(), placeholder: fn() => …)` |
-
-### Core Views & Modifiers Cheat Sheet (no need to read extra docs for standard UI)
-- **Layout**: `VStack`, `HStack` (`VerticalAlignment::top|center|bottom|firstTextBaseline`), `ZStack`, `LazyVStack`, `LazyHStack`, `Grid` + `GridRow` (`->gridCellColumns($n)`), `LazyVGrid` / `LazyHGrid` (`GridItem::adaptive(minimum:)`, `GridItem::flexible()`, `GridItem::fixed()`), `FlowLayout(spacing:)` (wrapping tags/chips), `ViewThatFits`, `ScrollView` + `ScrollViewReader`, `GeometryReader`, `HSplitView`, `VSplitView`, `Spacer`, `Divider`, `EmptyView`.
-- **Navigation & Bars**: `TabView(selection: $this->tab)(Tab('Home', systemImage: 'house', value: 'home')(…))->tabViewStyle(TabViewStyle::sidebarAdaptable)` (or `TabViewStyle::page` carousel), `NavigationStack(path: $this->path)(…)->navigationDestination(for: '/item/{id}', destination: __DIR__ . '/pages/item.php')`, `NavigationLink('Title', value: '/item/1')`, `NavigationSplitView(sidebar:, detail:)`, `->navigationTitle()`, `->toolbar(...)`, `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar | navigationBar)`, `->searchable(text: $this->query)`.
-- **Controls & Data**: `Text` (`Text('Hi {name}', name: $n)` for i18n, `Text(verbatim: $raw)` for user data), `Label`, `Button` (`ButtonStyle::borderedProminent|bordered|plain|borderless`, `ButtonRole::destructive|cancel`), `Toggle`, `Picker` (`PickerStyle::segmented|menu|radioGroup|inline`), `DatePicker` (`DatePickerStyle::graphical|compact`), `ColorPicker`, `Slider`, `RangeSlider`, `Stepper`, `TextField` (`->onSubmit()`, `->keyboardType()`), `SecureField`, `SearchField`, `TextEditor`, `CodeEditor`, `Markdown`, `ProgressView`, `Gauge`, `ContentUnavailableView($title, systemImage:, description:)` (`::search($q)`), `OutlineGroup`, `Accordion` (exclusive collapsible sections), `DisclosureGroup`, `ZoomableView` (double-tap/drag zoom container), `Form`, `Section`, `GroupBox`, `LabeledContent`, `ControlGroup`, `Menu`, `ShareLink`, `PhotosPicker`, `Avatar`, `Chart` (`BarMark`, `LineMark`, `AreaMark`, `PointMark`, `RuleMark`, `SectorMark`), `SceneView($scene, orbitControls:, onUpdate:, onPick:, overlay:)` (5-platform hardware 3D viewport via `MyPHP\Plugins\Scene\Scene`).
-- **Shapes, Gradients & Modals**: `Rectangle`, `RoundedRectangle($r)`, `Circle`, `Capsule`, `Ellipse`, `LinearGradient`, `RadialGradient`, `AngularGradient`, `->background()`, `->overlay()`, `->clipShape()`, `->scrollClipDisabled()`, `->glassEffect()`, `->sheet(isPresented:, content:)` (`->presentationDetents()`, `->interactiveDismissDisabled()`), `->fullScreenCover()`, `->popover()`, `->alert()`, `->confirmationDialog()`, `->fileImporter()`, `->fileExporter()`, `->contextMenu()`, `->swipeActions()`, `->refreshable()`, `->toast($this->toast)`.
-
-### Exact Parameter Signatures (PHP named arguments must match these)
-- **Containers**: `VStack(alignment: HorizontalAlignment::leading, spacing: 12)( ... )`, `HStack(alignment: VerticalAlignment::center, spacing: 8)( ... )`, `ZStack(alignment: Alignment::center)( ... )`, `ScrollView(Axis::vertical)( ... )`.
-- **Sizing & Padding**: `->frame(width: 48, height: 48)` or `->frame(maxWidth: INF, alignment: Alignment::leading)`; `->padding(16)` or `->padding(Edge::horizontal, 16)->padding(Edge::top, 8)`.
-- **Styling**: `->background(Color::secondarySystemGroupedBackground)` or `->background(LinearGradient(colors: [Color::blue, Color::purple], startPoint: UnitPoint::topLeading, endPoint: UnitPoint::bottomTrailing))`; `->cornerRadius(16)` or `->clipShape(Capsule())` / `->clipShape(Circle())` / `->clipShape(RoundedRectangle(cornerRadius: 12))`.
-- **Colors & Fonts**: `Color::primary`, `Color::secondary`, `Color::systemBackground`, `Color::secondarySystemBackground`, `Color::systemGroupedBackground`, `Color::secondarySystemGroupedBackground`, `Color::tertiarySystemGroupedBackground`, `Color::rgb(0x00CAA4)`; `Font::largeTitle`, `Font::title`, `Font::title2`, `Font::title3`, `Font::headline`, `Font::subheadline`, `Font::body`, `Font::callout`, `Font::footnote`, `Font::caption`, `Font::caption2`, `Font::system(size: 24, weight: Weight::bold)`.
-- **Modals**: `->sheet(isPresented: $this->open, content: fn() => ...)` (`->presentationDetents([PresentationDetent::medium(), PresentationDetent::large()])`, `->interactiveDismissDisabled()`), `->alert('Title', isPresented: $this->alertOpen, actions: [Button('OK')], message: '...')`, `->confirmationDialog('Title', isPresented: $this->confirmOpen, actions: [Button('Delete', role: ButtonRole::destructive, action: ...), Button('Cancel', role: ButtonRole::cancel)])`.
-
-*(Load `references/*.md` ONLY when needed: `references/async.md` for `URLSession`/SQLite/Secrets, `references/pitfalls.md` when debugging, `references/windows.md` for multi-window desktop apps.)*
-
-## 1.5. Zero-Boilerplate SwiftUI Rules (Do / Don't — MyPHP 1.207.1+)
-
-Never recreate web/Tailwind chrome by hand. MyPHP applies native Apple HIG styling automatically when you use SwiftUI's semantic views:
-
-| Don't (hand-drawn anti-pattern) | Do (native SwiftUI default) |
-|---|---|
-| `WindowOptions(vibrancy: 'sidebar', titleBarStyle: 'hiddenInset')` | Omit both — `TabView(.sidebarAdaptable)` / `NavigationSplitView` auto-enables `hiddenInset` + `sidebar` vibrancy on macOS and Mica on Windows 11 |
-| Hand-drawn `$card = fn(...) => VStack(...)->background(...)->cornerRadius(12)->border(Color::separator)` | `Form()(Section(header:, footer:)(...))` |
+| `WindowOptions(vibrancy: 'sidebar', titleBarStyle: 'hiddenInset', backgroundColor: ...)` | Omit all three — `TabView(.sidebarAdaptable)` and `NavigationSplitView` auto-enable `hiddenInset` + `sidebar` vibrancy on macOS and Mica on Windows 11 |
+| Custom `$card = fn(...) => VStack(...)->background(...)->cornerRadius(12)->border(Color::separator)` | `Form()(Section(header:, footer:)(...))` |
 | Hand-drawn top header `HStack(Text(...)->font(Font::title2), Spacer(), Button(...))` | `->navigationTitle('Title')` + `->toolbar(Button(...))` |
-| Wrapping `TextField` or `Picker(...)->pickerStyle(PickerStyle::segmented)` inside `HStack(Text, Spacer, ...)` in a `Form` | Put `TextField('Model Name', text: $this->name)` and `Picker('Preset', selection: $this->preset)(...)->pickerStyle(PickerStyle::segmented)` directly in `Section(...)` — desktop `Form` renders leading labels automatically (pass `->labelsHidden()` only to opt out) |
-| Manual `chartXScale`/`chartYScale` workarounds for 1-point charts, or big empty dark placeholder boxes | Write `Chart($data)(...)` directly (single points auto-widen & draw a dot); hide empty metric `Section`s or show `ContentUnavailableView` |
+| Wrapping `TextField` or segmented `Picker` in `HStack(Text, Spacer, ...)` inside a `Form` | Put `TextField('Name', text: $this->name)` and `Picker('Preset', selection: $this->preset)(...)->pickerStyle(PickerStyle::segmented)` directly in `Section(...)` — desktop `Form` renders leading labels automatically (`->labelsHidden()` opts out) |
+| Using `Stepper("Count: {$this->n}", ...)` for editable numbers | Use `NumberField('Count', value: $this->n, in: [1, 100], step: 1)` (`[ 45 ] [ − ] [ + ]`); use `Stepper` (adaptive horizontal `[ − | + ]`) only when direct typing is unwanted |
+| Manual `chartXScale`/`chartYScale` single-point guards, or huge empty placeholder boxes | Write `Chart($data)(...)` directly (single points auto-widen & draw a dot); hide empty metric `Section`s or show `ContentUnavailableView` |
+| Swift syntax (`Color.blue`, `.secondary`, `.infinity`, `->foregroundColor()`) | Valid PHP syntax (`Color::blue`, `Color::secondary`, `INF`, `->foregroundStyle()`) |
+| Declaring `class` or named `function` in `view.php` / `pages/*.php` | Closures only in `view.php` & `pages/*.php`; put all classes/methods in `src/` |
 
-### Desktop Golden Template (`view.php` — copy this shape)
+## 2. Canonical Project Template (Copy This Shape)
+
+Start with `myphp init -template native <dir>` (or `-template 3d` for a 3D `SceneView` app):
+
+```
+my-app/
+  myphp.json        {"name": "MyApp", "displayName": "My App", "identifier": "com.example.myapp", "entry": "app.php", "myphp": "1.207.4"}
+  boot.php          loads MyPHP
+  app.php           creates state, opens Window with minimal WindowOptions, calls App::run()
+  src/AppState.php  plain PHP properties + action methods (no UI code)
+  view.php          returns fn() => View (closures only, $this bound to AppState)
+  pages/*.php       sub-pages for NavigationStack, each returning fn($param) => View
+  tests/ui_test.php headless test run via `myphp test`
+```
+
+```php
+<?php // src/AppState.php
+declare(strict_types=1);
+
+use MyPHP\Window;
+
+final class AppState
+{
+    public string $tab = 'main';
+    public string $name = 'Untitled';
+    public string $preset = 'balanced';
+    public int $epochs = 45;
+    public bool $autoSave = true;
+    /** @var list<array{id: int, text: string}> */
+    public array $logs = [];
+    public ?Window $window = null;
+
+    public function run(): void
+    {
+        $this->logs[] = ['id' => count($this->logs) + 1, 'text' => "Ran {$this->name} ({$this->preset}, {$this->epochs})"];
+    }
+}
+```
+
 ```php
 <?php // view.php — $this is AppState (closures only)
 declare(strict_types=1);
 
 $main = fn() => Form()(
-    Section(header: 'General', footer: 'Changes apply immediately.')(
-        TextField('Name', text: $this->name, prompt: 'Default'),
+    Section(header: 'Settings', footer: 'Changes apply immediately.')(
+        TextField('Name', text: $this->name, prompt: 'Untitled'),
         Picker('Preset', selection: $this->preset)(
             Text('Fast')->tag('fast'),
             Text('Balanced')->tag('balanced'),
+            Text('Quality')->tag('quality'),
         )->pickerStyle(PickerStyle::segmented),
+        NumberField('Epochs', value: $this->epochs, in: [5, 200], step: 5),
         Toggle('Auto-save', isOn: $this->autoSave)->toggleStyle(ToggleStyle::switch),
     ),
 )->navigationTitle('Workspace')->toolbar(
     Button('Run', action: fn() => $this->run())->buttonStyle(ButtonStyle::borderedProminent),
 );
 
+$logs = fn() => ($this->logs === []
+    ? ContentUnavailableView('No Logs', systemImage: 'terminal', description: 'Run a task to see output here.')
+    : ListView($this->logs, id: 'id')(fn(array $row) => Text(verbatim: $row['text'])->monospaced())->listStyle(ListStyle::plain)
+)->navigationTitle('Logs');
+
 return fn() => TabView(selection: $this->tab)(
     Tab('Workspace', systemImage: 'slider.horizontal.3', value: 'main')($main()),
-    Tab('Logs', systemImage: 'terminal', value: 'logs')(ContentUnavailableView('No Logs', systemImage: 'terminal'))->badge(count($this->logs)),
+    Tab('Logs', systemImage: 'terminal', value: 'logs')($logs())->badge(count($this->logs)),
 )->tabViewStyle(TabViewStyle::sidebarAdaptable);
-```
-## 2. Project & Code Architecture
-
-Start a project with `myphp init -template native <dir>` (or `myphp init -template 3d <dir>` for a 3D `SceneView` app). Keep state & actions in `src/`, and pure closures in `view.php` and `pages/*.php` for instant hot reload (`Content::file()` binds `$this` to your state object):
-
-```
-my-app/
-  myphp.json        {"name": "MyApp", "displayName": "我的应用", "identifier": "com.example.app", "entry": "app.php", "myphp": "1.207.2"}
-  boot.php          loads MyPHP
-  app.php           creates state, sizes Window via Device::isDesktop(), runs App::run()
-  src/Todos.php     state properties + action methods (no UI nodes)
-  view.php          returns fn() => View (closures only — never declare classes/functions here)
-  pages/*.php       sub-pages for NavigationStack, each returning fn($param) => View
-  tests/ui_test.php headless test driving views and actions
-```
-
-```php
-<?php // src/Todos.php
-declare(strict_types=1);
-
-use MyPHP\{App, URLRequest, URLSession, Window};
-
-final class Todos
-{
-    /** @var list<array{id: int, title: string, done: bool}> */
-    public array $items = [];
-    public string $draft = '';
-    public ?Window $window = null;
-    private int $next = 1;
-
-    public function add(): void
-    {
-        $title = trim($this->draft);
-        if ($title === '') { return; }
-        $this->items[] = ['id' => $this->next++, 'title' => $title, 'done' => false];
-        $this->draft = '';
-    }
-
-    public function remove(int $id): void
-    {
-        $this->items = array_values(array_filter($this->items, fn(array $i) => $i['id'] !== $id));
-    }
-}
-```
-
-```php
-<?php // view.php — $this is Todos
-declare(strict_types=1);
-
-$row = fn(array $item, int $i) => Toggle($item['title'], isOn: $this->items[$i]['done'])
-    ->swipeActions(Button('Delete', role: ButtonRole::destructive, action: fn() => $this->remove($item['id'])));
-
-return fn() => VStack(alignment: HorizontalAlignment::leading, spacing: 12)(
-    HStack(spacing: 8)(
-        TextField('New to-do', text: $this->draft)->onSubmit(fn() => $this->add()),
-        Button('Add', action: fn() => $this->add())->buttonStyle(ButtonStyle::borderedProminent)->disabled(trim($this->draft) === ''),
-    ),
-    $this->items === []
-        ? ContentUnavailableView('No To-Dos', systemImage: 'checklist', description: 'Add a task above.')
-        : ListView($this->items, id: 'id')($row),
-)->padding(16);
 ```
 
 ```php
@@ -142,68 +99,86 @@ use MyPHP\{App, Device, Window, WindowOptions};
 use MyPHP\UI\Content;
 
 require __DIR__ . '/boot.php';
-require __DIR__ . '/src/Todos.php';
+require __DIR__ . '/src/AppState.php';
 
-$app = new Todos();
-App::setName('Todos');
-App::whenReady(function () use ($app) {
-    [$w, $h] = Device::isDesktop() ? [1080, 760] : [402, 874];
-    $app->window = new Window(new WindowOptions(title: 'Todos', width: $w, height: $h,
-        stateKey: 'main', // remembers window size, position, maximized/fullScreen across runs
-        content: Content::file(__DIR__ . '/view.php', $app)));
+$state = new AppState();
+App::setName('My App');
+App::whenReady(function () use ($state): void {
+    [$w, $h] = Device::isDesktop() ? [960, 680] : [402, 874];
+    // Leave vibrancy, titleBarStyle and backgroundColor unset — MyPHP configures them automatically.
+    $state->window = new Window(new WindowOptions(
+        title: 'My App',
+        width: $w,
+        height: $h,
+        stateKey: 'main',
+        content: Content::file(__DIR__ . '/view.php', $state),
+    ));
 });
 App::run();
 ```
 
-## 3. Essential Rules (Avoid Common Bugs)
+## 3. SwiftUI -> MyPHP Reference
 
-1. **SwiftUI / Foundation APIs first**:
-   - **Networking & Auto-Observed State**: Always use `URLSession::shared()->data(for: $req)`, `->json()`, `->decode()`, and `->upload(for: $req, from: ['file' => $path])` (native `multipart/form-data`, never base64-encode files into JSON) inside `App::go()` fibers. State objects bound via `Content::file(__DIR__ . '/view.php', $app)` are **automatically observed** across fibers and timers — simply assign to `$this->...` directly (no manual `$this->window->update()` needed).
-   - **Remote Images**: Always use `AsyncImage($url)` (built-in fiber download & memory cache), never manual `Image::fromBytes()` downloads.
-   - **Custom SVGs**: `Image($svg)` without `->resizable()` renders as a monochrome template icon. For multi-color SVGs/illustrations, always call `Image(SVG::parse($xml))->resizable()->scaledToFit()->frame(width: 44, height: 44)`.
-2. **Adaptive Multi-Platform Navigation**:
-   - **Cross-Platform HIG Alignment**: Desktops (`macOS`, `Windows`, `Linux`) follow **macOS HIG** (`13pt` controls, `220pt` sidebar, unified toolbar with quiet `sidebar.left` toggle); Tablets (`iPadOS`, `Android Pad`) follow **iPadOS HIG** (`17pt` controls, `260pt` landscape sidebar with `>=44pt` touch targets morphing to/from centered floating top glass capsule TabBar, `700pt` centered page sheets); Phones (`iOS`, `Android`) follow **iOS HIG**.
-   - Use one `TabView(selection: $this->tab)` with `->tabViewStyle(TabViewStyle::sidebarAdaptable)` and `->tint($accent)` across all 6 form factors.
+| SwiftUI | MyPHP |
+|---|---|
+| `VStack(spacing: 12) { … }` | `VStack(spacing: 12)( … )` — second `()` holds comma-separated children |
+| `if cond { Text("a") }` | `$cond ? Text('a') : null` (`null` renders nothing; arrays flatten) |
+| `ForEach(items, id: \.id) { … }` | `Each($items, id: 'id')(fn(array $item, int $i) => …)` |
+| `List { … }` | `ListView($items, id: 'id')(fn($item) => …)` or `ListView()(Section()(…))` |
+| `Link("Docs", destination: url)` | `WebLink('Docs', destination: $url)` |
+| `@State` / binding | Direct state property (`isOn: $this->flag`), `State(false)`, or `new Binding(get:, set:)` |
+| Fine-grained subtree | Child closure `fn() => Text("Count: {$this->count}")` (auto-tracks `$this->prop`) |
+| `URLSession.shared` | `URLSession::shared()->data(for: $req)`, `->json()`, `->decode()`, `->upload()` |
+| `AsyncImage(url:)` | `AsyncImage($url, content: fn($img) => $img->resizable()->scaledToFill(), placeholder: fn() => …)` |
+
+### Core Views & Exact Named Signatures
+- **Layout**: `VStack(alignment: HorizontalAlignment::leading, spacing: 12)(...)`, `HStack(alignment: VerticalAlignment::center, spacing: 8)(...)`, `ZStack(alignment: Alignment::center)(...)`, `LazyVStack`, `LazyHStack`, `Grid` + `GridRow` (`->gridCellColumns($n)`), `LazyVGrid` / `LazyHGrid` (`GridItem::adaptive(minimum:)`, `::flexible()`, `::fixed()`), `FlowLayout(spacing:)`, `ScrollView(Axis::vertical)(...)`, `ScrollViewReader`, `GeometryReader`, `HSplitView`, `VSplitView`, `Spacer`, `Divider`, `EmptyView`.
+- **Navigation**: `TabView(selection: $this->tab)(Tab('Title', systemImage: 'house', value: 'home')(...))->tabViewStyle(TabViewStyle::sidebarAdaptable)` (or `TabViewStyle::page`), `NavigationStack(path: $this->path)(...)->navigationDestination(for: '/item/{id}', destination: __DIR__ . '/pages/item.php')`, `NavigationLink('Title', value: '/item/1')`, `NavigationSplitView(sidebar:, detail:)`, `->navigationTitle()`, `->toolbar(...)`, `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar | navigationBar)`, `->searchable(text: $this->query)`.
+- **Form & Controls**: `Form`, `Section(header:, footer:)`, `LabeledContent('Key', $val)`, `Text` (`Text('Hi {name}', name: $n)` for i18n, `Text(verbatim: $raw)` for user/dynamic strings), `Label`, `Button('Save', action: ..., role: ButtonRole::destructive|cancel)` (`->buttonStyle(ButtonStyle::borderedProminent|bordered|plain|borderless)`), `Toggle('Title', isOn: $this->on)->toggleStyle(ToggleStyle::switch)`, `Picker('Title', selection: $this->x)(Text('A')->tag('a'))` (`PickerStyle::automatic|segmented|menu|radioGroup|inline`), `NumberField('Title', value: $this->n, in: [0, 100], step: 1)`, `DecimalField('Price', value: $this->p, in: ['0', '999'], step: '0.01')`, `Stepper('Title', value: $this->n, in: [0, 10], step: 1)`, `Slider(value: $this->v, in: [0.0, 1.0], step: 0.1)`, `RangeSlider`, `DatePicker`, `ColorPicker`, `TextField('Title', text: $this->s, prompt: 'Hint')` (`->onSubmit()`, `->keyboardType()`, `->labelsHidden()`), `SecureField`, `SearchField`, `TextEditor`, `EditableText`, `CodeEditor`, `Markdown`, `ProgressView(title:, value:, total:)`, `Gauge`, `ContentUnavailableView($title, systemImage:, description:)`, `DisclosureGroup`, `Accordion`, `GroupBox`, `Menu`, `ShareLink`, `PhotosPicker`, `Avatar`, `Chart($data)(fn($row) => [AreaMark(...), LineMark(...)])` (`BarMark`, `PointMark`, `RuleMark`, `SectorMark`).
+- **Sizing, Modals & Accents**: `->frame(width:, height:, maxWidth: INF, alignment: Alignment::leading)`, `->padding(16)` or `->padding(Edge::horizontal, 16)`, `->sheet(isPresented: $this->open, content: fn() => ...)` (`->presentationDetents([PresentationDetent::medium(), PresentationDetent::large()])`), `->fullScreenCover()`, `->popover()`, `->alert('Title', isPresented: $this->open, actions: [Button('OK')], message: '...')`, `->confirmationDialog(...)`, `->contextMenu()`, `->swipeActions()`, `->refreshable()`, `->toast($this->toast)`.
+- **System Colors & Fonts** (use sparingly — never hand-draw Form cards with `->background()`/`->border()`): `Color::primary`, `Color::secondary`, `Color::accentColor`, `Color::green`, `Color::orange`, `Color::red`, `Color::blue`; `Font::largeTitle`, `Font::title`, `Font::title2`, `Font::title3`, `Font::headline`, `Font::subheadline`, `Font::body`, `Font::callout`, `Font::footnote`, `Font::caption`, `Font::caption2`, `Font::system(size: 24, weight: Weight::bold)`.
+
+*(Load `references/*.md` ONLY when needed: `references/async.md` for `URLSession`/SQLite/Secrets, `references/pitfalls.md` when debugging, `references/windows.md` for multi-window desktop apps.)*
+
+## 4. Essential Rules (Avoid Common Bugs)
+
+1. **Foundation & State**:
+   - Use `URLSession::shared()` (`->data()`, `->json()`, `->decode()`, `->upload()`) inside `App::go()` fibers. State bound via `Content::file()` is auto-observed across fibers and timers — assign `$this->prop = ...` directly (no manual `$window->update()`).
+   - Use `AsyncImage($url)` for remote images; for local images decoded with `MyPHP\UI\Image::fromBytes()`, decode once in state (never inside `view.php`).
+   - For multi-color SVGs: `Image(SVG::parse($xml))->resizable()->scaledToFit()->frame(width: 44, height: 44)`.
+   - Never mutate state or perform disk/network I/O while building `view.php`; only inside `action:`, `onSubmit`, `onAppear`, `task`, `onChange`.
+2. **Bindings & Identity**:
+   - Bind controls directly to state properties (`isOn: $this->items[$i]['done']`), never to a loop copy (`$item['done']`).
+   - Always pass a stable `id:` to `Each($items, id: 'id')` and `ListView($items, id: 'id')`.
    - Keep a separate `Router` property per tab (`$this->homePath`, `$this->mePath`).
-   - Hide the floating phone tab bar on detail pages with `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::tabBar)`, and hide the top navigation bar on custom hero pages with `->toolbarVisibility(Visibility::hidden, for: ToolbarPlacement::navigationBar)`.
-3. **Bindings & Identity**:
-   - Bind controls directly to state properties (`isOn: $this->items[$i]['done']`), never to a loop variable copy (`$item['done']`).
-   - Always pass a stable key to `Each($items, id: 'id')` and `ListView($items, id: 'id')`.
-   - Never mutate state or perform I/O inside `view.php` while building; only inside action/lifecycle closures (`action:`, `onSubmit`, `onAppear`, `task`, `onChange`).
-4. **3D Views & Native OS Interop (`SceneView`, `myphp ffigen`, `myphp jnigen`)**:
-   - **3D Scenes & Game Toolkit**: Use `SceneView($this->scene, orbitControls: true, onUpdate: ..., onPick: ...)` or `SpriteView($this, overlay: fn() => ...)` with:
-     - `MyPHP\Plugins\Scene\{Scene, Entity, Mesh, Material, PointLight, ParticleEmitter3D, Tween3D, Animator3D, Collider3D}`: includes `Mesh::terrain()`, `$scene->addSkyDome()`, `Material::pbr()`, `Material::unlit(emissive: 1.0)`, `$scene->camera->shake()`, and `Animator3D` (`IDLE`, `WALK`, `LUNGE`, `HURT` + `addLimb()`).
-     - `MyPHP\Plugins\Game\{Game, Camera, VirtualPad, SpriteSheet, SpriteAnimation, GameAudio, ScreenTransition}`: includes `$this->hitStop(3)`, `$camera->shake()`, mobile touchscreen `VirtualPad` (auto-injects `Key::UP/DOWN/LEFT/RIGHT/SPACE/ESCAPE/TAB`), `GameAudio` (SFX pool + `registerTone` synth + BGM crossfade), and `ScreenTransition` (`FADE`, `SHUTTER`, `BATTLE_BLINDS`). Never re-implement these by hand!
-   - **Native C / Apple ObjC / Android Java Interop**: When an app needs a native C library, an iOS/macOS Objective-C framework, or an Android Java SDK class not already in MyPHP, use `myphp ffigen` or `myphp jnigen` to generate a typed PHP wrapper class (never hand-write raw `ObjC::msg` type strings or C JNI glue):
-     - C header: `myphp ffigen -class FooFfi -lib libfoo.dylib -out src/Native/FooFfi.php foo.h`
-     - Apple ObjC: `myphp ffigen -objc AVAudioSession -framework AVFAudio -out src/Native/AVAudioSession.php AVAudioSession.h`
-     - Android Java: `myphp jnigen -out src/Native/BatteryManager.php android.os.BatteryManager` (calls `MyPHP\Native\Jni` synchronously).
-5. **Packaging & Bundle Size (`myphp.json` & `myphp build`)**:
-   - Always build with `myphp build -platform ios/arm64|android/arm64|darwin/arm64|linux/amd64|windows/amd64` (never invoke `scripts/*.sh` directly); the CLI automatically prunes unused platform backends, compacts PHP, compiles mobile bundles into native read-only binaries (`libapp.so` on Android, `__TEXT,__const` on iOS — zero `.php` source files in the release archive), strips symbols, excludes `tests/` / `*.local.php`, and outputs ~8–10 MB release bundles.
-   - Load bundled assets via `App::path('resources') . '/file.png'` (with fallback to `dirname(__DIR__) . '/resources/file.png'`) so standalone desktop `-launcher micro` (`phar://`) and mobile bundles both resolve them.
-   - Add scratch/reference directories (e.g. `design/`, `docs/`, `mocks/`) to `"exclude": ["design", "docs"]` in `myphp.json`, and keep `resources/icon.png` at `<= 1024×1024` PNG. Use an ASCII slug for `"name"` and localized titles in `"displayName"`.
+3. **3D, Games & Native Interop** (only when the app actually needs them):
+   - 3D/2D games: use `SceneView` (`MyPHP\Plugins\Scene\*`) or `SpriteView` (`MyPHP\Plugins\Game\*`) — never re-implement camera/audio/transitions by hand.
+   - Native C / ObjC / Android Java bindings: generate typed wrappers with `myphp ffigen` or `myphp jnigen` instead of hand-writing FFI/JNI glue.
+4. **Assets & Packaging (`myphp build`)**:
+   - Build with `myphp build -platform darwin/arm64|windows/amd64|linux/amd64|ios/arm64|android/arm64` (never run `scripts/*.sh` directly).
+   - Resolve bundled files via `App::path(PathName::Resources) . '/file.png'` (with fallback to `dirname(__DIR__) . '/resources/file.png'`).
+   - Exclude scratch directories via `"exclude": ["docs", "tests"]` in `myphp.json`; keep `resources/icon.png` `<= 1024×1024`.
 
-## 4. Verify Before Finishing
+## 5. Verify Before Finishing
 
 1. **Syntax check**: `php -l` on every modified PHP file.
-2. **Headless UI test** (`myphp test`, which runs `tests/*_test.php` on the installed MyPHP as `flutter test` does; or `php -d ffi.enable=1 tests/ui_test.php`):
+2. **Headless UI test & lint**: run `myphp test` (runs `tests/*_test.php` and prints `myphp: hint:` for SwiftUI anti-patterns — fix any hints before finishing):
    ```php
-   $h = new Headless(Content::file(__DIR__ . '/../view.php', $app)->view, 402, 874);
-   $h->rt->touch = true; $h->rt->strict = true;
+   $h = new Headless(Content::file(__DIR__ . '/../view.php', $state)->view, 960, 680);
    $h->frame();
-   $h->clickText('New to-do'); $h->type('Milk'); $h->enter(); $h->frame();
-   same(1, count($app->items), 'added');
+   $h->clickText('Run'); $h->frame();
+   same(1, count($state->logs), 'ran');
    ```
-   *(Note: when navigating between pages in `NavigationStack`, run `$h->frame(30)` so the slide transition completes.)*
+   *(For `NavigationStack` page transitions, run `$h->frame(30)`.)*
 3. **Visual screenshot check** (< 1s):
-   Run `myphp screenshot -data /tmp/test-data -out /tmp/shot.png` (or via a `tests/preview.php` with `FakeApi` data; do not pass `-size` taller than ~800pt on a laptop screen) and inspect the PNG against this checklist:
-   - No hand-drawn bordered cards (`background` + `cornerRadius` + `border(Color::separator)`) where `Form`/`Section` belongs;
-   - Window title & toolbar buttons align on the same native titlebar row as the `sidebar.left` toggle;
-   - Form controls (`TextField`, `Picker`, `Stepper`, `Toggle`) use automatic leading labels with right-aligned controls;
-   - No large empty dark placeholder boxes when data/charts are empty (hide the `Section` or show `ContentUnavailableView`).
-4. **4-Platform Verification (`macOS`, `Windows`, `iOS`, `Android`)**:
-   Every feature change must be verified across target platforms via `myphp` CLI (never raw `xcrun` or `adb` scripts):
-   - **macOS**: `myphp screenshot -size 1280x800 -out /tmp/macos.png .` and `myphp run -d macos .`.
-   - **Windows (local VM over SSH, e.g. `ssh win`)**: Windows builds bundle the host Windows `php.exe` + `ext/*.dll` and compile a native GUI launcher (`myphp build` cannot cross-bundle Windows from macOS). Sync changes to a Windows VM configured with PHP 8.4/8.5 (`ext-ffi` enabled) + MinGW/LLVM-MinGW, run `php -d ffi.enable=1 tests\ui_test.php` and `bin\myphp.cmd build -skip-installer .` over SSH, and trigger `bin\myphp.cmd screenshot` inside the logged-in desktop session via `schtasks /IT` (SSH runs in non-interactive Session 0 without DWM), then `scp` the PNG back to inspect D3D11 + Win11 Mica rendering.
-   - **iOS / iPadOS**: `myphp devices` and `myphp run -d ios .` (verify Dynamic Island / Home Indicator safe areas and iPad `sidebarAdaptable` landscape sidebar ↔ portrait top capsule morphing).
-   - **Android**: `myphp emulators --launch <id>` (use an `Enforcing` SELinux image) and `myphp run -d android .` (ensure any bundled `.so` uses `-Wl,-z,max-page-size=16384` for 16 KB page alignment).
+   Run `myphp screenshot -size 960x680 -out /tmp/shot.png .` and verify against this checklist:
+   - Zero hand-drawn bordered cards (`background` + `cornerRadius` + `border(Color::separator)`) where `Form`/`Section` belongs;
+   - Window title and toolbar buttons sit on the same unified titlebar row as the `sidebar.left` toggle;
+   - `Form` controls (`TextField`, `Picker`, `NumberField`, `Stepper`, `Toggle`) use automatic leading labels with right-aligned controls — zero duplicate labels;
+   - No large empty dark placeholder boxes when data/charts are empty (hide the `Section` or show `ContentUnavailableView`);
+   - Only requested features and controls exist — zero unrequested decorations, gradients, or extra chrome.
+4. **4-Platform Verification (`macOS`, `Windows`, `iOS`, `Android`)** when releasing:
+   - **macOS**: `myphp screenshot -size 960x680 -out /tmp/macos.png .` and `myphp run -d macos .`.
+   - **Windows**: sync to a Windows host/VM with PHP 8.4/8.5 (`ext-ffi`) + MinGW, run `myphp.cmd test`, `myphp.cmd build -skip-installer .`, and `myphp.cmd screenshot` inside an interactive desktop session (`schtasks /IT`).
+   - **iOS / iPadOS**: `myphp devices` and `myphp run -d ios .`.
+   - **Android**: `myphp emulators --launch <id>` (`Enforcing` SELinux) and `myphp run -d android .`.
