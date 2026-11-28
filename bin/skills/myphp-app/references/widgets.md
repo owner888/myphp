@@ -24,7 +24,7 @@ Quick lookup from product requirement -> MyPHP SwiftUI view (`src/UI/Declarative
 | Switch / checkbox | `Toggle('Wi-Fi', isOn: $this->wifi)` (`->toggleStyle(ToggleStyle::switch | checkbox | button)`) |
 | Segmented / menu / radio picker | `Picker('Mode', selection: $this->mode)(Text('A')->tag('a'), …)->pickerStyle(PickerStyle::segmented | menu | radioGroup)` |
 | Date / time / graphical calendar | `DatePicker('Due', selection: $this->due, displayedComponents: [DatePickerComponents::date])` (`->datePickerStyle(DatePickerStyle::graphical)`) |
-| Slider / range / stepper / stars | `Slider(value: $this->v, in: [0, 100])`, `RangeSlider(lower: $this->lo, upper: $this->hi, in: [0, 100])`, `Stepper('Qty', value: $this->n, in: [1, 10])`, `Rating('Score', value: $this->stars)` |
+| Number / decimal / slider / stepper | `NumberField('Qty', value: $this->n, in: [1, 100], step: 1)`, `DecimalField('Price', value: $this->p, in: ['0', '999'], step: '0.01')`, `EditableText(text: $this->name)`, `Slider(value: $this->v, in: [0, 100])`, `RangeSlider(lower: $this->lo, upper: $this->hi, in: [0, 100])`, `Stepper('Qty', value: $this->n, in: [1, 10])`, `Rating('Score', value: $this->stars)` |
 | Single-line / password / search | `TextField('Name', text: $this->name)->onSubmit(fn() => …)`, `SecureField('Password', text: $this->pwd)`, `->searchable(text: $this->query)` |
 | Multi-line / rich text / code | `TextEditor(text: $this->body)`, `TextField('Bio', text: $this->bio, axis: Axis::vertical)`, `TextEditor(document: $this->richDoc)`, `CodeEditor($state)`, `DiffView($diff)` |
 | Photo picker / share / file | `PhotosPicker('Select Photo', selection: $this->photo)`, `ShareLink($url, title: 'Share')`, `->fileImporter(isPresented: $this->open, onCompletion: fn(array $paths) => …)` |
@@ -45,3 +45,12 @@ Quick lookup from product requirement -> MyPHP SwiftUI view (`src/UI/Declarative
 | Paged carousel / onboarding | `TabView(selection: $this->page)(Tab('1', value: 0)(…))->tabViewStyle(TabViewStyle::page(PageIndexDisplayMode::always))` |
 | Push navigation stack | `NavigationStack(path: $this->path)(…)->navigationDestination(for: '/item/{id}', destination: __DIR__ . '/pages/item.php')`, `NavigationLink('Open', value: '/item/1')` |
 | Modals, sheets & alerts | `->sheet(isPresented: $this->open, content: fn() => …)` (`->presentationDetents([PresentationDetent::medium(), PresentationDetent::large()])`, `->interactiveDismissDisabled()`), `->fullScreenCover()`, `->alert()`, `->confirmationDialog()`, `->popover()`, `->toast($this->toast)` |
+
+## 4. 3D, Games & Native OS Interop
+
+- **3D Scene**: `SceneView($this->scene, orbitControls: true, onUpdate:, onPick:, overlay:)` with `MyPHP\Plugins\Scene\{Scene, Entity, Mesh, Material, PointLight, ParticleEmitter3D, Tween3D, Animator3D, Collider3D}` (`Mesh::terrain()`, `addSkyDome()`, `Material::pbr()`, `Animator3D`).
+- **2D Games**: `SpriteView($this, overlay:)` with `MyPHP\Plugins\Game\{Game, Camera, VirtualPad, SpriteSheet, SpriteAnimation, GameAudio, ScreenTransition}`.
+- **Native C / ObjC / Android Java bindings**: generate typed wrappers instead of hand-writing FFI/JNI glue:
+  - `myphp ffigen -class FooFfi -lib libfoo.dylib -out src/Native/FooFfi.php foo.h`
+  - `myphp ffigen -objc AVAudioSession -framework AVFAudio -out src/Native/AVAudioSession.php AVAudioSession.h`
+  - `myphp jnigen -out src/Native/BatteryManager.php android.os.BatteryManager`
