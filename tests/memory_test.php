@@ -12,12 +12,18 @@ use MyPHP\{Logger, MemoryWatch};
 // php.ini sizes
 same([128 << 20, 1 << 30, 512 << 10, 1000, -1, -1], array_map(MemoryWatch::bytes(...), ['128M', '1G', '512k', '1000', '-1', '']), 'memory_limit read as bytes');
 
-// a steady app: its line, no warning
+// a steady app: quiet at default DEBUG level, logged at VERBOSE, no warning
+$wasLevel = Logger::level();
+$beforeEntries = count(Logger::entries());
 $w = new MemoryWatch(128 << 20);
+$w->sample(20 << 20, 0);
+same($beforeEntries, count(Logger::entries()), 'routine memory sample is quiet at default DEBUG level');
+Logger::setLevel(Logger::VERBOSE);
 $warned = [];
 for ($i = 0; $i < 10; $i++) { $warned = [...$warned, ...$w->sample((20 << 20) + ($i % 2) * 4096, 0)]; }
+Logger::setLevel($wasLevel);
 same([], $warned, 'memory up and down a little: no warning');
-check(str_contains(Logger::line(Logger::entries()[count(Logger::entries()) - 1]), 'MB live (+'), 'the line says what is live and how it changed: ' . Logger::line(Logger::entries()[count(Logger::entries()) - 1]));
+check(str_contains(Logger::line(Logger::entries()[count(Logger::entries()) - 1]), 'MB live (+'), 'the verbose line says what is live and how it changed: ' . Logger::line(Logger::entries()[count(Logger::entries()) - 1]));
 
 // growing in each of 6 samples, by 1 MB or more: a leak; growing less, not
 $w = new MemoryWatch(-1);

@@ -4665,11 +4665,14 @@ final class Context
     public function stepper(int|float &$value, float $min, float $max, float $step = 1): Node
     {
         $t = $this->theme;
-        $touch = $this->runtime?->touch ?? false;
-        // Side-by-side [ − | + ] capsule across both mobile (94×32) and desktop (72×26).
-        [$w, $h, $rad, $divH, $half, $arm, $stroke] = $touch
-            ? [94, 32, 8, 20, 46, 6.0, 1.8]
-            : [72, 26, $t->radius, 14, 35, 4.5, 1.5];
+        // Single adaptive [ − | + ] capsule scaled from the active theme across desktop, tablet and phone.
+        $h = $t->segmentedHeight > 0 ? $t->segmentedHeight : round($t->fontSize * 2);
+        $w = round($h * 2.85);
+        $rad = $t->segmentedHeight > 0 ? 8.0 : $t->radius;
+        $divH = round($h * 0.6);
+        $half = ($w - 1.0) / 2.0;
+        $arm = round($h * 0.18, 1);
+        $stroke = $h >= 30 ? 1.8 : 1.5;
         $n = $this->row(0, 0, 0, $t->surface)->size($w, $h)->radius($rad)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER);
         $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
         $jump = $this->runtime?->jumped($n->id) ?? 0;
@@ -4679,7 +4682,7 @@ final class Context
             if ($idx === 1) { $this->box(1, $divH, $t->border)->alignSelf(Node::CENTER)->role(Role::NONE); }
             $can = $dir > 0 ? $v < $max : $v > $min;
             $a = $this->box($half, $h, 0)->grow(1)->role(Role::NONE);
-            $a->color = $holding === $dir ? $t->surfacePressed : (!$touch && $can && $this->hovered($a) ? $t->surfaceHover : null);
+            $a->color = $holding === $dir ? $t->surfacePressed : ($can && $this->hovered($a) ? $t->surfaceHover : null);
             $a->draw(static function (Painter $p, array $r) use ($dir, $can, $arm, $stroke) {
                 $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $c = $can ? $t->text : $t->textMuted;
                 $list = $p->displayList(); $alpha = $can ? 1.0 : 0.4;
@@ -4691,7 +4694,7 @@ final class Context
         if ($v != $value) {
             $value = is_int($value) ? (int)round($v) : $v;
             $n->changed = true;
-            if ($touch) { $this->runtime?->haptic('light'); }
+            $this->runtime?->haptic('light');
         }
         $n->range($min, $max, $value, $step);
         return $n;

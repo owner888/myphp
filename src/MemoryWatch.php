@@ -5,8 +5,8 @@ namespace MyPHP;
 
 /**
  * Watches what the process holds, while the app runs in development: every
- * 10 seconds it collects PHP's cycles and logs the memory left (debug, the
- * "memory" subsystem), and warns when it comes near memory_limit or grows
+ * 10 seconds it collects PHP's cycles and logs the memory left (verbose, the
+ * "memory" subsystem — quiet at the default debug level), and warns when it comes near memory_limit or grows
  * sample after sample, a leak's signature, so that a leak shows in the log
  * the minute it starts rather than as "Allowed memory size exhausted" much
  * later. A sample that collects many cycles warns too: something builds a
@@ -44,7 +44,7 @@ final class MemoryWatch
         // Whether the compiled code counts in "live": in opcache's shared memory it does not, without opcache it does (the
         // framework's few MB), so that two platforms' numbers compare only with the same answer.
         $st = function_exists('opcache_get_status') ? @opcache_get_status(false) : false;
-        Logger::debug(is_array($st) && ($st['opcache_enabled'] ?? false)
+        Logger::verbose(is_array($st) && ($st['opcache_enabled'] ?? false)
             ? 'opcache caches the compiled code: "live" is the app\'s data'
             : sprintf('no opcache: "live" counts the compiled code of the %d files loaded too', count(get_included_files())), 'memory');
         $w = new self(self::bytes((string)ini_get('memory_limit')));
@@ -71,7 +71,7 @@ final class MemoryWatch
         }
         $this->peak = max($this->peak, $live);
         $mb = static fn(int $b): string => number_format($b / 1048576, 1, '.', '');
-        Logger::debug(sprintf('%s MB live%s, peak %s MB%s; %d cycles collected', $mb($live),
+        Logger::verbose(sprintf('%s MB live%s, peak %s MB%s; %d cycles collected', $mb($live),
             $before === null ? '' : sprintf(' (%+.1f MB in %d s)', ($live - $before) / 1048576, self::EVERY), $mb($this->peak),
             $this->limit > 0 ? ' of ' . $mb($this->limit) . ' MB (memory_limit)' : '', $freed), 'memory');
         $warnings = [];
