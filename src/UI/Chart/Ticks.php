@@ -15,7 +15,10 @@ final class Ticks
     /** @return array{0: float, 1: float, 2: float} the first and last tick's index and the step */
     public static function spec(float $lo, float $hi, float $count): array
     {
-        $step = ($hi - $lo) / max(0.0, $count);
+        if (!($count > 0) || $hi <= $lo || is_nan($lo) || is_nan($hi) || is_infinite($lo) || is_infinite($hi)) {
+            return [0.0, -1.0, 0.0];
+        }
+        $step = ($hi - $lo) / $count;
         $power = floor(log10($step));
         $e = $step / 10 ** $power;
         $factor = $e >= sqrt(50) ? 10 : ($e >= sqrt(10) ? 5 : ($e >= sqrt(2) ? 2 : 1));

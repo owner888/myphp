@@ -41,11 +41,16 @@ final class LabeledContent extends View
         $row = $stacked
             ? $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 4))->alignItems(Node::START)
             : $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignItems(Node::CENTER);
-          new Text($title)->render($c, $env->along($stacked ? Node::COLUMN : Node::ROW)->with(['formRow' => false]));
+          $lbl = (new Text($title))->render($c, $env->along($stacked ? Node::COLUMN : Node::ROW)->with(['formRow' => false]));
           if (!$wide && $env->formRow && !$stacked) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); }
           $n = $control();
           if ($wide) { $n->grow = max($n->grow, 1); }
         $c->end();
+        $row->focusTo = $n->focusTo ?? $n;
+        if ($lbl !== null && $c->clicked($lbl) && ($rt = $c->runtime) !== null) {
+            $to = $row->focusTo;
+            if ($to->kind === Node::INPUT || $to->kind === Node::TEXTAREA || $to->focusable) { $rt->focusOn($to->id); }
+        }
         if ($env->formRow || $wide) { View::takeRoom($row, $env->axis, View::FLEX_X); }
         return $row;
     }

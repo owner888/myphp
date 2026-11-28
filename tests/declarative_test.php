@@ -1255,3 +1255,18 @@ $scTouch = new Headless(fn(Context $c) => Content::render(fn() => TabView(select
 $scTouch->rt->touch = true;
 $scTouch->frame(2);
 same(false, $scTouch->rt->windowAsks['splitChrome'] ?? false, 'touch tablet NavigationSplitView does not request desktop splitChrome');
+
+// Desktop Form rows automatically show leading labels for TextField (clicking label focuses input) and segmented Picker.
+$formAuto = new class { public string $name = 'hdrnet'; public string $preset = 'balanced'; };
+$hf = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(
+    TextField('Model Name', text: $formAuto->name),
+    Picker('Preset', selection: $formAuto->preset)(
+        Text('Fast')->tag('fast'),
+        Text('Balanced')->tag('balanced'),
+    )->pickerStyle(\PickerStyle::segmented),
+)), $c), 600, 300);
+$hf->frame(2);
+check($hf->byText('Model Name') !== null, 'desktop Form TextField renders leading title label');
+check($hf->byText('Preset') !== null, 'desktop Form segmented Picker renders leading title label');
+$hf->clickText('Model Name'); $hf->type('_v2'); $hf->frame();
+same('hdrnet_v2', $formAuto->name, 'clicking leading label of desktop Form TextField focuses its input');

@@ -82,55 +82,65 @@ final class TextField extends View
 
     protected function build(Context $c, Env $env): ?Node
     {
-        $rt = $c->runtime;
-        $box = $this->search || $this->suggestions !== null ? $c->row(0, 0)->alignItems(Node::CENTER) : null; // a search field's or suggesting one's: its own state is the input's, the text's kept by the box around it
-        $id = $box?->id ?? $c->upcomingId($this->editor || $this->vertical ? Node::TEXTAREA : Node::INPUT);
-        $initialText = $this->text;
-        $kept = $rt === null ? new FieldKept($initialText)
-            : $rt->local($id, static fn() => new FieldKept($initialText), FieldKept::class); // keyed by the node it builds, which keeps it
-        $state = $kept->state;
-        $state->traits = $this->keyboard === null && $this->contentType === null && $this->submitLabel === null && $this->autocapitalization === null && !$this->autocorrectionDisabled
-            ? null : new TextInputTraits($this->keyboard, $this->contentType, $this->submitLabel, $this->autocapitalization, $this->autocorrectionDisabled); // each frame: a field in another's place has its own
-        if ($this->text !== $kept->app) { // the app changed it since: shown, the caret at its end
-            $state->text = $this->text;
-            $state->setCursor(strlen($this->text));
-        } elseif ($state->text !== $this->text) { // typed in: the app's
-            $this->text = $state->text;
-            $this->binding?->set($this->text);
-        }
-        $keys = $this->keys;
-        $state->onTextKey = $keys === [] ? null : static function (int $code, string $chars, int $mods) use ($keys): bool {
-            foreach ($keys as [$key, $action]) {
-                if ((is_string($key) ? $key === mb_strtolower($chars) : $key === $code) && $action(\KeyPress::of($mods)) === \KeyPressResult::handled) { return true; }
-            }
-            return false;
-        };
-        $placeholder = Localized::string($this->prompt ?? $this->title, $env);
         $touch = $c->runtime?->touch ?? false;
-        $plain = $env->textFieldStyle === \TextFieldStyle::plain || (($env->textFieldStyle ?? \TextFieldStyle::automatic) === \TextFieldStyle::automatic && $env->formRow && $touch); // in a phone's form, as SwiftUI's on iOS: no box, the row is the field
-        $n = match (true) {
-            $this->editor => $c->textarea($state, '', 0, 0),
-            $this->search => $c->searchField($state, 0),
-            $this->suggestions !== null => $c->autocomplete($state, $this->suggestions, $placeholder, 0),
-            $this->vertical => $c->textarea($state, $placeholder, 0, 0, null, $env->linesReserved ? ($env->lineLimit ?? 1) : 1, $env->lineLimit ?? 8), // growing with its lines to lineLimit's
-            $plain => $c->textInputBase($state),
-            default => $c->input($state, $placeholder, 0),
+        $labeled = $env->formRow && !$touch && !$env->labelsHidden && $this->title !== '' && !$this->editor && !$this->search && !$this->vertical;
+        $makeField = function () use ($c, $env, $touch, $labeled): Node {
+            $rt = $c->runtime;
+            $box = $this->search || $this->suggestions !== null ? $c->row(0, 0)->alignItems(Node::CENTER) : null; // a search field's or suggesting one's: its own state is the input's, the text's kept by the box around it
+            $id = $box?->id ?? $c->upcomingId($this->editor || $this->vertical ? Node::TEXTAREA : Node::INPUT);
+            $initialText = $this->text;
+            $kept = $rt === null ? new FieldKept($initialText)
+                : $rt->local($id, static fn() => new FieldKept($initialText), FieldKept::class); // keyed by the node it builds, which keeps it
+            $state = $kept->state;
+            $state->traits = $this->keyboard === null && $this->contentType === null && $this->submitLabel === null && $this->autocapitalization === null && !$this->autocorrectionDisabled
+                ? null : new TextInputTraits($this->keyboard, $this->contentType, $this->submitLabel, $this->autocapitalization, $this->autocorrectionDisabled); // each frame: a field in another's place has its own
+            if ($this->text !== $kept->app) { // the app changed it since: shown, the caret at its end
+                $state->text = $this->text;
+                $state->setCursor(strlen($this->text));
+            } elseif ($state->text !== $this->text) { // typed in: the app's
+                $this->text = $state->text;
+                $this->binding?->set($this->text);
+            }
+            $keys = $this->keys;
+            $state->onTextKey = $keys === [] ? null : static function (int $code, string $chars, int $mods) use ($keys): bool {
+                foreach ($keys as [$key, $action]) {
+                    if ((is_string($key) ? $key === mb_strtolower($chars) : $key === $code) && $action(\KeyPress::of($mods)) === \KeyPressResult::handled) { return true; }
+                }
+                return false;
+            };
+            $placeholder = $labeled
+                ? ($this->prompt !== null ? Localized::string($this->prompt, $env) : '')
+                : Localized::string($this->prompt ?? $this->title, $env);
+            $plain = $env->textFieldStyle === \TextFieldStyle::plain || (($env->textFieldStyle ?? \TextFieldStyle::automatic) === \TextFieldStyle::automatic && $env->formRow && $touch); // in a phone's form, as SwiftUI's on iOS: no box, the row is the field
+            $n = match (true) {
+                $this->editor => $c->textarea($state, '', 0, 0),
+                $this->search => $c->searchField($state, 0),
+                $this->suggestions !== null => $c->autocomplete($state, $this->suggestions, $placeholder, 0),
+                $this->vertical => $c->textarea($state, $placeholder, 0, 0, null, $env->linesReserved ? ($env->lineLimit ?? 1) : 1, $env->lineLimit ?? 8), // growing with its lines to lineLimit's
+                $plain => $c->textInputBase($state),
+                default => $c->input($state, $placeholder, $labeled ? 240 : 0),
+            };
+            if ($plain && !$this->editor && !$this->vertical) { $n->text = $placeholder; } // its prompt, as an input()'s
+            if (!$labeled) {
+                View::takeRoom($n, $env->axis, $this->editor ? View::FLEX_X | View::FLEX_Y : View::FLEX_X); // as SwiftUI's: a field takes the width it is given, a TextEditor the room
+            } else {
+                $n->shrink(1);
+            }
+            if ($this->secure) { $n->password(); }
+            $n->label(Localized::string($this->title, $env));
+            $env->font?->apply($n);
+            if ($env->disabled) { $n->disabled(); }
+            if ($c->changed($n)) { $this->text = $state->text; $this->binding?->set($this->text); }
+            $kept->app = $this->text;
+            if ($this->submit !== null && $c->submitted($n)) { ($this->submit)(); }
+            if ($box !== null) {
+                $n->grow = max($n->grow, 1);
+                $c->end();
+                if (!$labeled) { View::takeRoom($box, $env->axis, View::FLEX_X); } else { $box->size(240, 0)->shrink(1); }
+                return $box;
+            }
+            return $n;
         };
-        if ($plain && !$this->editor && !$this->vertical) { $n->text = $placeholder; } // its prompt, as an input()'s
-        View::takeRoom($n, $env->axis, $this->editor ? View::FLEX_X | View::FLEX_Y : View::FLEX_X); // as SwiftUI's: a field takes the width it is given, a TextEditor the room
-        if ($this->secure) { $n->password(); }
-        $n->label(Localized::string($this->title, $env));
-        $env->font?->apply($n);
-        if ($env->disabled) { $n->disabled(); }
-        if ($c->changed($n)) { $this->text = $state->text; $this->binding?->set($this->text); }
-        $kept->app = $this->text;
-        if ($this->submit !== null && $c->submitted($n)) { ($this->submit)(); }
-        if ($box !== null) {
-            $n->grow = max($n->grow, 1);
-            $c->end();
-            View::takeRoom($box, $env->axis, View::FLEX_X);
-            return $box;
-        }
-        return $n;
+        return $labeled ? LabeledContent::control($c, $env, $this->title, $makeField) : $makeField();
     }
 }

@@ -85,7 +85,7 @@ final class Picker extends View
         [$labels, $values] = $this->choices($env);
         $style = $env->pickerStyle ?? \PickerStyle::automatic;
         $was = $this->selection;
-        $n = LabeledContent::control($c, $env, $style === \PickerStyle::segmented && !$env->inList ? '' : $this->title, function () use ($c, $env, $style, $labels, $values): Node {
+        $n = LabeledContent::control($c, $env, $style === \PickerStyle::segmented && !$env->formRow ? '' : $this->title, function () use ($c, $env, $style, $labels, $values): Node {
             if ($style === \PickerStyle::radioGroup || $style === \PickerStyle::inline) {
                 $n = $c->radioGroup(function () use ($c, $labels, $values): void {
                     foreach ($labels as $i => $label) { $c->radio($label, $this->selection, $values[$i]); }
@@ -95,7 +95,7 @@ final class Picker extends View
                 $index = $found === false ? -1 : $found;
                 $n = $style === \PickerStyle::segmented ? $c->segmented($labels, $index) : $c->select($labels, $index);
                 if ($style !== \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { self::plain($n, $env); } // a phone's form: the choice in the muted text and its arrows, as UIKit's menu button in a cell
-                if ($style === \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false)) { $n->grow = 1; $n->shrink(1)->minWidth(0); foreach ($n->kids as $k) { $k->basis(0)->grow = 1; } } // across its row, its segments sharing it, as UIKit's in a cell
+                if ($style === \PickerStyle::segmented && $env->formRow && ($c->runtime?->touch ?? false) && ($env->labelsHidden || $this->title === '')) { $n->grow = 1; $n->shrink(1)->minWidth(0); foreach ($n->kids as $k) { $k->basis(0)->grow = 1; } } // across its row, its segments sharing it, as UIKit's in a cell
                 if ($index >= 0 && $index !== $found) { $this->selection = $values[$index]; }
             }
             $n->label(Localized::string($this->title, $env));

@@ -181,7 +181,7 @@ final class Chart extends View
             $xTicks = $time->ticks($this->xAxis?->desiredCount ?? 4);
         } else {
             [$lo, $hi] = $this->xDomain ?? ($xs === [] ? [0.0, 1.0] : Plot::extent(...array_map('floatval', $xs)));
-            $lin = $this->xDomain !== null ? new Linear($lo, $hi) : new Linear($lo, $hi)->nice($this->xAxis?->desiredCount ?? 5);
+            $lin = $this->xDomain !== null ? new Linear($lo, $hi) : new Linear($lo, $hi == $lo ? $lo + 1 : $hi)->nice($this->xAxis?->desiredCount ?? 5);
             if ($this->xAxis?->format !== null) { $lin->format = $this->xAxis->format; }
             $xAt = fn(mixed $v): float => $lin->at((float)$v);
             $xTicks = $lin->ticks($this->xAxis?->desiredCount ?? 5);
@@ -280,8 +280,14 @@ final class Chart extends View
                         });
                         continue;
                     }
-                    if ($path[0] === 'area') { $p->fillPath(Plot::area($r, $path[1], $path[2], $path[3], $path[6]), $path[4], $path[5]); }
-                    else { $p->strokePath(Plot::line($r, $path[1], $path[2], $path[6]), $path[7], $path[4], $path[5]); }
+                    if ($path[0] === 'area') {
+                        if (count($path[1]) >= 2) { $p->fillPath(Plot::area($r, $path[1], $path[2], $path[3], $path[6]), $path[4], $path[5]); }
+                    } elseif (count($path[1]) === 1) {
+                        $rad = max(2.5, $path[7] * 1.5);
+                        $p->fill([Plot::x($r, $path[1][0]) - $rad, Plot::y($r, $path[2][0]) - $rad, $rad * 2, $rad * 2], $path[4], $rad, $path[5]);
+                    } else {
+                        $p->strokePath(Plot::line($r, $path[1], $path[2], $path[6]), $path[7], $path[4], $path[5]);
+                    }
                 }
             });
             // The bars, points and rules, and the marks' annotations.

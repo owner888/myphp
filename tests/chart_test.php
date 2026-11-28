@@ -269,3 +269,15 @@ check(!isset($kinds($pts, 0.4)[9]) && $kinds($pts, 0.4) !== [], 'strokePolyline:
 foreach ([[], [[20.0, 20.0]], [[NAN, 0.0]], [[10.0, 10.0], [INF, 20.0], [30.0, 30.0]]] as $i => $p) {
     same([], $kinds($p, 1.0), "strokePolyline: nothing for lone points ($i)");
 }
+
+// Single-point / zero-width linear domains never divide by zero in Ticks::spec, Linear::nice, Linear::ticks or Chart.
+same([0.0, -1.0, 0.0], Ticks::spec(5.0, 5.0, 5.0), 'Ticks::spec guards lo == hi');
+$flat = (new Linear(5.0, 5.0))->nice(5);
+same([5.0, 5.0], [$flat->lo, $flat->hi], 'Linear(5, 5)->nice(5) returns unchanged domain');
+same(1, count((new Linear(5.0, 5.0))->ticks(5)), 'Linear(5, 5)->ticks(5) returns single tick');
+$singleChart = new Headless(fn(Context $c) => \MyPHP\UI\Content::render(fn() => \Chart()(
+    \AreaMark(x: \PlottableValue::value('Epoch', 5), y: \PlottableValue::value('PSNR', 29.5), stacking: \MarkStackingMethod::unstacked),
+    \LineMark(x: \PlottableValue::value('Epoch', 5), y: \PlottableValue::value('PSNR', 29.5)),
+)->frame(height: 120), $c), 300, 160);
+$singleChart->frame(2);
+check($singleChart->paint()->n > 0, 'single-point Chart renders cleanly without manual domain');
