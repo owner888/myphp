@@ -144,10 +144,8 @@ final class NavigationSplitView extends View
         if ($showToggle) { // the sidebar's button, next to the window controls on macOS or in the iPadOS navigation bar
             $label = Localized::string($visible ? 'Hide Sidebar' : 'Show Sidebar', $env);
             $c->key('sidebar toggle');
-            $curLeft = $closed + ($open - $closed) * $shown;
-            $btnTop = $topOffset + ($barH - $button) / 2;
             $toggle = $c->open(new Node(Node::CONTAINER, Node::ROW))->center()->focusable()->shrink(0)->role(Role::BUTTON)->absolute()
-                ->left($curLeft)->top($btnTop)->size($button, $button)->radius($touch ? $button / 2 : 6)
+                ->left($closed + ($open - $closed) * $shown)->top($topOffset + ($barH - $button) / 2)->size($button, $button)->radius($touch ? $button / 2 : 6)
                 ->label($label)->tooltip($label)->center();
             $toggle->floats = true;
             $hovered = $c->hovered($toggle);
@@ -157,20 +155,7 @@ final class NavigationSplitView extends View
             }
               $c->image(Image::symbol('sidebar.left', $iconSz, $touch ? $t->accent : ($hovered ? $t->text : $t->textMuted)), $iconSz, $iconSz);
             $c->end();
-            // Accept standard click, or catch clicks landed across the moving button bounds during 0.25s slide animation
-            $tClicked = $c->clicked($toggle);
-            if (!$tClicked && ($c->runtime?->input->mouseInside ?? false) && !($c->runtime?->input->mouseDown ?? true)) {
-                $upX = $c->runtime?->input->mouseX ?? -1.0;
-                $upY = $c->runtime?->input->mouseY ?? -1.0;
-                if ($upY >= $btnTop - 4.0 && $upY <= $btnTop + $button + 4.0) {
-                    $minX = min($closed, $curLeft, $open) - 4.0;
-                    $maxX = max($closed, $curLeft, $open) + $button + 4.0;
-                    if ($upX >= $minX && $upX <= $maxX && $c->runtime?->pressTarget($upX, $upY) === $toggle->id) {
-                        $tClicked = true;
-                    }
-                }
-            }
-            if ($tClicked) { $this->visibility = $visible ? \NavigationSplitViewVisibility::detailOnly : \NavigationSplitViewVisibility::all; $c->runtime?->changed(); }
+            if ($c->clicked($toggle)) { $this->visibility = $visible ? \NavigationSplitViewVisibility::detailOnly : \NavigationSplitViewVisibility::all; $c->runtime?->changed(); }
         }
         View::takeRoom($n, $env->axis, View::FLEX_X | View::FLEX_Y);
         return $n;

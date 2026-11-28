@@ -83,6 +83,9 @@ $winLinH = new Headless(function (Context $c) use ($winLinApp): void {
 }, 1180, 780);
 $winLinH->frame(2);
 check($winLinH->byLabel('Hide Sidebar') !== null && $winLinH->byText('Backtest Lab') !== null && $winLinH->byLabel('Sync') !== null, 'Windows/Linux desktop renders macOS-HIG sidebar toggle, navigationTitle, and toolbar');
+[$toggleX, $toggleY] = $winLinH->middle($winLinH->byLabel('Hide Sidebar'));
+$winLinH->hover($toggleX, $toggleY); $winLinH->frame(3);
+check($winLinH->byLabel('Hide Sidebar') !== null, 'hovering over the sidebar toggle does not collapse it');
 $winLinH->clickLabel('Hide Sidebar');
 $winLinH->frame(6); usleep(300_000); $winLinH->frame(3);
 check($winLinH->byLabel('Show Sidebar') !== null && $winLinH->rect($winLinH->byText('Body'))[0] < 50.0, 'Windows/Linux Hide Sidebar collapses sidebar and glides Show Sidebar to toolbar leading');
