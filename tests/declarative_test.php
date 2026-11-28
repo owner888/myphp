@@ -1279,3 +1279,12 @@ $hfNested = new Headless(fn(Context $c) => Content::render(fn() => Form()(Sectio
 $hfNested->frame(2);
 $textNodes = []; $walkText = function (Node $n) use (&$walkText, &$textNodes): void { if ($n->kind === Node::TEXT && $n->text === 'hdrnet_bilateral') { $textNodes[] = $n; } foreach ($n->kids as $k) { $walkText($k); } }; $walkText($hfNested->root); $walkText = null;
 same(0, count($textNodes), 'HStack-wrapped TextField in Form does not emit a duplicate leading Text label');
+
+// A Picker with an unmatched selection (empty label) keeps the exact same height as one with a selected option.
+$pickUnmatched = 'missing'; $pickMatched = 'a';
+$hPick = new Headless(fn(Context $c) => Content::render(fn() => VStack(spacing: 8)(
+    Picker('Unmatched', selection: $pickUnmatched)(Text('Alpha')->tag('a'), Text('Beta')->tag('b')),
+    Picker('Matched', selection: $pickMatched)(Text('Alpha')->tag('a'), Text('Beta')->tag('b')),
+), $c), 400, 200);
+$hPick->frame(2);
+same($hPick->rect($hPick->byLabel('Matched'))[3], $hPick->rect($hPick->byLabel('Unmatched'))[3], 'Picker keeps identical height when selection matches no option');

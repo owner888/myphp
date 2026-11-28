@@ -1728,13 +1728,17 @@ final class Context
         $rt = $this->runtime;
         $decimals = ($s = rtrim(rtrim(sprintf('%.10F', $step), '0'), '.')) !== '' && str_contains($s, '.') ? strlen($s) - strpos($s, '.') - 1 : 0;
         $format = fn(float $v) => number_format($v, $decimals, '.', '');
-        $n = $this->row(0, $t->space(1))->shrink(0)->alignItems(Node::CENTER);
+        // Unified [ − | 45 | + ] numeric stepper-field capsule sharing one outer border.
+        $n = $this->row(0, 0, 0, $t->surface)->radius($t->radius)->border()->clip()->shrink(0)->alignSelf(Node::START)->alignItems(Node::CENTER);
         $text = $rt?->local($n->id, fn() => new TextState($format($value))) ?? new TextState($format($value));
         $set = function (float $v) use (&$value, $lo, $hi, $decimals, $n) {
             $v = round(max($lo, min($hi, $v)), $decimals);
             if ($v != $value) { $value = is_int($value) ? (int)$v : $v; $n->changed = true; }
         };
-          $in = $this->input($text, '', $t->space(20));
+          $decBtn = $this->stepButton('−', 'Decrease')->disabled($value <= $lo);
+          $this->box(1, 0, $t->border)->alignSelf(Node::STRETCH)->role(Role::NONE);
+          $in = $this->input($text, '', $t->space(15));
+          $in->bordered = false; $in->color = null; $in->h = max($in->h - 2, 0); $in->textAlign(Node::CENTER);
           if ($rt !== null && $rt->focus === $in->id) {
               if (is_numeric(trim($text->text)) && (float)$text->text >= $lo && (float)$text->text <= $hi) { $set((float)$text->text); }
               if ($this->shortcut(Key::UP)) { $set($value + $step); $text->text = $format($value); $text->setCursor(strlen($text->text)); }
@@ -1743,12 +1747,12 @@ final class Context
               $text->text = $format($value); $text->setCursor(strlen($text->text)); // what the app set, or what was typed, shown in full
           }
           $in->range($lo, $hi, (float)$value, $step);
-          $buttons = [];
-          foreach ([['−', -1, 'Decrease'], ['+', 1, 'Increase']] as [$label, $sign, $name]) {
-              $buttons[$sign] = $this->stepButton($label, $name)->disabled($sign < 0 ? $value <= $lo : $value >= $hi);
-          }
+          $this->box(1, 0, $t->border)->alignSelf(Node::STRETCH)->role(Role::NONE);
+          $incBtn = $this->stepButton('+', 'Increase')->disabled($value >= $hi);
         $this->end();
-        foreach ($buttons as $sign => $b) {
+        $n->focusTo = $in;
+        if ($in->focused) { $n->borderColor = $t->accent; }
+        foreach ([-1 => $decBtn, 1 => $incBtn] as $sign => $b) {
             if ($this->clicked($b)) { $set($value + $sign * $step); $text->text = $format($value); $text->setCursor(strlen($text->text)); }
         }
         return $n;
@@ -1775,7 +1779,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->row(0, $t->space(1))->shrink(0)->alignItems(Node::CENTER);
+        $n = $this->row(0, 0, 0, $t->surface)->radius($t->radius)->border()->clip()->shrink(0)->alignSelf(Node::START)->alignItems(Node::CENTER);
         $d = $rt?->local($n->id, fn() => new DecimalInput) ?? new DecimalInput;
         if ($d->limits($lo, $hi, $step) || $value !== $d->shown) {
             $d->show($value); // a value the app set replaces what was typed
@@ -1792,7 +1796,10 @@ final class Context
         };
         // Steps the value, from 0 for none, and shows it in full.
         $stepBy = fn(int $sign) => $set(DecimalInput::add($d->v ?? '0', $sign > 0 ? $d->unit : DecimalInput::neg($d->unit)));
-          $in = $this->input($d->text, '', $t->space(20));
+          $decBtn = $this->stepButton('−', 'Decrease')->disabled($d->v !== null && $d->min !== null && DecimalInput::cmp($d->v, $d->min) <= 0);
+          $this->box(1, 0, $t->border)->alignSelf(Node::STRETCH)->role(Role::NONE);
+          $in = $this->input($d->text, '', $t->space(18));
+          $in->bordered = false; $in->color = null; $in->h = max($in->h - 2, 0); $in->textAlign(Node::CENTER);
           if ($this->changed($in)) {
               [$v, $f] = DecimalInput::parseDecimal($d->text->text, $d->scale);
               if ($f === DecimalInput::FINE) { $f = $d->inRange($v); }
@@ -1815,23 +1822,27 @@ final class Context
           }
           if ($d->fault !== DecimalInput::FINE) { $this->fieldError($in, $d->message($this->texts())); }
           $in->range($d->minF, $d->maxF, $d->now, $d->unitF); // assistive technology reads the value as the text of the field, exactly; the range in floating point
-          $buttons = [];
-          foreach ([['−', -1, 'Decrease'], ['+', 1, 'Increase']] as [$label, $sign, $name]) {
-              $b = $this->stepButton($label, $name);
-              $b->disabled($d->v !== null && ($sign < 0 ? $d->min !== null && DecimalInput::cmp($d->v, $d->min) <= 0 : $d->max !== null && DecimalInput::cmp($d->v, $d->max) >= 0));
-              $buttons[$sign] = $b;
-          }
+          $this->box(1, 0, $t->border)->alignSelf(Node::STRETCH)->role(Role::NONE);
+          $incBtn = $this->stepButton('+', 'Increase')->disabled($d->v !== null && $d->max !== null && DecimalInput::cmp($d->v, $d->max) >= 0);
         $this->end();
-        foreach ($buttons as $sign => $b) {
+        $n->focusTo = $in;
+        if ($d->fault !== DecimalInput::FINE) { $n->borderColor = $t->danger; }
+        elseif ($focused) { $n->borderColor = $t->accent; }
+        foreach ([-1 => $decBtn, 1 => $incBtn] as $sign => $b) {
             if ($this->clicked($b)) { $stepBy($sign); }
         }
         return $n;
     }
 
-    /** The − or + of a numberInput or decimalInput, named $name for assistive technology, padded Space(1) by Space(2) as mygo's. */
+    /** Integrated − or + segment button inside a numberInput or decimalInput capsule. */
     private function stepButton(string $label, string $name): Node
     {
-        return $this->button($label)->padding($this->theme->space(1), $this->theme->space(2))->label($name);
+        $t = $this->theme;
+        $b = $this->buttonBase()->padding(0, $t->space(2.25))->alignSelf(Node::STRETCH)->label($name);
+        if ($this->hovered($b)) { $b->color = ($this->runtime?->input->mouseDown ?? false) ? $t->surfacePressed : $t->surfaceHover; }
+          $this->text($label, $t->fontSize, $t->text)->noWrap();
+        $this->end();
+        return $b;
     }
 
     /**
@@ -3899,6 +3910,7 @@ final class Context
     private static function fieldControl(Node $e): ?Node
     {
         foreach ($e->kids as $k) {
+            if ($k->focusTo !== null) { return $k->focusTo; }
             if ($k->focusGroup !== 0) { return $k; }
             if ($k->focusable || $k->kind === Node::BUTTON || $k->kind === Node::INPUT || $k->kind === Node::TEXTAREA || $k->kind === Node::SLIDER) { return $k; }
             if (($c = self::fieldControl($k)) !== null) { return $c; }
@@ -3909,6 +3921,7 @@ final class Context
     /** What a click on the label of a field focuses: its control, or in a group of them, the one on, else the first. */
     private static function focusIn(Node $e): ?Node
     {
+        if ($e->focusTo !== null) { return $e->focusTo; }
         if ($e->focusable || $e->kind === Node::BUTTON || $e->kind === Node::INPUT || $e->kind === Node::TEXTAREA || $e->kind === Node::SLIDER) { return $e; }
         $first = null;
         $stack = [$e];
@@ -4854,7 +4867,8 @@ final class Context
         $t = $this->theme;
         $sel = $this->selectBase($index);
         $b = $sel->trigger;
-        $b->padding($t->space(1.5), $t->space(3.5))->radius($t->radius)->border()->justify(Node::SPACE_BETWEEN)->minWidth($t->space(35))->minHeight($t->controlHeight)->background($t->surface); // mygo's styleButton, at least Space(35) wide whatever width it is given, as mygo's MinWidth; a phone's 44 high
+        [, $lh] = $this->metrics->measure('X', $t->fontSize);
+        $b->padding($t->space(1.5), $t->space(3.5))->radius($t->radius)->border()->justify(Node::SPACE_BETWEEN)->minWidth($t->space(35))->minHeight(max($lh + $t->space(3) + 2, $t->controlHeight))->background($t->surface); // keep consistent control height even when no option matches ($label === '')
         if ($width !== null) { $b->width($width); }
         if ($this->hovered($b)) { $b->color = $this->runtime->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
         $b->gap = $t->space(1.5);

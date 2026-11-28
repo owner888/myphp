@@ -270,8 +270,8 @@ $h = new Headless(function (Context $c) use (&$v): void {
 }, 300, 100);
 $h->input->push(['accessOn']);
 $h->frame();
-[$rx, $ry, , $rh] = $h->rect($h->byLabel('Price'));
-$h->click($rx + 20, $ry + $rh / 2);
+[$rx, $ry, $rw, $rh] = $h->rect($h->byLabel('Price'));
+$h->click($rx + $rw / 2, $ry + $rh / 2);
 $h->input->focus->selectAll();
 $h->type('1.001');
 $n = decimalNode($h, Role::TEXT_FIELD, '');

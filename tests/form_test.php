@@ -111,8 +111,8 @@ $h = new Headless(function (Context $c) use (&$focus, $note): void {
 }, 500, 300);
 $h->frame(1);
 $form = $h->root->kids[0];
-$fl = $h->rect($h->byText('Focus')); $fi = $h->rect($form->kids[0]->kids[1]->kids[0]->kids[0]); // the field's content, the number input's row, its text field
-same($fi[1] + 7, $fl[1], 'the first frame: the label on the number input\'s line');
+$fl = $h->rect($h->byText('Focus')); $fi = $h->rect($form->kids[0]->kids[1]->kids[0]->focusTo); // the field's content, the number input's row, its centered text field
+check(abs($fl[1] - ($fi[1] + ($fi[3] - $fl[3]) / 2)) < 1.5, 'the first frame: the label on the number input\'s line: ' . json_encode([$fl, $fi]));
 $nl = $h->rect($h->byText('Notes')); $ni = $h->rect($form->kids[1]->kids[1]->kids[0]);
 same($ni[1] + 7, $nl[1], 'on the first line of a text area');
 // byLabel() goes in the order of the tree, as mygo's Tester.Find: the label first, then the control it names; under the field's content, the control.
