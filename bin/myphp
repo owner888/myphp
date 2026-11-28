@@ -4018,8 +4018,6 @@ function globalSkillTargets(): array
     return [
         ['path' => "$home/.agents/skills/myphp-app", 'always' => true, 'parent' => "$home/.agents"],
         ['path' => "$home/.claude/skills/myphp-app", 'always' => false, 'parent' => "$home/.claude"],
-        ['path' => "$home/.pig/agent/skills/myphp-app", 'always' => false, 'parent' => "$home/.pig/agent"],
-        ['path' => "$home/.codex/skills/myphp-app", 'always' => false, 'parent' => "$home/.codex"],
     ];
 }
 
@@ -4086,7 +4084,7 @@ function hintGlobalSkills(): void
 /** Links/installs the bundled myphp-app skill into global user agent directories. */
 function installSkills(array $args): void
 {
-    help($args, "install-skills\n\nLinks the bundled myphp-app AI agent skill into your global user agent directories\n(~/.agents/skills, and detected ~/.claude/skills, ~/.pig/agent/skills, ~/.codex/skills)\nso `myphp upgrade` keeps every project up to date automatically.");
+    help($args, "install-skills\n\nLinks the bundled myphp-app AI agent skill globally into ~/.agents/skills\n(shared by pi, pig, Codex, Cursor, etc.) and ~/.claude/skills when ~/.claude exists,\nso `myphp upgrade` keeps every project up to date automatically.");
     $args === [] || fail('install-skills takes no arguments (skills are installed globally)');
     $paths = installGlobalSkills(onlyExisting: false);
     $paths !== [] || fail('cannot resolve home directory for global skills');

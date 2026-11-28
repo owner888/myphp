@@ -13,8 +13,8 @@ and package a 5-platform desktop & mobile app autonomously in minutes.
 
 Install the official `myphp-app` skill globally once — on macOS and Linux it
 symlinks directly to your MyPHP installation so `myphp upgrade` keeps every
-agent (`~/.agents/skills`, `~/.claude/skills`, `~/.pig/agent/skills`,
-`~/.codex/skills`) up to date automatically without cluttering app repos:
+agent (`~/.agents/skills` for pi/pig/Codex/Cursor, and `~/.claude/skills` for
+Claude Code) up to date automatically without cluttering app repos:
 
 ```sh
 # 1. Link the bundled skill globally (once per machine)

@@ -73,9 +73,9 @@ simulator without rebuilding or reinstalling the app.
 myphp install-skills
 ```
 
-Links the bundled `myphp-app` agent skill (`bin/skills/myphp-app`) into your
-global user agent directories (`~/.agents/skills`, plus detected `~/.claude/skills`,
-`~/.pig/agent/skills`, and `~/.codex/skills`) on macOS/Linux, and copies on
+Links the bundled `myphp-app` agent skill (`bin/skills/myphp-app`) globally into
+`~/.agents/skills` (shared by pi, pig, Codex, Cursor, etc.) and `~/.claude/skills`
+when `~/.claude` exists on macOS/Linux, and copies on
 Windows (automatically refreshed by `myphp upgrade`).
 
 ## myphp dev

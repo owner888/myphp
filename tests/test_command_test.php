@@ -100,14 +100,14 @@ try {
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
     same([0, false, false], [proc_close($p), is_dir("$created/build"), is_dir("$created/.myphp")], "myphp clean deletes build artifacts: $out");
 
-    // install-skills with no dir links globally into $HOME/.agents/skills/myphp-app
+    // install-skills links globally into $HOME/.agents/skills/myphp-app (and $HOME/.claude/skills when ~/.claude exists)
     $fakeHome = "$dir/fake_home";
-    mkdir("$fakeHome/.pig/agent", 0755, true);
+    mkdir("$fakeHome/.claude", 0755, true);
     $p = proc_open([PHP_BINARY, $bin, 'install-skills'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, ['HOME' => $fakeHome, 'USERPROFILE' => $fakeHome] + getenv());
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
-    same([0, true, true], [proc_close($p), is_file("$fakeHome/.agents/skills/myphp-app/SKILL.md"), is_file("$fakeHome/.pig/agent/skills/myphp-app/SKILL.md")], "myphp install-skills installs globally: $out");
+    same([0, true, true], [proc_close($p), is_file("$fakeHome/.agents/skills/myphp-app/SKILL.md"), is_file("$fakeHome/.claude/skills/myphp-app/SKILL.md")], "myphp install-skills installs globally: $out");
     if (PHP_OS_FAMILY !== 'Windows') {
-        check(is_link("$fakeHome/.agents/skills/myphp-app") && is_link("$fakeHome/.pig/agent/skills/myphp-app"), 'global install uses symlinks so myphp upgrade stays in sync');
+        check(is_link("$fakeHome/.agents/skills/myphp-app") && is_link("$fakeHome/.claude/skills/myphp-app"), 'global install uses symlinks so myphp upgrade stays in sync');
     }
 } finally {
     $rm = function (string $d) use (&$rm): void {
