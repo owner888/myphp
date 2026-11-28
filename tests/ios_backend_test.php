@@ -303,7 +303,16 @@ use MyPHP\UI\{Content, TextState};
     // Secure entry and the content type changing (a password's field to another): the view becomes first responder again,
     // as the keyboard reads them only then; reloadInputViews alone left the Passwords bar on every field after it.
     check(str_contains($mainM, 'BOOL anew = (secure != 0) != g_secure_entry') && str_contains($mainM, '[g_view resignFirstResponder];') && str_contains($mainM, 'if (g_view && g_wants_keyboard && ![g_view isFirstResponder])'), 'main.m: a field after a password\'s recycles first responder across a run-loop turn, not the password\'s');
-    check(str_contains($mainM, 'g_wants_keyboard = 1;') && str_contains($mainM, 'myphp_ensure_keyboard_on_main(YES);') && str_contains($mainM, '- (BOOL)isEditable') && str_contains($mainM, '- (UIView *)textInputView') && str_contains($iosWindowSrc, '$this->keyboardVisible = false; // a tap on a field brings the keyboard up'), 'iOS keyboard implements iOS 18+ isEditable/textInputView and recycles first responder on tap and sceneDidBecomeActive');
+    check(str_contains($mainM, 'g_wants_keyboard = 1;') && str_contains($mainM, 'myphp_ensure_keyboard_on_main(YES);') && str_contains($mainM, '- (BOOL)isEditable') && str_contains($mainM, '- (UIView *)textInputView') && str_contains($iosWindowSrc, '$this->keyboardVisible = null; // resync keyboard on next frame (re-show on field tap'), 'iOS keyboard implements iOS 18+ isEditable/textInputView and recycles first responder on tap and sceneDidBecomeActive');
+    // Tri-state keyboard sync: after touchesEnded marks state null, losing focus on up (e.g. tapping a back button calling router->back()) still hides the keyboard, while keeping focus re-shows it.
+    same([1, 1, 0, -1, -1, 0], [
+        \MyPHP\Platform\iOS\Window::keyboardAction(false, true),
+        \MyPHP\Platform\iOS\Window::keyboardAction(null, true),
+        \MyPHP\Platform\iOS\Window::keyboardAction(true, true),
+        \MyPHP\Platform\iOS\Window::keyboardAction(true, false),
+        \MyPHP\Platform\iOS\Window::keyboardAction(null, false),
+        \MyPHP\Platform\iOS\Window::keyboardAction(false, false),
+    ], 'iOS tri-state keyboardAction shows on focus/unknown and hides when focus drops on tap-up');
     // r and R on a device: its bundle cannot be written, so an app myphp run made (MyPHPRun) runs a copy of its PHP in its
     // data, which myphp run changes by devicectl; its log is devicectl's --console, through phoneHot, launched again on R.
     $packageIosSh = (string)file_get_contents(__DIR__ . '/../scripts/package-ios-app.sh');

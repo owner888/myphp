@@ -39,7 +39,8 @@ final class Window implements Platform\Window
     private bool $touchMenuHeld = false;
     /** @var list<array{0: int, 1: float, 2: float}> */
     private array $touchHistory = [];
-    private bool $keyboardVisible = false;
+    /** Soft keyboard state: true shown, false hidden, null unknown after a tap (forces resync on next frame). */
+    private ?bool $keyboardVisible = false;
     /** What the keyboard was last told of the field it types into (TextInputTraits::key): told again when it changes. */
     private string $traitsKey = '';
     /** The input events taken from the launcher since the start, which it compares with those it queued (myphp_ios_set_text_document's acked). */
@@ -457,7 +458,7 @@ final class Window implements Platform\Window
                     $input->mouse($ptX, $ptY);
                     $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
                     $this->touchInField = false;
-                    $this->keyboardVisible = false; // re-ensure first responder & keyboard if dismissed externally
+                    $this->keyboardVisible = null; // resync keyboard on next frame (re-show if focused, hide if focus was lost on up)
                     if ($this->editMenuTouch !== null) { $this->editMenuTouch[3] = true; }
                     $this->requestFrame();
                     break;
@@ -489,7 +490,7 @@ final class Window implements Platform\Window
                     $input->mouseInside = false;
                     $input->mouseX = -1;
                     $input->mouseY = -1;
-                    $this->keyboardVisible = false; // a tap on a field brings the keyboard up even if it was already focused
+                    $this->keyboardVisible = null; // resync keyboard on next frame (re-show on field tap, hide if a button's up action removed focus)
                     $this->requestFrame();
                 }
                 break;
@@ -547,13 +548,26 @@ final class Window implements Platform\Window
         }
         $this->editMenuAfterTouch();
         $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
-        if ($hasInputFocus && !$this->keyboardVisible) {
+        $action = self::keyboardAction($this->keyboardVisible, $hasInputFocus);
+        if ($action > 0) {
             $this->keyboardVisible = true;
             iOS::ffi()->myphp_ios_show_keyboard();
-        } elseif (!$hasInputFocus && $this->keyboardVisible) {
+        } elseif ($action < 0) {
             $this->keyboardVisible = false;
             iOS::ffi()->myphp_ios_hide_keyboard();
         }
+    }
+
+    /** Tri-state soft keyboard sync: 1 to show, -1 to hide, 0 when already in sync. */
+    public static function keyboardAction(?bool $visible, bool $hasFocus): int
+    {
+        if ($hasFocus && $visible !== true) {
+            return 1;
+        }
+        if (!$hasFocus && $visible !== false) {
+            return -1;
+        }
+        return 0;
     }
 
     public function bounds(): Rectangle
