@@ -212,9 +212,9 @@ $find = function (Node $n, \Closure $is) use (&$find): ?Node {
 };
 $stepper = $find($h->root, fn(Node $n) => $n->role === \MyPHP\UI\Role::STEPPER);
 [$x, $y, $w, $hh] = $h->rect($stepper);
-$h->click($x + $w / 2, $y + $hh / 4); $h->frame(2);
-same(3, $ctl->qty, "a Stepper's upper arrow steps its value up");
-$h->click($x + $w / 2, $y + $hh / 4); $h->frame(2);
+$h->click($x + $w * 3 / 4, $y + $hh / 2); $h->frame(2);
+same(3, $ctl->qty, "a Stepper's + half steps its value up");
+$h->click($x + $w * 3 / 4, $y + $hh / 2); $h->frame(2);
 same(3, $ctl->qty, 'and not past the end of its range');
 $slider = $find($h->root, fn(Node $n) => $n->kind === Node::SLIDER);
 $find = null;
@@ -1270,3 +1270,12 @@ check($hf->byText('Model Name') !== null, 'desktop Form TextField renders leadin
 check($hf->byText('Preset') !== null, 'desktop Form segmented Picker renders leading title label');
 $hf->clickText('Model Name'); $hf->type('_v2'); $hf->frame();
 same('hdrnet_v2', $formAuto->name, 'clicking leading label of desktop Form TextField focuses its input');
+
+// TextField / segmented Picker nested inside an HStack in a Form row do not duplicate leading labels.
+$nestedName = 'hdrnet_bilateral';
+$hfNested = new Headless(fn(Context $c) => Content::render(fn() => Form()(Section()(
+    HStack()(Text('Model Name'), Spacer(), TextField('hdrnet_bilateral', text: $nestedName)->frame(width: 220)),
+)), $c), 600, 200);
+$hfNested->frame(2);
+$textNodes = []; $walkText = function (Node $n) use (&$walkText, &$textNodes): void { if ($n->kind === Node::TEXT && $n->text === 'hdrnet_bilateral') { $textNodes[] = $n; } foreach ($n->kids as $k) { $walkText($k); } }; $walkText($hfNested->root); $walkText = null;
+same(0, count($textNodes), 'HStack-wrapped TextField in Form does not emit a duplicate leading Text label');

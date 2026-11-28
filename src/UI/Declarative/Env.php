@@ -25,6 +25,8 @@ final class Env
     public ?\ListStyle $listStyle = null;
     /** A Form's row: a control's title at its start and the control at its end. */
     public bool $formRow = false;
+    /** Direct child of a Form row (not nested inside an HStack/VStack): single-line TextField and segmented Picker render automatic leading labels. */
+    public bool $directFormRow = false;
     public bool $radioRow = false;
     /** Controls show no title, which stays their accessibility label (labelsHidden). */
     public bool $labelsHidden = false;

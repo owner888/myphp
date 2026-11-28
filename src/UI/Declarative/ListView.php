@@ -219,7 +219,7 @@ final class ListView extends View
             $c->end();
         } else {
             $n = $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignSelf(Node::STRETCH)->minHeight($env->theme->rowHeight)->padding(11, 16)->alignItems(Node::CENTER);
-              View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true]), is_array($v) ? $v : [$v]);
+              View::renderAll($c, $env->along(Node::ROW)->with(['inList' => false, 'formRow' => true, 'directFormRow' => true]), is_array($v) ? $v : [$v]);
               if ($v instanceof View && $v->badgeValue !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); (new Text((string)$v->badgeValue, true))->foregroundStyle(\Color::secondary)->render($c, $env->along(Node::ROW)); }
             $c->end();
             foreach ($n->kids as $k) { // a switch (31 high) or segments (32) centered in a row 44 high, as UIKit's cells, not padded 11 as a line of text

@@ -75,7 +75,7 @@ $v = 5.0; $now = 0;
 $h = poseTester(function (Context $c) use (&$v): void { $c->stepper($v, 0, 10, 0.5)->label('Copies'); }, $now, 200, 200);
 $h->input->push(['accessOn']); $h->frame();
 $b = indNode($h->rt->accessTree, Role::STEPPER, 'Copies')->bounds;
-[$ux, $uy] = [$b[0] + $b[2] / 2, $b[1] + $b[3] / 4]; [$dx, $dy] = [$b[0] + $b[2] / 2, $b[1] + $b[3] * 3 / 4];
+[$ux, $uy] = [$b[0] + $b[2] * 3 / 4, $b[1] + $b[3] / 2]; [$dx, $dy] = [$b[0] + $b[2] / 4, $b[1] + $b[3] / 2];
 $h->click($ux, $uy);
 same(5.5, $v, 'a click on the up arrow');
 $h->click($dx, $dy);

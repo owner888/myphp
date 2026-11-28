@@ -3424,7 +3424,7 @@ final class Runtime
         if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
             return 0;
         }
-        if ($this->touch && $r[2] > $r[3] * 1.5) { // UIStepper horizontal [ − | + ] on a phone
+        if ($r[2] > $r[3] * 1.5) { // Horizontal [ − | + ] stepper
             $right = $x >= $r[0] + $r[2] / 2;
             return ($this->steppers[$id] ?? false) ? ($right ? -1 : 1) : ($right ? 1 : -1);
         }

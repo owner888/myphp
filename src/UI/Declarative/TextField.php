@@ -83,7 +83,7 @@ final class TextField extends View
     protected function build(Context $c, Env $env): ?Node
     {
         $touch = $c->runtime?->touch ?? false;
-        $labeled = $env->formRow && !$touch && !$env->labelsHidden && $this->title !== '' && !$this->editor && !$this->search && !$this->vertical;
+        $labeled = $env->directFormRow && !$touch && !$env->labelsHidden && $this->title !== '' && !$this->editor && !$this->search && !$this->vertical;
         $makeField = function () use ($c, $env, $touch, $labeled): Node {
             $rt = $c->runtime;
             $box = $this->search || $this->suggestions !== null ? $c->row(0, 0)->alignItems(Node::CENTER) : null; // a search field's or suggesting one's: its own state is the input's, the text's kept by the box around it

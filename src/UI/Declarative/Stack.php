@@ -30,7 +30,7 @@ final class Stack extends View
     {
         $n = $c->open(new Node(Node::CONTAINER, $this->axis, 0, $this->spacing ?? 8.0));
         $n->alignItems($this->align);
-        View::renderAll($c, $env->along($this->axis), $this->content);
+        View::renderAll($c, $env->directFormRow ? $env->along($this->axis)->with(['directFormRow' => false]) : $env->along($this->axis), $this->content);
         $c->end();
         View::takeRoom($n, $env->axis, View::flexOfKids($n)); // as SwiftUI's: a Spacer, a list or a stack inside that takes the room makes the stack take it
         return $n;

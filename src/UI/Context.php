@@ -4666,53 +4666,32 @@ final class Context
     {
         $t = $this->theme;
         $touch = $this->runtime?->touch ?? false;
-        if ($touch) { // UIStepper on a phone: 94 × 32 side-by-side [ − | + ] capsule
-            $n = $this->row(0, 0, 0, $t->surface)->size(94, 32)->radius(8)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER);
-            $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
-            $jump = $this->runtime?->jumped($n->id) ?? 0;
-            $holding = $this->runtime?->holding($n->id) ?? 0;
-            $v = $jump !== 0 ? ($jump > 0 ? $max : $min) : max($min, min($max, $value + $ticks * $step));
-            foreach ([-1, 1] as $idx => $dir) {
-                if ($idx === 1) { $this->box(1, 20, $t->border)->alignSelf(Node::CENTER)->role(Role::NONE); }
-                $can = $dir > 0 ? $v < $max : $v > $min;
-                $a = $this->box(46, 32, 0)->grow(1)->role(Role::NONE);
-                $a->color = $holding === $dir ? $t->surfacePressed : null;
-                $a->draw(static function (Painter $p, array $r) use ($dir, $can) {
-                    $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = 6.0; $c = $can ? $t->text : $t->textMuted;
-                    $list = $p->displayList(); $a = $can ? 1.0 : 0.4;
-                    $list->line($cx - $d, $cy, $cx + $d, $cy, $c, $a, 1.8);
-                    if ($dir > 0) { $list->line($cx, $cy - $d, $cx, $cy + $d, $c, $a, 1.8); }
-                });
-            }
-            $this->end();
-            if ($v != $value) {
-                $value = is_int($value) ? (int)round($v) : $v;
-                $n->changed = true;
-                $this->runtime?->haptic('light');
-            }
-            $n->range($min, $max, $value, $step);
-            return $n;
-        }
-        $n = $this->column(0, 0, 0, $t->surface)->size($t->space(5), 0)->radius($t->radius)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER); // mygo's: a column of the two arrows, bordered
+        // Side-by-side [ − | + ] capsule across both mobile (94×32) and desktop (72×26).
+        [$w, $h, $rad, $divH, $half, $arm, $stroke] = $touch
+            ? [94, 32, 8, 20, 46, 6.0, 1.8]
+            : [72, 26, $t->radius, 14, 35, 4.5, 1.5];
+        $n = $this->row(0, 0, 0, $t->surface)->size($w, $h)->radius($rad)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER);
         $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
         $jump = $this->runtime?->jumped($n->id) ?? 0;
         $holding = $this->runtime?->holding($n->id) ?? 0;
         $v = $jump !== 0 ? ($jump > 0 ? $max : $min) : max($min, min($max, $value + $ticks * $step));
-        foreach ([1, -1] as $dir) {
+        foreach ([-1, 1] as $idx => $dir) {
+            if ($idx === 1) { $this->box(1, $divH, $t->border)->alignSelf(Node::CENTER)->role(Role::NONE); }
             $can = $dir > 0 ? $v < $max : $v > $min;
-            $a = $this->box(0, $t->space(3.5), 0)->role(Role::NONE); // Height(Space(3.5)), across the column
-            $a->color = $holding === $dir ? $t->surfacePressed : ($this->hovered($a) ? $t->surfaceHover : null);
-            $a->draw(static function (Painter $p, array $r) use ($dir, $can) { // a chevron, stroked 1.5 wide
-                $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = $r[3] * 0.22; $c = $can ? $t->text : $t->textMuted;
-                $list = $p->displayList(); $a = $can ? 1.0 : 0.5;
-                $list->line($cx - $d, $cy + $dir * $d / 2, $cx, $cy - $dir * $d / 2, $c, $a, 1.5);
-                $list->line($cx, $cy - $dir * $d / 2, $cx + $d, $cy + $dir * $d / 2, $c, $a, 1.5);
+            $a = $this->box($half, $h, 0)->grow(1)->role(Role::NONE);
+            $a->color = $holding === $dir ? $t->surfacePressed : (!$touch && $can && $this->hovered($a) ? $t->surfaceHover : null);
+            $a->draw(static function (Painter $p, array $r) use ($dir, $can, $arm, $stroke) {
+                $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $c = $can ? $t->text : $t->textMuted;
+                $list = $p->displayList(); $alpha = $can ? 1.0 : 0.4;
+                $list->line($cx - $arm, $cy, $cx + $arm, $cy, $c, $alpha, $stroke);
+                if ($dir > 0) { $list->line($cx, $cy - $arm, $cx, $cy + $arm, $c, $alpha, $stroke); }
             });
         }
         $this->end();
         if ($v != $value) {
             $value = is_int($value) ? (int)round($v) : $v;
             $n->changed = true;
+            if ($touch) { $this->runtime?->haptic('light'); }
         }
         $n->range($min, $max, $value, $step);
         return $n;
