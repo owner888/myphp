@@ -84,6 +84,9 @@ static MTKView *g_view = NULL;
 static CADisplayLink *g_display_link = NULL;
 static volatile int g_needs_render = 0;
 static volatile int g_wants_keyboard = 0;
+static volatile int g_keyboard_presenting = 0;
+static double g_keyboard_attempt_at = 0.0;
+static void myphp_log_line(os_log_type_t type, const char *tag, const char *line);
 
 #define NOTIF_CLICK_QUEUE_SIZE 16
 static char g_notif_click_queue[NOTIF_CLICK_QUEUE_SIZE][256];
@@ -1070,8 +1073,16 @@ void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalizat
         g_autocorrection = (UITextAutocorrectionType)autocorrection;
         if (g_view && [g_view isFirstResponder]) {
             if (anew) {
+                // Defer becomeFirstResponder to the next run-loop turn after resignFirstResponder so UIKit / InputUI
+                // tears down the old keyboard session cleanly instead of dropping the immediate re-activation.
+                g_keyboard_presenting = 1;
+                g_keyboard_attempt_at = CFAbsoluteTimeGetCurrent();
                 [g_view resignFirstResponder];
-                [g_view becomeFirstResponder];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (g_view && g_wants_keyboard && ![g_view isFirstResponder]) {
+                        [g_view becomeFirstResponder];
+                    }
+                });
             } else {
                 [g_view reloadInputViews];
             }
@@ -1079,23 +1090,56 @@ void myphp_ios_set_text_traits(int keyboard, int return_key, int autocapitalizat
     });
 }
 
+static void myphp_ensure_keyboard_on_main(BOOL allowRecycle) {
+    if (!g_view || !g_wants_keyboard) return;
+    if (g_window && !g_window.isKeyWindow) {
+        [g_window makeKeyAndVisible];
+    }
+    double now = CFAbsoluteTimeGetCurrent();
+    if (![g_view isFirstResponder]) {
+        g_keyboard_presenting = 1;
+        g_keyboard_attempt_at = now;
+        BOOL ok = [g_view becomeFirstResponder];
+        if (!ok) {
+            g_keyboard_presenting = 0;
+            myphp_log_line(OS_LOG_TYPE_ERROR, "[myphp-ios]", [[NSString stringWithFormat:
+                @"becomeFirstResponder returned NO (hasWindow=%d keyWindow=%d sceneState=%ld)",
+                g_view.window != nil, g_window.isKeyWindow, (long)g_window.windowScene.activationState] UTF8String]);
+            return;
+        }
+        double stamp = now;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (g_keyboard_attempt_at == stamp && g_wants_keyboard && g_keyboard_height <= 0.0f) {
+                g_keyboard_presenting = 0;
+                myphp_log_line(OS_LOG_TYPE_DEFAULT, "[myphp-ios]", [[NSString stringWithFormat:
+                    @"keyboard height still 0 after becomeFirstResponder (firstResponder=%d keyWindow=%d sceneState=%ld hasWindow=%d)",
+                    [g_view isFirstResponder], g_window.isKeyWindow, (long)g_window.windowScene.activationState, g_view.window != nil] UTF8String]);
+            }
+        });
+    } else if (g_keyboard_height <= 0.0f && allowRecycle && (!g_keyboard_presenting || (now - g_keyboard_attempt_at) > 0.6)) {
+        // reloadInputViews never raises a dismissed software keyboard on iOS (fromBecomeFirstResponder == 0);
+        // recycle first responder across a run-loop turn so UIKeyboardSceneDelegate presents it anew.
+        g_keyboard_presenting = 1;
+        g_keyboard_attempt_at = now;
+        [g_view resignFirstResponder];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (g_view && g_wants_keyboard && ![g_view isFirstResponder]) {
+                [g_view becomeFirstResponder];
+            }
+        });
+    }
+}
+
 void myphp_ios_show_keyboard(void) {
     g_wants_keyboard = 1;
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (!g_view || !g_wants_keyboard) return;
-        if (g_window && !g_window.isKeyWindow) {
-            [g_window makeKeyAndVisible];
-        }
-        if (![g_view isFirstResponder]) {
-            [g_view becomeFirstResponder];
-        } else if (g_keyboard_height <= 0.0f) {
-            [g_view reloadInputViews];
-        }
+        myphp_ensure_keyboard_on_main(YES);
     });
 }
 
 void myphp_ios_hide_keyboard(void) {
     g_wants_keyboard = 0;
+    g_keyboard_presenting = 0;
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!g_wants_keyboard) {
             [g_window endEditing:YES];
@@ -1306,6 +1350,14 @@ static CGRect g_edit_menu_rect;        // the caret or the selection it points a
 
 - (BOOL)canBecomeFirstResponder {
     return YES;
+}
+
+- (BOOL)isEditable {
+    return YES;
+}
+
+- (UIView *)textInputView {
+    return self;
 }
 
 - (BOOL)resignFirstResponder {
@@ -2043,11 +2095,7 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {
     if (g_wants_keyboard && g_view) {
-        if (![g_view isFirstResponder]) {
-            [g_view becomeFirstResponder];
-        } else if (g_keyboard_height <= 0.0f) {
-            [g_view reloadInputViews];
-        }
+        myphp_ensure_keyboard_on_main(YES);
     }
 }
 
@@ -2092,11 +2140,24 @@ int myphp_ios_poll_access_action(MyphpAccessAction *out) {
         g_needs_render = 1;
     }];
 
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillShowNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
+        g_keyboard_presenting = 1;
+    }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardDidShowNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
+        g_keyboard_presenting = 0;
+    }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardDidHideNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
+        g_keyboard_presenting = 0;
+        g_keyboard_height = 0.0f;
+        g_needs_render = 1;
+    }];
     [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillChangeFrameNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *n) {
         CGRect end = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-        CGRect screen = [UIScreen mainScreen].bounds;
-        float h = (float)(CGRectGetMaxY(screen) - CGRectGetMinY(end));
-        g_keyboard_height = h > 0 && h <= CGRectGetHeight(screen) ? h : 0.0f; // off the bottom edge: hidden
+        CGRect bounds = g_window ? g_window.bounds : [UIScreen mainScreen].bounds;
+        CGRect localEnd = g_window ? [g_window convertRect:end fromView:nil] : end;
+        float h = (float)(CGRectGetMaxY(bounds) - CGRectGetMinY(localEnd));
+        g_keyboard_height = h > 0 && h <= CGRectGetHeight(bounds) ? h : 0.0f; // off the bottom edge: hidden
+        if (g_keyboard_height > 0.0f) { g_keyboard_presenting = 0; }
         g_needs_render = 1;
     }];
 
