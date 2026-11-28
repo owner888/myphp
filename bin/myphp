@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.208.1';
+const VERSION = '1.208.2';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -42,7 +42,7 @@ Tools & Devices:
 SDK:
 
 	doctor               check that the development environment is ready
-	install-skills [dir] link/install bundled AI agent skills globally (or into a project dir)
+	install-skills       link/install bundled AI agent skills globally
 	micro                get the static PHP that the apps myphp build makes carry
 	upgrade [--check]    upgrade MyPHP to its latest release (--check: only say whether there is one)
 	version              print the MyPHP version
@@ -909,7 +909,7 @@ function dev(array $args): void
     $sign = option($args, 'sign', '-');
     $skipDevCommand = flag($args, 'skip-dev-command');
     ['dir' => $dir, 'config' => $c] = project($args);
-    syncSkillsIfNeeded($dir);
+    hintGlobalSkills();
     $env = ['MYPHP_ENV' => 'development', 'MYPHP_HOME' => frameworkOf($c)];
     if ($lang !== '') { // the app reads it as it starts, over the language it keeps
         ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("-lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
@@ -1150,6 +1150,7 @@ function build(array $args): void
     $skipBuildCommand = flag($args, 'skip-build-command');
     $upload = flag($args, 'upload');
     ['dir' => $dir, 'config' => $c] = project($args);
+    hintGlobalSkills();
     if ($out !== '') {
         $c['out'] = $out;
     }
@@ -2829,13 +2830,6 @@ function swiftuiHints(string $dir): array
         && (preg_match("/vibrancy\s*:\s*'sidebar'/", $entry) === 1 || preg_match("/titleBarStyle\s*:\s*'hiddenInset'/", $entry) === 1)) {
         $hints[] = "app.php: MyPHP 1.207+ enables hiddenInset + sidebar vibrancy automatically for split views; omit them from WindowOptions";
     }
-    $localSkill = "$dir/.agents/skills/myphp-app";
-    if (is_dir($localSkill) && !is_link($localSkill)) {
-        $stale = @file_get_contents("$localSkill/.version") !== skillsStamp() . "\n";
-        if (hasGlobalSkills() || $stale) {
-            $hints[] = ($stale ? 'outdated' : 'duplicate') . ' .agents/skills/myphp-app overrides global skill; remove it (rm -rf .agents/skills/myphp-app)';
-        }
-    }
     return $hints;
 }
 
@@ -3488,8 +3482,10 @@ function ensurePhpEnvironment(bool $forceFix = false): void
 function doctor(array $args): void
 {
     help($args, "doctor [--fix]\n\nChecks the tools, toolchains and system libraries MyPHP needs; --fix automatically installs missing PHP extensions and configurations.");
-    if (flag($args, 'fix') || flag($args, '-fix')) {
+    $fix = flag($args, 'fix') || flag($args, '-fix');
+    if ($fix) {
         ensurePhpEnvironment(true);
+        if (!hasGlobalSkills()) { installGlobalSkills(); }
     }
     echo "Doctor summary (to see all details, run `myphp doctor -v`; to auto-fix PHP environment, run `myphp doctor --fix`):\n\n";
 
@@ -3630,6 +3626,12 @@ function doctor(array $args): void
         $deviceItems[] = [$usable, "{$d->name} ({$d->platform}, {$d->status}) • {$d->id}" . ($usable ? '' : ': no GTK 3, so no window opens'), $usable ? '' : 'Install GTK 3: see Linux Desktop Libraries above'];
     }
     $section("Connected Devices ($deviceCount available)", $deviceItems ?: [[false, "No connected devices found", "Connect an Android device or boot an iOS simulator"]]);
+
+    // 6. Global AI Agent Skills
+    $skillsOk = hasGlobalSkills();
+    $section('AI Agent Skills', [
+        [$skillsOk, $skillsOk ? 'myphp-app skill linked globally' : 'Global myphp-app skill not installed', 'myphp install-skills'],
+    ]);
 }
 
 /** Lists connected devices, real hardware and available simulators. */
@@ -3899,7 +3901,7 @@ function runCommand(array $args): void
     $say = function (string $msg) use ($all): void { if ($all) { logf($msg); } };
 
     ['dir' => $dir, 'config' => $c] = project($args);
-    syncSkillsIfNeeded($dir);
+    hintGlobalSkills();
     $targetDev = DeviceManager::findDevice($deviceId);
     if ($targetDev === null) {
         fail($deviceId !== '' ? "No device found matching \"$deviceId\". Run `myphp devices` to list available devices." : "No available devices or simulators found.");
@@ -4067,68 +4069,30 @@ function installGlobalSkills(bool $onlyExisting = false): array
             }
         }
         copyTree($src, $dst, []);
-        @file_put_contents("$dst/.version", skillsStamp() . "\n");
         $installed[] = $dst;
     }
     return $installed;
 }
 
-/** Installs or updates the bundled agent skills globally (default) or inside a project directory. */
+/** Reminds once in interactive runs when global AI agent skills are not yet installed. */
+function hintGlobalSkills(): void
+{
+    if (getenv('CI') !== false || getenv('GITHUB_ACTIONS') !== false || hasGlobalSkills()) {
+        return;
+    }
+    logf('tip: AI agent skills not installed globally — run "myphp install-skills" once');
+}
+
+/** Links/installs the bundled myphp-app skill into global user agent directories. */
 function installSkills(array $args): void
 {
-    help($args, "install-skills [dir]\n\nInstalls or links the bundled myphp-app AI agent skill.\nWith no arguments (default), symlinks into global user agent directories (~/.agents/skills,\nand detected ~/.claude/skills, ~/.pig/agent/skills, ~/.codex/skills) so `myphp upgrade`\nkeeps skills up to date automatically across every project.\nWith a project dir (e.g. `myphp install-skills .`), copies into <dir>/.agents/skills/myphp-app.");
-    $global = flag($args, 'global');
-    count($args) <= 1 || fail('expected at most one project directory');
-    if ($global || $args === []) {
-        $paths = installGlobalSkills(onlyExisting: false);
-        $paths !== [] || fail('cannot resolve home directory for global skills');
-        foreach ($paths as $p) {
-            logf((is_link($p) ? 'Linked skill: ' : 'Installed skill: ') . $p);
-        }
-        return;
+    help($args, "install-skills\n\nLinks the bundled myphp-app AI agent skill into your global user agent directories\n(~/.agents/skills, and detected ~/.claude/skills, ~/.pig/agent/skills, ~/.codex/skills)\nso `myphp upgrade` keeps every project up to date automatically.");
+    $args === [] || fail('install-skills takes no arguments (skills are installed globally)');
+    $paths = installGlobalSkills(onlyExisting: false);
+    $paths !== [] || fail('cannot resolve home directory for global skills');
+    foreach ($paths as $p) {
+        logf((is_link($p) ? 'Linked skill: ' : 'Installed skill: ') . $p);
     }
-    $dir = $args[0];
-    is_dir($dir) || fail("$dir is not a directory");
-    writeSkills($dir);
-    logf('Installed skills in ' . rtrim($dir, '/') . '/.agents/skills');
-}
-
-/** The skill for writing an app; myphp-maintenance, for working on MyPHP itself, stays in the checkout. */
-function writeSkills(string $dir): void
-{
-    $dst = "$dir/.agents/skills/myphp-app";
-    copyTree(SKILLS . '/myphp-app', $dst, []);
-    @file_put_contents("$dst/.version", skillsStamp() . "\n");
-}
-
-/** Content hash of the local bundled myphp-app skill files (7 files, ~40 KB, < 0.2 ms, zero network). */
-function skillsStamp(): string
-{
-    $ctx = hash_init('xxh128');
-    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(SKILLS . '/myphp-app', FilesystemIterator::SKIP_DOTS));
-    $files = [];
-    foreach ($it as $f) {
-        if ($f->isFile()) { $files[] = (string)$f; }
-    }
-    sort($files, SORT_STRING);
-    foreach ($files as $f) {
-        hash_update($ctx, substr($f, strlen(SKILLS)) . "\0" . (string)@file_get_contents($f) . "\0");
-    }
-    return hash_final($ctx);
-}
-
-/** Silently updates an existing <dir>/.agents/skills/myphp-app copy when its content changed (never creates .agents/ in clean projects). */
-function syncSkillsIfNeeded(string $dir): void
-{
-    $dst = "$dir/.agents/skills/myphp-app";
-    if (!is_dir($dst) || is_link($dst)) {
-        return;
-    }
-    $want = skillsStamp() . "\n";
-    if (@file_get_contents("$dst/.version") === $want) {
-        return;
-    }
-    writeSkills($dir);
 }
 
 /** Generates type-safe PHP bindings for C headers or Apple Objective-C classes (Flutter 3.50-style ffigen). */

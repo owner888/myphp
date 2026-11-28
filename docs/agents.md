@@ -25,8 +25,7 @@ myphp create my-app
 # or for a 5-platform 3D app:
 myphp create -template 3d my-3d-app
 
-# Optional: copy into a single project directory instead
-myphp install-skills .
+
 ```
 
 ### What the `myphp-app` skill gives your agent

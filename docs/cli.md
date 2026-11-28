@@ -70,14 +70,13 @@ simulator without rebuilding or reinstalling the app.
 ## myphp install-skills
 
 ```sh
-myphp install-skills        # link globally into ~/.agents/skills (& detected ~/.claude, ~/.pig, ~/.codex)
-myphp install-skills .      # copy into a single project's .agents/skills/myphp-app
+myphp install-skills
 ```
 
-Installs or links the bundled `myphp-app` agent skill (`bin/skills/myphp-app`).
-With no directory argument (recommended), symlinks into your global user agent
-directories on macOS/Linux (and copies on Windows, refreshed automatically by
-`myphp upgrade`) so every project automatically gets the latest skill.
+Links the bundled `myphp-app` agent skill (`bin/skills/myphp-app`) into your
+global user agent directories (`~/.agents/skills`, plus detected `~/.claude/skills`,
+`~/.pig/agent/skills`, and `~/.codex/skills`) on macOS/Linux, and copies on
+Windows (automatically refreshed by `myphp upgrade`).
 
 ## myphp dev
 

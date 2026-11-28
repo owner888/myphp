@@ -418,10 +418,7 @@ same([null, true], [$cfg['framework'] ?? null, is_string($cfg['myphp'] ?? null)]
 $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', "$root/demo/tests/ui_test.php"], [0 => ['file', DEVNULL, 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/demo", ['MYPHP_HOME' => dirname(__DIR__)] + getenv()); // as myphp test runs it (tests/test_command_test.php)
 $lines = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
 check(is_file("$root/demo/src/Counter.php") && proc_close($p) === 0, 'its state in src/, and its headless test, which passes: ' . $lines);
-mkdir("$root/demo/.agents/skills", 0755, true);
-file_put_contents("$root/demo/.agents/skills/mine.md", 'mine');
-[$code] = $myphp('install-skills', "$root/demo");
-check($code === 0 && is_file("$root/demo/.agents/skills/myphp-app/SKILL.md") && is_file("$root/demo/.agents/skills/myphp-app/references/pitfalls.md") && !is_dir("$root/demo/.agents/skills/myphp-maintenance") && is_file("$root/demo/.agents/skills/mine.md"), 'install-skills <dir> installs into a project dir, leaving unrelated files');
+
 
 // The Info.plist: what myphp.json says, the documents and URL schemes, the production flag, and the app's own keys, which win.
 $c = ['name' => 'A & B', 'identifier' => 'com.example.ab', 'version' => '1.2.3', 'copyright' => '© Us', 'urlSchemes' => ['ab'],
