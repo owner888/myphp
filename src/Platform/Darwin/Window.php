@@ -1393,6 +1393,29 @@ final class Window implements Platform\Window, Platform\NativeTips
         ObjC::msg('v:b', $this->ns, 'setMovableByWindowBackground:', $on);
     }
 
+    /** Applies SwiftUI's default NavigationSplitView macOS chrome: hiddenInset unified title bar + sidebar vibrancy material. */
+    public function enableSplitChrome(): void
+    {
+        if ($this->ns === null || $this->popover !== null || $this->panel) {
+            return;
+        }
+        if (!$this->hiddenTitleBar && $this->hasStyle(self::TITLED)) {
+            $this->setFullSizeContentView(true);
+            ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', true);
+            ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', 1); // NSWindowTitleHidden
+            if ($this->toolbar === null) {
+                $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
+                ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
+                ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
+                $this->toolbar = $tb;
+            }
+            $this->hiddenTitleBar = true;
+        }
+        if ($this->effect === null) {
+            $this->setVibrancy('sidebar');
+        }
+    }
+
     public function setMinimizable(bool $on): void { $this->setStyle(self::MINIATURIZABLE, $on); }
 
     public function isMinimizable(): bool { return $this->hasStyle(self::MINIATURIZABLE); }

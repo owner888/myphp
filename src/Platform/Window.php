@@ -184,6 +184,9 @@ interface Window
 
     public function setTitleBarHidden(bool $on): void;
 
+    /** Applies SwiftUI's default split-view window chrome (hiddenInset title bar + sidebar material) when the caller left window options at defaults. */
+    public function enableSplitChrome(): void;
+
     public function setMinimizable(bool $on): void;
 
     public function isMinimizable(): bool;

@@ -1234,3 +1234,24 @@ foreach (['downloading' => 'Downloading 45%...', 'installing' => 'New Version Av
     check($hd->byLabel($expectedLabel) !== null, "desktop UpdateCapsule expanded in status $st");
 }
 \MyPHP\App::setName($wasAppName);
+
+// Desktop NavigationSplitView / TabView(.sidebarAdaptable) automatically asks its window for SwiftUI's default split chrome
+// (hiddenInset title bar + sidebar vibrancy on macOS, Mica on Windows 11) and uses a soft dark charcoal fallback instead of near-black when vibrancy is off.
+$scApp = new class { public string $tab = 'a'; };
+$scDesktop = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $scApp->tab)(
+    Tab('Alpha', systemImage: 'house', value: 'a')(Text('Page A')),
+    Tab('Beta', systemImage: 'gearshape', value: 'b')(Text('Page B')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 900, 600);
+$scDesktop->theme = \MyPHP\UI\Theme::dark();
+$scDesktop->frame(2);
+same(true, $scDesktop->rt->windowAsks['splitChrome'] ?? false, 'desktop TabView(.sidebarAdaptable) requests default splitChrome');
+$sidePane = $scDesktop->root->kids[0]->kids[0]->kids[0]->kids[0] ?? null;
+same(\MyPHP\UI\Theme::mix($scDesktop->theme->background, $scDesktop->theme->surface, 0.55), $sidePane?->color, 'non-vibrant dark sidebar uses soft charcoal surface mix instead of darkening toward black');
+
+$scTouch = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $scApp->tab)(
+    Tab('Alpha', systemImage: 'house', value: 'a')(Text('Page A')),
+    Tab('Beta', systemImage: 'gearshape', value: 'b')(Text('Page B')),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 1180, 820);
+$scTouch->rt->touch = true;
+$scTouch->frame(2);
+same(false, $scTouch->rt->windowAsks['splitChrome'] ?? false, 'touch tablet NavigationSplitView does not request desktop splitChrome');

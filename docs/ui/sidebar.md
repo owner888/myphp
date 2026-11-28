@@ -13,8 +13,12 @@ $view = fn() => NavigationSplitView(
 );
 ```
 
-The sidebar takes the window's sidebar material with `vibrancy: 'sidebar'`
-and `titleBarStyle: 'hiddenInset'` on the window. `Section`s in it are its
+On desktop, a window with default options automatically enables
+`titleBarStyle: 'hiddenInset'` and `vibrancy: 'sidebar'` (as SwiftUI's
+`NavigationSplitView` does on macOS, with Mica on Windows 11 and a soft
+charcoal sidebar when vibrancy is unavailable); explicit window options
+(`vibrancy`, `titleBarStyle`, `backgroundColor`, `frameless`, `transparent`)
+are left untouched. `Section`s in it are its
 groups, their headers muted. It is for a sidebar of the app's data; an
 app's top-level pages are a `TabView(.sidebarAdaptable)` ([tabs](tabs.md)),
 which a phone shows as its tab bar.

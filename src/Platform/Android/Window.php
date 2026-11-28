@@ -921,6 +921,7 @@ final class Window implements Platform\Window
     public function isMovable(): bool { return false; }
     public function setFullSizeContentView(bool $on): void {}
     public function setTitleBarHidden(bool $on): void {}
+    public function enableSplitChrome(): void {}
     public function setMinimizable(bool $on): void {}
     public function isMinimizable(): bool { return false; }
     public function setMaximizable(bool $on): void {}

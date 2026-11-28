@@ -61,6 +61,9 @@ final class Window
     private bool $fixedAsked = false;
     /** Whether the view asked the window to float on top (a player's pin, IINA's), null before it asked. */
     private ?bool $onTopAsked = null;
+    /** Whether this window was constructed with default chrome (no explicit titleBarStyle/vibrancy/background), so NavigationSplitView may auto-enable macOS hiddenInset + sidebar vibrancy as SwiftUI does. */
+    private bool $defaultChrome = false;
+    private bool $splitChromeApplied = false;
     /** The window's background (setBackgroundColor). */
     private ?Background $background = null;
     private ?Page $page = null;
@@ -162,6 +165,9 @@ final class Window
             $this->runtime->underFrame = fn(): ?array => $this->native->underFrame(); // a player's subtitles, for its screenshots
         }
 
+        $this->defaultChrome = $this->flyout === null && !$this->panel && $o->content !== null
+            && $o->titleBarStyle === 'default' && $o->vibrancy === '' && !$o->frameless
+            && !$o->transparent && !$o->hideWindowButtons && $o->backgroundColor === '';
         $this->stateKey = $o->stateKey;
         if ($this->runtime !== null && $o->page->devTools->on()) {
             $this->runtime->inspector = new UI\Inspector(); // F12, Alt+Cmd+I and the menu's Toggle Developer Tools open it
@@ -532,6 +538,7 @@ final class Window
      */
     public function setBackgroundColor(string $color): void
     {
+        $this->splitChromeApplied = true;
         $this->background = Background::parse($color);
         $this->native->setBackgroundColor($this->background->for(App::theme()->dark));
     }
@@ -548,6 +555,7 @@ final class Window
         if ($material !== '' && !isset(self::MATERIALS[$material])) {
             throw new \InvalidArgumentException("no vibrancy \"$material\"");
         }
+        $this->splitChromeApplied = true;
         $this->native->setVibrancy($material);
     }
 
@@ -569,6 +577,10 @@ final class Window
         }
         if (array_key_exists('title', $asks) && $asks['title'] !== $this->title) {
             $this->setTitle($asks['title']);
+        }
+        if (($asks['splitChrome'] ?? false) === true && $this->defaultChrome && !$this->splitChromeApplied) {
+            $this->splitChromeApplied = true;
+            App::later(function (): void { if (!$this->destroyed) { $this->native->enableSplitChrome(); } });
         }
         if (array_key_exists('buttons', $asks) && $asks['buttons'] !== $this->buttonsAsked) {
             $this->buttonsAsked = $asks['buttons'];

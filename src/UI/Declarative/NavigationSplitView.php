@@ -42,6 +42,7 @@ final class NavigationSplitView extends View
         if (!$asList) { $selection = &$this->sidebar->selection(); }
         $chosen = $asList ? '' : (string)($selection ?? ''); // the sidebar's items are keyed by their tags as strings
         $touch = $c->runtime?->touch ?? false;
+        if (!$touch) { $c->runtime?->askWindow('splitChrome', true); }
         [$safeTop, $safeRight, $safeBottom, $safeLeft] = $c->safeArea;
         $vibrant = $c->vibrancy(); // the window's material shows through the sidebar, as a Mac's
         $bar = $c->titleBar(); // a hidden title bar: the content goes under it, the window controls over the sidebar
@@ -61,7 +62,7 @@ final class NavigationSplitView extends View
           $w = $width * $shown; // it slides out to the left as it hides
           $c->open(new Node(Node::CONTAINER, Node::ROW))->size($w, 0)->shrink(0)->alignItems(Node::STRETCH)->clip();
             $side = $c->open(new Node(Node::CONTAINER, Node::COLUMN))->size($width, 0)->shrink(0)->margin(0, 0, 0, $w - $width);
-            if (!$vibrant) { $side->background($t->dark ? \MyPHP\UI\Theme::mix($t->background, 0x000000, 0.22) : $t->surface); }
+            if (!$vibrant) { $side->background($t->dark ? \MyPHP\UI\Theme::mix($t->background, $t->surface, 0.55) : $t->surface); }
               $sideTop = $inset ? $barH : ($showToggle ? $topOffset + $barH : $topOffset);
               if ($sideTop > 0) {
                   $hdr = $c->attach(new Node(Node::BOX, 0, 0, 0, 0, $sideTop))->fillWidth()->shrink(0);

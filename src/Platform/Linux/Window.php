@@ -1889,6 +1889,8 @@ final class Window implements Platform\Window
 
     public function setTitleBarHidden(bool $on): void {}
 
+    public function enableSplitChrome(): void {}
+
     public function setMinimizable(bool $on): void {}
 
     public function isMinimizable(): bool

@@ -1456,6 +1456,13 @@ final class Window implements Platform\Window
         $this->setStyleBits(self::GWL_STYLE, self::WS_CAPTION, !$on);
     }
 
+    public function enableSplitChrome(): void
+    {
+        if (!$this->dead && $this->vibrancy === '' && MenuDraw::build() >= 22621) {
+            $this->setVibrancy('sidebar');
+        }
+    }
+
     public function setMinimizable(bool $on): void
     {
         $this->setStyleBits(self::GWL_STYLE, self::WS_MINIMIZEBOX, $on);
