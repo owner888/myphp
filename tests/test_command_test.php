@@ -85,6 +85,15 @@ try {
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
     same([0, true], [proc_close($p), str_contains($out, 'No issues found!')], "myphp analyze passes on a clean template: $out");
 
+    // analyze warns when a stale project-local .agents/skills/myphp-app shadows the global skill
+    mkdir("$created/.agents/skills/myphp-app", 0755, true);
+    file_put_contents("$created/.agents/skills/myphp-app/SKILL.md", 'old');
+    $p = proc_open([PHP_BINARY, $bin, 'analyze', $created], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    same([0, true], [proc_close($p), str_contains($out, 'rm -rf .agents/skills/myphp-app')], "myphp analyze hints to remove stale project-local skill: $out");
+    unlink("$created/.agents/skills/myphp-app/SKILL.md");
+    rmdir("$created/.agents/skills/myphp-app"); rmdir("$created/.agents/skills"); rmdir("$created/.agents");
+
     // analyze catches named function in view.php and Swift dot syntax
     file_put_contents("$created/view.php", "<?php function badHelper() {}\nreturn fn() => Text('Hi')->foregroundColor(Color.blue);\n");
     $p = proc_open([PHP_BINARY, $bin, 'analyze', $created], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);

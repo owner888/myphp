@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 @ini_set('memory_limit', '512M');
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.208.0';
+const VERSION = '1.208.1';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -2828,6 +2828,13 @@ function swiftuiHints(string $dir): array
         && (str_contains($views, 'TabViewStyle::sidebarAdaptable') || str_contains($views, 'NavigationSplitView('))
         && (preg_match("/vibrancy\s*:\s*'sidebar'/", $entry) === 1 || preg_match("/titleBarStyle\s*:\s*'hiddenInset'/", $entry) === 1)) {
         $hints[] = "app.php: MyPHP 1.207+ enables hiddenInset + sidebar vibrancy automatically for split views; omit them from WindowOptions";
+    }
+    $localSkill = "$dir/.agents/skills/myphp-app";
+    if (is_dir($localSkill) && !is_link($localSkill)) {
+        $stale = @file_get_contents("$localSkill/.version") !== skillsStamp() . "\n";
+        if (hasGlobalSkills() || $stale) {
+            $hints[] = ($stale ? 'outdated' : 'duplicate') . ' .agents/skills/myphp-app overrides global skill; remove it (rm -rf .agents/skills/myphp-app)';
+        }
     }
     return $hints;
 }
