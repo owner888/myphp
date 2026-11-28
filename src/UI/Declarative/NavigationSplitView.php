@@ -115,12 +115,12 @@ final class NavigationSplitView extends View
                 $hdrRow = $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, $topOffset + $barH)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding($topOffset, $trailPad, 0, $leadPad);
                 if ($inset) { $hdrRow->dragWindow(); }
                   if ($title !== null) { (new Text($title))->font($touch ? \Font::headline : \Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); }
-                  if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
+                  if ($items !== null) { $c->toolbar($items)->grow(1)->minWidth(0)->justify(Node::END); }
                 $c->end();
             } elseif ($title !== null || $items !== null) { // a title bar of the system's: the detail's title and toolbar a row under it
                 $c->open(new Node(Node::CONTAINER, Node::ROW))->size(0, 44)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, 20, 0, 20);
                   if ($title !== null) { (new Text($title))->font(\Font::title3)->bold()->lineLimit(1)->render($c, $env->along(Node::ROW)); }
-                  if ($items !== null) { $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1)); $c->toolbar($items); }
+                  if ($items !== null) { $c->toolbar($items)->grow(1)->minWidth(0)->justify(Node::END); }
                 $c->end();
             }
             $savedSafe = $c->safeArea;

@@ -1288,3 +1288,14 @@ $hPick = new Headless(fn(Context $c) => Content::render(fn() => VStack(spacing: 
 ), $c), 400, 200);
 $hPick->frame(2);
 same($hPick->rect($hPick->byLabel('Matched'))[3], $hPick->rect($hPick->byLabel('Unmatched'))[3], 'Picker keeps identical height when selection matches no option');
+
+// Switching tabs from an empty/narrow toolbar to a wider toolbar button never traps the button inside the overflow » menu.
+$tbApp = new class { public string $tab = 'empty'; };
+$hTb = new Headless(fn(Context $c) => Content::render(fn() => TabView(selection: $tbApp->tab)(
+    Tab('Previews', systemImage: 'photo.stack', value: 'empty')(Text('Empty')->navigationTitle('Previews')->toolbar(null)),
+    Tab('Workspace', systemImage: 'slider.horizontal.3', value: 'work')(Text('Main')->navigationTitle('HDRnet Trainer')->toolbar(Button('Start Training', action: fn() => null)->buttonStyle(\ButtonStyle::borderedProminent))),
+)->tabViewStyle(\TabViewStyle::sidebarAdaptable), $c), 960, 680);
+$hTb->frame(2);
+$tbApp->tab = 'work';
+$hTb->frame(3);
+same([true, null], [$hTb->byText('Start Training') !== null, $hTb->byLabel('More')], 'switching from empty toolbar tab to wider button shows the button directly without » overflow');

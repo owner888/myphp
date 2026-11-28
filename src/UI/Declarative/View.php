@@ -829,8 +829,7 @@ abstract class View
             $env = $env->with(['toolbarTaken' => true]); // the view inside is built once, under the bar
             $col = $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
               $c->open(new Node(Node::CONTAINER, Node::ROW, 0, 8))->alignSelf(Node::STRETCH)->shrink(0)->padding(6, 12)->alignItems(Node::CENTER);
-                $c->attach(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1));
-                $c->toolbar(function () use ($c, $env, $bar): void { self::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $bar); });
+                $c->toolbar(function () use ($c, $env, $bar): void { self::renderAll($c, $env->along(Node::ROW)->with(['buttonStyle' => \ButtonStyle::borderless, 'labelStyle' => Label::inToolbar($env)]), $bar); })->grow(1)->minWidth(0)->justify(Node::END);
               $c->end();
               $c->attach(new Node(Node::BOX, 0, 0, 0, 0, 1, 0, null, $env->theme->border));
               $c->open(new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 1))->alignSelf(Node::STRETCH)->minHeight(0);
